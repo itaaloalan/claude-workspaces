@@ -55,21 +55,50 @@ def worktree_path_for(repo_path: str, branch: str) -> Path:
 
 
 def add_worktree(
-    repo_path: str, branch: str, base_branch: str | None = None
+    repo_path: str,
+    branch: str,
+    base_branch: str | None = None,
+    create_branch: bool = True,
 ) -> tuple[bool, str, Path]:
     """Cria worktree em <parent>/<repo>.claude/<safe-branch>.
-    Retorna (ok, mensagem_de_erro, path)."""
+
+    create_branch=True (default): `git worktree add -b <branch> <path> <base>`
+    create_branch=False:           `git worktree add <path> <branch>` — checkout
+                                    de branch existente em novo worktree.
+
+    Retorna (ok, mensagem_de_erro, path).
+    """
     dest = worktree_path_for(repo_path, branch)
     if dest.exists():
         return False, f"path já existe: {dest}", dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    args = ["git", "worktree", "add", "-b", branch, str(dest)]
-    if base_branch:
-        args.append(base_branch)
+    if create_branch:
+        args = ["git", "worktree", "add", "-b", branch, str(dest)]
+        if base_branch:
+            args.append(base_branch)
+    else:
+        args = ["git", "worktree", "add", str(dest), branch]
     rc, out = _run(args, repo_path)
     if rc != 0:
         return False, out, dest
     return True, "", dest
+
+
+def list_local_branches(repo_path: str) -> list[str]:
+    """Lista nomes das branches locais (ordenadas por uso recente)."""
+    rc, out = _run(
+        [
+            "git",
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname:short)",
+            "refs/heads",
+        ],
+        repo_path,
+    )
+    if rc != 0:
+        return []
+    return [b.strip() for b in out.splitlines() if b.strip()]
 
 
 def remove_worktree(worktree_path: str) -> tuple[bool, str]:

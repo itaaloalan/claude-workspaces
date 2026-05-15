@@ -1102,10 +1102,21 @@ class MainWindow(QMainWindow):
             dialog = LaunchClaudeDialog(workspace, parent=self)
             if not dialog.exec():
                 return
+            selected = dialog.result_folders()
+            if not selected:
+                return
+            cwd = selected[0]
+            extras = selected[1:]
             if dialog.result_isolate():
                 branch = dialog.result_branch()
-                base = dialog.result_base_branch() or None
-                ok, msg, dest = add_worktree(workspace.folders[0], branch, base)
+                create = dialog.result_create_branch()
+                base = dialog.result_base_branch() or None if create else None
+                if not branch:
+                    QMessageBox.warning(
+                        self, "Branch inválida", "Escolha um nome de branch."
+                    )
+                    return
+                ok, msg, dest = add_worktree(cwd, branch, base, create_branch=create)
                 if not ok:
                     QMessageBox.warning(
                         self,
@@ -1114,7 +1125,6 @@ class MainWindow(QMainWindow):
                     )
                     return
                 cwd = str(dest)
-                # No worktree, todos os --add-dir das outras pastas continuam
                 worktree_label = f" · {branch}"
 
         argv = [self.settings.claude_command, *self.settings.claude_extra_args]
