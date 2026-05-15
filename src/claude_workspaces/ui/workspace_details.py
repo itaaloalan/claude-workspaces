@@ -331,7 +331,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._refresh_sessions()
         self._refresh_mcp_status()
         self._refresh_usage()
-        self._git_panel.set_workspace(workspace)
+        # git_panel.set_workspace é chamado pela MainWindow via
+        # _broadcast_workspace (panel está em DOCK_PANEL_SPECS)
 
         self.setCurrentWidget(self._content)
 

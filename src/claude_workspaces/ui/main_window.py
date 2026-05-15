@@ -27,6 +27,7 @@ from ..models import Workspace
 from ..settings import Settings
 from ..storage import load_workspaces, save_workspaces
 from .memory_panel import MemoryPanel
+from .panels import DockPanel, DockPanelSpec
 from .right_dock import RightDock
 from .settings_panel import SettingsPanel
 from .skills_panel import SkillsPanel
@@ -482,31 +483,47 @@ class MainWindow(QMainWindow):
             self.list_widget.setCurrentItem(ws_item)
         self._launch_claude_for(match, hit.session_id, cwd)
 
+    # Spec dos panels do dock — adicionar um novo painel é só estender
+    # essa lista. factory recebe MainWindow pra acessar dependencies.
+    DOCK_PANEL_SPECS: list[DockPanelSpec] = [
+        DockPanelSpec(
+            panel_id="git",
+            title="Git",
+            factory=lambda mw: mw.details.git_panel(),
+            default_open=True,
+        ),
+        DockPanelSpec(
+            panel_id="memory",
+            title="Memória",
+            factory=lambda mw: MemoryPanel(),
+            default_open=False,
+        ),
+        DockPanelSpec(
+            panel_id="skills",
+            title="Skills",
+            factory=lambda mw: SkillsPanel(),
+            default_open=False,
+        ),
+    ]
+
     def _build_right_dock(self) -> QWidget:
         dock = RightDock()
         dock.setStyleSheet("background: #141414;")
         collapsed = self.settings.right_dock_collapsed or {}
 
-        # Git
-        git_panel = self.details.git_panel()
-        dock.add_panel(
-            "git", "Git", git_panel,
-            open_=not collapsed.get("git", False),
-        )
-
-        # Memória do workspace (CLAUDE.md)
-        self._memory_panel = MemoryPanel()
-        dock.add_panel(
-            "memory", "Memória", self._memory_panel,
-            open_=not collapsed.get("memory", True),
-        )
-
-        # Skills (default fechado)
-        self._skills_panel = SkillsPanel()
-        dock.add_panel(
-            "skills", "Skills", self._skills_panel,
-            open_=not collapsed.get("skills", True),
-        )
+        self._dock_panels: list[DockPanel] = []
+        for spec in self.DOCK_PANEL_SPECS:
+            panel = spec.factory(self)
+            dock.add_panel(
+                spec.panel_id,
+                spec.title,
+                panel,
+                open_=not collapsed.get(spec.panel_id, not spec.default_open),
+            )
+            self._dock_panels.append(panel)
+            # Mantém atributos nomeados pra backward-compat com referências
+            # diretas (ex: _memory_panel, _skills_panel)
+            setattr(self, f"_{spec.panel_id}_panel", panel)
 
         dock.panel_toggled.connect(self._on_dock_toggled)
         return dock
@@ -803,8 +820,7 @@ class MainWindow(QMainWindow):
         if current is None:
             self.details.show_empty()
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
-            self._skills_panel.set_workspace(None)
-            self._memory_panel.set_workspace(None)
+            self._broadcast_workspace(None)
             return
         data = current.data(0, Qt.ItemDataRole.UserRole)
         ws: Workspace | None = None
@@ -817,9 +833,17 @@ class MainWindow(QMainWindow):
         if ws is None:
             return
         self.details.show_workspace(ws)
-        self._skills_panel.set_workspace(ws)
-        self._memory_panel.set_workspace(ws)
+        self._broadcast_workspace(ws)
         self._sync_terminal_for(ws)
+
+    def _broadcast_workspace(self, workspace: Workspace | None) -> None:
+        """Propaga set_workspace pra todos os panels do dock que
+        implementam o contrato DockPanel."""
+        for panel in self._dock_panels:
+            try:
+                panel.set_workspace(workspace)
+            except Exception:
+                log.exception("set_workspace falhou em %r", type(panel).__name__)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
         # Double-click ou Enter — sessão histórica retoma via --resume
