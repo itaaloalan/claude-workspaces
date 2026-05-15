@@ -61,8 +61,8 @@ class MainWindow(QMainWindow):
         self._terminal_areas: dict[str, TerminalArea] = {}  # key=workspace.id
         self._terminal_placeholder_idx: int = 0
         self._sidebar_last_size: int = 260
-        self._terminal_last_size: int = 420
-        self._content_last_size: int = 420
+        self._terminal_last_size: int = 520
+        self._content_last_size: int = 380
         # Estado dos terminais (tree_items, activity, inbox, running_counts)
         # agrupado pra cleanup atômico via release_tab(tab_id)
         self._terminals = TerminalState()
@@ -141,7 +141,7 @@ class MainWindow(QMainWindow):
         if self.settings.right_splitter_sizes:
             self.right_splitter.setSizes(self.settings.right_splitter_sizes)
         else:
-            self.right_splitter.setSizes([420, 380])
+            self.right_splitter.setSizes([380, 520])
 
         self.body_splitter.addWidget(self.right_splitter)
 
