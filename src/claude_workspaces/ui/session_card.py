@@ -17,6 +17,7 @@ class SessionCard(QFrame):
     """Card visual pra uma sessão do Claude. Substitui o item cru de QListWidget."""
 
     resume_requested = Signal(ClaudeSession)
+    convert_to_task_requested = Signal(ClaudeSession)
 
     def __init__(
         self,
@@ -70,6 +71,20 @@ class SessionCard(QFrame):
 
         actions = QHBoxLayout()
         actions.addStretch()
+
+        to_task_btn = QPushButton("→ Tarefa")
+        to_task_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        to_task_btn.setToolTip("Criar tarefa neste workspace a partir desta sessão")
+        to_task_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; color: #aaa;"
+            "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
+            "}"
+            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
+        )
+        to_task_btn.clicked.connect(lambda: self.convert_to_task_requested.emit(self.session))
+        actions.addWidget(to_task_btn)
+
         resume_btn = QPushButton("Retomar")
         resume_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         resume_btn.setStyleSheet(

@@ -1,8 +1,11 @@
 import logging
 
+from datetime import datetime
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -15,9 +18,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..claude_sessions import list_sessions_for_paths
+from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
-from ..models import Workspace
+from ..models import Task, Workspace
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
 from .session_card import SessionCard
@@ -265,6 +268,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         for s in sessions:
             card = SessionCard(s, show_origin=show_origin)
             card.resume_requested.connect(self._on_resume_card)
+            card.convert_to_task_requested.connect(self._on_convert_to_task)
             item = QListWidgetItem()
             item.setSizeHint(card.sizeHint())
             self._sessions_list.addItem(item)
@@ -285,6 +289,30 @@ class WorkspaceDetailsPanel(QStackedWidget):
         if not self.workspace:
             return
         self.launch_claude_requested.emit(self.workspace, session.id, session.origin_cwd)
+
+    def _on_convert_to_task(self, session: ClaudeSession) -> None:
+        if not self.workspace:
+            return
+        suggested = (session.preview or "").replace("\n", " ").strip()
+        if not suggested:
+            when = datetime.fromtimestamp(session.mtime)
+            suggested = f"Continuar sessão de {when.strftime('%d/%m %H:%M')}"
+        if len(suggested) > 200:
+            suggested = suggested[:199] + "…"
+        title, ok = QInputDialog.getText(
+            self,
+            "Nova tarefa a partir da sessão",
+            "Título da tarefa:",
+            text=suggested,
+        )
+        if not ok:
+            return
+        title = title.strip()
+        if not title:
+            return
+        self.workspace.tasks.append(Task(title=title))
+        self._tasks_panel.set_workspace(self.workspace)
+        self.tasks_changed.emit(self.workspace)
 
     def _launch_ide(self, ide_key: str) -> None:
         if not self.workspace:

@@ -28,9 +28,25 @@ class TerminalArea(QWidget):
     def add_terminal(self, title: str) -> TerminalWidget:
         widget = TerminalWidget()
         widget.running_changed.connect(self._on_running_changed)
+        widget.running_changed.connect(
+            lambda running, w=widget: self._mark_tab_state(w, running)
+        )
         idx = self.tabs.addTab(widget, title)
         self.tabs.setCurrentIndex(idx)
+        # Salva o título "limpo" — adicionamos marcadores depois sem
+        # destruir o original
+        widget.setProperty("_base_title", title)
         return widget
+
+    def _mark_tab_state(self, widget: TerminalWidget, running: bool) -> None:
+        idx = self.tabs.indexOf(widget)
+        if idx < 0:
+            return
+        base = widget.property("_base_title") or self.tabs.tabText(idx).lstrip("✓● ")
+        if running:
+            self.tabs.setTabText(idx, f"● {base}")
+        else:
+            self.tabs.setTabText(idx, f"✓ {base}")
 
     def count(self) -> int:
         return self.tabs.count()

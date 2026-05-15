@@ -186,6 +186,39 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+,"), self, self._show_settings)
         # Ctrl+N → novo workspace
         QShortcut(QKeySequence("Ctrl+N"), self, self.add_workspace)
+        # Ctrl+1..9 → pular pro N-ésimo workspace visível
+        for i in range(1, 10):
+            QShortcut(
+                QKeySequence(f"Ctrl+{i}"),
+                self,
+                lambda idx=i - 1: self._jump_to_workspace(idx),
+            )
+        # Ctrl+Tab / Ctrl+Shift+Tab → próximo/anterior workspace visível
+        QShortcut(QKeySequence("Ctrl+Tab"), self, lambda: self._cycle_workspace(1))
+        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, lambda: self._cycle_workspace(-1))
+
+    def _visible_rows(self) -> list[int]:
+        return [
+            i for i in range(self.list_widget.count())
+            if not self.list_widget.item(i).isHidden()
+        ]
+
+    def _jump_to_workspace(self, index: int) -> None:
+        rows = self._visible_rows()
+        if 0 <= index < len(rows):
+            self.list_widget.setCurrentRow(rows[index])
+
+    def _cycle_workspace(self, delta: int) -> None:
+        rows = self._visible_rows()
+        if not rows:
+            return
+        current = self.list_widget.currentRow()
+        try:
+            pos = rows.index(current)
+        except ValueError:
+            pos = 0
+        next_pos = (pos + delta) % len(rows)
+        self.list_widget.setCurrentRow(rows[next_pos])
 
     def _toggle_sidebar(self) -> None:
         sizes = self.body_splitter.sizes()

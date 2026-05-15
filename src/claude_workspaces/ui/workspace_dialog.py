@@ -1,3 +1,7 @@
+import os
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -13,6 +17,47 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import Workspace
+
+
+class _FoldersList(QListWidget):
+    """QListWidget que aceita drop de pastas vindas do gerenciador de arquivos."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        urls = event.mimeData().urls()
+        added = 0
+        existing = {self.item(i).text() for i in range(self.count())}
+        for u in urls:
+            if not u.isLocalFile():
+                continue
+            path = u.toLocalFile()
+            if not os.path.isdir(path):
+                continue
+            if path in existing:
+                continue
+            self.addItem(path)
+            existing.add(path)
+            added += 1
+        if added:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
 
 class WorkspaceDialog(QDialog):
@@ -33,8 +78,11 @@ class WorkspaceDialog(QDialog):
         form.addRow("Descrição:", self.desc_edit)
         layout.addLayout(form)
 
-        layout.addWidget(QLabel("Pastas (a primeira é a principal — vira o cwd do Claude):"))
-        self.folders_list = QListWidget()
+        layout.addWidget(QLabel(
+            "Pastas (a primeira é a principal — vira o cwd do Claude). "
+            "Arraste do gerenciador de arquivos pra adicionar."
+        ))
+        self.folders_list = _FoldersList()
         if workspace:
             self.folders_list.addItems(workspace.folders)
         layout.addWidget(self.folders_list)
