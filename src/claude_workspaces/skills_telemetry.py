@@ -10,12 +10,10 @@ Funções públicas:
 
 import json
 import logging
-from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
-
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +28,7 @@ class SkillUsage:
     def last_used_label(self) -> str:
         if not self.last_used:
             return ""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         delta = now - self.last_used
         days = delta.days
         if days <= 0:

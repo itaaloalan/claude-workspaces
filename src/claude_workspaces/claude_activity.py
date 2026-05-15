@@ -12,7 +12,6 @@ Heurística:
 import re
 from dataclasses import dataclass
 
-
 ANSI_CSI_RE = re.compile(r"\x1b\[[\d;?<>!]*[A-Za-z@`]")
 ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 ANSI_OTHER_RE = re.compile(r"\x1b[78NDEcMH=>\(\)*+]\S?")  # single-char e charset escapes
@@ -64,8 +63,8 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
         return Activity(status="", is_working=False)
     text = strip_ansi(text)
 
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    lines = [l for l in lines if _is_meaningful(l)]
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    lines = [ln for ln in lines if _is_meaningful(ln)]
     if not lines:
         return Activity(status="", is_working=False)
 

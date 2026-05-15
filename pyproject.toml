@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
@@ -31,3 +32,24 @@ claude_workspaces = ["ui/static/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # warnings
+    "I",   # isort (import order)
+    "UP",  # pyupgrade (modern syntax)
+    "B",   # bugbear (cuidado: B008 — defaults mutáveis)
+]
+ignore = [
+    "E501",  # line too long — Qt CSS strings violam constantemente
+    "E731",  # lambda atribuído — usamos pra slots de signals
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F841"]  # variáveis não-usadas em testes (às vezes só pra setup)

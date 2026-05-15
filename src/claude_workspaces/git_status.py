@@ -10,7 +10,6 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 log = logging.getLogger(__name__)
 
 TIMEOUT_S = 5

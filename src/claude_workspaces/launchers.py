@@ -9,7 +9,6 @@ from pathlib import Path
 from .models import Workspace
 from .settings import Settings
 
-
 log = logging.getLogger(__name__)
 
 

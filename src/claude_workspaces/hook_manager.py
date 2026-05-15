@@ -6,7 +6,6 @@ import logging
 import shutil
 from pathlib import Path
 
-
 log = logging.getLogger(__name__)
 
 HOOK_FILENAME = "notify-hook.py"

@@ -1,11 +1,9 @@
 import logging
-
-from datetime import datetime
+from datetime import UTC, datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -23,12 +21,11 @@ from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Workspace
-from .git_panel import GitPanel, open_path_in_editor
-from .mcp_dialog import MCPDialog
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
+from .git_panel import GitPanel
+from .mcp_dialog import MCPDialog
 from .session_card import SessionCard
-
 
 log = logging.getLogger(__name__)
 
@@ -343,12 +340,13 @@ class WorkspaceDetailsPanel(QStackedWidget):
             self._usage_label.setVisible(False)
             return
         try:
-            from datetime import datetime, timedelta, timezone
+            from datetime import datetime, timedelta
+
             from ..usage_telemetry import (
                 aggregate_usage_by_workspace,
                 format_tokens,
             )
-            since = datetime.now(timezone.utc) - timedelta(days=30)
+            since = datetime.now(UTC) - timedelta(days=30)
             all_usage = aggregate_usage_by_workspace(since=since)
         except Exception:
             self._usage_label.setVisible(False)
@@ -369,7 +367,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
             self._usage_label.setVisible(False)
             return
         parts = [
-            f"<b>Uso (30d):</b>",
+            "<b>Uso (30d):</b>",
             f"in {format_tokens(total_in)}",
             f"out {format_tokens(total_out)}",
             f"cache {format_tokens(total_cache)}",

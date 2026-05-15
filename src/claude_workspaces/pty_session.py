@@ -8,7 +8,6 @@ import termios
 
 from PySide6.QtCore import QObject, QSocketNotifier, Signal
 
-
 log = logging.getLogger(__name__)
 
 

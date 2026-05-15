@@ -9,7 +9,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 log = logging.getLogger(__name__)
 
 TIMEOUT_S = 60

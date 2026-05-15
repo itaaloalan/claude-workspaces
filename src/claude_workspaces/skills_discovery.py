@@ -18,7 +18,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
 log = logging.getLogger(__name__)
 
 _FRONT_LINE_RE = re.compile(r"^([\w-]+):\s*(.+?)\s*$")

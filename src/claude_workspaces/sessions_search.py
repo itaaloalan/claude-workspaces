@@ -9,12 +9,9 @@ search com snippet de contexto e retorna ordenado por recência.
 
 import json
 import logging
-import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
-
 
 log = logging.getLogger(__name__)
 
@@ -124,7 +121,7 @@ def search_sessions(
                 mtime_ts = jsonl.stat().st_mtime
             except OSError:
                 continue
-            last_modified = datetime.fromtimestamp(mtime_ts, tz=timezone.utc)
+            last_modified = datetime.fromtimestamp(mtime_ts, tz=UTC)
             if since and last_modified < since:
                 continue
             text, first_prompt = _read_session_text(jsonl)

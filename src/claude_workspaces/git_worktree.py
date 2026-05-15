@@ -14,7 +14,6 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-
 log = logging.getLogger(__name__)
 
 TIMEOUT_S = 60
@@ -105,11 +104,16 @@ def list_local_branches(repo_path: str) -> list[str]:
 def remove_worktree(worktree_path: str) -> tuple[bool, str]:
     """Remove o worktree. Pede ao git pra fazer cleanup do registro
     interno + remove o diretório."""
-    # Descobre o repo principal
-    rc, out = _run(["git", "rev-parse", "--show-toplevel"], worktree_path)
+    # Descobre o repo principal via --git-common-dir (sempre aponta pro
+    # .git principal mesmo quando rodado de dentro de um worktree).
+    # --show-toplevel não serve aqui — devolve o próprio worktree.
+    rc, out = _run(["git", "rev-parse", "--git-common-dir"], worktree_path)
     if rc != 0:
         return False, f"não foi possível resolver o repo: {out}"
-    main_repo = out.strip()
+    common_dir = Path(out.strip())
+    if not common_dir.is_absolute():
+        common_dir = (Path(worktree_path) / common_dir).resolve()
+    main_repo = str(common_dir.parent)
     if Path(main_repo).resolve() == Path(worktree_path).resolve():
         return False, "esse path é o repo principal, não um worktree"
     rc, out = _run(

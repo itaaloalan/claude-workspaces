@@ -22,9 +22,8 @@ from ..hook_manager import (
     is_hook_installed,
     uninstall_hook,
 )
-from ..logging_setup import log_file, state_dir
+from ..logging_setup import log_file
 from ..settings import Settings, settings_file
-
 
 log = logging.getLogger(__name__)
 

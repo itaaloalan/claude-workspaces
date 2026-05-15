@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-
 log = logging.getLogger(__name__)
 
 

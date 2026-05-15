@@ -3,7 +3,6 @@ herdando o contexto de uma sessão anterior. Permite editar antes."""
 
 import logging
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDialog,
@@ -14,7 +13,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..claude_sessions import ClaudeSession
-
 
 log = logging.getLogger(__name__)
 
@@ -44,9 +42,9 @@ class HandoffDialog(QDialog):
         v.setSpacing(10)
 
         info = QLabel(
-            f"Briefing a ser enviado como primeira mensagem do novo Claude. "
-            f"Edite o texto antes de confirmar; o conteúdo também vai pra clipboard "
-            f"como fallback."
+            "Briefing a ser enviado como primeira mensagem do novo Claude. "
+            "Edite o texto antes de confirmar; o conteúdo também vai pra clipboard "
+            "como fallback."
         )
         info.setWordWrap(True)
         info.setStyleSheet("color: #c8c8c8;")

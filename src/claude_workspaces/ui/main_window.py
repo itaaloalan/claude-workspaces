@@ -22,7 +22,6 @@ from ..launchers import (
     LauncherError,
     find_app_repo_root,
     launch_claude_in_dir,
-    launch_claude_resume,
 )
 from ..models import Workspace
 from ..settings import Settings
@@ -42,7 +41,6 @@ from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
 from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
-
 
 log = logging.getLogger(__name__)
 
@@ -977,8 +975,8 @@ class MainWindow(QMainWindow):
         self.top_bar.set_inbox_count(len(self._inbox))
 
     def _show_inbox(self) -> None:
-        from PySide6.QtWidgets import QMenu
         from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu
         if not self._inbox:
             menu = QMenu(self)
             empty = QAction("(nenhum console aguardando)", menu)
@@ -1132,8 +1130,8 @@ class MainWindow(QMainWindow):
             extras = []
         elif not resume_session_id:
             # Resume não passa pelo dialog (preserva a sessão exata)
-            from .launch_claude_dialog import LaunchClaudeDialog
             from ..git_worktree import add_worktree
+            from .launch_claude_dialog import LaunchClaudeDialog
             dialog = LaunchClaudeDialog(workspace, self.settings, parent=self)
             if not dialog.exec():
                 return
@@ -1192,8 +1190,9 @@ class MainWindow(QMainWindow):
         self.details.refresh_sessions_soon()
 
     def _handoff_session(self, workspace: Workspace, session) -> None:
-        from .handoff_dialog import HandoffDialog
         from PySide6.QtGui import QGuiApplication
+
+        from .handoff_dialog import HandoffDialog
         dialog = HandoffDialog(session, parent=self)
         if not dialog.exec():
             return

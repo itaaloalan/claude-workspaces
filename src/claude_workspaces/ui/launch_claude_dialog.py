@@ -5,7 +5,6 @@
 
 import logging
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -26,7 +25,6 @@ from ..git_worktree import (
 )
 from ..models import Workspace
 from ..settings import Settings
-
 
 log = logging.getLogger(__name__)
 

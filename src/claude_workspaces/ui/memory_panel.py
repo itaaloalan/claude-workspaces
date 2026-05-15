@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
 
 from ..models import Workspace
 
-
 log = logging.getLogger(__name__)
 
 

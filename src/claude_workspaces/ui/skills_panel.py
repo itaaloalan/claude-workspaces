@@ -22,7 +22,6 @@ from ..skills_discovery import (
 )
 from ..skills_telemetry import SkillUsage, aggregate_skill_usage
 
-
 KIND_LABEL = {
     KIND_SKILL: "Skill",
     KIND_AGENT: "Agente",
@@ -249,7 +248,7 @@ class SkillsPanel(QWidget):
                     f"Por workspace:\n{ws_breakdown}"
                 )
             li.setToolTip(tooltip)
-            from PySide6.QtGui import QColor, QBrush
+            from PySide6.QtGui import QBrush, QColor
             li.setForeground(QBrush(QColor(KIND_COLOR.get(item.kind, "#c8c8c8"))))
             self._list.addItem(li)
             shown += 1

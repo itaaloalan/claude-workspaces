@@ -6,7 +6,6 @@ from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QMenu,
     QMessageBox,
@@ -21,18 +20,21 @@ from PySide6.QtWidgets import (
 
 from ..git_actions import (
     commit as git_commit,
+)
+from ..git_actions import (
     delete_untracked,
     discard_unstaged,
-    fetch as git_fetch,
     pull_ff_only,
     stage_all,
     stage_file,
     unstage_all,
     unstage_file,
 )
+from ..git_actions import (
+    fetch as git_fetch,
+)
 from ..git_status import GitFile, GitStatus, get_diff, get_status
 from ..models import Workspace
-
 
 log = logging.getLogger(__name__)
 
@@ -616,7 +618,7 @@ class GitPanel(QWidget):
         self, menu: QMenu, items: list[QTreeWidgetItem]
     ) -> None:
         group_name = items[0].data(0, Qt.ItemDataRole.UserRole).get("name", "")
-        folder = items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
+        items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
         if "Unversioned" in group_name:
             menu.addAction(
                 self._action("+ Add todos", lambda: self._stage_group(items[0]))
@@ -656,7 +658,6 @@ class GitPanel(QWidget):
             )
         )
         menu.addSeparator()
-        from pathlib import Path
         menu.addAction(
             self._action(
                 "📁 Abrir pasta",

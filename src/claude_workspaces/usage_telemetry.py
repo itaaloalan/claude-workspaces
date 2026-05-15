@@ -9,10 +9,8 @@ mudar preços.
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Iterator
-
 
 log = logging.getLogger(__name__)
 

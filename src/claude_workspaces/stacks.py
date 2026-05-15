@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 STACK_INDICATORS: dict[str, list[str]] = {
     "java": [
         "pom.xml",

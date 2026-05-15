@@ -6,11 +6,10 @@ por recência. Click num resultado emite session_chosen(SearchHit).
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -23,7 +22,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..sessions_search import SearchHit, search_sessions
-
 
 log = logging.getLogger(__name__)
 
@@ -111,7 +109,7 @@ class SessionsSearchDialog(QDialog):
         idx = self._period.currentIndex()
         _, delta = PERIODS[idx]
         since = (
-            datetime.now(timezone.utc) - delta if delta else None
+            datetime.now(UTC) - delta if delta else None
         )
         self._status.setText("buscando…")
         QTimer.singleShot(0, lambda: self._do_search(query, since))
