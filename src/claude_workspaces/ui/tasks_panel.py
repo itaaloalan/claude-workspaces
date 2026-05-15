@@ -53,9 +53,17 @@ class TasksPanel(QWidget):
 
         self._list = QListWidget()
         self._list.setStyleSheet(
-            "QListWidget { background: #181818; border: 1px solid #2c2c2c; border-radius: 6px; }"
-            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #232323; }"
-            "QListWidget::item:selected { background: #2d4a6e; }"
+            "QListWidget {"
+            "  background: #181818; border: 1px solid #2c2c2c;"
+            "  border-radius: 6px; color: #e6e6e6;"
+            "}"
+            "QListWidget::item {"
+            "  padding: 6px 8px; border-bottom: 1px solid #232323;"
+            "  color: #d0d0d0;"
+            "}"
+            "QListWidget::item:hover { background: #2a3142; color: #fff; }"
+            "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
+            "QListWidget::item:selected:hover { background: #4a82c5; color: #fff; }"
         )
         self._list.itemChanged.connect(self._on_item_changed)
         outer.addWidget(self._list, stretch=1)
