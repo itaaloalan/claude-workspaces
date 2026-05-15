@@ -29,6 +29,10 @@ class Settings:
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
     # Dock direito (Tarefas + Git + Skills colapsáveis)
     right_dock_collapsed: dict = field(default_factory=dict)  # {panel_id: bool}
+    # Defaults pro LaunchClaudeDialog
+    default_isolate_worktree: bool = False
+    default_create_new_branch: bool = True
+    branch_prefix: str = "claude"  # prefixo das branches sugeridas pro worktree
 
     @classmethod
     def load(cls) -> "Settings":

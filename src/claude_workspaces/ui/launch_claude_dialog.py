@@ -25,6 +25,7 @@ from ..git_worktree import (
     worktree_path_for,
 )
 from ..models import Workspace
+from ..settings import Settings
 
 
 log = logging.getLogger(__name__)
@@ -41,9 +42,10 @@ class LaunchClaudeDialog(QDialog):
     - result_base_branch()  -> str           (só quando create_branch True)
     """
 
-    def __init__(self, workspace: Workspace, parent=None) -> None:
+    def __init__(self, workspace: Workspace, settings: Settings | None = None, parent=None) -> None:
         super().__init__(parent)
         self.workspace = workspace
+        self.settings = settings or Settings()
         self.setWindowTitle("Abrir Claude")
         self.resize(640, 460)
 
@@ -101,16 +103,19 @@ class LaunchClaudeDialog(QDialog):
             "Isolar em git worktree (working tree separada)"
         )
         self.isolate_chk.setEnabled(self._is_repo)
+        # Default vem das configs
+        if self._is_repo and self.settings.default_isolate_worktree:
+            self.isolate_chk.setChecked(True)
         v.addWidget(self.isolate_chk)
 
         self.new_branch_chk = QCheckBox("Criar nova branch")
-        self.new_branch_chk.setChecked(True)
+        self.new_branch_chk.setChecked(self.settings.default_create_new_branch)
         self.new_branch_chk.setEnabled(False)
         v.addWidget(self.new_branch_chk)
 
         form = QFormLayout()
-        # "Nova branch" — text edit
-        self.branch_edit = QLineEdit(suggest_branch_name())
+        # "Nova branch" — text edit, prefixada com settings.branch_prefix
+        self.branch_edit = QLineEdit(suggest_branch_name(self.settings.branch_prefix))
         self.branch_edit.setEnabled(False)
         form.addRow("Nome da nova branch:", self.branch_edit)
 

@@ -159,7 +159,10 @@ class TerminalWidget(QWidget):
         olhando os JSONLs em ~/.claude/projects/<encoded-cwd>/."""
         self._claude_cwd = cwd
         self._claude_resume_id = resume_id
-        self._claude_start_time = time.monotonic()
+        # time.time() (wall clock) pra comparar com os.path.getmtime; NÃO
+        # use monotonic aqui — referências diferentes, comparação errada
+        # acabaria casando sessões antigas e mostrando título reciclado
+        self._claude_start_time = time.time()
         self._session_preview = None
         self._session_resolved = False
 

@@ -38,6 +38,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
     delete_requested = Signal(Workspace)
     launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
     launch_shell_requested = Signal(Workspace)
+    handoff_requested = Signal(Workspace, ClaudeSession)
     columns_splitter_moved = Signal()
     open_file_requested = Signal(str)  # caminho absoluto pra abrir no editor
 
@@ -377,10 +378,23 @@ class WorkspaceDetailsPanel(QStackedWidget):
             card = SessionCard(s, show_origin=show_origin)
             card.resume_requested.connect(self._on_resume_card)
             card.delete_requested.connect(self._on_delete_session)
+            card.handoff_requested.connect(self._on_handoff_card)
             item = QListWidgetItem()
             item.setSizeHint(card.sizeHint())
             self._sessions_list.addItem(item)
             self._sessions_list.setItemWidget(item, card)
+
+    def _on_handoff_card(self, session: ClaudeSession) -> None:
+        if not self.workspace:
+            return
+        self.handoff_requested.emit(self.workspace, session)
+
+    def refresh_sessions_soon(self) -> None:
+        """Reescaneia a lista de sessões — chamada externamente quando um
+        novo Claude é lançado (a sessão JSONL leva ~1-3s pra aparecer)."""
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(2500, self._refresh_sessions)
+        QTimer.singleShot(6000, self._refresh_sessions)
 
     def _on_launch_claude(self) -> None:
         if not self.workspace or not self.workspace.folders:

@@ -4,6 +4,7 @@ import shlex
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -97,6 +98,7 @@ class SettingsPanel(QWidget):
 
         outer.addLayout(form)
 
+        outer.addWidget(self._build_worktree_section())
         outer.addWidget(self._build_notifications_section())
 
         actions = QHBoxLayout()
@@ -135,6 +137,9 @@ class SettingsPanel(QWidget):
         self._webstorm_cmd.setText(self.settings.webstorm_command)
         self._pycharm_cmd.setText(self.settings.pycharm_command)
         self._rider_cmd.setText(self.settings.rider_command)
+        self._default_isolate_chk.setChecked(self.settings.default_isolate_worktree)
+        self._default_new_branch_chk.setChecked(self.settings.default_create_new_branch)
+        self._branch_prefix.setText(self.settings.branch_prefix)
 
     def _on_save(self) -> None:
         self.settings.claude_command = self._claude_cmd.text().strip() or "claude"
@@ -150,6 +155,11 @@ class SettingsPanel(QWidget):
         self.settings.webstorm_command = self._webstorm_cmd.text().strip() or "webstorm"
         self.settings.pycharm_command = self._pycharm_cmd.text().strip() or "pycharm"
         self.settings.rider_command = self._rider_cmd.text().strip() or "rider"
+        self.settings.default_isolate_worktree = self._default_isolate_chk.isChecked()
+        self.settings.default_create_new_branch = self._default_new_branch_chk.isChecked()
+        self.settings.branch_prefix = (
+            self._branch_prefix.text().strip().strip("/") or "claude"
+        )
 
         try:
             self.settings.save()
@@ -171,6 +181,40 @@ class SettingsPanel(QWidget):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _build_worktree_section(self) -> QWidget:
+        box = QGroupBox("Worktree / Git ao abrir Claude")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "Pré-marca essas opções no diálogo 'Abrir Claude'. Você pode "
+            "sempre desmarcar antes de confirmar."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(intro)
+
+        self._default_isolate_chk = QCheckBox(
+            "Isolar em git worktree por padrão"
+        )
+        layout.addWidget(self._default_isolate_chk)
+
+        self._default_new_branch_chk = QCheckBox(
+            "Criar nova branch por padrão (quando isolar)"
+        )
+        layout.addWidget(self._default_new_branch_chk)
+
+        form = QFormLayout()
+        self._branch_prefix = QLineEdit()
+        self._branch_prefix.setPlaceholderText("claude")
+        self._branch_prefix.setToolTip(
+            "Prefixo das branches sugeridas pelo worktree. Resulta em "
+            "<prefixo>/<timestamp> (ex: italo/20260515-180000)."
+        )
+        form.addRow("Prefixo da branch:", self._branch_prefix)
+        layout.addLayout(form)
+
+        return box
 
     def _build_notifications_section(self) -> QWidget:
         box = QGroupBox("Notificações")

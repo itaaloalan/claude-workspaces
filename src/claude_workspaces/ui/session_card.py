@@ -18,6 +18,7 @@ class SessionCard(QFrame):
 
     resume_requested = Signal(ClaudeSession)
     delete_requested = Signal(ClaudeSession)
+    handoff_requested = Signal(ClaudeSession)
 
     def __init__(
         self,
@@ -84,6 +85,21 @@ class SessionCard(QFrame):
         )
         delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.session))
         actions.addWidget(delete_btn)
+
+        handoff_btn = QPushButton("→ Handoff")
+        handoff_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        handoff_btn.setToolTip(
+            "Abrir novo Claude com briefing dessa sessão como primeira mensagem"
+        )
+        handoff_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; color: #c8c8c8;"
+            "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
+            "}"
+            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
+        )
+        handoff_btn.clicked.connect(lambda: self.handoff_requested.emit(self.session))
+        actions.addWidget(handoff_btn)
 
         resume_btn = QPushButton("Retomar")
         resume_btn.setCursor(Qt.CursorShape.PointingHandCursor)

@@ -129,6 +129,7 @@ class MainWindow(QMainWindow):
         self.details.launch_claude_requested.connect(self._launch_claude_for)
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.open_file_requested.connect(self._open_file_in_editor)
+        self.details.handoff_requested.connect(self._handoff_session)
         self.content_stack.addWidget(self.details)
 
         self.settings_panel = SettingsPanel(self.settings)
@@ -1099,7 +1100,7 @@ class MainWindow(QMainWindow):
             # Resume não passa pelo dialog (preserva a sessão exata)
             from .launch_claude_dialog import LaunchClaudeDialog
             from ..git_worktree import add_worktree
-            dialog = LaunchClaudeDialog(workspace, parent=self)
+            dialog = LaunchClaudeDialog(workspace, self.settings, parent=self)
             if not dialog.exec():
                 return
             selected = dialog.result_folders()
@@ -1151,6 +1152,49 @@ class MainWindow(QMainWindow):
         except Exception as e:
             log.exception("Falha ao abrir Claude embutido")
             QMessageBox.warning(self, "Falha", str(e))
+            return
+        # JSONL da nova sessão aparece em ~1-3s; pede refresh dos cards
+        # de Sessões recentes (workspace_details agenda dois QTimer)
+        self.details.refresh_sessions_soon()
+
+    def _handoff_session(self, workspace: Workspace, session) -> None:
+        from .handoff_dialog import HandoffDialog
+        from PySide6.QtGui import QGuiApplication
+        dialog = HandoffDialog(session, parent=self)
+        if not dialog.exec():
+            return
+        briefing = dialog.briefing()
+        if not briefing:
+            return
+        QGuiApplication.clipboard().setText(briefing)
+        # Abre um novo Claude no workspace (passa pelo LaunchClaudeDialog normal,
+        # respeitando defaults). Depois agenda envio do briefing após 4s pro
+        # Claude estar pronto pra receber input.
+        before_count = 0
+        area_before = self._terminal_areas.get(workspace.id)
+        if area_before is not None:
+            before_count = area_before.tabs.count()
+        self._launch_claude_for(workspace, "", "")
+        area_after = self._terminal_areas.get(workspace.id)
+        if area_after is None or area_after.tabs.count() == before_count:
+            return  # usuário cancelou o LaunchClaudeDialog
+        new_terminal = area_after.tabs.widget(area_after.tabs.count() - 1)
+        if not isinstance(new_terminal, TerminalWidget):
+            return
+        # Envia o briefing como input ~4s depois (espera Claude inicializar)
+        QTimer.singleShot(
+            4000, lambda: self._send_to_terminal(new_terminal, briefing)
+        )
+
+    def _send_to_terminal(self, terminal: "TerminalWidget", text: str) -> None:
+        if not terminal.session.is_running():
+            log.warning("Terminal não está rodando, abortando envio do briefing")
+            return
+        try:
+            payload = (text + "\n").encode("utf-8")
+            terminal.session.write(payload)
+        except Exception:
+            log.exception("Falha ao enviar briefing pro terminal")
 
     def _launch_shell_for(self, workspace: Workspace) -> None:
         if not workspace.folders:

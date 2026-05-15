@@ -35,8 +35,9 @@ def _run(args: list[str], cwd: str) -> tuple[int, str]:
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
-def suggest_branch_name() -> str:
-    return f"claude/{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+def suggest_branch_name(prefix: str = "claude") -> str:
+    prefix = (prefix or "claude").strip().strip("/") or "claude"
+    return f"{prefix}/{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
 
 def safe_dir_name(branch: str) -> str:
