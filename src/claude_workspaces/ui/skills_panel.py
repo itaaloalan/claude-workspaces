@@ -20,6 +20,7 @@ from ..skills_discovery import (
     ClaudeItem,
     list_all_items,
 )
+from ..skills_telemetry import SkillUsage, aggregate_skill_usage
 
 
 KIND_LABEL = {
@@ -58,6 +59,7 @@ class SkillsPanel(QWidget):
         super().__init__(parent)
         self.workspace: Workspace | None = None
         self._all: list[ClaudeItem] = []
+        self._usage: dict[str, SkillUsage] = {}
         self._kind_filter = self.KIND_FILTER_ALL
         self._source_filter = self.SOURCE_FILTER_ALL
 
@@ -181,6 +183,10 @@ class SkillsPanel(QWidget):
     def refresh(self) -> None:
         folders = self.workspace.folders if self.workspace else []
         self._all = list_all_items(folders)
+        try:
+            self._usage = aggregate_skill_usage()
+        except Exception:
+            self._usage = {}
         self._render()
 
     def _matches_source(self, item: ClaudeItem) -> bool:
@@ -192,9 +198,18 @@ class SkillsPanel(QWidget):
 
     def _render(self) -> None:
         needle = self._search.text().strip().lower()
+        # Pra ordenar Skills por uso (decrescente) quando filtro de tipo
+        # mostra só skills ou todos — quem foi usado fica em cima.
+        items = list(self._all)
+        if self._kind_filter == self.KIND_FILTER_ALL or self._kind_filter == KIND_SKILL:
+            items.sort(
+                key=lambda i: -(self._usage.get(i.name).count if self._usage.get(i.name) else 0)
+                if i.kind == KIND_SKILL
+                else 0
+            )
         self._list.clear()
         shown = 0
-        for item in self._all:
+        for item in items:
             if self._kind_filter != self.KIND_FILTER_ALL and item.kind != self._kind_filter:
                 continue
             if not self._matches_source(item):
@@ -202,8 +217,16 @@ class SkillsPanel(QWidget):
             hay = f"{item.name}\n{item.description}\n{item.source}".lower()
             if needle and needle not in hay:
                 continue
+            usage = self._usage.get(item.name) if item.kind == KIND_SKILL else None
+            stats_suffix = ""
+            if usage and usage.count > 0:
+                stats_suffix = f"  ·  {usage.count} uso(s)"
+                ago = usage.last_used_label()
+                if ago:
+                    stats_suffix += f"  ·  {ago}"
             label = (
-                f"[{KIND_LABEL[item.kind]}]  {item.invocation}  ·  {item.source_label}"
+                f"[{KIND_LABEL[item.kind]}]  {item.invocation}"
+                f"  ·  {item.source_label}{stats_suffix}"
             )
             if item.description:
                 desc = item.description.strip().replace("\n", " ")
@@ -212,9 +235,20 @@ class SkillsPanel(QWidget):
                 label += f"\n{desc}"
             li = QListWidgetItem(label)
             li.setData(Qt.ItemDataRole.UserRole, item)
-            li.setToolTip(
-                f"{item.path}\n\nClique pra copiar  {item.invocation}"
-            )
+            tooltip = f"{item.path}\n\nClique pra copiar  {item.invocation}"
+            if usage and usage.count > 0:
+                ws_breakdown = "\n".join(
+                    f"  · {cwd}: {n}x"
+                    for cwd, n in sorted(
+                        usage.by_workspace.items(), key=lambda kv: -kv[1]
+                    )[:5]
+                )
+                tooltip += (
+                    f"\n\nUsos: {usage.count}\n"
+                    f"Último: {usage.last_used_label()}\n"
+                    f"Por workspace:\n{ws_breakdown}"
+                )
+            li.setToolTip(tooltip)
             from PySide6.QtGui import QColor, QBrush
             li.setForeground(QBrush(QColor(KIND_COLOR.get(item.kind, "#c8c8c8"))))
             self._list.addItem(li)
