@@ -9,9 +9,9 @@ class TerminalArea(QWidget):
     Mantém o estado das sessões mesmo quando o usuário alterna entre workspaces."""
 
     running_count_changed = Signal(int)
-    # tab_id (id() do widget), título, status, is_working, is_running
-    tab_activity_changed = Signal(int, str, str, bool, bool)
-    tab_removed = Signal(int)  # tab_id
+    # tab_id é id() do widget — pode passar de 2^31, então usa qint64
+    tab_activity_changed = Signal("qint64", str, str, bool, bool)
+    tab_removed = Signal("qint64")
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
