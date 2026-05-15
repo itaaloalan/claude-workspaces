@@ -104,5 +104,5 @@ Itens marcados ✓ já foram resolvidos; ✗ pendentes.
 | 3 | `BasePanel` Protocol + adaptar panels | 2h | ✗ |
 | 4 | `services/launcher_service.py` extraído | 2h | ✗ |
 | 5 | `TerminalState` com ciclo de vida | 3h | ✗ |
-| 6 | Testes de `git_actions`, `claude_activity`, `skills_discovery` | 4h | ✗ |
-| 7 | CI: `ruff` + `mypy` | 30 min | ✗ |
+| 6 | Testes de 7 módulos puros (102 testes total) | 4h | ✓ |
+| 7 | CI: `ruff` no workflow + config em pyproject | 30 min | ✓ |
