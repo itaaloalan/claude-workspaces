@@ -4,6 +4,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -13,11 +15,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..claude_sessions import ClaudeSession, list_sessions
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..models import Workspace
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
-from .terminal_widget import TerminalWidget
+from .terminal_area import TerminalArea
 
 
 log = logging.getLogger(__name__)
@@ -31,6 +34,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         super().__init__()
         self.settings = settings
         self.workspace: Workspace | None = None
+        self._terminal_areas: dict[str, TerminalArea] = {}
 
         self._empty = self._build_empty_panel()
         self.addWidget(self._empty)
@@ -58,12 +62,20 @@ class WorkspaceDetailsPanel(QStackedWidget):
         scroll.setWidget(self._build_top_section())
         splitter.addWidget(scroll)
 
-        self.terminal = TerminalWidget()
-        splitter.addWidget(self.terminal)
+        self._terminal_host = QStackedWidget()
+        self._empty_terminal = QLabel(
+            "(sem terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' acima)"
+        )
+        self._empty_terminal.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_terminal.setStyleSheet(
+            "background: #0e0e0e; color: #555; padding: 24px;"
+        )
+        self._terminal_host.addWidget(self._empty_terminal)
+        splitter.addWidget(self._terminal_host)
 
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([280, 420])
+        splitter.setSizes([340, 420])
         return splitter
 
     def _build_top_section(self) -> QWidget:
@@ -93,11 +105,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         c.addWidget(self._folders)
 
         c.addWidget(QLabel("<b>Abrir com</b>"))
-
         primary_row = QHBoxLayout()
-        claude_btn = QPushButton("Abrir Claude (embutido)")
-        claude_btn.clicked.connect(self._launch_claude)
-        konsole_btn = QPushButton("Abrir Terminal (embutido)")
+        claude_btn = QPushButton("Abrir Claude (nova aba)")
+        claude_btn.clicked.connect(self._launch_claude_new)
+        konsole_btn = QPushButton("Abrir Terminal (nova aba)")
         konsole_btn.clicked.connect(self._launch_shell)
         primary_row.addWidget(claude_btn)
         primary_row.addWidget(konsole_btn)
@@ -109,11 +120,38 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._ide_row.setContentsMargins(0, 0, 0, 0)
         c.addWidget(self._ide_row_host)
 
+        sess_header = QHBoxLayout()
+        sess_header.addWidget(QLabel("<b>Sessões recentes do Claude</b>"))
+        sess_header.addStretch()
+        refresh_btn = QPushButton("↻")
+        refresh_btn.setFixedWidth(28)
+        refresh_btn.setToolTip("Atualizar lista")
+        refresh_btn.clicked.connect(self._refresh_sessions)
+        sess_header.addWidget(refresh_btn)
+        c.addLayout(sess_header)
+
+        self._sessions_list = QListWidget()
+        self._sessions_list.setMaximumHeight(150)
+        self._sessions_list.setStyleSheet("color: #ccc;")
+        self._sessions_list.itemDoubleClicked.connect(self._resume_session_item)
+        c.addWidget(self._sessions_list)
+
+        sess_actions = QHBoxLayout()
+        resume_btn = QPushButton("Retomar selecionada (nova aba)")
+        resume_btn.clicked.connect(self._resume_selected_session)
+        sess_actions.addWidget(resume_btn)
+        sess_actions.addStretch()
+        c.addLayout(sess_actions)
+
         meta = QHBoxLayout()
         edit_btn = QPushButton("Editar")
-        edit_btn.clicked.connect(lambda: self.workspace and self.edit_requested.emit(self.workspace))
+        edit_btn.clicked.connect(
+            lambda: self.workspace and self.edit_requested.emit(self.workspace)
+        )
         del_btn = QPushButton("Remover")
-        del_btn.clicked.connect(lambda: self.workspace and self.delete_requested.emit(self.workspace))
+        del_btn.clicked.connect(
+            lambda: self.workspace and self.delete_requested.emit(self.workspace)
+        )
         meta.addStretch()
         meta.addWidget(edit_btn)
         meta.addWidget(del_btn)
@@ -124,8 +162,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
     def show_empty(self) -> None:
         self.workspace = None
-        if hasattr(self, "terminal"):
-            self.terminal.terminate()
         self.setCurrentWidget(self._empty)
 
     def show_workspace(self, workspace: Workspace) -> None:
@@ -148,7 +184,22 @@ class WorkspaceDetailsPanel(QStackedWidget):
             self._stacks.setVisible(False)
 
         self._rebuild_ide_buttons(stacks)
+        self._refresh_sessions()
+
+        if workspace.name in self._terminal_areas:
+            self._terminal_host.setCurrentWidget(self._terminal_areas[workspace.name])
+        else:
+            self._terminal_host.setCurrentIndex(0)
+
         self.setCurrentWidget(self._content)
+
+    def cleanup_workspace(self, name: str) -> None:
+        area = self._terminal_areas.pop(name, None)
+        if area is None:
+            return
+        area.close_all()
+        self._terminal_host.removeWidget(area)
+        area.deleteLater()
 
     def _rebuild_ide_buttons(self, stacks: set[str]) -> None:
         while self._ide_row.count():
@@ -174,16 +225,56 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         self._ide_row.addStretch()
 
-    def _launch_claude(self) -> None:
+    def _refresh_sessions(self) -> None:
+        self._sessions_list.clear()
+        if not self.workspace or not self.workspace.folders:
+            return
+        cwd, _ = self.workspace.launch_paths()
+        sessions = list_sessions(cwd, limit=15)
+        if not sessions:
+            placeholder = QListWidgetItem("(nenhuma sessão encontrada para esse projeto)")
+            placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+            self._sessions_list.addItem(placeholder)
+            return
+        for s in sessions:
+            item = QListWidgetItem(s.label())
+            item.setData(Qt.ItemDataRole.UserRole, s)
+            item.setToolTip(f"ID: {s.id}\n\n{s.preview}")
+            self._sessions_list.addItem(item)
+
+    def _get_terminal_area(self) -> TerminalArea | None:
+        if not self.workspace:
+            return None
+        name = self.workspace.name
+        if name not in self._terminal_areas:
+            area = TerminalArea()
+            self._terminal_areas[name] = area
+            self._terminal_host.addWidget(area)
+        return self._terminal_areas[name]
+
+    def _launch_claude_new(self) -> None:
+        self._launch_claude()
+
+    def _launch_claude(self, *, resume_session_id: str | None = None) -> None:
         if not self.workspace or not self.workspace.folders:
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
         cwd, extras = self.workspace.launch_paths()
         argv = [self.settings.claude_command, *self.settings.claude_extra_args]
+        if resume_session_id:
+            argv += ["--resume", resume_session_id]
         for extra in extras:
             argv += ["--add-dir", extra]
+
+        area = self._get_terminal_area()
+        if area is None:
+            return
+        self._terminal_host.setCurrentWidget(area)
+        title = "claude (resume)" if resume_session_id else "claude"
+        title = f"{title} #{area.count() + 1}"
+        terminal = area.add_terminal(title)
         try:
-            self.terminal.start_shell_command(
+            terminal.start_shell_command(
                 argv,
                 cwd,
                 label=f"claude — {self.workspace.name}",
@@ -197,14 +288,30 @@ class WorkspaceDetailsPanel(QStackedWidget):
         if not self.workspace or not self.workspace.folders:
             return
         cwd, _ = self.workspace.launch_paths()
+        area = self._get_terminal_area()
+        if area is None:
+            return
+        self._terminal_host.setCurrentWidget(area)
+        terminal = area.add_terminal(f"shell #{area.count() + 1}")
         try:
-            self.terminal.start_interactive_shell(
+            terminal.start_interactive_shell(
                 cwd,
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:
             log.exception("Falha ao abrir shell embutido")
             QMessageBox.warning(self, "Falha", str(e))
+
+    def _resume_session_item(self, item: QListWidgetItem) -> None:
+        session = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(session, ClaudeSession):
+            self._launch_claude(resume_session_id=session.id)
+
+    def _resume_selected_session(self) -> None:
+        item = self._sessions_list.currentItem()
+        if item is None:
+            return
+        self._resume_session_item(item)
 
     def _launch_ide(self, ide_key: str) -> None:
         if not self.workspace:
@@ -215,4 +322,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
             log.exception(
                 "Falha ao abrir %s (workspace=%s)", ide_key, self.workspace.name
             )
-            QMessageBox.warning(self, f"Falha ao abrir {IDE_LABEL.get(ide_key, ide_key)}", str(e))
+            QMessageBox.warning(
+                self,
+                f"Falha ao abrir {IDE_LABEL.get(ide_key, ide_key)}",
+                str(e),
+            )

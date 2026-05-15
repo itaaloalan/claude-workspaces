@@ -193,4 +193,5 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.workspaces.remove(workspace)
             save_workspaces(self.workspaces)
+            self.details.cleanup_workspace(workspace.name)
             self.refresh_list()
