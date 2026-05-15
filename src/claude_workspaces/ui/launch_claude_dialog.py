@@ -172,8 +172,10 @@ class LaunchClaudeDialog(QDialog):
     def _sync_enabled_states(self) -> None:
         isolating = self.isolate_chk.isChecked() and self._is_repo
         new_branch = self.new_branch_chk.isChecked()
-        # Quando isolando + criando nova branch: branch_edit e base_edit ligados
-        # Quando isolando + usando existente: existing_combo ligado
+        # new_branch_chk fica desabilitado quando não está isolando — sem
+        # worktree, não criamos branch. Esse setEnabled estava faltando
+        # antes, então o chk ficava trancado mesmo com isolate marcado.
+        self.new_branch_chk.setEnabled(isolating)
         self.branch_edit.setEnabled(isolating and new_branch)
         self.base_edit.setEnabled(isolating and new_branch)
         self.existing_combo.setEnabled(isolating and not new_branch)

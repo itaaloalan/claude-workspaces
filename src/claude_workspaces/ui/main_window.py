@@ -111,7 +111,10 @@ class MainWindow(QMainWindow):
         # conteúdo (details / settings) em cima, terminal embaixo —
         # terminal nunca passa por baixo do sidebar
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.right_splitter.setChildrenCollapsible(True)
+        # collapsible=False → drag freeform sem snap-to-zero embaixo do
+        # threshold (~15px). Toggle Ctrl+J / minimize button continuam
+        # funcionando via setSizes([N, 0]) que ignora a constraint.
+        self.right_splitter.setChildrenCollapsible(False)
         self.right_splitter.setHandleWidth(8)
         self.right_splitter.setStyleSheet(splitter_css)
 
