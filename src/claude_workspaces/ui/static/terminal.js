@@ -25,7 +25,19 @@
         }
     }
 
-    safeFit();
+    // Tenta refitar várias vezes nos primeiros segundos — Qt pode demorar
+    // pra finalizar layout (especialmente em splitters) e fontes podem
+    // ainda estar carregando quando o init roda
+    function aggressiveFit() {
+        safeFit();
+        const delays = [50, 150, 300, 600, 1200];
+        delays.forEach(ms => setTimeout(safeFit, ms));
+    }
+    aggressiveFit();
+
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(safeFit);
+    }
 
     new QWebChannel(qt.webChannelTransport, function (channel) {
         const bridge = channel.objects.bridge;
@@ -42,6 +54,13 @@
             }
         });
 
+        // Sinal explícito do Qt quando o widget redimensiona (resizeEvent)
+        if (bridge.force_fit_requested) {
+            bridge.force_fit_requested.connect(function () {
+                aggressiveFit();
+            });
+        }
+
         term.onData(function (data) {
             bridge.input_from_terminal(data);
         });
@@ -54,8 +73,12 @@
         window.addEventListener('resize', safeFit);
         const ro = new ResizeObserver(safeFit);
         ro.observe(document.getElementById('terminal'));
+        ro.observe(document.body);
 
         sendSize();
         bridge.frontend_ready();
+        // Mais uma rodada depois que o bridge tá pronto — alguns sizes
+        // do Qt só se estabilizam após o channel conectar
+        aggressiveFit();
     });
 })();

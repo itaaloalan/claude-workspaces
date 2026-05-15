@@ -35,6 +35,7 @@ class TerminalBridge(QObject):
     # QByteArray vira ArrayBuffer no JS, deixando o xterm.js decodificar
     # UTF-8 corretamente (chars multi-byte como ─ │ ╭ não quebram).
     output_to_terminal = Signal("QByteArray")
+    force_fit_requested = Signal()
     ready = Signal()
 
     def __init__(self, session: PtySession) -> None:
@@ -172,6 +173,20 @@ class TerminalWidget(QWidget):
         self._stop_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
         self._set_running(False)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        # Qt mudou nosso tamanho — o ResizeObserver no JS normalmente já
+        # pega isso, mas em alguns casos (split inicial, troca de aba do
+        # QStackedWidget, mudança de zoom do Qt) o evento não propaga.
+        # Disparar o sinal force_fit_requested garante um refit explícito.
+        if hasattr(self, "bridge") and self._bridge_ready:
+            self.bridge.force_fit_requested.emit()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if hasattr(self, "bridge") and self._bridge_ready:
+            self.bridge.force_fit_requested.emit()
 
     def closeEvent(self, event) -> None:
         self.terminate()
