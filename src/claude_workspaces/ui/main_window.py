@@ -1,17 +1,17 @@
 import logging
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSplitter,
-    QTabWidget,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -21,98 +21,135 @@ from ..models import Workspace
 from ..settings import Settings
 from ..storage import load_workspaces, save_workspaces
 from .settings_panel import SettingsPanel
+from .terminal_area import TerminalArea
+from .top_bar import TopBar
 from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
+
+
+log = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Claude Workspaces")
-        self.resize(1180, 740)
 
         self.settings = Settings.load()
         self.workspaces: list[Workspace] = load_workspaces()
-        self._running_counts: dict[str, int] = {}
+        # Migração silenciosa: se algum workspace veio sem id (arquivo
+        # antigo), salva de volta com ids preenchidos pelo from_dict.
+        self._migrate_ids_if_needed()
 
-        tabs = QTabWidget()
-        tabs.addTab(self._build_workspaces_tab(), "Workspaces")
+        self._running_counts: dict[str, int] = {}  # key=workspace.id
+        self._terminal_areas: dict[str, TerminalArea] = {}  # key=workspace.id
+        self._terminal_placeholder_idx: int = 0
 
-        self.settings_panel = SettingsPanel(self.settings)
-        tabs.addTab(self.settings_panel, "Configurações")
-
-        self.setCentralWidget(tabs)
+        self._build_ui()
+        self._restore_geometry()
         self.refresh_list()
 
-    def _build_workspaces_tab(self) -> QWidget:
-        container = QWidget()
-        outer = QVBoxLayout(container)
+    # ---------- construção ----------
+
+    def _build_ui(self) -> None:
+        central = QWidget()
+        outer = QVBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(6, 4, 6, 4)
-        self.toggle_sidebar_btn = QPushButton("☰")
-        self.toggle_sidebar_btn.setFixedWidth(32)
-        self.toggle_sidebar_btn.setToolTip("Esconder / mostrar a barra lateral")
-        self.toggle_sidebar_btn.clicked.connect(self._toggle_sidebar)
-        toolbar.addWidget(self.toggle_sidebar_btn)
-        toolbar.addStretch()
-        outer.addLayout(toolbar)
+        self.top_bar = TopBar()
+        self.top_bar.search_changed.connect(self._apply_filter)
+        self.top_bar.settings_clicked.connect(self._show_settings)
+        self.top_bar.home_clicked.connect(self._show_workspaces)
+        outer.addWidget(self.top_bar)
 
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.setChildrenCollapsible(True)
-        self.splitter.setHandleWidth(6)
+        # Splitter vertical: corpo em cima, terminal embaixo (full-width)
+        self.main_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.setHandleWidth(6)
+
+        # Splitter horizontal: sidebar | conteúdo
+        self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.body_splitter.setChildrenCollapsible(True)
+        self.body_splitter.setHandleWidth(6)
+
         self._sidebar = self._build_sidebar()
-        self.splitter.addWidget(self._sidebar)
+        self.body_splitter.addWidget(self._sidebar)
 
+        self.content_stack = QStackedWidget()
         self.details = WorkspaceDetailsPanel(self.settings)
         self.details.edit_requested.connect(self.edit_workspace)
         self.details.delete_requested.connect(self.delete_workspace)
-        self.details.workspace_running_changed.connect(self._on_workspace_running)
-        self.splitter.addWidget(self.details)
+        self.details.launch_claude_requested.connect(self._launch_claude_for)
+        self.details.launch_shell_requested.connect(self._launch_shell_for)
+        self.details.tasks_changed.connect(self._persist_tasks)
+        self.content_stack.addWidget(self.details)
 
-        self.splitter.setStretchFactor(0, 0)
-        self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([280, 900])
-        outer.addWidget(self.splitter, stretch=1)
-        return container
+        self.settings_panel = SettingsPanel(self.settings)
+        self.content_stack.addWidget(self.settings_panel)
 
-    def _toggle_sidebar(self) -> None:
-        sizes = self.splitter.sizes()
-        if sizes[0] == 0:
-            self.splitter.setSizes([280, max(sizes[1] - 280, 600)])
+        self.body_splitter.addWidget(self.content_stack)
+        self.body_splitter.setStretchFactor(0, 0)
+        self.body_splitter.setStretchFactor(1, 1)
+        if self.settings.body_splitter_sizes:
+            self.body_splitter.setSizes(self.settings.body_splitter_sizes)
         else:
-            self.splitter.setSizes([0, sum(sizes)])
+            self.body_splitter.setSizes([260, 920])
+
+        self.main_splitter.addWidget(self.body_splitter)
+
+        # Terminal host: full-width, embaixo de tudo (incluindo sidebar)
+        self.terminal_host = QStackedWidget()
+        self._empty_terminal = QLabel(
+            "Nenhum terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' "
+            "para iniciar uma sessão. Cada workspace tem suas próprias abas."
+        )
+        self._empty_terminal.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_terminal.setStyleSheet(
+            "background: #0e0e0e; color: #555; padding: 28px;"
+        )
+        self._terminal_placeholder_idx = self.terminal_host.addWidget(self._empty_terminal)
+        self.main_splitter.addWidget(self.terminal_host)
+
+        self.main_splitter.setStretchFactor(0, 3)
+        self.main_splitter.setStretchFactor(1, 2)
+        if self.settings.main_splitter_sizes:
+            self.main_splitter.setSizes(self.settings.main_splitter_sizes)
+        else:
+            self.main_splitter.setSizes([460, 320])
+
+        outer.addWidget(self.main_splitter, stretch=1)
+        self.setCentralWidget(central)
+
+        # Restaurar tamanhos das colunas internas dos details
+        if self.settings.workspace_columns_sizes:
+            self.details.restore_columns_sizes(self.settings.workspace_columns_sizes)
 
     def _build_sidebar(self) -> QWidget:
         wrapper = QWidget()
         layout = QVBoxLayout(wrapper)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(10, 12, 10, 10)
         layout.setSpacing(6)
 
-        layout.addWidget(QLabel("<b>Workspaces</b>"))
-
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Filtrar…")
-        self.search_box.setClearButtonEnabled(True)
-        self.search_box.textChanged.connect(self._apply_filter)
-        layout.addWidget(self.search_box)
+        layout.addWidget(QLabel("<b>WORKSPACES</b>"))
 
         self.list_widget = QListWidget()
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
+        self.list_widget.setStyleSheet(
+            "QListWidget { background: transparent; border: 0; }"
+            "QListWidget::item { padding: 6px 8px; border-radius: 4px; }"
+            "QListWidget::item:selected { background: #2d4a6e; color: #fff; }"
+            "QListWidget::item:hover:!selected { background: #1f1f1f; }"
+        )
         layout.addWidget(self.list_widget, stretch=1)
 
-        actions = QHBoxLayout()
-        add_btn = QPushButton("+ Novo")
+        add_btn = QPushButton("+ Novo Workspace")
         add_btn.clicked.connect(self.add_workspace)
-        actions.addWidget(add_btn)
-        actions.addStretch()
-        layout.addLayout(actions)
+        layout.addWidget(add_btn)
 
         sep = QWidget()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background: #3a3a3a;")
+        sep.setStyleSheet("background: #2a2a2a;")
         layout.addWidget(sep)
 
         self.self_dev_btn = QPushButton("🔧 Hack este app")
@@ -124,28 +161,33 @@ class MainWindow(QMainWindow):
 
         return wrapper
 
+    # ---------- listagem / filtro / badge ----------
+
     def refresh_list(self) -> None:
-        current_name = None
+        current_id = None
         current_item = self.list_widget.currentItem()
         if current_item:
-            current_name = current_item.data(Qt.ItemDataRole.UserRole).name
+            current_id = current_item.data(Qt.ItemDataRole.UserRole).id
 
         self.list_widget.clear()
         for ws in self.workspaces:
             item = QListWidgetItem(self._item_label(ws))
             item.setData(Qt.ItemDataRole.UserRole, ws)
-            if ws.description:
-                item.setToolTip(ws.description)
+            tip = ws.description or ""
+            if ws.folders:
+                tip = (tip + "\n\n" if tip else "") + "\n".join(ws.folders)
+            if tip:
+                item.setToolTip(tip)
             self.list_widget.addItem(item)
 
-        self._apply_filter(self.search_box.text() if hasattr(self, "search_box") else "")
+        self._apply_filter(self.top_bar.search.text() if hasattr(self, "top_bar") else "")
 
-        if current_name:
+        if current_id:
             for i in range(self.list_widget.count()):
                 item = self.list_widget.item(i)
                 if item.isHidden():
                     continue
-                if item.data(Qt.ItemDataRole.UserRole).name == current_name:
+                if item.data(Qt.ItemDataRole.UserRole).id == current_id:
                     self.list_widget.setCurrentRow(i)
                     return
 
@@ -157,12 +199,15 @@ class MainWindow(QMainWindow):
         self.details.show_empty()
 
     def _item_label(self, ws: Workspace) -> str:
-        count = self._running_counts.get(ws.name, 0)
-        if count <= 0:
-            return ws.name
-        if count == 1:
-            return f"● {ws.name}"
-        return f"● {ws.name} ({count})"
+        count = self._running_counts.get(ws.id, 0)
+        pending = sum(1 for t in ws.tasks if not t.done)
+        bits = [ws.name]
+        if pending:
+            bits.append(f"({pending} pend.)")
+        if count > 0:
+            dot = "●" if count == 1 else f"●×{count}"
+            return f"{dot} " + " ".join(bits)
+        return " ".join(bits)
 
     def _apply_filter(self, text: str) -> None:
         needle = text.strip().lower()
@@ -178,29 +223,141 @@ class MainWindow(QMainWindow):
                     self.list_widget.setCurrentRow(i)
                     return
 
-    def _on_workspace_running(self, name: str, count: int) -> None:
-        if count <= 0:
-            self._running_counts.pop(name, None)
-        else:
-            self._running_counts[name] = count
+    def _refresh_item_label(self, workspace_id: str) -> None:
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             ws = item.data(Qt.ItemDataRole.UserRole)
-            if ws.name == name:
+            if ws.id == workspace_id:
                 item.setText(self._item_label(ws))
                 break
 
+    def _on_workspace_running(self, workspace_id: str, count: int) -> None:
+        if count <= 0:
+            self._running_counts.pop(workspace_id, None)
+        else:
+            self._running_counts[workspace_id] = count
+        self._refresh_item_label(workspace_id)
+
+    # ---------- seleção / settings ----------
+
     def _on_selection_changed(self, current, _previous) -> None:
+        # Mudou de workspace — sempre volta pra view de detalhes
+        if self.content_stack.currentIndex() != 0:
+            self.content_stack.setCurrentIndex(0)
         if current is None:
             self.details.show_empty()
+            self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             return
         ws = current.data(Qt.ItemDataRole.UserRole)
         self.details.show_workspace(ws)
+        self._sync_terminal_for(ws)
+
+    def _show_settings(self) -> None:
+        self.content_stack.setCurrentWidget(self.settings_panel)
+
+    def _show_workspaces(self) -> None:
+        self.content_stack.setCurrentIndex(0)
+        current = self.list_widget.currentItem()
+        if current:
+            ws = current.data(Qt.ItemDataRole.UserRole)
+            self.details.show_workspace(ws)
+            self._sync_terminal_for(ws)
+
+    # ---------- terminal ----------
+
+    def _sync_terminal_for(self, workspace: Workspace) -> None:
+        area = self._terminal_areas.get(workspace.id)
+        if area is not None:
+            self.terminal_host.setCurrentWidget(area)
+        else:
+            self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
+
+    def _get_terminal_area(self, workspace: Workspace) -> TerminalArea:
+        area = self._terminal_areas.get(workspace.id)
+        if area is None:
+            area = TerminalArea()
+            ws_id = workspace.id
+            area.running_count_changed.connect(
+                lambda c, wid=ws_id: self._on_workspace_running(wid, c)
+            )
+            self._terminal_areas[ws_id] = area
+            self.terminal_host.addWidget(area)
+        return area
+
+    def _launch_claude_for(
+        self, workspace: Workspace, resume_session_id: str, cwd_override: str
+    ) -> None:
+        if not workspace.folders:
+            QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
+            return
+        cwd, extras = workspace.launch_paths()
+        if cwd_override:
+            cwd = cwd_override
+            extras = []
+        argv = [self.settings.claude_command, *self.settings.claude_extra_args]
+        if resume_session_id:
+            argv += ["--resume", resume_session_id]
+        for extra in extras:
+            argv += ["--add-dir", extra]
+
+        area = self._get_terminal_area(workspace)
+        self.terminal_host.setCurrentWidget(area)
+        title = "claude (resume)" if resume_session_id else "claude"
+        title = f"{title} #{area.count() + 1}"
+        terminal = area.add_terminal(title)
+        try:
+            terminal.start_shell_command(
+                argv,
+                cwd,
+                label=f"claude — {workspace.name}",
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
+            log.exception("Falha ao abrir Claude embutido")
+            QMessageBox.warning(self, "Falha", str(e))
+
+    def _launch_shell_for(self, workspace: Workspace) -> None:
+        if not workspace.folders:
+            return
+        cwd, _ = workspace.launch_paths()
+        area = self._get_terminal_area(workspace)
+        self.terminal_host.setCurrentWidget(area)
+        terminal = area.add_terminal(f"shell #{area.count() + 1}")
+        try:
+            terminal.start_interactive_shell(
+                cwd,
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
+            log.exception("Falha ao abrir shell embutido")
+            QMessageBox.warning(self, "Falha", str(e))
+
+    def _cleanup_terminal_for(self, workspace_id: str) -> None:
+        area = self._terminal_areas.pop(workspace_id, None)
+        if area is None:
+            return
+        area.close_all()
+        self.terminal_host.removeWidget(area)
+        area.deleteLater()
+        self._running_counts.pop(workspace_id, None)
+        if self.terminal_host.count() == 1:
+            self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
+
+    # ---------- tarefas ----------
+
+    def _persist_tasks(self, workspace: Workspace) -> None:
+        # Workspace dentro de self.workspaces é a mesma instância referenciada
+        # pelos itens (refresh_list passa o próprio objeto via UserRole), então
+        # só precisa salvar e atualizar o badge.
+        save_workspaces(self.workspaces)
+        self._refresh_item_label(workspace.id)
+
+    # ---------- CRUD de workspace ----------
 
     def _launch_self_dev(self) -> None:
         repo = find_app_repo_root()
         if not repo:
-            logging.getLogger(__name__).warning("Repo root não encontrado para self-dev")
+            log.warning("Repo root não encontrado para self-dev")
             QMessageBox.warning(
                 self,
                 "Não foi possível localizar o repo",
@@ -211,7 +368,7 @@ class MainWindow(QMainWindow):
         try:
             launch_claude_in_dir(repo, self.settings)
         except LauncherError as e:
-            logging.getLogger(__name__).exception("Falha em self-dev launch")
+            log.exception("Falha em self-dev launch")
             QMessageBox.warning(self, "Falha ao abrir Claude", str(e))
 
     def add_workspace(self) -> None:
@@ -228,11 +385,18 @@ class MainWindow(QMainWindow):
     def edit_workspace(self, workspace: Workspace) -> None:
         dialog = WorkspaceDialog(workspace=workspace, parent=self)
         if dialog.exec():
-            updated = dialog.workspace()
-            idx = self.workspaces.index(workspace)
+            updated = dialog.workspace()  # mesma id, tasks preservadas
+            idx = next(
+                (i for i, w in enumerate(self.workspaces) if w.id == workspace.id),
+                None,
+            )
+            if idx is None:
+                return
             self.workspaces[idx] = updated
             save_workspaces(self.workspaces)
             self.refresh_list()
+            # Reapresenta com os novos dados (mesmo id = mesmo terminal area)
+            self.details.show_workspace(updated)
 
     def delete_workspace(self, workspace: Workspace) -> None:
         reply = QMessageBox.question(
@@ -241,7 +405,38 @@ class MainWindow(QMainWindow):
             f"Remover o workspace '{workspace.name}'?",
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.workspaces.remove(workspace)
+            self.workspaces = [w for w in self.workspaces if w.id != workspace.id]
             save_workspaces(self.workspaces)
-            self.details.cleanup_workspace(workspace.name)
+            self._cleanup_terminal_for(workspace.id)
             self.refresh_list()
+
+    # ---------- persistência ----------
+
+    def _migrate_ids_if_needed(self) -> None:
+        # from_dict já preenche id ausente; só precisamos persistir se algo mudou.
+        # Detectamos pela presença do campo no arquivo original — mas como
+        # comparar é caro, salva sempre quando há ao menos 1 workspace.
+        # Custo: 1 write inicial, garantia de migração estável.
+        if self.workspaces:
+            save_workspaces(self.workspaces)
+
+    def _restore_geometry(self) -> None:
+        geom = self.settings.window_geometry
+        if geom and len(geom) == 4:
+            x, y, w, h = geom
+            if w > 200 and h > 200:
+                self.setGeometry(x, y, w, h)
+                return
+        self.resize(1200, 780)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        try:
+            self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
+            self.settings.main_splitter_sizes = list(self.main_splitter.sizes())
+            self.settings.workspace_columns_sizes = self.details.columns_sizes()
+            g = self.geometry()
+            self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
+            self.settings.save()
+        except Exception:
+            log.exception("Falha ao salvar geometria/splitters")
+        super().closeEvent(event)

@@ -22,6 +22,11 @@ class Settings:
     webstorm_command: str = "webstorm"
     pycharm_command: str = "pycharm"
     rider_command: str = "rider"
+    # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
+    body_splitter_sizes: list[int] = field(default_factory=list)
+    main_splitter_sizes: list[int] = field(default_factory=list)
+    workspace_columns_sizes: list[int] = field(default_factory=list)
+    window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
 
     @classmethod
     def load(cls) -> "Settings":
