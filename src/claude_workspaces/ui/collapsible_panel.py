@@ -44,12 +44,12 @@ class CollapsiblePanel(QWidget):
 
         self._arrow = QLabel("▼" if expanded else "▶")
         self._arrow.setFixedWidth(12)
-        self._arrow.setStyleSheet("color: #888; font-size: 10px;")
+        self._arrow.setStyleSheet("color: #b0b0b0; font-size: 10px;")
         h.addWidget(self._arrow)
 
         self._title_label = QLabel(title.upper())
         self._title_label.setStyleSheet(
-            "color: #ccc; font-size: 11px; font-weight: 600; "
+            "color: #e6e6e6; font-size: 11px; font-weight: 600; "
             "letter-spacing: 0.5px;"
         )
         h.addWidget(self._title_label)
@@ -67,7 +67,7 @@ class CollapsiblePanel(QWidget):
         self._toggle_btn.setFlat(True)
         self._toggle_btn.setToolTip("Minimizar / expandir")
         self._toggle_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #888; border: 0; }"
+            "QPushButton { background: transparent; color: #b0b0b0; border: 0; }"
             "QPushButton:hover { color: #6aa9e0; }"
         )
         self._toggle_btn.clicked.connect(self.toggle)

@@ -57,7 +57,7 @@ class ShortcutsDialog(QDialog):
             "embutido (Ctrl+T, Ctrl+K…) operam no terminal visível."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #888;")
+        hint.setStyleSheet("color: #b0b0b0;")
         outer.addWidget(hint)
 
         mono = QFont("monospace")

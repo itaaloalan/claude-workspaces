@@ -48,7 +48,7 @@ class SettingsPanel(QWidget):
             "($SHELL -ic), então aliases como <code>ia</code> resolvem normalmente."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #aaa;")
+        intro.setStyleSheet("color: #c8c8c8;")
         outer.addWidget(intro)
 
         form = QFormLayout()
@@ -119,7 +119,7 @@ class SettingsPanel(QWidget):
             f"Configurações: <code>{settings_file()}</code><br>"
             f"Logs: <code>{log_file()}</code>"
         )
-        footer.setStyleSheet("color: #666;")
+        footer.setStyleSheet("color: #999;")
         footer.setTextInteractionFlags(footer.textInteractionFlags())
         outer.addWidget(footer)
 
@@ -183,7 +183,7 @@ class SettingsPanel(QWidget):
             "outros hooks."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #aaa;")
+        intro.setStyleSheet("color: #c8c8c8;")
         layout.addWidget(intro)
 
         self._hook_status = QLabel()
@@ -208,7 +208,7 @@ class SettingsPanel(QWidget):
             self._hook_toggle_btn.setText("Remover notificações")
         else:
             self._hook_status.setText("Hook não instalado — notificações desativadas")
-            self._hook_status.setStyleSheet("color: #888;")
+            self._hook_status.setStyleSheet("color: #b0b0b0;")
             self._hook_toggle_btn.setText("Ativar notificações")
 
     def _toggle_hook(self) -> None:

@@ -55,7 +55,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         layout = QVBoxLayout(w)
         msg = QLabel("Selecione um workspace na barra lateral ou crie um novo.")
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet("color: #888;")
+        msg.setStyleSheet("color: #b0b0b0;")
         layout.addWidget(msg)
         return w
 
@@ -75,18 +75,18 @@ class WorkspaceDetailsPanel(QStackedWidget):
         c.addWidget(self._name)
 
         self._stacks = QLabel()
-        self._stacks.setStyleSheet("color: #888;")
+        self._stacks.setStyleSheet("color: #b0b0b0;")
         c.addWidget(self._stacks)
 
         self._desc = QLabel()
         self._desc.setWordWrap(True)
-        self._desc.setStyleSheet("color: #bbb;")
+        self._desc.setStyleSheet("color: #d0d0d0;")
         c.addWidget(self._desc)
 
         self._folders = QLabel()
         self._folders.setWordWrap(True)
         self._folders.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._folders.setStyleSheet("color: #888; font-family: monospace; font-size: 11px;")
+        self._folders.setStyleSheet("color: #b0b0b0; font-family: monospace; font-size: 11px;")
         c.addWidget(self._folders)
 
         c.addLayout(self._build_mcp_row())
@@ -149,7 +149,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         row.setSpacing(8)
         self._mcp_label = QLabel()
         self._mcp_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._mcp_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        self._mcp_label.setStyleSheet("color: #c8c8c8; font-size: 11px;")
         row.addWidget(self._mcp_label, stretch=1)
 
         self._mcp_edit_btn = QPushButton("Configurar MCP")

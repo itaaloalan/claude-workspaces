@@ -145,7 +145,7 @@ class GitPanel(QWidget):
 
     def _make_toolbar(self, layout: QHBoxLayout) -> None:
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #888; font-size: 11px;")
+        self._counter.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(self._counter)
         layout.addStretch()
 

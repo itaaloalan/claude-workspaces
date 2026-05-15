@@ -73,7 +73,7 @@ class TerminalWidget(QWidget):
         toolbar = QHBoxLayout()
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(terminal vazio)")
-        self._status.setStyleSheet("color: #888;")
+        self._status.setStyleSheet("color: #b0b0b0;")
         toolbar.addWidget(self._status)
         toolbar.addStretch()
         self._stop_btn = QPushButton("Encerrar")

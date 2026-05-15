@@ -36,7 +36,7 @@ class TopBar(QWidget):
         toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle_btn.setToolTip("Esconder / mostrar a barra lateral (Ctrl+B)")
         toggle_btn.setStyleSheet(
-            "QPushButton { color: #aaa; font-size: 16px; padding: 4px; }"
+            "QPushButton { color: #c8c8c8; font-size: 16px; padding: 4px; }"
             "QPushButton:hover { color: #6aa9e0; }"
         )
         toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)

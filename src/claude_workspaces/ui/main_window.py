@@ -532,11 +532,21 @@ class MainWindow(QMainWindow):
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
         self.list_widget.setStyleSheet(
             "QListWidget { background: transparent; border: 0; color: #e6e6e6; }"
-            "QListWidget::item { padding: 6px 8px; border-radius: 4px; color: #d0d0d0; }"
+            "QListWidget::item { padding: 6px 8px; border-radius: 4px; color: #e6e6e6; }"
             "QListWidget::item:hover { background: #2a3142; color: #fff; }"
             "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
             "QListWidget::item:selected:hover { background: #4a82c5; color: #fff; }"
         )
+        # Força as cores via palette também — em alguns temas KDE o QSS de
+        # ::item não vence o QPalette.Inactive.Text, deixando o item
+        # não-selecionado quase invisível
+        from PySide6.QtGui import QColor, QPalette
+        pal = self.list_widget.palette()
+        for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+            pal.setColor(grp, QPalette.ColorRole.Text, QColor("#e6e6e6"))
+            pal.setColor(grp, QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+            pal.setColor(grp, QPalette.ColorRole.Highlight, QColor("#3d6ea8"))
+        self.list_widget.setPalette(pal)
         layout.addWidget(self.list_widget, stretch=1)
 
         add_btn = QPushButton("+ Novo Workspace")

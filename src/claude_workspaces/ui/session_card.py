@@ -52,7 +52,7 @@ class SessionCard(QFrame):
         header.addWidget(title, stretch=1)
 
         when = QLabel(self._when_text())
-        when.setStyleSheet("color: #888; font-size: 11px;")
+        when.setStyleSheet("color: #a8a8a8; font-size: 11px;")
         when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         header.addWidget(when)
 
@@ -65,7 +65,7 @@ class SessionCard(QFrame):
 
         if session.preview:
             preview = QLabel(self._preview_text())
-            preview.setStyleSheet("color: #aaa; font-size: 12px;")
+            preview.setStyleSheet("color: #c8c8c8; font-size: 12px;")
             preview.setWordWrap(True)
             outer.addWidget(preview)
 
@@ -77,7 +77,7 @@ class SessionCard(QFrame):
         delete_btn.setToolTip("Excluir o arquivo desta sessão (.jsonl)")
         delete_btn.setStyleSheet(
             "QPushButton {"
-            "  background: transparent; color: #888;"
+            "  background: transparent; color: #a8a8a8;"
             "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
             "}"
             "QPushButton:hover { color: #e57373; border-color: #a23a3a; }"
