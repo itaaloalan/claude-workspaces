@@ -99,6 +99,7 @@ class MainWindow(QMainWindow):
         self.details.launch_claude_requested.connect(self._launch_claude_for)
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.tasks_changed.connect(self._persist_tasks)
+        self.details.open_file_requested.connect(self._open_file_in_editor)
         self.content_stack.addWidget(self.details)
 
         self.settings_panel = SettingsPanel(self.settings)
@@ -577,6 +578,18 @@ class MainWindow(QMainWindow):
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
 
     # ---------- tarefas ----------
+
+    def _open_file_in_editor(self, abs_path: str) -> None:
+        from .git_panel import open_path_in_editor
+        editor = self.settings.vscode_command or "code"
+        try:
+            open_path_in_editor(abs_path, editor)
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self,
+                "Editor não encontrado",
+                f"Comando '{editor}' não está no PATH. Ajuste em Configurações.",
+            )
 
     def _persist_tasks(self, workspace: Workspace) -> None:
         # Workspace dentro de self.workspaces é a mesma instância referenciada

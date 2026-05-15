@@ -22,6 +22,7 @@ from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Task, Workspace
+from .git_panel import GitPanel, open_path_in_editor
 from .mcp_dialog import MCPDialog
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
@@ -39,6 +40,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
     launch_shell_requested = Signal(Workspace)
     tasks_changed = Signal(Workspace)
     columns_splitter_moved = Signal()
+    open_file_requested = Signal(str)  # caminho absoluto pra abrir no editor
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -133,9 +135,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         columns.addWidget(self._build_sessions_column())
         columns.addWidget(self._build_tasks_column())
-        columns.setStretchFactor(0, 1)
-        columns.setStretchFactor(1, 1)
-        columns.setSizes([520, 380])
+        columns.addWidget(self._build_git_column())
+        columns.setStretchFactor(0, 2)
+        columns.setStretchFactor(1, 2)
+        columns.setStretchFactor(2, 2)
+        columns.setSizes([400, 300, 300])
         columns.setStyleSheet(
             "QSplitter::handle { background: #2a2a2a; }"
             "QSplitter::handle:hover { background: #3d6ea8; }"
@@ -281,6 +285,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._tasks_panel.tasks_changed.connect(self.tasks_changed.emit)
         return self._tasks_panel
 
+    def _build_git_column(self) -> QWidget:
+        self._git_panel = GitPanel()
+        self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
+        return self._git_panel
+
     def show_empty(self) -> None:
         self.workspace = None
         self._tasks_panel.set_workspace(None)
@@ -310,6 +319,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._refresh_sessions()
         self._refresh_mcp_status()
         self._tasks_panel.set_workspace(workspace)
+        self._git_panel.set_workspace(workspace)
 
         self.setCurrentWidget(self._content)
 
