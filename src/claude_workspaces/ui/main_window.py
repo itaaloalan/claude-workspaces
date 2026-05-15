@@ -240,6 +240,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+P"), self, self._quick_open_file)
         QShortcut(QKeySequence("Ctrl+O"), self, self._open_folder_in_file_manager)
         QShortcut(QKeySequence("Ctrl+Shift+C"), self, self._copy_primary_folder)
+        # Busca em sessões
+        QShortcut(QKeySequence("Ctrl+Shift+F"), self, self._show_sessions_search)
         # Help
         QShortcut(QKeySequence("Ctrl+/"), self, self._show_shortcuts)
         QShortcut(QKeySequence("F1"), self, self._show_shortcuts)
@@ -449,6 +451,38 @@ class MainWindow(QMainWindow):
     def _show_shortcuts(self) -> None:
         from .shortcuts_dialog import ShortcutsDialog
         ShortcutsDialog(self).exec()
+
+    def _show_sessions_search(self) -> None:
+        from .sessions_search_dialog import SessionsSearchDialog
+        dialog = SessionsSearchDialog(parent=self)
+        dialog.session_chosen.connect(self._jump_to_search_hit)
+        dialog.exec()
+
+    def _jump_to_search_hit(self, hit) -> None:
+        """Pula pro workspace que contém a pasta da sessão e retoma a sessão."""
+        cwd = hit.project_path
+        # Acha o workspace cujas folders contenham cwd, ou seja cwd
+        match = None
+        for ws in self.workspaces:
+            for folder in ws.folders:
+                if folder == cwd or cwd.startswith(folder + "/"):
+                    match = ws
+                    break
+            if match:
+                break
+        if match is None:
+            QMessageBox.information(
+                self,
+                "Workspace não encontrado",
+                f"Não achei workspace contendo:\n{cwd}\n\n"
+                f"Crie um workspace com essa pasta pra retomar.",
+            )
+            return
+        # Foca workspace e retoma sessão internamente
+        ws_item = self._find_workspace_item(match.id)
+        if ws_item is not None:
+            self.list_widget.setCurrentItem(ws_item)
+        self._launch_claude_for(match, hit.session_id, cwd)
 
     def _build_right_dock(self) -> QWidget:
         dock = RightDock()

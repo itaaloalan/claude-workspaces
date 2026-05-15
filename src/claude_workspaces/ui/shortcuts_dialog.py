@@ -15,6 +15,7 @@ SHORTCUTS = [
         ("Ctrl+1 … Ctrl+9", "Pular pro N-ésimo workspace visível"),
         ("Ctrl+Tab / Ctrl+Shift+Tab", "Próximo / anterior workspace"),
         ("Ctrl+F", "Focar a busca no topbar"),
+        ("Ctrl+Shift+F", "Buscar texto em todas as sessões do Claude"),
         ("Ctrl+Enter", "Abrir Claude no workspace atual"),
         ("Ctrl+,", "Configurações"),
     ]),
