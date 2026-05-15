@@ -9,6 +9,9 @@ class TerminalArea(QWidget):
     Mantém o estado das sessões mesmo quando o usuário alterna entre workspaces."""
 
     running_count_changed = Signal(int)
+    # tab_id (id() do widget), título, status, is_working, is_running
+    tab_activity_changed = Signal(int, str, str, bool, bool)
+    tab_removed = Signal(int)  # tab_id
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -31,11 +34,17 @@ class TerminalArea(QWidget):
         widget.running_changed.connect(
             lambda running, w=widget: self._mark_tab_state(w, running)
         )
+        widget.running_changed.connect(
+            lambda running, w=widget: self._emit_activity(w, w._last_status, running)
+        )
+        widget.activity_changed.connect(
+            lambda status, working, w=widget: self._emit_activity(w, status, working)
+        )
         idx = self.tabs.addTab(widget, title)
         self.tabs.setCurrentIndex(idx)
-        # Salva o título "limpo" — adicionamos marcadores depois sem
-        # destruir o original
         widget.setProperty("_base_title", title)
+        # Emite estado inicial
+        self.tab_activity_changed.emit(id(widget), title, "", False, False)
         return widget
 
     def _mark_tab_state(self, widget: TerminalWidget, running: bool) -> None:
@@ -47,6 +56,16 @@ class TerminalArea(QWidget):
             self.tabs.setTabText(idx, f"● {base}")
         else:
             self.tabs.setTabText(idx, f"✓ {base}")
+
+    def _emit_activity(
+        self, widget: TerminalWidget, status: str, is_working: bool
+    ) -> None:
+        if self.tabs.indexOf(widget) < 0:
+            return
+        title = widget.property("_base_title") or ""
+        self.tab_activity_changed.emit(
+            id(widget), title, status, is_working, widget.is_running()
+        )
 
     def count(self) -> int:
         return self.tabs.count()
@@ -62,11 +81,13 @@ class TerminalArea(QWidget):
 
     def _close_tab(self, index: int) -> None:
         widget = self.tabs.widget(index)
+        tab_id = id(widget) if widget is not None else 0
         if isinstance(widget, TerminalWidget):
             widget.terminate()
         self.tabs.removeTab(index)
         if widget is not None:
             widget.deleteLater()
+            self.tab_removed.emit(tab_id)
 
     def close_all(self) -> None:
         while self.tabs.count():

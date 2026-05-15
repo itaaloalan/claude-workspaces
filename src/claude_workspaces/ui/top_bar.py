@@ -53,7 +53,7 @@ class TopBar(QWidget):
         row.addWidget(logo)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Filtrar por nome, pasta ou tarefa… (Ctrl+F)")
+        self.search.setPlaceholderText("Filtrar por nome, pasta ou sessão… (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(380)
         self.search.setStyleSheet(

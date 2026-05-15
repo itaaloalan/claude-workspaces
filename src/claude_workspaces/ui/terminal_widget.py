@@ -2,9 +2,10 @@ import logging
 import os
 import pwd
 import shlex
+import time
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -61,10 +62,18 @@ class TerminalBridge(QObject):
 
 class TerminalWidget(QWidget):
     running_changed = Signal(bool)
+    activity_changed = Signal(str, bool)  # status_text, is_working
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._is_running = False
+        self._output_buffer = bytearray()
+        self._last_output_time = 0.0
+        self._activity_timer = QTimer(self)
+        self._activity_timer.setInterval(500)
+        self._activity_timer.timeout.connect(self._poll_activity)
+        self._last_status = ""
+        self._last_working = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -84,6 +93,7 @@ class TerminalWidget(QWidget):
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)
+        self.session.output_received.connect(self._record_output)
 
         self.bridge = TerminalBridge(self.session)
         self.bridge.ready.connect(self._on_bridge_ready)
@@ -118,9 +128,38 @@ class TerminalWidget(QWidget):
         if self._is_running != running:
             self._is_running = running
             self.running_changed.emit(running)
+            if running:
+                self._activity_timer.start()
+            else:
+                self._activity_timer.stop()
+                # Emite estado final "idle" pra UI limpar o spinner
+                self.activity_changed.emit("(encerrado)", False)
 
     def is_running(self) -> bool:
         return self._is_running
+
+    def _record_output(self, data: bytes) -> None:
+        self._output_buffer.extend(data)
+        # Cap em 8KB — só precisamos do final pra detectar status atual
+        if len(self._output_buffer) > 8192:
+            del self._output_buffer[:-8192]
+        self._last_output_time = time.monotonic()
+
+    def _poll_activity(self) -> None:
+        from ..claude_activity import parse_status
+        age = (
+            time.monotonic() - self._last_output_time
+            if self._last_output_time
+            else 999.0
+        )
+        activity = parse_status(bytes(self._output_buffer), age)
+        if (
+            activity.status != self._last_status
+            or activity.is_working != self._last_working
+        ):
+            self._last_status = activity.status
+            self._last_working = activity.is_working
+            self.activity_changed.emit(activity.status, activity.is_working)
 
     def _on_session_finished(self) -> None:
         self._status.setText("(processo encerrado)")

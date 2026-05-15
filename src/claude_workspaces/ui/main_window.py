@@ -6,13 +6,13 @@ from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
     QSplitter,
     QStackedWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -50,6 +50,15 @@ class MainWindow(QMainWindow):
         self._sidebar_last_size: int = 260
         self._terminal_last_size: int = 420
         self._content_last_size: int = 420
+        # Tree items dos terminais ativos (children dos workspace items)
+        # key = id() do TerminalWidget; value = QTreeWidgetItem
+        self._terminal_tree_items: dict[int, QTreeWidgetItem] = {}
+        # Estado de atividade pra animar o spinner
+        # key = tab_id; value = (status, is_working, title)
+        self._terminal_activity: dict[int, tuple[str, bool, str]] = {}
+        self._spinner_frame: int = 0
+        # Cache de texto de sessões pro filtro (lazy, key=ws.id)
+        self._session_text_cache: dict[str, str] = {}
 
         self._build_ui()
         self._restore_geometry()
@@ -218,26 +227,32 @@ class MainWindow(QMainWindow):
 
     def _visible_rows(self) -> list[int]:
         return [
-            i for i in range(self.list_widget.count())
-            if not self.list_widget.item(i).isHidden()
+            i for i in range(self.list_widget.topLevelItemCount())
+            if not self.list_widget.topLevelItem(i).isHidden()
         ]
 
     def _jump_to_workspace(self, index: int) -> None:
         rows = self._visible_rows()
         if 0 <= index < len(rows):
-            self.list_widget.setCurrentRow(rows[index])
+            self.list_widget.setCurrentItem(
+                self.list_widget.topLevelItem(rows[index])
+            )
 
     def _cycle_workspace(self, delta: int) -> None:
         rows = self._visible_rows()
         if not rows:
             return
-        current = self.list_widget.currentRow()
+        current_item = self.list_widget.currentItem()
+        current = -1
+        if current_item is not None:
+            top = current_item if current_item.parent() is None else current_item.parent()
+            current = self.list_widget.indexOfTopLevelItem(top)
         try:
             pos = rows.index(current)
         except ValueError:
             pos = 0
         next_pos = (pos + delta) % len(rows)
-        self.list_widget.setCurrentRow(rows[next_pos])
+        self.list_widget.setCurrentItem(self.list_widget.topLevelItem(rows[next_pos]))
 
     def _toggle_sidebar(self) -> None:
         sizes = self.body_splitter.sizes()
@@ -517,18 +532,20 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("<b>WORKSPACES</b>"))
 
-        self.list_widget = QListWidget()
+        self.list_widget = QTreeWidget()
+        self.list_widget.setHeaderHidden(True)
+        self.list_widget.setRootIsDecorated(True)
+        self.list_widget.setIndentation(14)
+        self.list_widget.setExpandsOnDoubleClick(False)
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
+        self.list_widget.itemActivated.connect(self._on_tree_item_activated)
         self.list_widget.setStyleSheet(
-            "QListWidget { background: transparent; border: 0; color: #e6e6e6; }"
-            "QListWidget::item { padding: 6px 8px; border-radius: 4px; color: #e6e6e6; }"
-            "QListWidget::item:hover { background: #2a3142; color: #fff; }"
-            "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
-            "QListWidget::item:selected:hover { background: #4a82c5; color: #fff; }"
+            "QTreeWidget { background: transparent; border: 0; color: #e6e6e6; }"
+            "QTreeWidget::item { padding: 4px 4px; color: #e6e6e6; }"
+            "QTreeWidget::item:hover { background: #2a3142; color: #fff; }"
+            "QTreeWidget::item:selected { background: #3d6ea8; color: #fff; }"
+            "QTreeWidget::item:selected:hover { background: #4a82c5; color: #fff; }"
         )
-        # Força as cores via palette também — em alguns temas KDE o QSS de
-        # ::item não vence o QPalette.Inactive.Text, deixando o item
-        # não-selecionado quase invisível
         from PySide6.QtGui import QColor, QPalette
         pal = self.list_widget.palette()
         for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
@@ -537,6 +554,11 @@ class MainWindow(QMainWindow):
             pal.setColor(grp, QPalette.ColorRole.Highlight, QColor("#3d6ea8"))
         self.list_widget.setPalette(pal)
         layout.addWidget(self.list_widget, stretch=1)
+
+        # Timer pra animar o spinner dos terminais em "working"
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(100)
+        self._spinner_timer.timeout.connect(self._tick_spinner)
 
         add_btn = QPushButton("+ Novo Workspace")
         add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
@@ -563,36 +585,71 @@ class MainWindow(QMainWindow):
         current_id = None
         current_item = self.list_widget.currentItem()
         if current_item:
-            current_id = current_item.data(Qt.ItemDataRole.UserRole).id
+            data = current_item.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, Workspace):
+                current_id = data.id
+            elif current_item.parent():
+                pdata = current_item.parent().data(0, Qt.ItemDataRole.UserRole)
+                if isinstance(pdata, Workspace):
+                    current_id = pdata.id
 
         self.list_widget.clear()
+        self._terminal_tree_items.clear()
+
         for ws in self.workspaces:
-            item = QListWidgetItem(self._item_label(ws))
-            item.setData(Qt.ItemDataRole.UserRole, ws)
+            item = QTreeWidgetItem([self._item_label(ws)])
+            item.setData(0, Qt.ItemDataRole.UserRole, ws)
             tip = ws.description or ""
             if ws.folders:
                 tip = (tip + "\n\n" if tip else "") + "\n".join(ws.folders)
             if tip:
-                item.setToolTip(tip)
-            self.list_widget.addItem(item)
+                item.setToolTip(0, tip)
+            self.list_widget.addTopLevelItem(item)
+            item.setExpanded(True)
 
-        self._apply_filter(self.top_bar.search.text() if hasattr(self, "top_bar") else "")
+        self._apply_filter(
+            self.top_bar.search.text() if hasattr(self, "top_bar") else ""
+        )
+
+        # Reanexa abas de terminais já existentes
+        for ws_id, area in self._terminal_areas.items():
+            ws_item = self._find_workspace_item(ws_id)
+            if ws_item is None:
+                continue
+            for i in range(area.tabs.count()):
+                widget = area.tabs.widget(i)
+                if not isinstance(widget, TerminalWidget):
+                    continue
+                tab_id = id(widget)
+                base_title = widget.property("_base_title") or area.tabs.tabText(i)
+                self._add_terminal_child(
+                    ws_item, tab_id, base_title,
+                    self._terminal_activity.get(tab_id, ("", False, base_title))[0],
+                    self._terminal_activity.get(tab_id, ("", False, base_title))[1],
+                    widget.is_running(),
+                )
 
         if current_id:
-            for i in range(self.list_widget.count()):
-                item = self.list_widget.item(i)
-                if item.isHidden():
-                    continue
-                if item.data(Qt.ItemDataRole.UserRole).id == current_id:
-                    self.list_widget.setCurrentRow(i)
-                    return
+            ws_item = self._find_workspace_item(current_id)
+            if ws_item is not None and not ws_item.isHidden():
+                self.list_widget.setCurrentItem(ws_item)
+                return
 
-        for i in range(self.list_widget.count()):
-            if not self.list_widget.item(i).isHidden():
-                self.list_widget.setCurrentRow(i)
+        for i in range(self.list_widget.topLevelItemCount()):
+            it = self.list_widget.topLevelItem(i)
+            if not it.isHidden():
+                self.list_widget.setCurrentItem(it)
                 return
 
         self.details.show_empty()
+
+    def _find_workspace_item(self, workspace_id: str) -> QTreeWidgetItem | None:
+        for i in range(self.list_widget.topLevelItemCount()):
+            it = self.list_widget.topLevelItem(i)
+            ws = it.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(ws, Workspace) and ws.id == workspace_id:
+                return it
+        return None
 
     def _item_label(self, ws: Workspace) -> str:
         count = self._running_counts.get(ws.id, 0)
@@ -603,19 +660,49 @@ class MainWindow(QMainWindow):
 
     def _apply_filter(self, text: str) -> None:
         needle = text.strip().lower()
-        for i in range(self.list_widget.count()):
-            item = self.list_widget.item(i)
-            ws = item.data(Qt.ItemDataRole.UserRole)
+        for i in range(self.list_widget.topLevelItemCount()):
+            item = self.list_widget.topLevelItem(i)
+            ws = item.data(0, Qt.ItemDataRole.UserRole)
+            if not isinstance(ws, Workspace):
+                continue
+            # Inclui preview das sessões do Claude — assim o user encontra
+            # workspace lembrando do prompt que rodou antes
+            sess_text = self._session_text_for(ws) if needle else ""
             haystack = (
-                f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}"
+                f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}\n{sess_text}"
             ).lower()
             item.setHidden(bool(needle) and needle not in haystack)
         current = self.list_widget.currentItem()
         if current and current.isHidden():
-            for i in range(self.list_widget.count()):
-                if not self.list_widget.item(i).isHidden():
-                    self.list_widget.setCurrentRow(i)
+            for i in range(self.list_widget.topLevelItemCount()):
+                it = self.list_widget.topLevelItem(i)
+                if not it.isHidden():
+                    self.list_widget.setCurrentItem(it)
                     return
+
+    def _session_text_for(self, ws: Workspace) -> str:
+        """Concat dos previews das últimas sessões do Claude desse workspace.
+        Cacheado por ws.id — invalidado em refresh_list e em CRUD do workspace."""
+        if ws.id in self._session_text_cache:
+            return self._session_text_cache[ws.id]
+        text = ""
+        if ws.folders:
+            try:
+                from ..claude_sessions import list_sessions_for_paths
+                cwd, _ = ws.launch_paths()
+                paths = list({cwd, *ws.folders})
+                sessions = list_sessions_for_paths(paths, limit=15)
+                text = " ".join(s.preview for s in sessions if s.preview)
+            except Exception:
+                text = ""
+        self._session_text_cache[ws.id] = text
+        return text
+
+    def _invalidate_session_cache(self, ws_id: str | None = None) -> None:
+        if ws_id is None:
+            self._session_text_cache.clear()
+        else:
+            self._session_text_cache.pop(ws_id, None)
 
     def _search_submit(self) -> None:
         """Enter na busca: foca o primeiro workspace visível."""
@@ -643,7 +730,6 @@ class MainWindow(QMainWindow):
     # ---------- seleção / settings ----------
 
     def _on_selection_changed(self, current, _previous) -> None:
-        # Mudou de workspace — sempre volta pra view de detalhes
         if self.content_stack.currentIndex() != 0:
             self.content_stack.setCurrentIndex(0)
         if current is None:
@@ -651,10 +737,39 @@ class MainWindow(QMainWindow):
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             self._skills_panel.set_workspace(None)
             return
-        ws = current.data(Qt.ItemDataRole.UserRole)
+        data = current.data(0, Qt.ItemDataRole.UserRole)
+        ws: Workspace | None = None
+        if isinstance(data, Workspace):
+            ws = data
+        elif current.parent() is not None:
+            pdata = current.parent().data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(pdata, Workspace):
+                ws = pdata
+        if ws is None:
+            return
         self.details.show_workspace(ws)
         self._skills_panel.set_workspace(ws)
         self._sync_terminal_for(ws)
+
+    def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
+        # Double-click ou Enter — em child item, foca a aba do terminal
+        if item.parent() is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(data, int):  # tab_id
+            return
+        tab_id = data
+        pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(pdata, Workspace):
+            return
+        area = self._terminal_areas.get(pdata.id)
+        if area is None:
+            return
+        for i in range(area.tabs.count()):
+            if id(area.tabs.widget(i)) == tab_id:
+                area.tabs.setCurrentIndex(i)
+                self.terminal_host.setCurrentWidget(area)
+                break
 
     def _show_settings(self) -> None:
         self.content_stack.setCurrentWidget(self.settings_panel)
@@ -684,9 +799,117 @@ class MainWindow(QMainWindow):
             area.running_count_changed.connect(
                 lambda c, wid=ws_id: self._on_workspace_running(wid, c)
             )
+            area.tab_activity_changed.connect(
+                lambda tab_id, title, status, working, running, wid=ws_id:
+                    self._on_tab_activity(wid, tab_id, title, status, working, running)
+            )
+            area.tab_removed.connect(self._on_tab_removed)
             self._terminal_areas[ws_id] = area
             self.terminal_host.addWidget(area)
         return area
+
+    def _on_tab_activity(
+        self,
+        workspace_id: str,
+        tab_id: int,
+        title: str,
+        status: str,
+        is_working: bool,
+        is_running: bool,
+    ) -> None:
+        self._terminal_activity[tab_id] = (status, is_working, title)
+        ws_item = self._find_workspace_item(workspace_id)
+        if ws_item is None:
+            return
+        if tab_id in self._terminal_tree_items:
+            self._update_terminal_child(tab_id, title, status, is_working, is_running)
+        else:
+            self._add_terminal_child(
+                ws_item, tab_id, title, status, is_working, is_running
+            )
+        # Liga/desliga timer do spinner conforme algum terminal está working
+        any_working = any(w for _, w, _ in self._terminal_activity.values())
+        if any_working and not self._spinner_timer.isActive():
+            self._spinner_timer.start()
+        elif not any_working and self._spinner_timer.isActive():
+            self._spinner_timer.stop()
+
+    def _on_tab_removed(self, tab_id: int) -> None:
+        item = self._terminal_tree_items.pop(tab_id, None)
+        self._terminal_activity.pop(tab_id, None)
+        if item is not None and item.parent() is not None:
+            item.parent().removeChild(item)
+        if not any(w for _, w, _ in self._terminal_activity.values()):
+            self._spinner_timer.stop()
+
+    def _add_terminal_child(
+        self,
+        ws_item: QTreeWidgetItem,
+        tab_id: int,
+        title: str,
+        status: str,
+        is_working: bool,
+        is_running: bool,
+    ) -> None:
+        child = QTreeWidgetItem(
+            [self._terminal_child_label(title, status, is_working, is_running)]
+        )
+        child.setData(0, Qt.ItemDataRole.UserRole, tab_id)
+        child.setToolTip(0, status)
+        from PySide6.QtGui import QColor, QBrush
+        if is_working:
+            child.setForeground(0, QBrush(QColor("#e0b86a")))
+        elif is_running:
+            child.setForeground(0, QBrush(QColor("#c8c8c8")))
+        else:
+            child.setForeground(0, QBrush(QColor("#888")))
+        ws_item.addChild(child)
+        ws_item.setExpanded(True)
+        self._terminal_tree_items[tab_id] = child
+
+    def _update_terminal_child(
+        self,
+        tab_id: int,
+        title: str,
+        status: str,
+        is_working: bool,
+        is_running: bool,
+    ) -> None:
+        item = self._terminal_tree_items.get(tab_id)
+        if item is None:
+            return
+        item.setText(0, self._terminal_child_label(title, status, is_working, is_running))
+        item.setToolTip(0, status)
+        from PySide6.QtGui import QColor, QBrush
+        if is_working:
+            item.setForeground(0, QBrush(QColor("#e0b86a")))
+        elif is_running:
+            item.setForeground(0, QBrush(QColor("#c8c8c8")))
+        else:
+            item.setForeground(0, QBrush(QColor("#888")))
+
+    SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def _terminal_child_label(
+        self, title: str, status: str, is_working: bool, is_running: bool
+    ) -> str:
+        if is_working:
+            spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
+            prefix = spinner
+        elif is_running:
+            prefix = "○"  # aguardando input do user
+        else:
+            prefix = "✓"  # encerrado
+        short_status = (status[:50] + "…") if len(status) > 51 else status
+        if short_status:
+            return f"{prefix}  {title} — {short_status}"
+        return f"{prefix}  {title}"
+
+    def _tick_spinner(self) -> None:
+        self._spinner_frame = (self._spinner_frame + 1) % len(self.SPINNER_FRAMES)
+        for tab_id, (status, working, title) in list(self._terminal_activity.items()):
+            if working:
+                self._update_terminal_child(tab_id, title, status, True, True)
 
     def _launch_claude_for(
         self, workspace: Workspace, resume_session_id: str, cwd_override: str
@@ -803,6 +1026,7 @@ class MainWindow(QMainWindow):
                 return
             self.workspaces[idx] = updated
             save_workspaces(self.workspaces)
+            self._invalidate_session_cache(updated.id)
             self.refresh_list()
             # Reapresenta com os novos dados (mesmo id = mesmo terminal area)
             self.details.show_workspace(updated)
@@ -817,6 +1041,7 @@ class MainWindow(QMainWindow):
             self.workspaces = [w for w in self.workspaces if w.id != workspace.id]
             save_workspaces(self.workspaces)
             self._cleanup_terminal_for(workspace.id)
+            self._invalidate_session_cache(workspace.id)
             self.refresh_list()
 
     # ---------- persistência ----------
