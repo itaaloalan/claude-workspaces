@@ -131,3 +131,32 @@ def get_status(folder: str) -> GitStatus:
     except Exception as e:
         log.exception("git status falhou em %s", folder)
         return GitStatus(folder=folder, is_repo=True, error=str(e))
+
+
+def get_diff(folder: str, file_path: str, staged: bool = False) -> str:
+    """Devolve o diff do arquivo (relativo ao folder).
+    - staged=True: diff entre index e HEAD (mudanças staged)
+    - staged=False: diff entre working tree e index (mudanças unstaged)
+    Para arquivos untracked, retorna o conteúdo cru com prefixo +."""
+    args = ["git", "diff", "--no-color"]
+    if staged:
+        args.append("--cached")
+    args.extend(["--", file_path])
+    try:
+        r = _run(args, folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return f"(erro ao rodar git diff: {e})"
+    if r.returncode != 0:
+        return f"(git diff falhou: {r.stderr.strip()})"
+    if r.stdout:
+        return r.stdout
+    # Vazio = pode ser untracked. Mostra o conteúdo com + na frente.
+    abs_path = Path(folder) / file_path
+    if abs_path.is_file():
+        try:
+            text = abs_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            return f"(falha lendo arquivo: {e})"
+        prefix_lines = "\n".join(f"+{line}" for line in text.splitlines())
+        return f"(arquivo novo, sem versão anterior)\n\n{prefix_lines}"
+    return "(sem alterações)"
