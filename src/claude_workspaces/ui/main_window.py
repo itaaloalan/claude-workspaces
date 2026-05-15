@@ -66,6 +66,9 @@ class MainWindow(QMainWindow):
         self._spinner_frame: int = 0
         # Cache de texto de sessões pro filtro (lazy, key=ws.id)
         self._session_text_cache: dict[str, str] = {}
+        # Inbox de consoles aguardando atenção (working → idle transitions)
+        # key = tab_id; value = {workspace_id, title, status, when}
+        self._inbox: dict[int, dict] = {}
 
         self._build_ui()
         self._restore_geometry()
@@ -85,6 +88,7 @@ class MainWindow(QMainWindow):
         self.top_bar.settings_clicked.connect(self._show_settings)
         self.top_bar.home_clicked.connect(self._show_workspaces)
         self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
+        self.top_bar.inbox_clicked.connect(self._show_inbox)
         outer.addWidget(self.top_bar)
 
         splitter_css = (
@@ -810,9 +814,22 @@ class MainWindow(QMainWindow):
                     self._on_tab_activity(wid, tab_id, title, status, working, running)
             )
             area.tab_removed.connect(self._on_tab_removed)
+            area.tabs.currentChanged.connect(
+                lambda idx, a=area: self._on_terminal_tab_focused(a, idx)
+            )
             self._terminal_areas[ws_id] = area
             self.terminal_host.addWidget(area)
         return area
+
+    def _on_terminal_tab_focused(self, area: TerminalArea, idx: int) -> None:
+        if idx < 0:
+            return
+        widget = area.tabs.widget(idx)
+        if widget is None:
+            return
+        tab_id = id(widget)
+        if self._inbox.pop(tab_id, None) is not None:
+            self._refresh_inbox_badge()
 
     def _on_tab_activity(
         self,
@@ -823,7 +840,29 @@ class MainWindow(QMainWindow):
         is_working: bool,
         is_running: bool,
     ) -> None:
+        prev_status, prev_working, prev_title = self._terminal_activity.get(
+            tab_id, ("", False, title)
+        )
         self._terminal_activity[tab_id] = (status, is_working, title)
+
+        # Detecção de "precisa de atenção": estava working e agora não está
+        # (mas ainda rodando). Adiciona ao inbox global.
+        if prev_working and not is_working and is_running:
+            self._inbox[tab_id] = {
+                "workspace_id": workspace_id,
+                "title": title,
+                "status": status,
+            }
+            self._refresh_inbox_badge()
+        elif is_working and tab_id in self._inbox:
+            # Voltou a trabalhar — sai do inbox
+            self._inbox.pop(tab_id, None)
+            self._refresh_inbox_badge()
+        elif not is_running and tab_id in self._inbox:
+            # Terminou — sai do inbox
+            self._inbox.pop(tab_id, None)
+            self._refresh_inbox_badge()
+
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is None:
             return
@@ -833,16 +872,76 @@ class MainWindow(QMainWindow):
             self._add_terminal_child(
                 ws_item, tab_id, title, status, is_working, is_running
             )
-        # Liga/desliga timer do spinner conforme algum terminal está working
         any_working = any(w for _, w, _ in self._terminal_activity.values())
         if any_working and not self._spinner_timer.isActive():
             self._spinner_timer.start()
         elif not any_working and self._spinner_timer.isActive():
             self._spinner_timer.stop()
 
+    def _refresh_inbox_badge(self) -> None:
+        self.top_bar.set_inbox_count(len(self._inbox))
+
+    def _show_inbox(self) -> None:
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QAction
+        if not self._inbox:
+            menu = QMenu(self)
+            empty = QAction("(nenhum console aguardando)", menu)
+            empty.setEnabled(False)
+            menu.addAction(empty)
+            menu.exec_(self.top_bar.mapToGlobal(self.top_bar.rect().bottomRight()))
+            return
+        menu = QMenu(self)
+        for tab_id, info in list(self._inbox.items()):
+            ws = next(
+                (w for w in self.workspaces if w.id == info["workspace_id"]),
+                None,
+            )
+            ws_name = ws.name if ws else "?"
+            label = f"{ws_name} · {info['title']}"
+            if info.get("status"):
+                sub = info["status"]
+                if len(sub) > 60:
+                    sub = sub[:59] + "…"
+                label += f"  —  {sub}"
+            act = QAction(label, menu)
+            act.triggered.connect(
+                lambda _checked=False, wid=info["workspace_id"], tid=tab_id:
+                    self._focus_tab_from_inbox(wid, tid)
+            )
+            menu.addAction(act)
+        menu.addSeparator()
+        clear = QAction("Limpar inbox", menu)
+        clear.triggered.connect(self._clear_inbox)
+        menu.addAction(clear)
+        # Posiciona logo abaixo do bell
+        anchor = self.top_bar._inbox_btn
+        menu.exec_(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+    def _clear_inbox(self) -> None:
+        self._inbox.clear()
+        self._refresh_inbox_badge()
+
+    def _focus_tab_from_inbox(self, workspace_id: str, tab_id: int) -> None:
+        self._inbox.pop(tab_id, None)
+        self._refresh_inbox_badge()
+        ws_item = self._find_workspace_item(workspace_id)
+        if ws_item is not None:
+            self.list_widget.setCurrentItem(ws_item)
+        area = self._terminal_areas.get(workspace_id)
+        if area is None:
+            return
+        for i in range(area.tabs.count()):
+            if id(area.tabs.widget(i)) == tab_id:
+                area.tabs.setCurrentIndex(i)
+                self.terminal_host.setCurrentWidget(area)
+                break
+
     def _on_tab_removed(self, tab_id: int) -> None:
         item = self._terminal_tree_items.pop(tab_id, None)
         self._terminal_activity.pop(tab_id, None)
+        if self._inbox.pop(tab_id, None) is not None:
+            self._refresh_inbox_badge()
         if item is not None and item.parent() is not None:
             item.parent().removeChild(item)
         if not any(w for _, w, _ in self._terminal_activity.values()):

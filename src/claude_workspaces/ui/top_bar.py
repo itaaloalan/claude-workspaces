@@ -10,14 +10,14 @@ from PySide6.QtWidgets import (
 
 
 class TopBar(QWidget):
-    """Barra superior global: toggle sidebar + logo + busca + botão Configurar.
-    Substitui o QTabWidget anterior."""
+    """Barra superior global: toggle sidebar + logo + busca + inbox + Configurar."""
 
     search_changed = Signal(str)
     search_submitted = Signal()
     settings_clicked = Signal()
     home_clicked = Signal()
     toggle_sidebar_clicked = Signal()
+    inbox_clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -67,6 +67,15 @@ class TopBar(QWidget):
 
         row.addStretch()
 
+        # Bell de inbox — destaca quando há console aguardando atenção
+        self._inbox_btn = QPushButton("🔔")
+        self._inbox_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._inbox_btn.setToolTip("Consoles aguardando atenção")
+        self._inbox_count = 0
+        self._refresh_inbox_btn_style()
+        self._inbox_btn.clicked.connect(self.inbox_clicked.emit)
+        row.addWidget(self._inbox_btn)
+
         settings_btn = QPushButton("⚙ Configurar")
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.setToolTip("Configurações (Ctrl+,)")
@@ -81,6 +90,34 @@ class TopBar(QWidget):
         # Atalho Ctrl+F foca a busca da topbar
         QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
         QShortcut(QKeySequence("Ctrl+L"), self, self._focus_search)
+
+    def set_inbox_count(self, count: int) -> None:
+        self._inbox_count = count
+        if count > 0:
+            self._inbox_btn.setText(f"🔔 {count}")
+        else:
+            self._inbox_btn.setText("🔔")
+        self._refresh_inbox_btn_style()
+
+    def _refresh_inbox_btn_style(self) -> None:
+        if self._inbox_count > 0:
+            self._inbox_btn.setStyleSheet(
+                "QPushButton {"
+                "  background: #c9772d; color: #fff; font-weight: 600;"
+                "  border: 1px solid #c9772d; border-radius: 6px;"
+                "  padding: 6px 10px;"
+                "}"
+                "QPushButton:hover { background: #e0892f; border-color: #e0892f; }"
+            )
+        else:
+            self._inbox_btn.setStyleSheet(
+                "QPushButton {"
+                "  background: #1f1f1f; color: #c8c8c8;"
+                "  border: 1px solid #2c2c2c; border-radius: 6px;"
+                "  padding: 6px 10px;"
+                "}"
+                "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+            )
 
     def _focus_search(self) -> None:
         self.search.setFocus()
