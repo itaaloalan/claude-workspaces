@@ -24,7 +24,8 @@ optdepends=(
     'intellij-idea-community-edition: integração com IntelliJ'
 )
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')  # substituir por sha256 real ao publicar
+sha256sums=('933fe82345dd2de5ae0e3c91880599c0e895efa0552dfa071f07af4c4dc17fa2')
+install="$pkgname.install"
 
 build() {
     cd "$srcdir/$pkgname-$pkgver"

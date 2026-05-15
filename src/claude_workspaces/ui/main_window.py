@@ -305,26 +305,28 @@ class MainWindow(QMainWindow):
             "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
             "QPushButton:disabled { color: #444; }"
         )
-        self._term_max_btn = QPushButton("⬆")
+        # Ícones estilo Windows: minimizar (linha), maximizar (quadrado),
+        # restaurar (quadrados sobrepostos)
+        self._term_min_btn = QPushButton("—")
+        self._term_min_btn.setToolTip("Minimizar terminal (Ctrl+J)")
+        self._term_min_btn.setFixedWidth(28)
+        self._term_min_btn.setStyleSheet(btn_css)
+        self._term_min_btn.clicked.connect(self._toggle_terminal)
+        h.addWidget(self._term_min_btn)
+
+        self._term_max_btn = QPushButton("▢")
         self._term_max_btn.setToolTip("Maximizar terminal (esconder conteúdo)")
         self._term_max_btn.setFixedWidth(28)
         self._term_max_btn.setStyleSheet(btn_css)
         self._term_max_btn.clicked.connect(self._maximize_terminal)
         h.addWidget(self._term_max_btn)
 
-        self._term_restore_btn = QPushButton("⬜")
+        self._term_restore_btn = QPushButton("❐")
         self._term_restore_btn.setToolTip("Restaurar layout 50/50")
         self._term_restore_btn.setFixedWidth(28)
         self._term_restore_btn.setStyleSheet(btn_css)
         self._term_restore_btn.clicked.connect(self._restore_terminal)
         h.addWidget(self._term_restore_btn)
-
-        self._term_min_btn = QPushButton("⬇")
-        self._term_min_btn.setToolTip("Minimizar terminal (Ctrl+J)")
-        self._term_min_btn.setFixedWidth(28)
-        self._term_min_btn.setStyleSheet(btn_css)
-        self._term_min_btn.clicked.connect(self._toggle_terminal)
-        h.addWidget(self._term_min_btn)
 
         layout.addWidget(header)
 
