@@ -38,6 +38,7 @@ from .terminal_child_widget import (
     STATE_WORKING,
     TerminalChildWidget,
 )
+from .terminal_state import TerminalState
 from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
 from .workspace_details import WorkspaceDetailsPanel
@@ -57,24 +58,17 @@ class MainWindow(QMainWindow):
         # antigo), salva de volta com ids preenchidos pelo from_dict.
         self._migrate_ids_if_needed()
 
-        self._running_counts: dict[str, int] = {}  # key=workspace.id
         self._terminal_areas: dict[str, TerminalArea] = {}  # key=workspace.id
         self._terminal_placeholder_idx: int = 0
         self._sidebar_last_size: int = 260
         self._terminal_last_size: int = 420
         self._content_last_size: int = 420
-        # Tree items dos terminais ativos (children dos workspace items)
-        # key = id() do TerminalWidget; value = QTreeWidgetItem
-        self._terminal_tree_items: dict[int, QTreeWidgetItem] = {}
-        # Estado de atividade pra animar o spinner
-        # key = tab_id; value = (status, is_working, title)
-        self._terminal_activity: dict[int, tuple[str, bool, str]] = {}
+        # Estado dos terminais (tree_items, activity, inbox, running_counts)
+        # agrupado pra cleanup atômico via release_tab(tab_id)
+        self._terminals = TerminalState()
         self._spinner_frame: int = 0
         # Cache de texto de sessões pro filtro (lazy, key=ws.id)
         self._session_text_cache: dict[str, str] = {}
-        # Inbox de consoles aguardando atenção (working → idle transitions)
-        # key = tab_id; value = {workspace_id, title, status, when}
-        self._inbox: dict[int, dict] = {}
 
         self._build_ui()
         self._restore_geometry()
@@ -668,7 +662,7 @@ class MainWindow(QMainWindow):
                     current_id = pdata.id
 
         self.list_widget.clear()
-        self._terminal_tree_items.clear()
+        self._terminals.tree_items.clear()
 
         for ws in self.workspaces:
             item = QTreeWidgetItem([self._item_label(ws)])
@@ -698,8 +692,8 @@ class MainWindow(QMainWindow):
                 base_title = widget.property("_base_title") or area.tabs.tabText(i)
                 self._add_terminal_child(
                     ws_item, tab_id, base_title,
-                    self._terminal_activity.get(tab_id, ("", False, base_title))[0],
-                    self._terminal_activity.get(tab_id, ("", False, base_title))[1],
+                    self._terminals.activity.get(tab_id, ("", False, base_title))[0],
+                    self._terminals.activity.get(tab_id, ("", False, base_title))[1],
                     widget.is_running(),
                 )
 
@@ -737,7 +731,7 @@ class MainWindow(QMainWindow):
         return None
 
     def _item_label(self, ws: Workspace) -> str:
-        count = self._running_counts.get(ws.id, 0)
+        count = self._terminals.running_counts.get(ws.id, 0)
         if count > 0:
             dot = "●" if count == 1 else f"●×{count}"
             return f"{dot} {ws.name}"
@@ -807,9 +801,9 @@ class MainWindow(QMainWindow):
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:
-            self._running_counts.pop(workspace_id, None)
+            self._terminals.running_counts.pop(workspace_id, None)
         else:
-            self._running_counts[workspace_id] = count
+            self._terminals.running_counts[workspace_id] = count
         self._refresh_item_label(workspace_id)
 
     # ---------- seleção / settings ----------
@@ -945,7 +939,7 @@ class MainWindow(QMainWindow):
         if widget is None:
             return
         tab_id = id(widget)
-        if self._inbox.pop(tab_id, None) is not None:
+        if self._terminals.inbox.pop(tab_id, None) is not None:
             self._refresh_inbox_badge()
 
     def _on_tab_activity(
@@ -957,51 +951,51 @@ class MainWindow(QMainWindow):
         is_working: bool,
         is_running: bool,
     ) -> None:
-        prev_status, prev_working, prev_title = self._terminal_activity.get(
+        prev_status, prev_working, prev_title = self._terminals.activity.get(
             tab_id, ("", False, title)
         )
-        self._terminal_activity[tab_id] = (status, is_working, title)
+        self._terminals.activity[tab_id] = (status, is_working, title)
 
         # Detecção de "precisa de atenção": estava working e agora não está
         # (mas ainda rodando). Adiciona ao inbox global.
         if prev_working and not is_working and is_running:
-            self._inbox[tab_id] = {
+            self._terminals.inbox[tab_id] = {
                 "workspace_id": workspace_id,
                 "title": title,
                 "status": status,
             }
             self._refresh_inbox_badge()
-        elif is_working and tab_id in self._inbox:
+        elif is_working and tab_id in self._terminals.inbox:
             # Voltou a trabalhar — sai do inbox
-            self._inbox.pop(tab_id, None)
+            self._terminals.inbox.pop(tab_id, None)
             self._refresh_inbox_badge()
-        elif not is_running and tab_id in self._inbox:
+        elif not is_running and tab_id in self._terminals.inbox:
             # Terminou — sai do inbox
-            self._inbox.pop(tab_id, None)
+            self._terminals.inbox.pop(tab_id, None)
             self._refresh_inbox_badge()
 
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is None:
             return
-        if tab_id in self._terminal_tree_items:
+        if tab_id in self._terminals.tree_items:
             self._update_terminal_child(tab_id, title, status, is_working, is_running)
         else:
             self._add_terminal_child(
                 ws_item, tab_id, title, status, is_working, is_running
             )
-        any_working = any(w for _, w, _ in self._terminal_activity.values())
+        any_working = any(w for _, w, _ in self._terminals.activity.values())
         if any_working and not self._spinner_timer.isActive():
             self._spinner_timer.start()
         elif not any_working and self._spinner_timer.isActive():
             self._spinner_timer.stop()
 
     def _refresh_inbox_badge(self) -> None:
-        self.top_bar.set_inbox_count(len(self._inbox))
+        self.top_bar.set_inbox_count(len(self._terminals.inbox))
 
     def _show_inbox(self) -> None:
         from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QMenu
-        if not self._inbox:
+        if not self._terminals.inbox:
             menu = QMenu(self)
             empty = QAction("(nenhum console aguardando)", menu)
             empty.setEnabled(False)
@@ -1009,7 +1003,7 @@ class MainWindow(QMainWindow):
             menu.exec_(self.top_bar.mapToGlobal(self.top_bar.rect().bottomRight()))
             return
         menu = QMenu(self)
-        for tab_id, info in list(self._inbox.items()):
+        for tab_id, info in list(self._terminals.inbox.items()):
             ws = next(
                 (w for w in self.workspaces if w.id == info["workspace_id"]),
                 None,
@@ -1036,11 +1030,11 @@ class MainWindow(QMainWindow):
         menu.exec_(anchor.mapToGlobal(anchor.rect().bottomLeft()))
 
     def _clear_inbox(self) -> None:
-        self._inbox.clear()
+        self._terminals.inbox.clear()
         self._refresh_inbox_badge()
 
     def _focus_tab_from_inbox(self, workspace_id: str, tab_id: int) -> None:
-        self._inbox.pop(tab_id, None)
+        self._terminals.inbox.pop(tab_id, None)
         self._refresh_inbox_badge()
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is not None:
@@ -1055,13 +1049,13 @@ class MainWindow(QMainWindow):
                 break
 
     def _on_tab_removed(self, tab_id: int) -> None:
-        item = self._terminal_tree_items.pop(tab_id, None)
-        self._terminal_activity.pop(tab_id, None)
-        if self._inbox.pop(tab_id, None) is not None:
+        item = self._terminals.tree_items.get(tab_id)
+        inbox_changed = self._terminals.release_tab(tab_id)
+        if inbox_changed:
             self._refresh_inbox_badge()
         if item is not None and item.parent() is not None:
             item.parent().removeChild(item)
-        if not any(w for _, w, _ in self._terminal_activity.values()):
+        if not self._terminals.any_working():
             self._spinner_timer.stop()
 
     SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -1109,7 +1103,7 @@ class MainWindow(QMainWindow):
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
         ws_item.setExpanded(True)
-        self._terminal_tree_items[tab_id] = child
+        self._terminals.tree_items[tab_id] = child
 
     def _update_terminal_child(
         self,
@@ -1119,7 +1113,7 @@ class MainWindow(QMainWindow):
         is_working: bool,
         is_running: bool,
     ) -> None:
-        item = self._terminal_tree_items.get(tab_id)
+        item = self._terminals.tree_items.get(tab_id)
         if item is None:
             return
         widget = self.list_widget.itemWidget(item, 0)
@@ -1137,7 +1131,7 @@ class MainWindow(QMainWindow):
 
     def _tick_spinner(self) -> None:
         self._spinner_frame = (self._spinner_frame + 1) % len(self.SPINNER_FRAMES)
-        for tab_id, (status, working, title) in list(self._terminal_activity.items()):
+        for tab_id, (status, working, title) in list(self._terminals.activity.items()):
             if working:
                 self._update_terminal_child(tab_id, title, status, True, True)
 
@@ -1276,7 +1270,7 @@ class MainWindow(QMainWindow):
         area.close_all()
         self.terminal_host.removeWidget(area)
         area.deleteLater()
-        self._running_counts.pop(workspace_id, None)
+        self._terminals.running_counts.pop(workspace_id, None)
         if self.terminal_host.count() == 1:
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
 
