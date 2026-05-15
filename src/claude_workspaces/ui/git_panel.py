@@ -2,12 +2,13 @@ import logging
 import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -20,10 +21,13 @@ from PySide6.QtWidgets import (
 
 from ..git_actions import (
     commit as git_commit,
+    delete_untracked,
+    discard_unstaged,
     fetch as git_fetch,
     pull_ff_only,
     stage_all,
     stage_file,
+    unstage_all,
     unstage_file,
 )
 from ..git_status import GitFile, GitStatus, get_diff, get_status
@@ -105,6 +109,9 @@ class GitPanel(QWidget):
         self._tree.itemChanged.connect(self._on_item_changed)
         self._tree.itemClicked.connect(self._on_single_click)
         self._tree.itemDoubleClicked.connect(self._on_double_click)
+        self._tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
+        self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._tree.customContextMenuRequested.connect(self._on_context_menu)
         split.addWidget(self._tree)
 
         self._diff = QPlainTextEdit()
@@ -515,6 +522,243 @@ class GitPanel(QWidget):
         self._commit_btn.setText(
             "Commit" if total == 0 else f"Commit ({total})"
         )
+
+    # ---------- context menu ----------
+
+    def _on_context_menu(self, pos: QPoint) -> None:
+        items = self._tree.selectedItems()
+        clicked = self._tree.itemAt(pos)
+        if not items and clicked is not None:
+            items = [clicked]
+        if not items:
+            return
+
+        menu = QMenu(self)
+        # Classifica os items selecionados
+        file_items = [
+            i for i in items
+            if (i.data(0, Qt.ItemDataRole.UserRole) or {}).get("type") == T_FILE
+        ]
+        group_items = [
+            i for i in items
+            if (i.data(0, Qt.ItemDataRole.UserRole) or {}).get("type") == T_GROUP
+        ]
+        repo_items = [
+            i for i in items
+            if (i.data(0, Qt.ItemDataRole.UserRole) or {}).get("type") == T_REPO
+        ]
+
+        if file_items:
+            self._build_file_menu(menu, file_items)
+        elif group_items:
+            self._build_group_menu(menu, group_items)
+        elif repo_items:
+            self._build_repo_menu(menu, repo_items)
+
+        if menu.actions():
+            menu.exec_(self._tree.viewport().mapToGlobal(pos))
+
+    def _build_file_menu(
+        self, menu: QMenu, items: list[QTreeWidgetItem]
+    ) -> None:
+        # Pega dados consolidados
+        first_data = items[0].data(0, Qt.ItemDataRole.UserRole)
+        any_untracked = any(
+            (i.data(0, Qt.ItemDataRole.UserRole) or {}).get("is_untracked")
+            for i in items
+        )
+        any_unstaged = any(
+            (i.data(0, Qt.ItemDataRole.UserRole) or {}).get("is_unstaged")
+            for i in items
+        )
+        any_staged = any(
+            (i.data(0, Qt.ItemDataRole.UserRole) or {}).get("is_staged")
+            for i in items
+        )
+        n = len(items)
+        suffix = "" if n == 1 else f" ({n} arquivos)"
+
+        if len(items) == 1:
+            menu.addAction(
+                self._action(
+                    "Abrir no editor",
+                    lambda: self.open_file_requested.emit(first_data["path"]),
+                )
+            )
+            menu.addSeparator()
+
+        if any_untracked or any_unstaged:
+            menu.addAction(
+                self._action(f"+ Add (stage){suffix}", lambda: self._stage_items(items))
+            )
+        if any_staged:
+            menu.addAction(
+                self._action(f"− Unstage{suffix}", lambda: self._unstage_items(items))
+            )
+
+        menu.addSeparator()
+        if any_unstaged:
+            menu.addAction(
+                self._action(
+                    f"↶ Rollback mudanças{suffix}",
+                    lambda: self._rollback_items(items),
+                )
+            )
+        if any_untracked:
+            menu.addAction(
+                self._action(
+                    f"✕ Deletar arquivo{suffix}",
+                    lambda: self._delete_items(items),
+                )
+            )
+
+    def _build_group_menu(
+        self, menu: QMenu, items: list[QTreeWidgetItem]
+    ) -> None:
+        group_name = items[0].data(0, Qt.ItemDataRole.UserRole).get("name", "")
+        folder = items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
+        if "Unversioned" in group_name:
+            menu.addAction(
+                self._action("+ Add todos", lambda: self._stage_group(items[0]))
+            )
+        elif "Changes" in group_name:
+            menu.addAction(
+                self._action("+ Stage todos", lambda: self._stage_group(items[0]))
+            )
+            menu.addAction(
+                self._action("− Unstage todos", lambda: self._unstage_group(items[0]))
+            )
+            menu.addSeparator()
+            menu.addAction(
+                self._action(
+                    "↶ Rollback todos",
+                    lambda: self._rollback_group(items[0]),
+                )
+            )
+
+    def _build_repo_menu(
+        self, menu: QMenu, items: list[QTreeWidgetItem]
+    ) -> None:
+        folder = items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
+        menu.addAction(
+            self._action("⤓ Pull (ff-only)", lambda: self._do_pull_one(folder))
+        )
+        menu.addAction(
+            self._action("⇡⇣ Fetch", lambda: self._do_fetch_one(folder))
+        )
+        menu.addSeparator()
+        menu.addAction(
+            self._action("+ Stage tudo", lambda: stage_all(folder) and self.refresh())
+        )
+        menu.addAction(
+            self._action(
+                "− Unstage tudo", lambda: unstage_all(folder) and self.refresh()
+            )
+        )
+        menu.addSeparator()
+        from pathlib import Path
+        menu.addAction(
+            self._action(
+                "📁 Abrir pasta",
+                lambda: subprocess.Popen(["xdg-open", folder]),
+            )
+        )
+
+    @staticmethod
+    def _action(text: str, slot) -> QAction:
+        a = QAction(text)
+        a.triggered.connect(slot)
+        return a
+
+    # ---------- handlers do menu ----------
+
+    def _stage_items(self, items: list[QTreeWidgetItem]) -> None:
+        errors = []
+        for it in items:
+            d = it.data(0, Qt.ItemDataRole.UserRole)
+            ok, out = stage_file(d["folder"], d["rel_path"])
+            if not ok:
+                errors.append(f"{d['rel_path']}: {out}")
+        if errors:
+            self._notify("Stage", "?", False, "\n".join(errors))
+        self.refresh()
+
+    def _unstage_items(self, items: list[QTreeWidgetItem]) -> None:
+        errors = []
+        for it in items:
+            d = it.data(0, Qt.ItemDataRole.UserRole)
+            ok, out = unstage_file(d["folder"], d["rel_path"])
+            if not ok:
+                errors.append(f"{d['rel_path']}: {out}")
+        if errors:
+            self._notify("Unstage", "?", False, "\n".join(errors))
+        self.refresh()
+
+    def _rollback_items(self, items: list[QTreeWidgetItem]) -> None:
+        names = [i.data(0, Qt.ItemDataRole.UserRole)["rel_path"] for i in items]
+        reply = QMessageBox.question(
+            self,
+            "Rollback de mudanças",
+            "Vai descartar mudanças locais (irreversível) em:\n\n"
+            + "\n".join(names[:20])
+            + (f"\n... e mais {len(names)-20}" if len(names) > 20 else "")
+            + "\n\nContinuar?",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        errors = []
+        for it in items:
+            d = it.data(0, Qt.ItemDataRole.UserRole)
+            ok, out = discard_unstaged(d["folder"], d["rel_path"])
+            if not ok:
+                errors.append(f"{d['rel_path']}: {out}")
+        if errors:
+            self._notify("Rollback", "?", False, "\n".join(errors))
+        self.refresh()
+
+    def _delete_items(self, items: list[QTreeWidgetItem]) -> None:
+        names = [i.data(0, Qt.ItemDataRole.UserRole)["rel_path"] for i in items]
+        reply = QMessageBox.question(
+            self,
+            "Deletar arquivos untracked",
+            "Vai apagar do disco (irreversível):\n\n"
+            + "\n".join(names[:20])
+            + (f"\n... e mais {len(names)-20}" if len(names) > 20 else "")
+            + "\n\nContinuar?",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        errors = []
+        for it in items:
+            d = it.data(0, Qt.ItemDataRole.UserRole)
+            ok, out = delete_untracked(d["folder"], d["rel_path"])
+            if not ok:
+                errors.append(f"{d['rel_path']}: {out}")
+        if errors:
+            self._notify("Delete", "?", False, "\n".join(errors))
+        self.refresh()
+
+    def _collect_group_files(self, group_item: QTreeWidgetItem) -> list[QTreeWidgetItem]:
+        return [group_item.child(i) for i in range(group_item.childCount())]
+
+    def _stage_group(self, group_item: QTreeWidgetItem) -> None:
+        self._stage_items(self._collect_group_files(group_item))
+
+    def _unstage_group(self, group_item: QTreeWidgetItem) -> None:
+        self._unstage_items(self._collect_group_files(group_item))
+
+    def _rollback_group(self, group_item: QTreeWidgetItem) -> None:
+        self._rollback_items(self._collect_group_files(group_item))
+
+    def _do_fetch_one(self, folder: str) -> None:
+        ok, out = git_fetch(folder)
+        self._notify("Fetch", folder, ok, out)
+        self.refresh()
+
+    def _do_pull_one(self, folder: str) -> None:
+        ok, out = pull_ff_only(folder)
+        self._notify("Pull", folder, ok, out)
+        self.refresh()
 
     # ---------- ações git ----------
 

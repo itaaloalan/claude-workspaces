@@ -73,3 +73,27 @@ def commit(folder: str, message: str) -> tuple[bool, str]:
     if not message.strip():
         return False, "mensagem vazia"
     return _run(["git", "commit", "-m", message], folder)
+
+
+def unstage_all(folder: str) -> tuple[bool, str]:
+    """`git reset HEAD --` — tira tudo do staging area."""
+    return _run(["git", "reset", "HEAD", "--"], folder)
+
+
+def discard_unstaged(folder: str, file_path: str) -> tuple[bool, str]:
+    """Descarta mudanças unstaged do arquivo (rollback pro HEAD).
+    Destrutivo — caller deve confirmar com o usuário antes."""
+    return _run(["git", "restore", "--", file_path], folder)
+
+
+def delete_untracked(folder: str, file_path: str) -> tuple[bool, str]:
+    """Remove arquivo untracked do disco. Destrutivo."""
+    import os
+    full = os.path.join(folder, file_path)
+    try:
+        if os.path.isfile(full):
+            os.remove(full)
+            return True, ""
+        return False, f"não é arquivo: {full}"
+    except OSError as e:
+        return False, str(e)
