@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -32,6 +33,7 @@ class MainWindow(QMainWindow):
 
         self.settings = Settings.load()
         self.workspaces: list[Workspace] = load_workspaces()
+        self._running_counts: dict[str, int] = {}
 
         tabs = QTabWidget()
         tabs.addTab(self._build_workspaces_tab(), "Workspaces")
@@ -67,6 +69,7 @@ class MainWindow(QMainWindow):
         self.details = WorkspaceDetailsPanel(self.settings)
         self.details.edit_requested.connect(self.edit_workspace)
         self.details.delete_requested.connect(self.delete_workspace)
+        self.details.workspace_running_changed.connect(self._on_workspace_running)
         self.splitter.addWidget(self.details)
 
         self.splitter.setStretchFactor(0, 0)
@@ -89,6 +92,12 @@ class MainWindow(QMainWindow):
         layout.setSpacing(6)
 
         layout.addWidget(QLabel("<b>Workspaces</b>"))
+
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Filtrar…")
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.textChanged.connect(self._apply_filter)
+        layout.addWidget(self.search_box)
 
         self.list_widget = QListWidget()
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
@@ -123,22 +132,63 @@ class MainWindow(QMainWindow):
 
         self.list_widget.clear()
         for ws in self.workspaces:
-            item = QListWidgetItem(ws.name)
+            item = QListWidgetItem(self._item_label(ws))
             item.setData(Qt.ItemDataRole.UserRole, ws)
             if ws.description:
                 item.setToolTip(ws.description)
             self.list_widget.addItem(item)
 
+        self._apply_filter(self.search_box.text() if hasattr(self, "search_box") else "")
+
         if current_name:
             for i in range(self.list_widget.count()):
-                if self.list_widget.item(i).data(Qt.ItemDataRole.UserRole).name == current_name:
+                item = self.list_widget.item(i)
+                if item.isHidden():
+                    continue
+                if item.data(Qt.ItemDataRole.UserRole).name == current_name:
                     self.list_widget.setCurrentRow(i)
                     return
 
-        if self.workspaces:
-            self.list_widget.setCurrentRow(0)
+        for i in range(self.list_widget.count()):
+            if not self.list_widget.item(i).isHidden():
+                self.list_widget.setCurrentRow(i)
+                return
+
+        self.details.show_empty()
+
+    def _item_label(self, ws: Workspace) -> str:
+        count = self._running_counts.get(ws.name, 0)
+        if count <= 0:
+            return ws.name
+        if count == 1:
+            return f"● {ws.name}"
+        return f"● {ws.name} ({count})"
+
+    def _apply_filter(self, text: str) -> None:
+        needle = text.strip().lower()
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            ws = item.data(Qt.ItemDataRole.UserRole)
+            haystack = f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}".lower()
+            item.setHidden(bool(needle) and needle not in haystack)
+        current = self.list_widget.currentItem()
+        if current and current.isHidden():
+            for i in range(self.list_widget.count()):
+                if not self.list_widget.item(i).isHidden():
+                    self.list_widget.setCurrentRow(i)
+                    return
+
+    def _on_workspace_running(self, name: str, count: int) -> None:
+        if count <= 0:
+            self._running_counts.pop(name, None)
         else:
-            self.details.show_empty()
+            self._running_counts[name] = count
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            ws = item.data(Qt.ItemDataRole.UserRole)
+            if ws.name == name:
+                item.setText(self._item_label(ws))
+                break
 
     def _on_selection_changed(self, current, _previous) -> None:
         if current is None:

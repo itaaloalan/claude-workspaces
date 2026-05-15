@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 class WorkspaceDetailsPanel(QStackedWidget):
     edit_requested = Signal(Workspace)
     delete_requested = Signal(Workspace)
+    workspace_running_changed = Signal(str, int)
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -200,6 +201,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         area.close_all()
         self._terminal_host.removeWidget(area)
         area.deleteLater()
+        self.workspace_running_changed.emit(name, 0)
 
     def _rebuild_ide_buttons(self, stacks: set[str]) -> None:
         while self._ide_row.count():
@@ -255,6 +257,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         name = self.workspace.name
         if name not in self._terminal_areas:
             area = TerminalArea()
+            area.running_count_changed.connect(
+                lambda c, n=name: self.workspace_running_changed.emit(n, c)
+            )
             self._terminal_areas[name] = area
             self._terminal_host.addWidget(area)
         return self._terminal_areas[name]

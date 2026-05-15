@@ -59,8 +59,11 @@ class TerminalBridge(QObject):
 
 
 class TerminalWidget(QWidget):
+    running_changed = Signal(bool)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._is_running = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -110,9 +113,18 @@ class TerminalWidget(QWidget):
             self._pending = None
             self._start_now(argv, cwd, label)
 
+    def _set_running(self, running: bool) -> None:
+        if self._is_running != running:
+            self._is_running = running
+            self.running_changed.emit(running)
+
+    def is_running(self) -> bool:
+        return self._is_running
+
     def _on_session_finished(self) -> None:
         self._status.setText("(processo encerrado)")
         self._stop_btn.setEnabled(False)
+        self._set_running(False)
 
     def start_command(self, argv: list[str], cwd: str, label: str | None = None) -> None:
         if not self._bridge_ready:
@@ -133,6 +145,7 @@ class TerminalWidget(QWidget):
             return
         self._status.setText(label or " ".join(argv))
         self._stop_btn.setEnabled(True)
+        self._set_running(True)
 
     def start_shell_command(
         self,
@@ -158,6 +171,7 @@ class TerminalWidget(QWidget):
             self.session.terminate()
         self._stop_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
+        self._set_running(False)
 
     def closeEvent(self, event) -> None:
         self.terminate()
