@@ -1,7 +1,7 @@
 import logging
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -44,6 +44,8 @@ class MainWindow(QMainWindow):
         self._running_counts: dict[str, int] = {}  # key=workspace.id
         self._terminal_areas: dict[str, TerminalArea] = {}  # key=workspace.id
         self._terminal_placeholder_idx: int = 0
+        self._sidebar_last_size: int = 260
+        self._terminal_last_size: int = 420
 
         self._build_ui()
         self._restore_geometry()
@@ -61,19 +63,29 @@ class MainWindow(QMainWindow):
         self.top_bar.search_changed.connect(self._apply_filter)
         self.top_bar.settings_clicked.connect(self._show_settings)
         self.top_bar.home_clicked.connect(self._show_workspaces)
+        self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
         outer.addWidget(self.top_bar)
+
+        splitter_css = (
+            "QSplitter::handle { background: #2a2a2a; }"
+            "QSplitter::handle:hover { background: #3d6ea8; }"
+            "QSplitter::handle:pressed { background: #4a82c5; }"
+        )
 
         # Splitter vertical: corpo em cima, terminal embaixo (full-width)
         self.main_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.main_splitter.setChildrenCollapsible(False)
-        self.main_splitter.setHandleWidth(6)
+        self.main_splitter.setChildrenCollapsible(True)
+        self.main_splitter.setHandleWidth(8)
+        self.main_splitter.setStyleSheet(splitter_css)
 
         # Splitter horizontal: sidebar | conteúdo
         self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.body_splitter.setChildrenCollapsible(True)
-        self.body_splitter.setHandleWidth(6)
+        self.body_splitter.setHandleWidth(8)
+        self.body_splitter.setStyleSheet(splitter_css)
 
         self._sidebar = self._build_sidebar()
+        self._sidebar.setMinimumWidth(0)
         self.body_splitter.addWidget(self._sidebar)
 
         self.content_stack = QStackedWidget()
@@ -100,6 +112,7 @@ class MainWindow(QMainWindow):
 
         # Terminal host: full-width, embaixo de tudo (incluindo sidebar)
         self.terminal_host = QStackedWidget()
+        self.terminal_host.setMinimumHeight(0)
         self._empty_terminal = QLabel(
             "Nenhum terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' "
             "para iniciar uma sessão. Cada workspace tem suas próprias abas."
@@ -111,12 +124,12 @@ class MainWindow(QMainWindow):
         self._terminal_placeholder_idx = self.terminal_host.addWidget(self._empty_terminal)
         self.main_splitter.addWidget(self.terminal_host)
 
-        self.main_splitter.setStretchFactor(0, 3)
-        self.main_splitter.setStretchFactor(1, 2)
+        self.main_splitter.setStretchFactor(0, 1)
+        self.main_splitter.setStretchFactor(1, 1)
         if self.settings.main_splitter_sizes:
             self.main_splitter.setSizes(self.settings.main_splitter_sizes)
         else:
-            self.main_splitter.setSizes([460, 320])
+            self.main_splitter.setSizes([380, 420])
 
         outer.addWidget(self.main_splitter, stretch=1)
         self.setCentralWidget(central)
@@ -124,6 +137,86 @@ class MainWindow(QMainWindow):
         # Restaurar tamanhos das colunas internas dos details
         if self.settings.workspace_columns_sizes:
             self.details.restore_columns_sizes(self.settings.workspace_columns_sizes)
+
+        # Persistência ao vivo (debounced) — qualquer movimento dos
+        # splitters dispara save após 600ms de inatividade
+        self._layout_save_timer = QTimer(self)
+        self._layout_save_timer.setSingleShot(True)
+        self._layout_save_timer.setInterval(600)
+        self._layout_save_timer.timeout.connect(self._persist_layout)
+
+        self.body_splitter.splitterMoved.connect(self._schedule_layout_save)
+        self.main_splitter.splitterMoved.connect(self._schedule_layout_save)
+        self.details.columns_splitter_moved.connect(self._schedule_layout_save)
+
+        self._install_shortcuts()
+
+    def _schedule_layout_save(self, *_args) -> None:
+        self._layout_save_timer.start()
+
+    def _persist_layout(self) -> None:
+        try:
+            self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
+            self.settings.main_splitter_sizes = list(self.main_splitter.sizes())
+            self.settings.workspace_columns_sizes = self.details.columns_sizes()
+            g = self.geometry()
+            self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
+            self.settings.save()
+        except Exception:
+            log.exception("Falha ao persistir layout ao vivo")
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_layout_save_timer"):
+            self._layout_save_timer.start()
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        if hasattr(self, "_layout_save_timer"):
+            self._layout_save_timer.start()
+
+    def _install_shortcuts(self) -> None:
+        # Ctrl+B → alternar sidebar (mais espaço pro terminal/conteúdo)
+        QShortcut(QKeySequence("Ctrl+B"), self, self._toggle_sidebar)
+        # Ctrl+J → alternar terminal (foco mais alto no conteúdo)
+        QShortcut(QKeySequence("Ctrl+J"), self, self._toggle_terminal)
+        # Ctrl+Enter → abrir Claude no workspace atual
+        QShortcut(QKeySequence("Ctrl+Return"), self, self._launch_current_claude)
+        # Ctrl+, → configurações (convenção)
+        QShortcut(QKeySequence("Ctrl+,"), self, self._show_settings)
+        # Ctrl+N → novo workspace
+        QShortcut(QKeySequence("Ctrl+N"), self, self.add_workspace)
+
+    def _toggle_sidebar(self) -> None:
+        sizes = self.body_splitter.sizes()
+        if not sizes:
+            return
+        if sizes[0] > 0:
+            self._sidebar_last_size = sizes[0]
+            self.body_splitter.setSizes([0, sum(sizes)])
+        else:
+            target = self._sidebar_last_size or 260
+            self.body_splitter.setSizes([target, max(sum(sizes) - target, 200)])
+        self._schedule_layout_save()
+
+    def _toggle_terminal(self) -> None:
+        sizes = self.main_splitter.sizes()
+        if not sizes:
+            return
+        if sizes[1] > 0:
+            self._terminal_last_size = sizes[1]
+            self.main_splitter.setSizes([sum(sizes), 0])
+        else:
+            target = self._terminal_last_size or 420
+            self.main_splitter.setSizes([max(sum(sizes) - target, 200), target])
+        self._schedule_layout_save()
+
+    def _launch_current_claude(self) -> None:
+        current = self.list_widget.currentItem()
+        if current is None:
+            return
+        ws = current.data(Qt.ItemDataRole.UserRole)
+        self._launch_claude_for(ws, "", "")
 
     def _build_sidebar(self) -> QWidget:
         wrapper = QWidget()
@@ -136,14 +229,16 @@ class MainWindow(QMainWindow):
         self.list_widget = QListWidget()
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
         self.list_widget.setStyleSheet(
-            "QListWidget { background: transparent; border: 0; }"
-            "QListWidget::item { padding: 6px 8px; border-radius: 4px; }"
-            "QListWidget::item:selected { background: #2d4a6e; color: #fff; }"
-            "QListWidget::item:hover:!selected { background: #1f1f1f; }"
+            "QListWidget { background: transparent; border: 0; color: #e6e6e6; }"
+            "QListWidget::item { padding: 6px 8px; border-radius: 4px; color: #d0d0d0; }"
+            "QListWidget::item:hover { background: #2a3142; color: #fff; }"
+            "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
+            "QListWidget::item:selected:hover { background: #4a82c5; color: #fff; }"
         )
         layout.addWidget(self.list_widget, stretch=1)
 
         add_btn = QPushButton("+ Novo Workspace")
+        add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
         add_btn.clicked.connect(self.add_workspace)
         layout.addWidget(add_btn)
 

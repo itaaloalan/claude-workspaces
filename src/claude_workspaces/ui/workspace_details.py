@@ -33,6 +33,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
     launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
     launch_shell_requested = Signal(Workspace)
     tasks_changed = Signal(Workspace)
+    columns_splitter_moved = Signal()
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -128,6 +129,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
         columns.setStretchFactor(0, 1)
         columns.setStretchFactor(1, 1)
         columns.setSizes([520, 380])
+        columns.setStyleSheet(
+            "QSplitter::handle { background: #2a2a2a; }"
+            "QSplitter::handle:hover { background: #3d6ea8; }"
+        )
+        columns.splitterMoved.connect(lambda *_: self.columns_splitter_moved.emit())
         c.addWidget(columns, stretch=1)
 
         scroll.setWidget(w)

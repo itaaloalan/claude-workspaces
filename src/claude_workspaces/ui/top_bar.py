@@ -10,12 +10,13 @@ from PySide6.QtWidgets import (
 
 
 class TopBar(QWidget):
-    """Barra superior global: logo + busca + botão Configurar.
+    """Barra superior global: toggle sidebar + logo + busca + botão Configurar.
     Substitui o QTabWidget anterior."""
 
     search_changed = Signal(str)
     settings_clicked = Signal()
     home_clicked = Signal()
+    toggle_sidebar_clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -25,8 +26,20 @@ class TopBar(QWidget):
         )
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(12, 8, 12, 8)
-        row.setSpacing(12)
+        row.setContentsMargins(8, 8, 12, 8)
+        row.setSpacing(10)
+
+        toggle_btn = QPushButton("☰")
+        toggle_btn.setFlat(True)
+        toggle_btn.setFixedWidth(32)
+        toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        toggle_btn.setToolTip("Esconder / mostrar a barra lateral (Ctrl+B)")
+        toggle_btn.setStyleSheet(
+            "QPushButton { color: #aaa; font-size: 16px; padding: 4px; }"
+            "QPushButton:hover { color: #6aa9e0; }"
+        )
+        toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)
+        row.addWidget(toggle_btn)
 
         logo = QPushButton("Claude Workspaces")
         logo.setFlat(True)
@@ -39,7 +52,7 @@ class TopBar(QWidget):
         row.addWidget(logo)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar workspaces, projetos ou comandos…")
+        self.search.setPlaceholderText("Filtrar workspaces… (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(380)
         self.search.setStyleSheet(
@@ -54,6 +67,7 @@ class TopBar(QWidget):
 
         settings_btn = QPushButton("⚙ Configurar")
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings_btn.setToolTip("Configurações (Ctrl+,)")
         settings_btn.setStyleSheet(
             "QPushButton { background: #1f1f1f; color: #e6e6e6; "
             "border: 1px solid #2c2c2c; border-radius: 6px; padding: 6px 12px; }"
