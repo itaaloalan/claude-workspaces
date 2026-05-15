@@ -32,7 +32,9 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 class TerminalBridge(QObject):
-    output_to_terminal = Signal(str)
+    # QByteArray vira ArrayBuffer no JS, deixando o xterm.js decodificar
+    # UTF-8 corretamente (chars multi-byte como ─ │ ╭ não quebram).
+    output_to_terminal = Signal("QByteArray")
     ready = Signal()
 
     def __init__(self, session: PtySession) -> None:
@@ -41,9 +43,7 @@ class TerminalBridge(QObject):
         self.session.output_received.connect(self._on_pty_output)
 
     def _on_pty_output(self, data: bytes) -> None:
-        # latin-1 round-trips arbitrary bytes safely as JS strings; xterm.js
-        # handles ANSI/escape parsing regardless of encoding interpretation.
-        self.output_to_terminal.emit(data.decode("latin-1"))
+        self.output_to_terminal.emit(data)
 
     @Slot(str)
     def input_from_terminal(self, data: str) -> None:

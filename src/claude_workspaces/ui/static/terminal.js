@@ -31,7 +31,15 @@
         const bridge = channel.objects.bridge;
 
         bridge.output_to_terminal.connect(function (data) {
-            term.write(data);
+            // data chega como ArrayBuffer (QByteArray) — xterm.js aceita
+            // Uint8Array diretamente e faz a decodificação UTF-8 internamente
+            if (data instanceof ArrayBuffer) {
+                term.write(new Uint8Array(data));
+            } else if (data && data.buffer instanceof ArrayBuffer) {
+                term.write(new Uint8Array(data.buffer));
+            } else {
+                term.write(data);
+            }
         });
 
         term.onData(function (data) {
