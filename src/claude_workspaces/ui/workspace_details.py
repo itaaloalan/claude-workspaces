@@ -20,7 +20,9 @@ from PySide6.QtWidgets import (
 
 from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
+from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Task, Workspace
+from .mcp_dialog import MCPDialog
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
 from .session_card import SessionCard
@@ -88,6 +90,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._folders.setStyleSheet("color: #888; font-family: monospace; font-size: 11px;")
         c.addWidget(self._folders)
 
+        c.addLayout(self._build_mcp_row())
+
         # Linha única de ações principais
         actions_row = QHBoxLayout()
         actions_row.setSpacing(6)
@@ -141,6 +145,91 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         scroll.setWidget(w)
         return scroll
+
+    def _build_mcp_row(self):
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._mcp_label = QLabel()
+        self._mcp_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._mcp_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        row.addWidget(self._mcp_label, stretch=1)
+
+        self._mcp_edit_btn = QPushButton("Configurar MCP")
+        self._mcp_edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mcp_edit_btn.setStyleSheet(
+            "QPushButton { background: #1f1f1f; color: #e6e6e6;"
+            "  border: 1px solid #2c2c2c; border-radius: 4px; padding: 3px 10px; font-size: 11px; }"
+            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+        )
+        self._mcp_edit_btn.clicked.connect(self._on_edit_mcp)
+        row.addWidget(self._mcp_edit_btn)
+
+        self._mcp_remove_btn = QPushButton("Remover")
+        self._mcp_remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mcp_remove_btn.setStyleSheet(self._mcp_edit_btn.styleSheet())
+        self._mcp_remove_btn.clicked.connect(self._on_remove_mcp)
+        row.addWidget(self._mcp_remove_btn)
+
+        return row
+
+    def _refresh_mcp_status(self) -> None:
+        if not self.workspace:
+            return
+        name = self.workspace.name
+        if not mcp_exists(name):
+            self._mcp_label.setText(
+                f"<b>MCP:</b> nenhum servidor configurado pro nome "
+                f"<code>{name}</code>"
+            )
+            self._mcp_edit_btn.setText("Criar MCP")
+            self._mcp_remove_btn.setVisible(False)
+            return
+        if not is_postgres_mcp(name):
+            self._mcp_label.setText(
+                f"<b>MCP:</b> existe <code>{name}</code> mas não é postgres "
+                f"(não dá pra editar daqui)"
+            )
+            self._mcp_edit_btn.setEnabled(False)
+            self._mcp_remove_btn.setVisible(True)
+            return
+        url = get_postgres_url(name) or ""
+        self._mcp_label.setText(
+            f"<b>MCP:</b> <code>{name}</code> → {mask_password(url)}"
+        )
+        self._mcp_edit_btn.setEnabled(True)
+        self._mcp_edit_btn.setText("Editar MCP")
+        self._mcp_remove_btn.setVisible(True)
+
+    def _on_edit_mcp(self) -> None:
+        if not self.workspace:
+            return
+        name = self.workspace.name
+        if is_postgres_mcp(name):
+            current = get_postgres_url(name) or ""
+        else:
+            current = ""
+        dialog = MCPDialog(name, current_url=current, parent=self)
+        if dialog.exec():
+            self._refresh_mcp_status()
+
+    def _on_remove_mcp(self) -> None:
+        if not self.workspace:
+            return
+        name = self.workspace.name
+        reply = QMessageBox.question(
+            self,
+            "Remover MCP",
+            f"Remover o MCP '{name}' do Claude Code? Workspaces que "
+            f"dependem dele perdem acesso ao banco até reconfigurar.",
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            delete_mcp(name)
+        except OSError as e:
+            QMessageBox.critical(self, "Falha ao remover", str(e))
+            return
+        self._refresh_mcp_status()
 
     def _make_action_button(self, label: str, primary: bool = False) -> QPushButton:
         btn = QPushButton(label)
@@ -219,6 +308,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         self._rebuild_ide_buttons(stacks)
         self._refresh_sessions()
+        self._refresh_mcp_status()
         self._tasks_panel.set_workspace(workspace)
 
         self.setCurrentWidget(self._content)

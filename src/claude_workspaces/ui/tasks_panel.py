@@ -51,11 +51,14 @@ class TasksPanel(QWidget):
         header.addWidget(self._counter)
         outer.addLayout(header)
 
-        # Chips de filtro
+        # Chips de filtro — guardamos pra marcar o default depois de
+        # criar a QListWidget (senão setChecked dispara _on_chip_toggled
+        # antes do _list existir)
         chips = QHBoxLayout()
         chips.setSpacing(4)
         self._chip_group = QButtonGroup(self)
         self._chip_group.setExclusive(True)
+        self._chips: list[QPushButton] = []
         for key, label in [
             (self.FILTER_PENDING, "Pendentes"),
             (self.FILTER_DONE, "Concluídas"),
@@ -79,8 +82,7 @@ class TasksPanel(QWidget):
             btn.toggled.connect(self._on_chip_toggled)
             self._chip_group.addButton(btn)
             chips.addWidget(btn)
-            if key == self._filter:
-                btn.setChecked(True)
+            self._chips.append(btn)
         chips.addStretch()
         outer.addLayout(chips)
 
@@ -124,6 +126,12 @@ class TasksPanel(QWidget):
         outer.addLayout(footer)
 
         QShortcut(QKeySequence.StandardKey.Delete, self._list, self._delete_selected)
+
+        # Marca o filtro default agora que _list existe
+        for btn in self._chips:
+            if btn.property("filter_key") == self._filter:
+                btn.setChecked(True)
+                break
 
     def set_workspace(self, workspace: Workspace | None) -> None:
         self.workspace = workspace
