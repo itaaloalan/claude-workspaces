@@ -92,6 +92,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._folders.setStyleSheet("color: #b0b0b0; font-family: monospace; font-size: 11px;")
         c.addWidget(self._folders)
 
+        self._usage_label = QLabel()
+        self._usage_label.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        self._usage_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        c.addWidget(self._usage_label)
+
         c.addLayout(self._build_mcp_row())
 
         # Linha única de ações principais
@@ -328,9 +333,51 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._rebuild_ide_buttons(stacks)
         self._refresh_sessions()
         self._refresh_mcp_status()
+        self._refresh_usage()
         self._git_panel.set_workspace(workspace)
 
         self.setCurrentWidget(self._content)
+
+    def _refresh_usage(self) -> None:
+        if not self.workspace or not self.workspace.folders:
+            self._usage_label.setVisible(False)
+            return
+        try:
+            from datetime import datetime, timedelta, timezone
+            from ..usage_telemetry import (
+                aggregate_usage_by_workspace,
+                format_tokens,
+            )
+            since = datetime.now(timezone.utc) - timedelta(days=30)
+            all_usage = aggregate_usage_by_workspace(since=since)
+        except Exception:
+            self._usage_label.setVisible(False)
+            return
+        total_in = 0
+        total_out = 0
+        total_cache = 0
+        total_cost = 0.0
+        for folder in self.workspace.folders:
+            stats = all_usage.get(folder)
+            if not stats:
+                continue
+            total_in += stats.input_tokens
+            total_out += stats.output_tokens
+            total_cache += stats.cache_creation_tokens + stats.cache_read_tokens
+            total_cost += stats.cost_usd
+        if total_in + total_out + total_cache <= 0:
+            self._usage_label.setVisible(False)
+            return
+        parts = [
+            f"<b>Uso (30d):</b>",
+            f"in {format_tokens(total_in)}",
+            f"out {format_tokens(total_out)}",
+            f"cache {format_tokens(total_cache)}",
+        ]
+        if total_cost > 0:
+            parts.append(f"≈ US$ {total_cost:.2f}")
+        self._usage_label.setText("  ·  ".join(parts))
+        self._usage_label.setVisible(True)
 
     def restore_columns_sizes(self, sizes: list[int]) -> None:
         if sizes and len(sizes) == self._columns_splitter.count():
