@@ -789,8 +789,8 @@ class MainWindow(QMainWindow):
         self._sync_terminal_for(ws)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
-        # Double-click ou Enter — sessão histórica retoma via `--resume`;
-        # terminal vivo foca a aba existente.
+        # Double-click ou Enter — sessão histórica retoma via --resume
+        # NO TERMINAL INTERNO; terminal vivo foca a aba existente.
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
@@ -798,12 +798,9 @@ class MainWindow(QMainWindow):
         if not isinstance(pdata, Workspace):
             return
         if isinstance(data, ClaudeSession):
-            try:
-                launch_claude_resume(
-                    pdata, self.settings, data.id, cwd=data.origin_cwd
-                )
-            except LauncherError as e:
-                QMessageBox.warning(self, "Erro ao retomar sessão", str(e))
+            # Rota pelo launcher embutido (mesmo fluxo do botão Retomar
+            # do card) — não abre Konsole externo
+            self._launch_claude_for(pdata, data.id, data.origin_cwd)
             return
         if not isinstance(data, int):  # tab_id
             return
