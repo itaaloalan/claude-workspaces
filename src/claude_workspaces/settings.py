@@ -23,10 +23,12 @@ class Settings:
     pycharm_command: str = "pycharm"
     rider_command: str = "rider"
     # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
-    body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, right_pane]
+    body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, middle, right_dock]
     right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]
-    workspace_columns_sizes: list[int] = field(default_factory=list)
+    workspace_columns_sizes: list[int] = field(default_factory=list)  # legado, sem uso atual
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
+    # Dock direito (Tarefas + Git + Skills colapsáveis)
+    right_dock_collapsed: dict = field(default_factory=dict)  # {panel_id: bool}
 
     @classmethod
     def load(cls) -> "Settings":

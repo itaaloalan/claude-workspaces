@@ -127,28 +127,31 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         c.addLayout(actions_row)
 
-        # Duas colunas: Sessões | Tarefas
-        columns = QSplitter(Qt.Orientation.Horizontal)
-        columns.setChildrenCollapsible(False)
-        columns.setHandleWidth(8)
-        self._columns_splitter = columns
+        # Tarefas + Git agora moram no dock direito da MainWindow; aqui
+        # fica só a coluna de Sessões. Criamos os widgets de tasks e git
+        # mesmo assim — MainWindow puxa via accessor pra colocá-los no
+        # dock. Isso preserva sinais e o ciclo set_workspace.
+        self._tasks_panel = TasksPanel()
+        self._tasks_panel.tasks_changed.connect(self.tasks_changed.emit)
+        self._git_panel = GitPanel()
+        self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
 
-        columns.addWidget(self._build_sessions_column())
-        columns.addWidget(self._build_tasks_column())
-        columns.addWidget(self._build_git_column())
-        columns.setStretchFactor(0, 2)
-        columns.setStretchFactor(1, 2)
-        columns.setStretchFactor(2, 2)
-        columns.setSizes([400, 300, 300])
-        columns.setStyleSheet(
-            "QSplitter::handle { background: #2a2a2a; }"
-            "QSplitter::handle:hover { background: #3d6ea8; }"
-        )
-        columns.splitterMoved.connect(lambda *_: self.columns_splitter_moved.emit())
-        c.addWidget(columns, stretch=1)
+        sessions = self._build_sessions_column()
+        c.addWidget(sessions, stretch=1)
+
+        # Splitter "fantasma" só pra preservar a API existente
+        # (columns_sizes / restore_columns_sizes) sem quebrar callsites
+        self._columns_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._columns_splitter.setVisible(False)
 
         scroll.setWidget(w)
         return scroll
+
+    def tasks_panel(self) -> "TasksPanel":
+        return self._tasks_panel
+
+    def git_panel(self) -> "GitPanel":
+        return self._git_panel
 
     def _build_mcp_row(self):
         row = QHBoxLayout()
@@ -280,15 +283,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
         layout.addWidget(self._sessions_list, stretch=1)
         return col
 
-    def _build_tasks_column(self) -> QWidget:
-        self._tasks_panel = TasksPanel()
-        self._tasks_panel.tasks_changed.connect(self.tasks_changed.emit)
-        return self._tasks_panel
-
-    def _build_git_column(self) -> QWidget:
-        self._git_panel = GitPanel()
-        self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
-        return self._git_panel
+    # (removidos: tarefas e git viraram propriedades acessadas via
+    # tasks_panel() / git_panel() pra reuso no dock direito)
 
     def show_empty(self) -> None:
         self.workspace = None

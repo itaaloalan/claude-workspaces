@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
@@ -20,7 +21,9 @@ from ..launchers import LauncherError, find_app_repo_root, launch_claude_in_dir
 from ..models import Workspace
 from ..settings import Settings
 from ..storage import load_workspaces, save_workspaces
+from .collapsible_panel import CollapsiblePanel
 from .settings_panel import SettingsPanel
+from .skills_panel import SkillsPanel
 from .terminal_area import TerminalArea
 from .top_bar import TopBar
 from .workspace_details import WorkspaceDetailsPanel
@@ -121,12 +124,20 @@ class MainWindow(QMainWindow):
             self.right_splitter.setSizes([420, 380])
 
         self.body_splitter.addWidget(self.right_splitter)
+
+        # Dock direito (3ª coluna): Tarefas + Git + Skills colapsáveis
+        self.right_dock = self._build_right_dock()
+        self.right_dock.setMinimumWidth(0)
+        self.body_splitter.addWidget(self.right_dock)
+
         self.body_splitter.setStretchFactor(0, 0)
         self.body_splitter.setStretchFactor(1, 1)
-        if self.settings.body_splitter_sizes:
-            self.body_splitter.setSizes(self.settings.body_splitter_sizes)
+        self.body_splitter.setStretchFactor(2, 0)
+        sizes = self.settings.body_splitter_sizes
+        if sizes and len(sizes) == 3:
+            self.body_splitter.setSizes(sizes)
         else:
-            self.body_splitter.setSizes([260, 920])
+            self.body_splitter.setSizes([240, 760, 340])
 
         outer.addWidget(self.body_splitter, stretch=1)
         self.setCentralWidget(central)
@@ -176,26 +187,35 @@ class MainWindow(QMainWindow):
             self._layout_save_timer.start()
 
     def _install_shortcuts(self) -> None:
-        # Ctrl+B → alternar sidebar (mais espaço pro terminal/conteúdo)
+        # Layout
         QShortcut(QKeySequence("Ctrl+B"), self, self._toggle_sidebar)
-        # Ctrl+J → alternar terminal (foco mais alto no conteúdo)
         QShortcut(QKeySequence("Ctrl+J"), self, self._toggle_terminal)
-        # Ctrl+Enter → abrir Claude no workspace atual
+        QShortcut(QKeySequence("Ctrl+Shift+B"), self, self._toggle_right_dock)
+        # Workspace
         QShortcut(QKeySequence("Ctrl+Return"), self, self._launch_current_claude)
-        # Ctrl+, → configurações (convenção)
         QShortcut(QKeySequence("Ctrl+,"), self, self._show_settings)
-        # Ctrl+N → novo workspace
         QShortcut(QKeySequence("Ctrl+N"), self, self.add_workspace)
-        # Ctrl+1..9 → pular pro N-ésimo workspace visível
         for i in range(1, 10):
             QShortcut(
                 QKeySequence(f"Ctrl+{i}"),
                 self,
                 lambda idx=i - 1: self._jump_to_workspace(idx),
             )
-        # Ctrl+Tab / Ctrl+Shift+Tab → próximo/anterior workspace visível
         QShortcut(QKeySequence("Ctrl+Tab"), self, lambda: self._cycle_workspace(1))
         QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, lambda: self._cycle_workspace(-1))
+        # Terminal
+        QShortcut(QKeySequence("Ctrl+T"), self, self._new_terminal_tab)
+        QShortcut(QKeySequence("Ctrl+Shift+W"), self, self._close_active_terminal_tab)
+        QShortcut(QKeySequence("Ctrl+K"), self, self._clear_active_terminal)
+        QShortcut(QKeySequence("Ctrl+Alt+Right"), self, lambda: self._cycle_terminal_tab(1))
+        QShortcut(QKeySequence("Ctrl+Alt+Left"), self, lambda: self._cycle_terminal_tab(-1))
+        # Arquivos
+        QShortcut(QKeySequence("Ctrl+P"), self, self._quick_open_file)
+        QShortcut(QKeySequence("Ctrl+O"), self, self._open_folder_in_file_manager)
+        QShortcut(QKeySequence("Ctrl+Shift+C"), self, self._copy_primary_folder)
+        # Help
+        QShortcut(QKeySequence("Ctrl+/"), self, self._show_shortcuts)
+        QShortcut(QKeySequence("F1"), self, self._show_shortcuts)
 
     def _visible_rows(self) -> list[int]:
         return [
@@ -280,6 +300,172 @@ class MainWindow(QMainWindow):
             return
         ws = current.data(Qt.ItemDataRole.UserRole)
         self._launch_claude_for(ws, "", "")
+
+    def _toggle_right_dock(self) -> None:
+        sizes = self.body_splitter.sizes()
+        if not sizes or len(sizes) < 3:
+            return
+        if sizes[2] > 0:
+            self._right_dock_last_size = sizes[2]
+            self.body_splitter.setSizes([sizes[0], sizes[1] + sizes[2], 0])
+        else:
+            target = getattr(self, "_right_dock_last_size", 340) or 340
+            self.body_splitter.setSizes(
+                [sizes[0], max(sizes[1] - target, 200), target]
+            )
+        self._schedule_layout_save()
+
+    def _current_workspace(self) -> Workspace | None:
+        current = self.list_widget.currentItem()
+        if current is None:
+            return None
+        return current.data(Qt.ItemDataRole.UserRole)
+
+    def _new_terminal_tab(self) -> None:
+        ws = self._current_workspace()
+        if ws and ws.folders:
+            self._launch_shell_for(ws)
+
+    def _active_terminal_area(self) -> TerminalArea | None:
+        w = self.terminal_host.currentWidget()
+        return w if isinstance(w, TerminalArea) else None
+
+    def _close_active_terminal_tab(self) -> None:
+        area = self._active_terminal_area()
+        if area is None or area.count() == 0:
+            return
+        area._close_tab(area.tabs.currentIndex())
+
+    def _clear_active_terminal(self) -> None:
+        area = self._active_terminal_area()
+        if area is None or area.count() == 0:
+            return
+        widget = area.tabs.currentWidget()
+        # Manda Ctrl+L (form-feed) pra limpar — funciona em bash/zsh/fish/claude
+        from .terminal_widget import TerminalWidget
+        if isinstance(widget, TerminalWidget) and widget.session.is_running():
+            widget.session.write(b"\x0c")
+
+    def _cycle_terminal_tab(self, delta: int) -> None:
+        area = self._active_terminal_area()
+        if area is None or area.count() == 0:
+            return
+        idx = (area.tabs.currentIndex() + delta) % area.count()
+        area.tabs.setCurrentIndex(idx)
+
+    def _quick_open_file(self) -> None:
+        from PySide6.QtWidgets import QInputDialog
+        ws = self._current_workspace()
+        if not ws or not ws.folders:
+            return
+        # Versão simples por enquanto — listar todos os arquivos é caro
+        # em repos grandes. Pedimos um padrão e usamos find/grep.
+        pattern, ok = QInputDialog.getText(
+            self,
+            "Quick open",
+            f"Nome (ou parte) do arquivo em {Path(ws.folders[0]).name}:",
+        )
+        if not ok or not pattern.strip():
+            return
+        pattern = pattern.strip()
+        import subprocess
+        matches: list[str] = []
+        for folder in ws.folders:
+            try:
+                r = subprocess.run(
+                    ["git", "ls-files"],
+                    cwd=folder,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if r.returncode == 0:
+                    for line in r.stdout.splitlines():
+                        if pattern.lower() in line.lower():
+                            matches.append(str(Path(folder) / line))
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        if not matches:
+            QMessageBox.information(
+                self, "Quick open", f"Nenhum arquivo casa com '{pattern}'"
+            )
+            return
+        choice, ok = QInputDialog.getItem(
+            self, "Quick open", f"{len(matches)} match(es):",
+            matches[:200], 0, False,
+        )
+        if ok and choice:
+            self._open_file_in_editor(choice)
+
+    def _open_folder_in_file_manager(self) -> None:
+        ws = self._current_workspace()
+        if not ws or not ws.folders:
+            return
+        import subprocess
+        try:
+            subprocess.Popen(["xdg-open", ws.folders[0]])
+        except FileNotFoundError:
+            QMessageBox.warning(self, "xdg-open ausente", "Instale xdg-utils.")
+
+    def _copy_primary_folder(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+        ws = self._current_workspace()
+        if not ws or not ws.folders:
+            return
+        QGuiApplication.clipboard().setText(ws.folders[0])
+
+    def _show_shortcuts(self) -> None:
+        from .shortcuts_dialog import ShortcutsDialog
+        ShortcutsDialog(self).exec()
+
+    def _build_right_dock(self) -> QWidget:
+        wrapper = QWidget()
+        wrapper.setStyleSheet("background: #141414;")
+        v = QVBoxLayout(wrapper)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+
+        collapsed = self.settings.right_dock_collapsed or {}
+
+        tasks_panel = self.details.tasks_panel()
+        self._dock_tasks = CollapsiblePanel(
+            "Tarefas",
+            tasks_panel,
+            expanded=not collapsed.get("tasks", False),
+        )
+        self._dock_tasks.toggled.connect(
+            lambda exp: self._on_dock_toggled("tasks", exp)
+        )
+        v.addWidget(self._dock_tasks, stretch=1)
+
+        git_panel = self.details.git_panel()
+        self._dock_git = CollapsiblePanel(
+            "Git",
+            git_panel,
+            expanded=not collapsed.get("git", False),
+        )
+        self._dock_git.toggled.connect(
+            lambda exp: self._on_dock_toggled("git", exp)
+        )
+        v.addWidget(self._dock_git, stretch=2)
+
+        self._skills_panel = SkillsPanel()
+        self._dock_skills = CollapsiblePanel(
+            "Skills",
+            self._skills_panel,
+            expanded=not collapsed.get("skills", True),  # default colapsado
+        )
+        self._dock_skills.toggled.connect(
+            lambda exp: self._on_dock_toggled("skills", exp)
+        )
+        v.addWidget(self._dock_skills, stretch=1)
+
+        return wrapper
+
+    def _on_dock_toggled(self, panel_id: str, expanded: bool) -> None:
+        # True = expandido; armazenamos "collapsed" = not expanded
+        self.settings.right_dock_collapsed[panel_id] = not expanded
+        self._schedule_layout_save()
 
     def _build_terminal_pane(self) -> QWidget:
         pane = QWidget()
@@ -481,9 +667,11 @@ class MainWindow(QMainWindow):
         if current is None:
             self.details.show_empty()
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
+            self._skills_panel.set_workspace(None)
             return
         ws = current.data(Qt.ItemDataRole.UserRole)
         self.details.show_workspace(ws)
+        self._skills_panel.set_workspace(ws)
         self._sync_terminal_for(ws)
 
     def _show_settings(self) -> None:
