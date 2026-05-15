@@ -21,6 +21,7 @@ from ..launchers import LauncherError, find_app_repo_root, launch_claude_in_dir
 from ..models import Workspace
 from ..settings import Settings
 from ..storage import load_workspaces, save_workspaces
+from .memory_panel import MemoryPanel
 from .right_dock import RightDock
 from .settings_panel import SettingsPanel
 from .skills_panel import SkillsPanel
@@ -454,6 +455,13 @@ class MainWindow(QMainWindow):
             open_=not collapsed.get("git", False),
         )
 
+        # Memória do workspace (CLAUDE.md)
+        self._memory_panel = MemoryPanel()
+        dock.add_panel(
+            "memory", "Memória", self._memory_panel,
+            open_=not collapsed.get("memory", True),
+        )
+
         # Skills (default fechado)
         self._skills_panel = SkillsPanel()
         dock.add_panel(
@@ -746,6 +754,7 @@ class MainWindow(QMainWindow):
             self.details.show_empty()
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             self._skills_panel.set_workspace(None)
+            self._memory_panel.set_workspace(None)
             return
         data = current.data(0, Qt.ItemDataRole.UserRole)
         ws: Workspace | None = None
@@ -759,6 +768,7 @@ class MainWindow(QMainWindow):
             return
         self.details.show_workspace(ws)
         self._skills_panel.set_workspace(ws)
+        self._memory_panel.set_workspace(ws)
         self._sync_terminal_for(ws)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
