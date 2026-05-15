@@ -27,11 +27,16 @@
 
     // Tenta refitar várias vezes nos primeiros segundos — Qt pode demorar
     // pra finalizar layout (especialmente em splitters) e fontes podem
-    // ainda estar carregando quando o init roda
+    // ainda estar carregando quando o init roda. Cancela a fila anterior
+    // antes de agendar a nova pra evitar acúmulo de fits durante drag.
+    let pendingFitTimers = [];
     function aggressiveFit() {
+        pendingFitTimers.forEach(id => clearTimeout(id));
+        pendingFitTimers = [];
         safeFit();
-        const delays = [50, 150, 300, 600, 1200];
-        delays.forEach(ms => setTimeout(safeFit, ms));
+        [50, 200, 500].forEach(ms => {
+            pendingFitTimers.push(setTimeout(safeFit, ms));
+        });
     }
     aggressiveFit();
 

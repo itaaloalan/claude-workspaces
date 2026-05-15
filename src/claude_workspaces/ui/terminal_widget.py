@@ -74,6 +74,13 @@ class TerminalWidget(QWidget):
         self._activity_timer.timeout.connect(self._poll_activity)
         self._last_status = ""
         self._last_working = False
+        # Debounce do refit do xterm.js — durante drag de splitter / resize
+        # de janela, evita disparar fits em rajada (cada um dispara 6 fits
+        # com timeouts internos no JS → CPU thrash)
+        self._fit_timer = QTimer(self)
+        self._fit_timer.setSingleShot(True)
+        self._fit_timer.setInterval(120)
+        self._fit_timer.timeout.connect(self._emit_force_fit)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -215,15 +222,17 @@ class TerminalWidget(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        # Qt mudou nosso tamanho — o ResizeObserver no JS normalmente já
-        # pega isso, mas em alguns casos (split inicial, troca de aba do
-        # QStackedWidget, mudança de zoom do Qt) o evento não propaga.
-        # Disparar o sinal force_fit_requested garante um refit explícito.
-        if hasattr(self, "bridge") and self._bridge_ready:
-            self.bridge.force_fit_requested.emit()
+        # Debounced — durante drag de splitter o resizeEvent dispara dezenas
+        # de vezes; queremos refitar só quando para
+        self._fit_timer.start()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        # Show é raro o suficiente pra disparar direto (sem debounce)
+        if hasattr(self, "bridge") and self._bridge_ready:
+            self.bridge.force_fit_requested.emit()
+
+    def _emit_force_fit(self) -> None:
         if hasattr(self, "bridge") and self._bridge_ready:
             self.bridge.force_fit_requested.emit()
 
