@@ -1141,6 +1141,9 @@ class MainWindow(QMainWindow):
         if not workspace.folders:
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
+        from ..services.launch_planner import build_claude_argv, plan_from_dialog
+        from .launch_claude_dialog import LaunchClaudeDialog
+
         cwd, extras = workspace.launch_paths()
         worktree_label = ""
         if cwd_override:
@@ -1148,41 +1151,29 @@ class MainWindow(QMainWindow):
             extras = []
         elif not resume_session_id:
             # Resume não passa pelo dialog (preserva a sessão exata)
-            from ..git_worktree import add_worktree
-            from .launch_claude_dialog import LaunchClaudeDialog
             dialog = LaunchClaudeDialog(workspace, self.settings, parent=self)
             if not dialog.exec():
                 return
-            selected = dialog.result_folders()
-            if not selected:
+            plan = plan_from_dialog(
+                dialog.result_folders(),
+                dialog.result_isolate(),
+                dialog.result_create_branch(),
+                dialog.result_branch(),
+                dialog.result_base_branch(),
+            )
+            if not plan.ok:
+                if plan.error:
+                    QMessageBox.warning(self, "Falha ao preparar launch", plan.error)
                 return
-            cwd = selected[0]
-            extras = selected[1:]
-            if dialog.result_isolate():
-                branch = dialog.result_branch()
-                create = dialog.result_create_branch()
-                base = dialog.result_base_branch() or None if create else None
-                if not branch:
-                    QMessageBox.warning(
-                        self, "Branch inválida", "Escolha um nome de branch."
-                    )
-                    return
-                ok, msg, dest = add_worktree(cwd, branch, base, create_branch=create)
-                if not ok:
-                    QMessageBox.warning(
-                        self,
-                        "Falha ao criar worktree",
-                        f"Não consegui criar o worktree:\n\n{msg}",
-                    )
-                    return
-                cwd = str(dest)
-                worktree_label = f" · {branch}"
+            cwd, extras = plan.cwd, plan.extras
+            worktree_label = plan.worktree_label
 
-        argv = [self.settings.claude_command, *self.settings.claude_extra_args]
-        if resume_session_id:
-            argv += ["--resume", resume_session_id]
-        for extra in extras:
-            argv += ["--add-dir", extra]
+        argv = build_claude_argv(
+            self.settings.claude_command,
+            self.settings.claude_extra_args,
+            extras,
+            resume_session_id,
+        )
 
         area = self._get_terminal_area(workspace)
         self.terminal_host.setCurrentWidget(area)

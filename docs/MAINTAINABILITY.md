@@ -101,8 +101,8 @@ Itens marcados ✓ já foram resolvidos; ✗ pendentes.
 |---|------|---------|--------|
 | 1 | Remover `collapsible_panel.py` | 5 min | ✓ |
 | 2 | Extrair `theme.py` com paleta + helpers | 1h | ✓ |
-| 3 | `BasePanel` Protocol + adaptar panels | 2h | ✗ |
-| 4 | `services/launcher_service.py` extraído | 2h | ✗ |
-| 5 | `TerminalState` com ciclo de vida | 3h | ✗ |
-| 6 | Testes de 7 módulos puros (102 testes total) | 4h | ✓ |
+| 3 | `DockPanel` Protocol + `DOCK_PANEL_SPECS` | 2h | ✓ |
+| 4 | `services/launch_planner.py` extraído | 2h | ✓ |
+| 5 | `TerminalState` com ciclo de vida | 3h | ✓ |
+| 6 | Testes de 9 módulos puros (122 testes total) | 4h | ✓ |
 | 7 | CI: `ruff` no workflow + config em pyproject | 30 min | ✓ |
