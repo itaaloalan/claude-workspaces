@@ -62,7 +62,9 @@ class TerminalArea(QWidget):
     ) -> None:
         if self.tabs.indexOf(widget) < 0:
             return
-        title = widget.property("_base_title") or ""
+        # Preferir o título da sessão Claude (primeiro user prompt) se
+        # já tiver sido resolvido; fallback pro título base da aba
+        title = widget.effective_title()
         self.tab_activity_changed.emit(
             id(widget), title, status, is_working, widget.is_running()
         )

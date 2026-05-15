@@ -74,9 +74,14 @@ class TerminalWidget(QWidget):
         self._activity_timer.timeout.connect(self._poll_activity)
         self._last_status = ""
         self._last_working = False
-        # Dirty flag: bytes chegaram desde última avaliação. Evita reparse
-        # do buffer em ticks sem novidade.
         self._activity_dirty = False
+        # Context Claude (cwd + resume) pra descobrir o título da sessão
+        # via scan do ~/.claude/projects/<cwd>/*.jsonl
+        self._claude_cwd: str | None = None
+        self._claude_resume_id: str | None = None
+        self._claude_start_time: float = 0.0
+        self._session_preview: str | None = None
+        self._session_resolved: bool = False
         # Debounce do refit do xterm.js — durante drag de splitter / resize
         # de janela, evita disparar fits em rajada (cada um dispara 6 fits
         # com timeouts internos no JS → CPU thrash)
@@ -148,6 +153,58 @@ class TerminalWidget(QWidget):
     def is_running(self) -> bool:
         return self._is_running
 
+    def configure_claude(self, cwd: str, resume_id: str | None = None) -> None:
+        """Diz à TerminalWidget que o comando rodando é um Claude — assim
+        ela consegue resolver o título da sessão (primeiro user prompt)
+        olhando os JSONLs em ~/.claude/projects/<encoded-cwd>/."""
+        self._claude_cwd = cwd
+        self._claude_resume_id = resume_id
+        self._claude_start_time = time.monotonic()
+        self._session_preview = None
+        self._session_resolved = False
+
+    def effective_title(self) -> str:
+        """Título preferido — preview da sessão (truncado) ou _base_title."""
+        if self._session_preview:
+            text = self._session_preview.replace("\n", " ").strip()
+            if len(text) > 60:
+                text = text[:59] + "…"
+            return text
+        return self.property("_base_title") or ""
+
+    def full_title(self) -> str:
+        if self._session_preview:
+            return self._session_preview.strip()
+        return self.property("_base_title") or ""
+
+    def _try_resolve_session(self) -> None:
+        if self._session_resolved or not self._claude_cwd:
+            return
+        try:
+            from ..claude_sessions import list_sessions
+            sessions = list_sessions(self._claude_cwd, limit=8)
+        except Exception:
+            return
+        if not sessions:
+            return
+        if self._claude_resume_id:
+            for s in sessions:
+                if s.id == self._claude_resume_id:
+                    self._session_preview = s.preview or ""
+                    self._session_resolved = True
+                    return
+            return
+        # Sessão nova — pega a mais recente criada após nosso start
+        # (-5s pra tolerar drift). Se nada bater ainda, tenta no próximo tick.
+        matching = [s for s in sessions if s.mtime >= self._claude_start_time - 5]
+        if not matching:
+            return
+        matching.sort(key=lambda s: s.mtime, reverse=True)
+        preview = matching[0].preview or ""
+        if preview:
+            self._session_preview = preview
+            self._session_resolved = True
+
     def _record_output(self, data: bytes) -> None:
         self._output_buffer.extend(data)
         if len(self._output_buffer) > 8192:
@@ -162,8 +219,9 @@ class TerminalWidget(QWidget):
             if self._last_output_time
             else 999.0
         )
+        # Tenta resolver o título da sessão (Claude grava JSONL ~1-3s após start)
+        self._try_resolve_session()
         if not self._activity_dirty and self._last_working and age <= 2.5:
-            # Sem novo output mas ainda dentro da janela working — mantém
             return
         self._activity_dirty = False
         activity = parse_status(bytes(self._output_buffer), age)

@@ -71,6 +71,13 @@ class TerminalChildWidget(QWidget):
 
         outer.addLayout(vbox, stretch=1)
 
+    def set_title(self, title: str, tooltip: str = "") -> None:
+        if title and title != self._title:
+            self._title = title
+            self._title_label.setText(title)
+        # Tooltip aplicado no widget inteiro pra hover em qualquer parte
+        self.setToolTip(tooltip or title)
+
     def update_state(
         self,
         state: str,

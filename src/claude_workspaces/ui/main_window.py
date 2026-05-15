@@ -1016,6 +1016,14 @@ class MainWindow(QMainWindow):
             return STATE_WORKING
         return STATE_IDLE
 
+    def _terminal_widget_for(self, tab_id: int) -> TerminalWidget | None:
+        for area in self._terminal_areas.values():
+            for i in range(area.tabs.count()):
+                w = area.tabs.widget(i)
+                if id(w) == tab_id and isinstance(w, TerminalWidget):
+                    return w
+        return None
+
     def _add_terminal_child(
         self,
         ws_item: QTreeWidgetItem,
@@ -1028,13 +1036,17 @@ class MainWindow(QMainWindow):
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, tab_id)
         widget = TerminalChildWidget(title)
+        full_title = title
+        term = self._terminal_widget_for(tab_id)
+        if term is not None:
+            full_title = term.full_title() or title
+        widget.set_title(title, full_title)
         spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
         widget.update_state(
             self._resolve_state(is_working, is_running), status, spinner_char=spinner
         )
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
-        # Ajusta altura do item ao tamanho do widget custom
         child.setSizeHint(0, widget.sizeHint())
         ws_item.setExpanded(True)
         self._terminal_tree_items[tab_id] = child
@@ -1053,6 +1065,11 @@ class MainWindow(QMainWindow):
         widget = self.list_widget.itemWidget(item, 0)
         if not isinstance(widget, TerminalChildWidget):
             return
+        full_title = title
+        term = self._terminal_widget_for(tab_id)
+        if term is not None:
+            full_title = term.full_title() or title
+        widget.set_title(title, full_title)
         spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
         widget.update_state(
             self._resolve_state(is_working, is_running), status, spinner_char=spinner
@@ -1109,6 +1126,9 @@ class MainWindow(QMainWindow):
         title = "claude (resume)" if resume_session_id else "claude"
         title = f"{title} #{area.count() + 1}{worktree_label}"
         terminal = area.add_terminal(title)
+        # Dá pra terminal saber que é Claude (cwd + resume id), pra ele
+        # tentar achar o título da sessão (1º user prompt) e mostrar no tree
+        terminal.configure_claude(cwd, resume_session_id or None)
         try:
             terminal.start_shell_command(
                 argv,
