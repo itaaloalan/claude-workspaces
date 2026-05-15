@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -148,6 +150,7 @@ class MainWindow(QMainWindow):
     def _launch_self_dev(self) -> None:
         repo = find_app_repo_root()
         if not repo:
+            logging.getLogger(__name__).warning("Repo root não encontrado para self-dev")
             QMessageBox.warning(
                 self,
                 "Não foi possível localizar o repo",
@@ -158,6 +161,7 @@ class MainWindow(QMainWindow):
         try:
             launch_claude_in_dir(repo, self.settings)
         except LauncherError as e:
+            logging.getLogger(__name__).exception("Falha em self-dev launch")
             QMessageBox.warning(self, "Falha ao abrir Claude", str(e))
 
     def add_workspace(self) -> None:

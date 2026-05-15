@@ -1,3 +1,4 @@
+import logging
 import os
 import shlex
 import shutil
@@ -6,6 +7,9 @@ from pathlib import Path
 
 from .models import Workspace
 from .settings import Settings
+
+
+log = logging.getLogger(__name__)
 
 
 IDE_LABEL: dict[str, str] = {
@@ -23,24 +27,35 @@ class LauncherError(Exception):
 
 def _require(cmd: str, label: str | None = None) -> None:
     if not shutil.which(cmd):
-        raise LauncherError(f"'{cmd}' não encontrado no PATH ({label or 'comando'})")
+        msg = f"'{cmd}' não encontrado no PATH ({label or 'comando'})"
+        log.warning(msg)
+        raise LauncherError(msg)
 
 
 def _user_shell() -> str:
     return os.environ.get("SHELL", "/bin/bash")
 
 
+def _spawn(argv: list[str], cwd: str | Path) -> subprocess.Popen:
+    log.info("Spawning: %s (cwd=%s)", argv, cwd)
+    try:
+        return subprocess.Popen(argv, cwd=str(cwd))
+    except OSError as e:
+        log.exception("Falha ao iniciar processo: %s", argv)
+        raise LauncherError(f"Falha ao iniciar processo: {e}") from e
+
+
 def _run_in_terminal(
     terminal_cmd: str,
     inner_cmd_parts: list[str],
     cwd: str | Path,
-) -> None:
+) -> subprocess.Popen:
     """Spawn the terminal, running the inner command through an interactive
     shell so user-defined aliases (e.g. `ia` → `claude`) resolve."""
     inner = shlex.join(inner_cmd_parts)
-    subprocess.Popen(
+    return _spawn(
         [terminal_cmd, "-e", _user_shell(), "-ic", inner],
-        cwd=str(cwd),
+        cwd,
     )
 
 
@@ -64,7 +79,7 @@ def launch_konsole(workspace: Workspace, settings: Settings) -> None:
     if not workspace.primary_folder:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
     _require(settings.terminal_command, "terminal")
-    subprocess.Popen([settings.terminal_command], cwd=workspace.primary_folder)
+    _spawn([settings.terminal_command], workspace.primary_folder)
 
 
 def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
@@ -77,7 +92,7 @@ def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
         raise LauncherError(
             f"'{cmd}' não encontrado no PATH — ajuste o comando do {IDE_LABEL.get(ide_key, ide_key)} em Configurações"
         )
-    subprocess.Popen([cmd, *workspace.folders])
+    _spawn([cmd, *workspace.folders], workspace.primary_folder or Path.cwd())
 
 
 def find_app_repo_root() -> Path | None:

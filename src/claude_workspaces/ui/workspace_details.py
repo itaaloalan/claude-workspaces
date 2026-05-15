@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -19,6 +21,9 @@ from ..launchers import (
 from ..models import Workspace
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
+
+
+log = logging.getLogger(__name__)
 
 
 class WorkspaceDetailsPanel(QStackedWidget):
@@ -161,6 +166,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         try:
             launch_claude(self.workspace, self.settings)
         except (LauncherError, FileNotFoundError) as e:
+            log.exception("Falha ao abrir Claude (workspace=%s)", self.workspace.name)
             QMessageBox.warning(self, "Falha ao abrir Claude", str(e))
 
     def _launch_konsole(self) -> None:
@@ -169,6 +175,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         try:
             launch_konsole(self.workspace, self.settings)
         except (LauncherError, FileNotFoundError) as e:
+            log.exception("Falha ao abrir terminal (workspace=%s)", self.workspace.name)
             QMessageBox.warning(self, "Falha ao abrir terminal", str(e))
 
     def _launch_ide(self, ide_key: str) -> None:
@@ -177,4 +184,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         try:
             launch_ide(ide_key, self.workspace, self.settings)
         except (LauncherError, FileNotFoundError) as e:
+            log.exception(
+                "Falha ao abrir %s (workspace=%s)", ide_key, self.workspace.name
+            )
             QMessageBox.warning(self, f"Falha ao abrir {IDE_LABEL.get(ide_key, ide_key)}", str(e))

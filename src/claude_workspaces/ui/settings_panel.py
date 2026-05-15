@@ -1,6 +1,7 @@
 import shlex
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..logging_setup import log_file, state_dir
 from ..settings import Settings, settings_file
 
 
@@ -83,11 +85,18 @@ class SettingsPanel(QWidget):
         actions.addWidget(save_btn)
         actions.addWidget(reset_btn)
         actions.addStretch()
+        open_log_btn = QPushButton("Abrir log")
+        open_log_btn.setToolTip(f"Abre {log_file()}")
+        open_log_btn.clicked.connect(self._open_log)
+        actions.addWidget(open_log_btn)
         outer.addLayout(actions)
 
         outer.addStretch()
 
-        footer = QLabel(f"Arquivo: <code>{settings_file()}</code>")
+        footer = QLabel(
+            f"Configurações: <code>{settings_file()}</code><br>"
+            f"Logs: <code>{log_file()}</code>"
+        )
         footer.setStyleSheet("color: #666;")
         footer.setTextInteractionFlags(footer.textInteractionFlags())
         outer.addWidget(footer)
@@ -131,3 +140,10 @@ class SettingsPanel(QWidget):
         defaults = Settings()
         self.settings.update_from(defaults)
         self._refresh_fields()
+
+    def _open_log(self) -> None:
+        path = log_file()
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
