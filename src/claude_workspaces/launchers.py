@@ -72,13 +72,14 @@ def _run_in_terminal(
 
 
 def launch_claude(workspace: Workspace, settings: Settings) -> None:
-    if not workspace.primary_folder:
+    if not workspace.folders:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
     _require(settings.terminal_command, "terminal")
+    cwd, extras = workspace.launch_paths()
     cmd = [settings.claude_command, *settings.claude_extra_args]
-    for extra in workspace.extra_folders:
+    for extra in extras:
         cmd += ["--add-dir", extra]
-    _run_in_terminal(settings, cmd, workspace.primary_folder)
+    _run_in_terminal(settings, cmd, cwd)
 
 
 def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
@@ -88,10 +89,11 @@ def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
 
 
 def launch_konsole(workspace: Workspace, settings: Settings) -> None:
-    if not workspace.primary_folder:
+    if not workspace.folders:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
     _require(settings.terminal_command, "terminal")
-    _spawn([settings.terminal_command], workspace.primary_folder)
+    cwd, _ = workspace.launch_paths()
+    _spawn([settings.terminal_command], cwd)
 
 
 def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
@@ -104,7 +106,8 @@ def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
         raise LauncherError(
             f"'{cmd}' não encontrado no PATH — ajuste o comando do {IDE_LABEL.get(ide_key, ide_key)} em Configurações"
         )
-    _spawn([cmd, *workspace.folders], workspace.primary_folder or Path.cwd())
+    cwd, _ = workspace.launch_paths()
+    _spawn([cmd, *workspace.folders], cwd)
 
 
 def find_app_repo_root() -> Path | None:

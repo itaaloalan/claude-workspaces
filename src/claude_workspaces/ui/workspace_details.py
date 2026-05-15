@@ -175,16 +175,17 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._ide_row.addStretch()
 
     def _launch_claude(self) -> None:
-        if not self.workspace or not self.workspace.primary_folder:
+        if not self.workspace or not self.workspace.folders:
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
+        cwd, extras = self.workspace.launch_paths()
         argv = [self.settings.claude_command, *self.settings.claude_extra_args]
-        for extra in self.workspace.extra_folders:
+        for extra in extras:
             argv += ["--add-dir", extra]
         try:
             self.terminal.start_shell_command(
                 argv,
-                self.workspace.primary_folder,
+                cwd,
                 label=f"claude — {self.workspace.name}",
                 shell=self.settings.shell_command or None,
             )
@@ -193,11 +194,12 @@ class WorkspaceDetailsPanel(QStackedWidget):
             QMessageBox.warning(self, "Falha", str(e))
 
     def _launch_shell(self) -> None:
-        if not self.workspace or not self.workspace.primary_folder:
+        if not self.workspace or not self.workspace.folders:
             return
+        cwd, _ = self.workspace.launch_paths()
         try:
             self.terminal.start_interactive_shell(
-                self.workspace.primary_folder,
+                cwd,
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:
