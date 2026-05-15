@@ -82,6 +82,20 @@ def launch_claude(workspace: Workspace, settings: Settings) -> None:
     _run_in_terminal(settings, cmd, cwd)
 
 
+def launch_claude_resume(
+    workspace: Workspace, settings: Settings, session_id: str, cwd: str | None = None
+) -> None:
+    if not workspace.folders:
+        raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
+    _require(settings.terminal_command, "terminal")
+    ws_cwd, extras = workspace.launch_paths()
+    effective_cwd = cwd or ws_cwd
+    cmd = [settings.claude_command, *settings.claude_extra_args, "--resume", session_id]
+    for extra in extras:
+        cmd += ["--add-dir", extra]
+    _run_in_terminal(settings, cmd, effective_cwd)
+
+
 def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
     _require(settings.terminal_command, "terminal")
     cmd = [settings.claude_command, *settings.claude_extra_args]

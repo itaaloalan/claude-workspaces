@@ -17,7 +17,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..launchers import LauncherError, find_app_repo_root, launch_claude_in_dir
+from ..claude_sessions import ClaudeSession, list_sessions_for_paths
+from ..launchers import (
+    LauncherError,
+    find_app_repo_root,
+    launch_claude_in_dir,
+    launch_claude_resume,
+)
 from ..models import Workspace
 from ..settings import Settings
 from ..storage import load_workspaces, save_workspaces
@@ -647,6 +653,17 @@ class MainWindow(QMainWindow):
                     widget.is_running(),
                 )
 
+        # Última sessão do Claude (se houver) como child — visível mesmo
+        # sem terminal ativo. Duplo-clique retoma via `claude --resume`.
+        for i in range(self.list_widget.topLevelItemCount()):
+            ws_item = self.list_widget.topLevelItem(i)
+            ws = ws_item.data(0, Qt.ItemDataRole.UserRole)
+            if not isinstance(ws, Workspace):
+                continue
+            last = self._last_session_for(ws)
+            if last is not None:
+                self._add_last_session_child(ws_item, last)
+
         if current_id:
             ws_item = self._find_workspace_item(current_id)
             if ws_item is not None and not ws_item.isHidden():
@@ -772,16 +789,25 @@ class MainWindow(QMainWindow):
         self._sync_terminal_for(ws)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
-        # Double-click ou Enter — em child item, foca a aba do terminal
+        # Double-click ou Enter — sessão histórica retoma via `--resume`;
+        # terminal vivo foca a aba existente.
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
-        if not isinstance(data, int):  # tab_id
-            return
-        tab_id = data
         pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(pdata, Workspace):
             return
+        if isinstance(data, ClaudeSession):
+            try:
+                launch_claude_resume(
+                    pdata, self.settings, data.id, cwd=data.origin_cwd
+                )
+            except LauncherError as e:
+                QMessageBox.warning(self, "Erro ao retomar sessão", str(e))
+            return
+        if not isinstance(data, int):  # tab_id
+            return
+        tab_id = data
         area = self._terminal_areas.get(pdata.id)
         if area is None:
             return
@@ -790,6 +816,33 @@ class MainWindow(QMainWindow):
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 break
+
+    def _last_session_for(self, ws: Workspace) -> ClaudeSession | None:
+        if not ws.folders:
+            return None
+        try:
+            cwd, _ = ws.launch_paths()
+            paths = list({cwd, *ws.folders})
+            sessions = list_sessions_for_paths(paths, limit=1)
+        except Exception:
+            log.exception("Falha ao listar sessões do workspace %s", ws.id)
+            return None
+        return sessions[0] if sessions else None
+
+    def _add_last_session_child(
+        self, ws_item: QTreeWidgetItem, session: ClaudeSession
+    ) -> None:
+        from PySide6.QtGui import QBrush, QColor
+
+        label = "↻ " + session.label(max_preview=40)
+        child = QTreeWidgetItem([label])
+        child.setData(0, Qt.ItemDataRole.UserRole, session)
+        child.setToolTip(
+            0, f"Última sessão — duplo-clique pra retomar ({session.id})"
+        )
+        child.setForeground(0, QBrush(QColor("#9aa3b3")))
+        ws_item.addChild(child)
+        ws_item.setExpanded(True)
 
     def _show_settings(self) -> None:
         self.content_stack.setCurrentWidget(self.settings_panel)
@@ -1022,9 +1075,32 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
         cwd, extras = workspace.launch_paths()
+        worktree_label = ""
         if cwd_override:
             cwd = cwd_override
             extras = []
+        elif not resume_session_id:
+            # Resume não passa pelo dialog (preserva a sessão exata)
+            from .launch_claude_dialog import LaunchClaudeDialog
+            from ..git_worktree import add_worktree
+            dialog = LaunchClaudeDialog(workspace, parent=self)
+            if not dialog.exec():
+                return
+            if dialog.result_isolate():
+                branch = dialog.result_branch()
+                base = dialog.result_base_branch() or None
+                ok, msg, dest = add_worktree(workspace.folders[0], branch, base)
+                if not ok:
+                    QMessageBox.warning(
+                        self,
+                        "Falha ao criar worktree",
+                        f"Não consegui criar o worktree:\n\n{msg}",
+                    )
+                    return
+                cwd = str(dest)
+                # No worktree, todos os --add-dir das outras pastas continuam
+                worktree_label = f" · {branch}"
+
         argv = [self.settings.claude_command, *self.settings.claude_extra_args]
         if resume_session_id:
             argv += ["--resume", resume_session_id]
@@ -1034,13 +1110,13 @@ class MainWindow(QMainWindow):
         area = self._get_terminal_area(workspace)
         self.terminal_host.setCurrentWidget(area)
         title = "claude (resume)" if resume_session_id else "claude"
-        title = f"{title} #{area.count() + 1}"
+        title = f"{title} #{area.count() + 1}{worktree_label}"
         terminal = area.add_terminal(title)
         try:
             terminal.start_shell_command(
                 argv,
                 cwd,
-                label=f"claude — {workspace.name}",
+                label=f"claude — {workspace.name}{worktree_label}",
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:
