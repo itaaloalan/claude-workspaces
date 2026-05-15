@@ -101,7 +101,6 @@ class MainWindow(QMainWindow):
         self.details.delete_requested.connect(self.delete_workspace)
         self.details.launch_claude_requested.connect(self._launch_claude_for)
         self.details.launch_shell_requested.connect(self._launch_shell_for)
-        self.details.tasks_changed.connect(self._persist_tasks)
         self.details.open_file_requested.connect(self._open_file_in_editor)
         self.content_stack.addWidget(self.details)
 
@@ -427,17 +426,6 @@ class MainWindow(QMainWindow):
 
         collapsed = self.settings.right_dock_collapsed or {}
 
-        tasks_panel = self.details.tasks_panel()
-        self._dock_tasks = CollapsiblePanel(
-            "Tarefas",
-            tasks_panel,
-            expanded=not collapsed.get("tasks", False),
-        )
-        self._dock_tasks.toggled.connect(
-            lambda exp: self._on_dock_toggled("tasks", exp)
-        )
-        v.addWidget(self._dock_tasks, stretch=1)
-
         git_panel = self.details.git_panel()
         self._dock_git = CollapsiblePanel(
             "Git",
@@ -609,23 +597,18 @@ class MainWindow(QMainWindow):
 
     def _item_label(self, ws: Workspace) -> str:
         count = self._running_counts.get(ws.id, 0)
-        pending = sum(1 for t in ws.tasks if not t.done)
-        bits = [ws.name]
-        if pending:
-            bits.append(f"({pending} pend.)")
         if count > 0:
             dot = "●" if count == 1 else f"●×{count}"
-            return f"{dot} " + " ".join(bits)
-        return " ".join(bits)
+            return f"{dot} {ws.name}"
+        return ws.name
 
     def _apply_filter(self, text: str) -> None:
         needle = text.strip().lower()
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             ws = item.data(Qt.ItemDataRole.UserRole)
-            tasks_blob = " ".join(t.title for t in ws.tasks)
             haystack = (
-                f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}\n{tasks_blob}"
+                f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}"
             ).lower()
             item.setHidden(bool(needle) and needle not in haystack)
         current = self.list_widget.currentItem()
@@ -779,13 +762,6 @@ class MainWindow(QMainWindow):
                 f"Comando '{editor}' não está no PATH. Ajuste em Configurações.",
             )
 
-    def _persist_tasks(self, workspace: Workspace) -> None:
-        # Workspace dentro de self.workspaces é a mesma instância referenciada
-        # pelos itens (refresh_list passa o próprio objeto via UserRole), então
-        # só precisa salvar e atualizar o badge.
-        save_workspaces(self.workspaces)
-        self._refresh_item_label(workspace.id)
-
     # ---------- CRUD de workspace ----------
 
     def _launch_self_dev(self) -> None:
@@ -819,7 +795,7 @@ class MainWindow(QMainWindow):
     def edit_workspace(self, workspace: Workspace) -> None:
         dialog = WorkspaceDialog(workspace=workspace, parent=self)
         if dialog.exec():
-            updated = dialog.workspace()  # mesma id, tasks preservadas
+            updated = dialog.workspace()  # mesma id
             idx = next(
                 (i for i, w in enumerate(self.workspaces) if w.id == workspace.id),
                 None,

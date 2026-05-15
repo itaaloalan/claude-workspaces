@@ -5,7 +5,6 @@ from datetime import datetime
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -21,13 +20,12 @@ from PySide6.QtWidgets import (
 from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
-from ..models import Task, Workspace
+from ..models import Workspace
 from .git_panel import GitPanel, open_path_in_editor
 from .mcp_dialog import MCPDialog
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
 from .session_card import SessionCard
-from .tasks_panel import TasksPanel
 
 
 log = logging.getLogger(__name__)
@@ -38,7 +36,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
     delete_requested = Signal(Workspace)
     launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
     launch_shell_requested = Signal(Workspace)
-    tasks_changed = Signal(Workspace)
     columns_splitter_moved = Signal()
     open_file_requested = Signal(str)  # caminho absoluto pra abrir no editor
 
@@ -127,12 +124,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         c.addLayout(actions_row)
 
-        # Tarefas + Git agora moram no dock direito da MainWindow; aqui
-        # fica só a coluna de Sessões. Criamos os widgets de tasks e git
-        # mesmo assim — MainWindow puxa via accessor pra colocá-los no
-        # dock. Isso preserva sinais e o ciclo set_workspace.
-        self._tasks_panel = TasksPanel()
-        self._tasks_panel.tasks_changed.connect(self.tasks_changed.emit)
+        # Git mora no dock direito da MainWindow; aqui fica só a coluna
+        # de Sessões. O widget de Git é criado mesmo assim — MainWindow
+        # puxa via accessor pra colocá-lo no dock.
         self._git_panel = GitPanel()
         self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
 
@@ -146,9 +140,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         scroll.setWidget(w)
         return scroll
-
-    def tasks_panel(self) -> "TasksPanel":
-        return self._tasks_panel
 
     def git_panel(self) -> "GitPanel":
         return self._git_panel
@@ -283,12 +274,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         layout.addWidget(self._sessions_list, stretch=1)
         return col
 
-    # (removidos: tarefas e git viraram propriedades acessadas via
-    # tasks_panel() / git_panel() pra reuso no dock direito)
+    # (git virou propriedade acessada via git_panel() pra reuso no dock direito)
 
     def show_empty(self) -> None:
         self.workspace = None
-        self._tasks_panel.set_workspace(None)
         self.setCurrentWidget(self._empty)
 
     def show_workspace(self, workspace: Workspace) -> None:
@@ -314,7 +303,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._rebuild_ide_buttons(stacks)
         self._refresh_sessions()
         self._refresh_mcp_status()
-        self._tasks_panel.set_workspace(workspace)
         self._git_panel.set_workspace(workspace)
 
         self.setCurrentWidget(self._content)
@@ -364,7 +352,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         for s in sessions:
             card = SessionCard(s, show_origin=show_origin)
             card.resume_requested.connect(self._on_resume_card)
-            card.convert_to_task_requested.connect(self._on_convert_to_task)
+            card.delete_requested.connect(self._on_delete_session)
             item = QListWidgetItem()
             item.setSizeHint(card.sizeHint())
             self._sessions_list.addItem(item)
@@ -386,29 +374,28 @@ class WorkspaceDetailsPanel(QStackedWidget):
             return
         self.launch_claude_requested.emit(self.workspace, session.id, session.origin_cwd)
 
-    def _on_convert_to_task(self, session: ClaudeSession) -> None:
-        if not self.workspace:
-            return
-        suggested = (session.preview or "").replace("\n", " ").strip()
-        if not suggested:
-            when = datetime.fromtimestamp(session.mtime)
-            suggested = f"Continuar sessão de {when.strftime('%d/%m %H:%M')}"
-        if len(suggested) > 200:
-            suggested = suggested[:199] + "…"
-        title, ok = QInputDialog.getText(
+    def _on_delete_session(self, session: ClaudeSession) -> None:
+        when = datetime.fromtimestamp(session.mtime).strftime("%d/%m %H:%M")
+        preview = (session.preview or "(sem prompt registrado)").replace("\n", " ").strip()
+        if len(preview) > 80:
+            preview = preview[:79] + "…"
+        reply = QMessageBox.question(
             self,
-            "Nova tarefa a partir da sessão",
-            "Título da tarefa:",
-            text=suggested,
+            "Remover sessão",
+            f"Excluir definitivamente esta sessão?\n\n"
+            f"{when} — {preview}\n\n"
+            f"Arquivo: {session.path}\n\nEssa ação não pode ser desfeita.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
-        if not ok:
+        if reply != QMessageBox.StandardButton.Yes:
             return
-        title = title.strip()
-        if not title:
+        try:
+            session.path.unlink(missing_ok=True)
+        except OSError as e:
+            QMessageBox.critical(self, "Falha ao remover sessão", str(e))
             return
-        self.workspace.tasks.append(Task(title=title))
-        self._tasks_panel.set_workspace(self.workspace)
-        self.tasks_changed.emit(self.workspace)
+        self._refresh_sessions()
 
     def _launch_ide(self, ide_key: str) -> None:
         if not self.workspace:

@@ -133,14 +133,13 @@ class WorkspaceDialog(QDialog):
     def workspace(self) -> Workspace:
         folders = [self.folders_list.item(i).text() for i in range(self.folders_list.count())]
         if self._original is not None:
-            # Preserva id e tarefas — edição não invalida referências
-            # existentes em _terminal_areas / _running_counts da MainWindow
+            # Preserva id — edição não invalida referências existentes em
+            # _terminal_areas / _running_counts da MainWindow
             return Workspace(
                 id=self._original.id,
                 name=self.name_edit.text().strip(),
                 folders=folders,
                 description=self.desc_edit.toPlainText().strip(),
-                tasks=list(self._original.tasks),
             )
         return Workspace(
             name=self.name_edit.text().strip(),

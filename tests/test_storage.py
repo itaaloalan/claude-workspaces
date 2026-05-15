@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from claude_workspaces import storage
-from claude_workspaces.models import Task, Workspace
+from claude_workspaces.models import Workspace
 
 
 @pytest.fixture
@@ -22,7 +22,6 @@ def test_save_and_load_roundtrip(patched_config_dir):
         name="alpha",
         folders=["/tmp/a"],
         description="primeiro",
-        tasks=[Task(title="todo 1", done=False)],
     )
     ws2 = Workspace(name="beta", folders=["/tmp/b"])
     storage.save_workspaces([ws1, ws2])
@@ -31,8 +30,6 @@ def test_save_and_load_roundtrip(patched_config_dir):
     assert len(loaded) == 2
     assert loaded[0].name == "alpha"
     assert loaded[0].id == ws1.id
-    assert len(loaded[0].tasks) == 1
-    assert loaded[0].tasks[0].title == "todo 1"
     assert loaded[1].name == "beta"
 
 
