@@ -25,6 +25,13 @@ from .right_dock import RightDock
 from .settings_panel import SettingsPanel
 from .skills_panel import SkillsPanel
 from .terminal_area import TerminalArea
+from .terminal_child_widget import (
+    STATE_DONE,
+    STATE_IDLE,
+    STATE_WORKING,
+    TerminalChildWidget,
+)
+from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
 from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
@@ -356,7 +363,6 @@ class MainWindow(QMainWindow):
             return
         widget = area.tabs.currentWidget()
         # Manda Ctrl+L (form-feed) pra limpar — funciona em bash/zsh/fish/claude
-        from .terminal_widget import TerminalWidget
         if isinstance(widget, TerminalWidget) and widget.session.is_running():
             widget.session.write(b"\x0c")
 
@@ -842,6 +848,15 @@ class MainWindow(QMainWindow):
         if not any(w for _, w, _ in self._terminal_activity.values()):
             self._spinner_timer.stop()
 
+    SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+    def _resolve_state(self, is_working: bool, is_running: bool) -> str:
+        if not is_running:
+            return STATE_DONE
+        if is_working:
+            return STATE_WORKING
+        return STATE_IDLE
+
     def _add_terminal_child(
         self,
         ws_item: QTreeWidgetItem,
@@ -851,19 +866,17 @@ class MainWindow(QMainWindow):
         is_working: bool,
         is_running: bool,
     ) -> None:
-        child = QTreeWidgetItem(
-            [self._terminal_child_label(title, status, is_working, is_running)]
-        )
+        child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, tab_id)
-        child.setToolTip(0, status)
-        from PySide6.QtGui import QColor, QBrush
-        if is_working:
-            child.setForeground(0, QBrush(QColor("#e0b86a")))
-        elif is_running:
-            child.setForeground(0, QBrush(QColor("#c8c8c8")))
-        else:
-            child.setForeground(0, QBrush(QColor("#888")))
+        widget = TerminalChildWidget(title)
+        spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
+        widget.update_state(
+            self._resolve_state(is_working, is_running), status, spinner_char=spinner
+        )
         ws_item.addChild(child)
+        self.list_widget.setItemWidget(child, 0, widget)
+        # Ajusta altura do item ao tamanho do widget custom
+        child.setSizeHint(0, widget.sizeHint())
         ws_item.setExpanded(True)
         self._terminal_tree_items[tab_id] = child
 
@@ -878,32 +891,14 @@ class MainWindow(QMainWindow):
         item = self._terminal_tree_items.get(tab_id)
         if item is None:
             return
-        item.setText(0, self._terminal_child_label(title, status, is_working, is_running))
-        item.setToolTip(0, status)
-        from PySide6.QtGui import QColor, QBrush
-        if is_working:
-            item.setForeground(0, QBrush(QColor("#e0b86a")))
-        elif is_running:
-            item.setForeground(0, QBrush(QColor("#c8c8c8")))
-        else:
-            item.setForeground(0, QBrush(QColor("#888")))
-
-    SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-
-    def _terminal_child_label(
-        self, title: str, status: str, is_working: bool, is_running: bool
-    ) -> str:
-        if is_working:
-            spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
-            prefix = spinner
-        elif is_running:
-            prefix = "○"  # aguardando input do user
-        else:
-            prefix = "✓"  # encerrado
-        short_status = (status[:50] + "…") if len(status) > 51 else status
-        if short_status:
-            return f"{prefix}  {title} — {short_status}"
-        return f"{prefix}  {title}"
+        widget = self.list_widget.itemWidget(item, 0)
+        if not isinstance(widget, TerminalChildWidget):
+            return
+        spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
+        widget.update_state(
+            self._resolve_state(is_working, is_running), status, spinner_char=spinner
+        )
+        item.setSizeHint(0, widget.sizeHint())
 
     def _tick_spinner(self) -> None:
         self._spinner_frame = (self._spinner_frame + 1) % len(self.SPINNER_FRAMES)

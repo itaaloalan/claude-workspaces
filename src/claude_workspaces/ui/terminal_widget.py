@@ -70,10 +70,13 @@ class TerminalWidget(QWidget):
         self._output_buffer = bytearray()
         self._last_output_time = 0.0
         self._activity_timer = QTimer(self)
-        self._activity_timer.setInterval(500)
+        self._activity_timer.setInterval(250)
         self._activity_timer.timeout.connect(self._poll_activity)
         self._last_status = ""
         self._last_working = False
+        # Dirty flag: bytes chegaram desde última avaliação. Evita reparse
+        # do buffer em ticks sem novidade.
+        self._activity_dirty = False
         # Debounce do refit do xterm.js — durante drag de splitter / resize
         # de janela, evita disparar fits em rajada (cada um dispara 6 fits
         # com timeouts internos no JS → CPU thrash)
@@ -147,10 +150,10 @@ class TerminalWidget(QWidget):
 
     def _record_output(self, data: bytes) -> None:
         self._output_buffer.extend(data)
-        # Cap em 8KB — só precisamos do final pra detectar status atual
         if len(self._output_buffer) > 8192:
             del self._output_buffer[:-8192]
         self._last_output_time = time.monotonic()
+        self._activity_dirty = True
 
     def _poll_activity(self) -> None:
         from ..claude_activity import parse_status
@@ -159,6 +162,10 @@ class TerminalWidget(QWidget):
             if self._last_output_time
             else 999.0
         )
+        if not self._activity_dirty and self._last_working and age <= 2.5:
+            # Sem novo output mas ainda dentro da janela working — mantém
+            return
+        self._activity_dirty = False
         activity = parse_status(bytes(self._output_buffer), age)
         if (
             activity.status != self._last_status

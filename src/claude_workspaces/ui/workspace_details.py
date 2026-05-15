@@ -5,7 +5,9 @@ from datetime import datetime
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
@@ -254,7 +256,17 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         header = QHBoxLayout()
         header.addWidget(QLabel("<b>Sessões recentes do Claude</b>"))
-        header.addStretch()
+        self._sessions_filter = QLineEdit()
+        self._sessions_filter.setPlaceholderText("Filtrar sessões…")
+        self._sessions_filter.setClearButtonEnabled(True)
+        self._sessions_filter.setMaximumWidth(220)
+        self._sessions_filter.setStyleSheet(
+            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "border-radius: 4px; padding: 3px 8px; color: #e6e6e6; font-size: 11px; }"
+            "QLineEdit:focus { border-color: #3d6ea8; }"
+        )
+        self._sessions_filter.textChanged.connect(self._apply_sessions_filter)
+        header.addWidget(self._sessions_filter, stretch=1)
         refresh_btn = QPushButton("↻")
         refresh_btn.setFixedWidth(28)
         refresh_btn.setToolTip("Atualizar lista")
@@ -273,6 +285,18 @@ class WorkspaceDetailsPanel(QStackedWidget):
         )
         layout.addWidget(self._sessions_list, stretch=1)
         return col
+
+    def _apply_sessions_filter(self, text: str) -> None:
+        needle = text.strip().lower()
+        for i in range(self._sessions_list.count()):
+            item = self._sessions_list.item(i)
+            session = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(session, ClaudeSession):
+                hay = (session.preview or "").lower()
+                item.setHidden(bool(needle) and needle not in hay)
+            else:
+                # Placeholder "nenhuma sessão" — esconde quando filtrando
+                item.setHidden(bool(needle))
 
     # (git virou propriedade acessada via git_panel() pra reuso no dock direito)
 

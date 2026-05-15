@@ -1,7 +1,14 @@
-"""Descobre skills disponíveis no Claude Code:
-- ~/.claude/skills/<name>/SKILL.md  (user-scope)
-- ~/.claude/plugins/<plugin>/skills/<name>/SKILL.md  (plugin-scope)
-- <workspace>/.claude/skills/<name>/SKILL.md  (project-scope)
+"""Descobre recursos do Claude Code: skills, agents e commands.
+
+Hierarquia de origens (cada uma fornece os 3 tipos):
+- user-scope:    ~/.claude/{skills,agents,commands}/
+- plugin-scope:  ~/.claude/plugins/marketplaces/*/{external_plugins,plugins}/*/{skills,agents,commands}/
+- project-scope: <workspace>/.claude/{skills,agents,commands}/
+
+Estrutura física:
+- skills: <base>/<nome>/SKILL.md          (subdir)
+- agents: <base>/<nome>.md                (arquivo direto)
+- commands: <base>/<nome>.md              (arquivo direto)
 
 Parsing leve do frontmatter YAML pra pegar name + description.
 """
@@ -14,15 +21,20 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-# Linha YAML simples — não tenta resolver YAML complexo
-_FRONT_LINE_RE = re.compile(r'^([\w-]+):\s*(.+?)\s*$')
+_FRONT_LINE_RE = re.compile(r"^([\w-]+):\s*(.+?)\s*$")
+
+
+KIND_SKILL = "skill"
+KIND_AGENT = "agent"
+KIND_COMMAND = "command"
 
 
 @dataclass
-class Skill:
+class ClaudeItem:
     name: str
     description: str
     source: str  # "user", "project", "plugin:<name>"
+    kind: str    # KIND_SKILL | KIND_AGENT | KIND_COMMAND
     path: Path
 
     @property
@@ -33,8 +45,16 @@ class Skill:
 
     @property
     def invocation(self) -> str:
-        """O texto que o usuário cola no Claude pra ativar essa skill."""
-        return f"/{self.name}"
+        """O que o usuário cola no Claude pra invocar.
+        - skill: /name
+        - command: /name
+        - agent: name (não é slash, é nome do subagent)
+        """
+        return f"/{self.name}" if self.kind != KIND_AGENT else self.name
+
+
+# Alias pra compatibilidade — código antigo usa Skill
+Skill = ClaudeItem
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
@@ -49,7 +69,6 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
         m = _FRONT_LINE_RE.match(line)
         if m:
             key, val = m.group(1), m.group(2).strip()
-            # Tira aspas externas, simples e duplas
             if (val.startswith('"') and val.endswith('"')) or (
                 val.startswith("'") and val.endswith("'")
             ):
@@ -58,79 +77,180 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
     return out
 
 
-def _read_skill(md_path: Path, source: str, fallback_name: str = "") -> Skill | None:
+def _read_item(
+    md_path: Path, source: str, kind: str, fallback_name: str = ""
+) -> ClaudeItem | None:
     try:
         text = md_path.read_text(encoding="utf-8")
     except OSError as e:
-        log.warning("falha lendo skill %s: %s", md_path, e)
+        log.warning("falha lendo %s: %s", md_path, e)
         return None
     fm = _parse_frontmatter(text)
     name = fm.get("name") or fallback_name or md_path.stem
     description = fm.get("description") or ""
-    return Skill(name=name, description=description, source=source, path=md_path)
+    return ClaudeItem(
+        name=name, description=description, source=source, kind=kind, path=md_path
+    )
 
 
-def _list_skills_in(base: Path, source: str) -> list[Skill]:
+def _list_skills_in(base: Path, source: str) -> list[ClaudeItem]:
     if not base.is_dir():
         return []
-    skills: list[Skill] = []
+    out: list[ClaudeItem] = []
     try:
         entries = list(base.iterdir())
     except OSError:
         return []
     for entry in entries:
         if entry.is_dir():
-            # Convenção: skills/<nome>/SKILL.md
             for candidate in (entry / "SKILL.md", entry / "skill.md"):
                 if candidate.exists():
-                    s = _read_skill(candidate, source, fallback_name=entry.name)
-                    if s:
-                        skills.append(s)
+                    item = _read_item(
+                        candidate, source, KIND_SKILL, fallback_name=entry.name
+                    )
+                    if item:
+                        out.append(item)
                     break
         elif entry.is_file() and entry.suffix == ".md" and entry.name != "README.md":
-            s = _read_skill(entry, source)
-            if s:
-                skills.append(s)
-    return skills
-
-
-def list_user_skills() -> list[Skill]:
-    return _list_skills_in(Path.home() / ".claude" / "skills", "user")
-
-
-def list_plugin_skills() -> list[Skill]:
-    base = Path.home() / ".claude" / "plugins"
-    if not base.is_dir():
-        return []
-    out: list[Skill] = []
-    try:
-        plugins = list(base.iterdir())
-    except OSError:
-        return []
-    for plugin in plugins:
-        if plugin.is_dir():
-            out.extend(_list_skills_in(plugin / "skills", f"plugin:{plugin.name}"))
+            item = _read_item(entry, source, KIND_SKILL)
+            if item:
+                out.append(item)
     return out
 
 
-def list_project_skills(workspace_folders: list[str] | None) -> list[Skill]:
+def _list_flat_in(base: Path, source: str, kind: str) -> list[ClaudeItem]:
+    """Pra agents e commands: arquivos .md direto no diretório."""
+    if not base.is_dir():
+        return []
+    out: list[ClaudeItem] = []
+    try:
+        entries = list(base.iterdir())
+    except OSError:
+        return []
+    for entry in entries:
+        if entry.is_file() and entry.suffix == ".md" and entry.name != "README.md":
+            item = _read_item(entry, source, kind)
+            if item:
+                out.append(item)
+    return out
+
+
+# ----- user scope -----
+
+def list_user_skills() -> list[ClaudeItem]:
+    return _list_skills_in(Path.home() / ".claude" / "skills", "user")
+
+
+def list_user_agents() -> list[ClaudeItem]:
+    return _list_flat_in(Path.home() / ".claude" / "agents", "user", KIND_AGENT)
+
+
+def list_user_commands() -> list[ClaudeItem]:
+    return _list_flat_in(Path.home() / ".claude" / "commands", "user", KIND_COMMAND)
+
+
+# ----- plugin scope (marketplace) -----
+
+def _walk_plugin_roots() -> list[tuple[str, Path]]:
+    """Retorna [(plugin_name, plugin_root), ...] varrendo marketplaces."""
+    base = Path.home() / ".claude" / "plugins" / "marketplaces"
+    if not base.is_dir():
+        return []
+    found: list[tuple[str, Path]] = []
+    try:
+        for marketplace in base.iterdir():
+            if not marketplace.is_dir():
+                continue
+            for sub in ("plugins", "external_plugins"):
+                container = marketplace / sub
+                if not container.is_dir():
+                    continue
+                for plugin in container.iterdir():
+                    if plugin.is_dir():
+                        found.append((plugin.name, plugin))
+    except OSError:
+        pass
+    return found
+
+
+def list_plugin_skills() -> list[ClaudeItem]:
+    out: list[ClaudeItem] = []
+    for name, root in _walk_plugin_roots():
+        out.extend(_list_skills_in(root / "skills", f"plugin:{name}"))
+    return out
+
+
+def list_plugin_agents() -> list[ClaudeItem]:
+    out: list[ClaudeItem] = []
+    for name, root in _walk_plugin_roots():
+        out.extend(_list_flat_in(root / "agents", f"plugin:{name}", KIND_AGENT))
+    return out
+
+
+def list_plugin_commands() -> list[ClaudeItem]:
+    out: list[ClaudeItem] = []
+    for name, root in _walk_plugin_roots():
+        out.extend(_list_flat_in(root / "commands", f"plugin:{name}", KIND_COMMAND))
+    return out
+
+
+# ----- project scope -----
+
+def list_project_skills(workspace_folders: list[str] | None) -> list[ClaudeItem]:
     if not workspace_folders:
         return []
-    out: list[Skill] = []
+    out: list[ClaudeItem] = []
     for folder in workspace_folders:
         out.extend(_list_skills_in(Path(folder) / ".claude" / "skills", "project"))
     return out
 
 
-def list_all_skills(workspace_folders: list[str] | None = None) -> list[Skill]:
-    """Agrega skills de todas as fontes. Dedup por nome com prioridade:
-    project > user > plugin (project sobrescreve user, user sobrescreve plugin)."""
-    everything = (
-        list_plugin_skills()
-        + list_user_skills()
-        + list_project_skills(workspace_folders)
+def list_project_agents(workspace_folders: list[str] | None) -> list[ClaudeItem]:
+    if not workspace_folders:
+        return []
+    out: list[ClaudeItem] = []
+    for folder in workspace_folders:
+        out.extend(_list_flat_in(
+            Path(folder) / ".claude" / "agents", "project", KIND_AGENT
+        ))
+    return out
+
+
+def list_project_commands(workspace_folders: list[str] | None) -> list[ClaudeItem]:
+    if not workspace_folders:
+        return []
+    out: list[ClaudeItem] = []
+    for folder in workspace_folders:
+        out.extend(_list_flat_in(
+            Path(folder) / ".claude" / "commands", "project", KIND_COMMAND
+        ))
+    return out
+
+
+def list_all_items(workspace_folders: list[str] | None = None) -> list[ClaudeItem]:
+    """Tudo agregado, dedup por (kind, name) com prioridade
+    project > user > plugin."""
+    everything: list[ClaudeItem] = []
+    everything += list_plugin_skills()
+    everything += list_plugin_agents()
+    everything += list_plugin_commands()
+    everything += list_user_skills()
+    everything += list_user_agents()
+    everything += list_user_commands()
+    everything += list_project_skills(workspace_folders)
+    everything += list_project_agents(workspace_folders)
+    everything += list_project_commands(workspace_folders)
+    deduped: dict[tuple[str, str], ClaudeItem] = {}
+    for item in everything:
+        # ordem garante que project sobrescreve user que sobrescreve plugin
+        deduped[(item.kind, item.name)] = item
+    return sorted(
+        deduped.values(),
+        key=lambda i: (i.kind, i.name.lower()),
     )
-    deduped: dict[str, Skill] = {}
-    for s in everything:
-        deduped[s.name] = s  # ordem garante prioridade pela inserção mais recente
-    return sorted(deduped.values(), key=lambda s: s.name.lower())
+
+
+# Compat antigo
+def list_all_skills(workspace_folders: list[str] | None = None) -> list[ClaudeItem]:
+    """Mantido pra compat — devolve tudo (skills + agents + commands)."""
+    return list_all_items(workspace_folders)
