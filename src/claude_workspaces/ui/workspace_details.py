@@ -6,21 +6,18 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from ..launchers import (
-    IDE_LABEL,
-    LauncherError,
-    launch_claude,
-    launch_ide,
-    launch_konsole,
-)
+from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..models import Workspace
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
+from .terminal_widget import TerminalWidget
 
 
 log = logging.getLogger(__name__)
@@ -51,10 +48,29 @@ class WorkspaceDetailsPanel(QStackedWidget):
         return w
 
     def _build_content_panel(self) -> QWidget:
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(True)
+        splitter.setHandleWidth(6)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(self._build_top_section())
+        splitter.addWidget(scroll)
+
+        self.terminal = TerminalWidget()
+        splitter.addWidget(self.terminal)
+
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([280, 420])
+        return splitter
+
+    def _build_top_section(self) -> QWidget:
         w = QWidget()
         c = QVBoxLayout(w)
-        c.setContentsMargins(20, 20, 20, 20)
-        c.setSpacing(10)
+        c.setContentsMargins(20, 16, 20, 12)
+        c.setSpacing(8)
 
         self._name = QLabel()
         self._name.setStyleSheet("font-size: 20px; font-weight: bold;")
@@ -66,10 +82,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         self._desc = QLabel()
         self._desc.setWordWrap(True)
-        self._desc.setStyleSheet("color: #bbb; margin-top: 4px;")
+        self._desc.setStyleSheet("color: #bbb;")
         c.addWidget(self._desc)
 
-        c.addSpacing(8)
         c.addWidget(QLabel("<b>Pastas</b>"))
         self._folders = QLabel()
         self._folders.setWordWrap(True)
@@ -77,14 +92,13 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._folders.setStyleSheet("color: #aaa; font-family: monospace;")
         c.addWidget(self._folders)
 
-        c.addSpacing(12)
         c.addWidget(QLabel("<b>Abrir com</b>"))
 
         primary_row = QHBoxLayout()
-        claude_btn = QPushButton("Abrir Claude")
+        claude_btn = QPushButton("Abrir Claude (embutido)")
         claude_btn.clicked.connect(self._launch_claude)
-        konsole_btn = QPushButton("Abrir Terminal")
-        konsole_btn.clicked.connect(self._launch_konsole)
+        konsole_btn = QPushButton("Abrir Terminal (embutido)")
+        konsole_btn.clicked.connect(self._launch_shell)
         primary_row.addWidget(claude_btn)
         primary_row.addWidget(konsole_btn)
         primary_row.addStretch()
@@ -94,8 +108,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._ide_row = QHBoxLayout(self._ide_row_host)
         self._ide_row.setContentsMargins(0, 0, 0, 0)
         c.addWidget(self._ide_row_host)
-
-        c.addStretch()
 
         meta = QHBoxLayout()
         edit_btn = QPushButton("Editar")
@@ -107,16 +119,18 @@ class WorkspaceDetailsPanel(QStackedWidget):
         meta.addWidget(del_btn)
         c.addLayout(meta)
 
+        c.addStretch()
         return w
 
     def show_empty(self) -> None:
         self.workspace = None
+        if hasattr(self, "terminal"):
+            self.terminal.terminate()
         self.setCurrentWidget(self._empty)
 
     def show_workspace(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self._name.setText(workspace.name)
-
         self._desc.setText(workspace.description or "")
         self._desc.setVisible(bool(workspace.description))
 
@@ -161,22 +175,30 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._ide_row.addStretch()
 
     def _launch_claude(self) -> None:
-        if not self.workspace:
+        if not self.workspace or not self.workspace.primary_folder:
+            QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
+        argv = [self.settings.claude_command, *self.settings.claude_extra_args]
+        for extra in self.workspace.extra_folders:
+            argv += ["--add-dir", extra]
         try:
-            launch_claude(self.workspace, self.settings)
-        except (LauncherError, FileNotFoundError) as e:
-            log.exception("Falha ao abrir Claude (workspace=%s)", self.workspace.name)
-            QMessageBox.warning(self, "Falha ao abrir Claude", str(e))
+            self.terminal.start_shell_command(
+                argv,
+                self.workspace.primary_folder,
+                label=f"claude — {self.workspace.name}",
+            )
+        except Exception as e:
+            log.exception("Falha ao abrir Claude embutido")
+            QMessageBox.warning(self, "Falha", str(e))
 
-    def _launch_konsole(self) -> None:
-        if not self.workspace:
+    def _launch_shell(self) -> None:
+        if not self.workspace or not self.workspace.primary_folder:
             return
         try:
-            launch_konsole(self.workspace, self.settings)
-        except (LauncherError, FileNotFoundError) as e:
-            log.exception("Falha ao abrir terminal (workspace=%s)", self.workspace.name)
-            QMessageBox.warning(self, "Falha ao abrir terminal", str(e))
+            self.terminal.start_interactive_shell(self.workspace.primary_folder)
+        except Exception as e:
+            log.exception("Falha ao abrir shell embutido")
+            QMessageBox.warning(self, "Falha", str(e))
 
     def _launch_ide(self, ide_key: str) -> None:
         if not self.workspace:

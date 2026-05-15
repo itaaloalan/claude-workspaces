@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="vendor/xterm.css">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #0e0e0e;
+            overflow: hidden;
+        }
+        #terminal {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            left: 4px;
+            right: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="vendor/xterm.js"></script>
+    <script src="vendor/addon-fit.js"></script>
+    <script src="terminal.js"></script>
+</body>
+</html>

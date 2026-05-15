@@ -19,3 +19,6 @@ claude-workspaces = "claude_workspaces.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+claude_workspaces = ["ui/static/**/*"]
