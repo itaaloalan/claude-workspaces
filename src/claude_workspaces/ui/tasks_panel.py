@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QFrame,
+    QButtonGroup,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -16,28 +16,73 @@ from ..models import Task, Workspace
 
 
 class TasksPanel(QWidget):
-    """Lista de tarefas por workspace. Emite tasks_changed quando o usuário
-    cria, marca ou remove uma tarefa, pra que a MainWindow persista o
-    workspace inteiro."""
+    """TODO list manual por workspace — itens criados pelo usuário ou
+    convertidos a partir de uma sessão recente do Claude. Não puxa
+    de fontes externas (Linear, GitHub, etc).
+
+    Emite tasks_changed quando há mudança, pra que a MainWindow
+    persista o workspace inteiro."""
 
     tasks_changed = Signal(Workspace)
+
+    FILTER_ALL = "all"
+    FILTER_PENDING = "pending"
+    FILTER_DONE = "done"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.workspace: Workspace | None = None
+        self._filter = self.FILTER_PENDING
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(6)
 
         header = QHBoxLayout()
-        title = QLabel("<b>Atividades (Pendentes)</b>")
+        title = QLabel("<b>Tarefas</b>")
+        title.setToolTip(
+            "TODO local por workspace. Criadas manualmente ou a partir "
+            "de sessões recentes do Claude (botão → Tarefa no card)."
+        )
         header.addWidget(title)
         header.addStretch()
         self._counter = QLabel()
         self._counter.setStyleSheet("color: #888; font-size: 11px;")
         header.addWidget(self._counter)
         outer.addLayout(header)
+
+        # Chips de filtro
+        chips = QHBoxLayout()
+        chips.setSpacing(4)
+        self._chip_group = QButtonGroup(self)
+        self._chip_group.setExclusive(True)
+        for key, label in [
+            (self.FILTER_PENDING, "Pendentes"),
+            (self.FILTER_DONE, "Concluídas"),
+            (self.FILTER_ALL, "Todas"),
+        ]:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setProperty("filter_key", key)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(
+                "QPushButton {"
+                "  background: transparent; color: #aaa;"
+                "  border: 1px solid #2c2c2c; border-radius: 12px;"
+                "  padding: 2px 10px; font-size: 11px;"
+                "}"
+                "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+                "QPushButton:checked {"
+                "  background: #3d6ea8; color: #fff; border-color: #3d6ea8;"
+                "}"
+            )
+            btn.toggled.connect(self._on_chip_toggled)
+            self._chip_group.addButton(btn)
+            chips.addWidget(btn)
+            if key == self._filter:
+                btn.setChecked(True)
+        chips.addStretch()
+        outer.addLayout(chips)
 
         add_row = QHBoxLayout()
         self._input = QLineEdit()
@@ -84,14 +129,28 @@ class TasksPanel(QWidget):
         self.workspace = workspace
         self._refresh()
 
+    def _on_chip_toggled(self, checked: bool) -> None:
+        if not checked:
+            return
+        btn = self._chip_group.checkedButton()
+        if btn is None:
+            return
+        self._filter = btn.property("filter_key")
+        self._refresh()
+
+    def _visible_tasks(self) -> list[Task]:
+        if self.workspace is None:
+            return []
+        if self._filter == self.FILTER_PENDING:
+            return [t for t in self.workspace.tasks if not t.done]
+        if self._filter == self.FILTER_DONE:
+            return [t for t in self.workspace.tasks if t.done]
+        return list(self.workspace.tasks)
+
     def _refresh(self) -> None:
         self._list.blockSignals(True)
         self._list.clear()
-        if self.workspace is None:
-            self._counter.setText("")
-            self._list.blockSignals(False)
-            return
-        for task in self.workspace.tasks:
+        for task in self._visible_tasks():
             item = QListWidgetItem(task.title)
             item.setData(Qt.ItemDataRole.UserRole, task.id)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -113,7 +172,7 @@ class TasksPanel(QWidget):
             return
         total = len(self.workspace.tasks)
         if total == 0:
-            self._counter.setText("")
+            self._counter.setText("vazio")
             return
         pending = sum(1 for t in self.workspace.tasks if not t.done)
         self._counter.setText(f"{pending}/{total} pendentes")
@@ -126,7 +185,15 @@ class TasksPanel(QWidget):
             return
         self.workspace.tasks.append(Task(title=title))
         self._input.clear()
-        self._refresh()
+        # Se o filtro atual oculta nova tarefa (caso "Concluídas"), troca pro
+        # "Todas" pra que o usuário veja o que acabou de criar
+        if self._filter == self.FILTER_DONE:
+            for btn in self._chip_group.buttons():
+                if btn.property("filter_key") == self.FILTER_ALL:
+                    btn.setChecked(True)
+                    break
+        else:
+            self._refresh()
         self.tasks_changed.emit(self.workspace)
 
     def _on_item_changed(self, item: QListWidgetItem) -> None:
