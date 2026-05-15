@@ -21,7 +21,7 @@ from ..launchers import LauncherError, find_app_repo_root, launch_claude_in_dir
 from ..models import Workspace
 from ..settings import Settings
 from ..storage import load_workspaces, save_workspaces
-from .collapsible_panel import CollapsiblePanel
+from .right_dock import RightDock
 from .settings_panel import SettingsPanel
 from .skills_panel import SkillsPanel
 from .terminal_area import TerminalArea
@@ -418,41 +418,30 @@ class MainWindow(QMainWindow):
         ShortcutsDialog(self).exec()
 
     def _build_right_dock(self) -> QWidget:
-        wrapper = QWidget()
-        wrapper.setStyleSheet("background: #141414;")
-        v = QVBoxLayout(wrapper)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(0)
-
+        dock = RightDock()
+        dock.setStyleSheet("background: #141414;")
         collapsed = self.settings.right_dock_collapsed or {}
 
+        # Git
         git_panel = self.details.git_panel()
-        self._dock_git = CollapsiblePanel(
-            "Git",
-            git_panel,
-            expanded=not collapsed.get("git", False),
+        dock.add_panel(
+            "git", "Git", git_panel,
+            open_=not collapsed.get("git", False),
         )
-        self._dock_git.toggled.connect(
-            lambda exp: self._on_dock_toggled("git", exp)
-        )
-        v.addWidget(self._dock_git, stretch=2)
 
+        # Skills (default fechado)
         self._skills_panel = SkillsPanel()
-        self._dock_skills = CollapsiblePanel(
-            "Skills",
-            self._skills_panel,
-            expanded=not collapsed.get("skills", True),  # default colapsado
+        dock.add_panel(
+            "skills", "Skills", self._skills_panel,
+            open_=not collapsed.get("skills", True),
         )
-        self._dock_skills.toggled.connect(
-            lambda exp: self._on_dock_toggled("skills", exp)
-        )
-        v.addWidget(self._dock_skills, stretch=1)
 
-        return wrapper
+        dock.panel_toggled.connect(self._on_dock_toggled)
+        return dock
 
-    def _on_dock_toggled(self, panel_id: str, expanded: bool) -> None:
-        # True = expandido; armazenamos "collapsed" = not expanded
-        self.settings.right_dock_collapsed[panel_id] = not expanded
+    def _on_dock_toggled(self, panel_id: str, is_open: bool) -> None:
+        # Persiste estado (chave 'collapsed' = inverso de 'open')
+        self.settings.right_dock_collapsed[panel_id] = not is_open
         self._schedule_layout_save()
 
     def _build_terminal_pane(self) -> QWidget:
