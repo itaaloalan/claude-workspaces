@@ -1,9 +1,11 @@
+import logging
 import shlex
 
 from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -13,8 +15,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..hook_manager import (
+    claude_settings_file,
+    install_hook,
+    is_hook_installed,
+    uninstall_hook,
+)
 from ..logging_setup import log_file, state_dir
 from ..settings import Settings, settings_file
+
+
+log = logging.getLogger(__name__)
 
 
 class SettingsPanel(QWidget):
@@ -85,6 +96,8 @@ class SettingsPanel(QWidget):
         form.addRow("Rider:", self._rider_cmd)
 
         outer.addLayout(form)
+
+        outer.addWidget(self._build_notifications_section())
 
         actions = QHBoxLayout()
         save_btn = QPushButton("Salvar")
@@ -158,3 +171,54 @@ class SettingsPanel(QWidget):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _build_notifications_section(self) -> QWidget:
+        box = QGroupBox("Notificações")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "Quando ativado, o Claude dispara uma notificação do desktop a "
+            "cada turno encerrado, mostrando o nome do projeto e a tarefa. "
+            f"Mexe em <code>{claude_settings_file()}</code> preservando seus "
+            "outros hooks."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #aaa;")
+        layout.addWidget(intro)
+
+        self._hook_status = QLabel()
+        layout.addWidget(self._hook_status)
+
+        row = QHBoxLayout()
+        self._hook_toggle_btn = QPushButton()
+        self._hook_toggle_btn.clicked.connect(self._toggle_hook)
+        row.addWidget(self._hook_toggle_btn)
+        row.addStretch()
+        layout.addLayout(row)
+
+        self._refresh_hook_status()
+        return box
+
+    def _refresh_hook_status(self) -> None:
+        if is_hook_installed():
+            self._hook_status.setText(
+                "✓ Hook instalado — Claude notifica ao fim de cada turno"
+            )
+            self._hook_status.setStyleSheet("color: #5ac35a;")
+            self._hook_toggle_btn.setText("Remover notificações")
+        else:
+            self._hook_status.setText("Hook não instalado — notificações desativadas")
+            self._hook_status.setStyleSheet("color: #888;")
+            self._hook_toggle_btn.setText("Ativar notificações")
+
+    def _toggle_hook(self) -> None:
+        try:
+            if is_hook_installed():
+                uninstall_hook()
+            else:
+                install_hook()
+        except Exception as e:
+            log.exception("Falha ao alternar hook")
+            QMessageBox.warning(self, "Erro com hook", str(e))
+            return
+        self._refresh_hook_status()

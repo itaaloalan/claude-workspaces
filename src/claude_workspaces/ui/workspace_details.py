@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..claude_sessions import ClaudeSession, list_sessions
+from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..models import Workspace
 from ..settings import Settings
@@ -229,17 +229,24 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._sessions_list.clear()
         if not self.workspace or not self.workspace.folders:
             return
+        # Agrega de TODAS as pastas do workspace + o cwd unificado.
+        # Importante porque sessões abertas pelo VSCode plugin gravam
+        # com o cwd específico da pasta (map-web ou map-api), não do
+        # pai comum.
         cwd, _ = self.workspace.launch_paths()
-        sessions = list_sessions(cwd, limit=15)
+        candidate_paths = list({cwd, *self.workspace.folders})
+        sessions = list_sessions_for_paths(candidate_paths, limit=20)
         if not sessions:
             placeholder = QListWidgetItem("(nenhuma sessão encontrada para esse projeto)")
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             self._sessions_list.addItem(placeholder)
             return
+        # Mostra o nome da pasta de origem só quando há mais de uma pasta
+        show_origin = len(self.workspace.folders) > 1
         for s in sessions:
-            item = QListWidgetItem(s.label())
+            item = QListWidgetItem(s.label(include_origin=show_origin))
             item.setData(Qt.ItemDataRole.UserRole, s)
-            item.setToolTip(f"ID: {s.id}\n\n{s.preview}")
+            item.setToolTip(f"ID: {s.id}\nOrigem: {s.origin_cwd}\n\n{s.preview}")
             self._sessions_list.addItem(item)
 
     def _get_terminal_area(self) -> TerminalArea | None:
@@ -255,11 +262,22 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _launch_claude_new(self) -> None:
         self._launch_claude()
 
-    def _launch_claude(self, *, resume_session_id: str | None = None) -> None:
+    def _launch_claude(
+        self,
+        *,
+        resume_session_id: str | None = None,
+        cwd_override: str | None = None,
+    ) -> None:
         if not self.workspace or not self.workspace.folders:
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
         cwd, extras = self.workspace.launch_paths()
+        if cwd_override:
+            # Retomando sessão criada em outro cwd (ex: subpasta do workspace)
+            cwd = cwd_override
+            # Não passa --add-dir porque o claude vai retomar com o estado
+            # original da sessão
+            extras = []
         argv = [self.settings.claude_command, *self.settings.claude_extra_args]
         if resume_session_id:
             argv += ["--resume", resume_session_id]
@@ -305,7 +323,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _resume_session_item(self, item: QListWidgetItem) -> None:
         session = item.data(Qt.ItemDataRole.UserRole)
         if isinstance(session, ClaudeSession):
-            self._launch_claude(resume_session_id=session.id)
+            self._launch_claude(
+                resume_session_id=session.id,
+                cwd_override=session.origin_cwd,
+            )
 
     def _resume_selected_session(self) -> None:
         item = self._sessions_list.currentItem()

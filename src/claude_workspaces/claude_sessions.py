@@ -14,8 +14,9 @@ class ClaudeSession:
     mtime: float
     preview: str
     path: Path
+    origin_cwd: str  # diretório de onde a sessão foi originalmente iniciada
 
-    def label(self, max_preview: int = 70) -> str:
+    def label(self, max_preview: int = 70, include_origin: bool = False) -> str:
         when = datetime.fromtimestamp(self.mtime)
         now = datetime.now()
         if when.date() == now.date():
@@ -25,12 +26,16 @@ class ClaudeSession:
         else:
             time_str = when.strftime("%d/%m %H:%M")
 
+        prefix = ""
+        if include_origin:
+            prefix = f"[{Path(self.origin_cwd).name}] "
+
         if self.preview:
             preview = self.preview.replace("\n", " ").strip()
             if len(preview) > max_preview:
                 preview = preview[: max_preview - 1] + "…"
-            return f"{time_str} — {preview}"
-        return f"{time_str} — (sem prompt registrado)"
+            return f"{prefix}{time_str} — {preview}"
+        return f"{prefix}{time_str} — (sem prompt registrado)"
 
 
 def _encode_project_path(path: str) -> str:
@@ -98,6 +103,25 @@ def list_sessions(project_path: str, limit: int = 15) -> list[ClaudeSession]:
                 mtime=mtime,
                 preview=_read_first_user_message(f),
                 path=f,
+                origin_cwd=project_path,
             )
         )
     return sessions
+
+
+def list_sessions_for_paths(paths: list[str], limit: int = 20) -> list[ClaudeSession]:
+    """Agrega sessões de múltiplos caminhos (cwd potenciais) e devolve
+    ordenado por mtime descendente. Cada sessão preserva o origin_cwd
+    pra que retomá-la use o cwd correto onde foi originalmente iniciada
+    (importante quando workspace tem pastas-irmãs e o VSCode plugin
+    abriu sessões em uma das subpastas específicas)."""
+    seen_dirs: set[Path] = set()
+    all_sessions: list[ClaudeSession] = []
+    for p in paths:
+        d = project_sessions_dir(p)
+        if d in seen_dirs:
+            continue
+        seen_dirs.add(d)
+        all_sessions.extend(list_sessions(p, limit=limit))
+    all_sessions.sort(key=lambda s: s.mtime, reverse=True)
+    return all_sessions[:limit]
