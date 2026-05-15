@@ -46,6 +46,7 @@ class MainWindow(QMainWindow):
         self._terminal_placeholder_idx: int = 0
         self._sidebar_last_size: int = 260
         self._terminal_last_size: int = 420
+        self._content_last_size: int = 420
 
         self._build_ui()
         self._restore_geometry()
@@ -73,13 +74,7 @@ class MainWindow(QMainWindow):
             "QSplitter::handle:pressed { background: #4a82c5; }"
         )
 
-        # Splitter vertical: corpo em cima, terminal embaixo (full-width)
-        self.main_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.main_splitter.setChildrenCollapsible(True)
-        self.main_splitter.setHandleWidth(8)
-        self.main_splitter.setStyleSheet(splitter_css)
-
-        # Splitter horizontal: sidebar | conteúdo
+        # Splitter horizontal: sidebar full-height | painel direito
         self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.body_splitter.setChildrenCollapsible(True)
         self.body_splitter.setHandleWidth(8)
@@ -88,6 +83,14 @@ class MainWindow(QMainWindow):
         self._sidebar = self._build_sidebar()
         self._sidebar.setMinimumWidth(0)
         self.body_splitter.addWidget(self._sidebar)
+
+        # Splitter vertical interno ao painel direito:
+        # conteúdo (details / settings) em cima, terminal embaixo —
+        # terminal nunca passa por baixo do sidebar
+        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.right_splitter.setChildrenCollapsible(True)
+        self.right_splitter.setHandleWidth(8)
+        self.right_splitter.setStyleSheet(splitter_css)
 
         self.content_stack = QStackedWidget()
         self.details = WorkspaceDetailsPanel(self.settings)
@@ -100,8 +103,23 @@ class MainWindow(QMainWindow):
 
         self.settings_panel = SettingsPanel(self.settings)
         self.content_stack.addWidget(self.settings_panel)
+        self.content_stack.setMinimumHeight(0)
 
-        self.body_splitter.addWidget(self.content_stack)
+        self.right_splitter.addWidget(self.content_stack)
+
+        # Painel do terminal: barra de controle (maximizar/minimizar)
+        # + stack de TerminalAreas por workspace
+        self._terminal_pane = self._build_terminal_pane()
+        self.right_splitter.addWidget(self._terminal_pane)
+
+        self.right_splitter.setStretchFactor(0, 1)
+        self.right_splitter.setStretchFactor(1, 1)
+        if self.settings.right_splitter_sizes:
+            self.right_splitter.setSizes(self.settings.right_splitter_sizes)
+        else:
+            self.right_splitter.setSizes([420, 380])
+
+        self.body_splitter.addWidget(self.right_splitter)
         self.body_splitter.setStretchFactor(0, 0)
         self.body_splitter.setStretchFactor(1, 1)
         if self.settings.body_splitter_sizes:
@@ -109,30 +127,7 @@ class MainWindow(QMainWindow):
         else:
             self.body_splitter.setSizes([260, 920])
 
-        self.main_splitter.addWidget(self.body_splitter)
-
-        # Terminal host: full-width, embaixo de tudo (incluindo sidebar)
-        self.terminal_host = QStackedWidget()
-        self.terminal_host.setMinimumHeight(0)
-        self._empty_terminal = QLabel(
-            "Nenhum terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' "
-            "para iniciar uma sessão. Cada workspace tem suas próprias abas."
-        )
-        self._empty_terminal.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_terminal.setStyleSheet(
-            "background: #0e0e0e; color: #555; padding: 28px;"
-        )
-        self._terminal_placeholder_idx = self.terminal_host.addWidget(self._empty_terminal)
-        self.main_splitter.addWidget(self.terminal_host)
-
-        self.main_splitter.setStretchFactor(0, 1)
-        self.main_splitter.setStretchFactor(1, 1)
-        if self.settings.main_splitter_sizes:
-            self.main_splitter.setSizes(self.settings.main_splitter_sizes)
-        else:
-            self.main_splitter.setSizes([380, 420])
-
-        outer.addWidget(self.main_splitter, stretch=1)
+        outer.addWidget(self.body_splitter, stretch=1)
         self.setCentralWidget(central)
 
         # Restaurar tamanhos das colunas internas dos details
@@ -147,10 +142,13 @@ class MainWindow(QMainWindow):
         self._layout_save_timer.timeout.connect(self._persist_layout)
 
         self.body_splitter.splitterMoved.connect(self._schedule_layout_save)
-        self.main_splitter.splitterMoved.connect(self._schedule_layout_save)
+        self.right_splitter.splitterMoved.connect(self._schedule_layout_save)
         self.details.columns_splitter_moved.connect(self._schedule_layout_save)
 
         self._install_shortcuts()
+        # Estado inicial dos botões do terminal
+        self.right_splitter.splitterMoved.connect(lambda *_: self._refresh_terminal_btns())
+        QTimer.singleShot(0, self._refresh_terminal_btns)
 
     def _schedule_layout_save(self, *_args) -> None:
         self._layout_save_timer.start()
@@ -158,7 +156,7 @@ class MainWindow(QMainWindow):
     def _persist_layout(self) -> None:
         try:
             self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
-            self.settings.main_splitter_sizes = list(self.main_splitter.sizes())
+            self.settings.right_splitter_sizes = list(self.right_splitter.sizes())
             self.settings.workspace_columns_sizes = self.details.columns_sizes()
             g = self.geometry()
             self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
@@ -234,16 +232,46 @@ class MainWindow(QMainWindow):
         self._schedule_layout_save()
 
     def _toggle_terminal(self) -> None:
-        sizes = self.main_splitter.sizes()
+        sizes = self.right_splitter.sizes()
         if not sizes:
             return
         if sizes[1] > 0:
             self._terminal_last_size = sizes[1]
-            self.main_splitter.setSizes([sum(sizes), 0])
+            self.right_splitter.setSizes([sum(sizes), 0])
         else:
             target = self._terminal_last_size or 420
-            self.main_splitter.setSizes([max(sum(sizes) - target, 200), target])
+            self.right_splitter.setSizes([max(sum(sizes) - target, 200), target])
+        self._refresh_terminal_btns()
         self._schedule_layout_save()
+
+    def _maximize_terminal(self) -> None:
+        sizes = self.right_splitter.sizes()
+        total = sum(sizes) or 800
+        if sizes[0] > 0:
+            self._content_last_size = sizes[0]
+        self.right_splitter.setSizes([0, total])
+        self._refresh_terminal_btns()
+        self._schedule_layout_save()
+
+    def _restore_terminal(self) -> None:
+        sizes = self.right_splitter.sizes()
+        total = sum(sizes) or 800
+        # 50/50 — equilíbrio razoável após maximizar ou minimizar
+        half = total // 2
+        self.right_splitter.setSizes([total - half, half])
+        self._refresh_terminal_btns()
+        self._schedule_layout_save()
+
+    def _refresh_terminal_btns(self) -> None:
+        sizes = self.right_splitter.sizes()
+        if not sizes or len(sizes) < 2:
+            return
+        content_visible = sizes[0] > 0
+        terminal_visible = sizes[1] > 0
+        self._term_max_btn.setEnabled(content_visible)
+        self._term_min_btn.setEnabled(terminal_visible)
+        # Restaurar só faz sentido se algum lado está colapsado
+        self._term_restore_btn.setEnabled(not (content_visible and terminal_visible))
 
     def _launch_current_claude(self) -> None:
         current = self.list_widget.currentItem()
@@ -251,6 +279,69 @@ class MainWindow(QMainWindow):
             return
         ws = current.data(Qt.ItemDataRole.UserRole)
         self._launch_claude_for(ws, "", "")
+
+    def _build_terminal_pane(self) -> QWidget:
+        pane = QWidget()
+        pane.setMinimumHeight(0)
+        layout = QVBoxLayout(pane)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        header = QWidget()
+        header.setStyleSheet(
+            "background: #161616; border-bottom: 1px solid #2a2a2a;"
+        )
+        h = QHBoxLayout(header)
+        h.setContentsMargins(8, 4, 8, 4)
+        h.setSpacing(6)
+        title = QLabel("Terminal")
+        title.setStyleSheet("color: #888; font-size: 11px;")
+        h.addWidget(title)
+        h.addStretch()
+
+        btn_css = (
+            "QPushButton { background: transparent; color: #aaa; "
+            "border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; }"
+            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
+            "QPushButton:disabled { color: #444; }"
+        )
+        self._term_max_btn = QPushButton("⬆")
+        self._term_max_btn.setToolTip("Maximizar terminal (esconder conteúdo)")
+        self._term_max_btn.setFixedWidth(28)
+        self._term_max_btn.setStyleSheet(btn_css)
+        self._term_max_btn.clicked.connect(self._maximize_terminal)
+        h.addWidget(self._term_max_btn)
+
+        self._term_restore_btn = QPushButton("⬜")
+        self._term_restore_btn.setToolTip("Restaurar layout 50/50")
+        self._term_restore_btn.setFixedWidth(28)
+        self._term_restore_btn.setStyleSheet(btn_css)
+        self._term_restore_btn.clicked.connect(self._restore_terminal)
+        h.addWidget(self._term_restore_btn)
+
+        self._term_min_btn = QPushButton("⬇")
+        self._term_min_btn.setToolTip("Minimizar terminal (Ctrl+J)")
+        self._term_min_btn.setFixedWidth(28)
+        self._term_min_btn.setStyleSheet(btn_css)
+        self._term_min_btn.clicked.connect(self._toggle_terminal)
+        h.addWidget(self._term_min_btn)
+
+        layout.addWidget(header)
+
+        self.terminal_host = QStackedWidget()
+        self.terminal_host.setMinimumHeight(0)
+        self._empty_terminal = QLabel(
+            "Nenhum terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' "
+            "para iniciar uma sessão. Cada workspace tem suas próprias abas."
+        )
+        self._empty_terminal.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_terminal.setStyleSheet(
+            "background: #0e0e0e; color: #555; padding: 28px;"
+        )
+        self._terminal_placeholder_idx = self.terminal_host.addWidget(self._empty_terminal)
+        layout.addWidget(self.terminal_host, stretch=1)
+
+        return pane
 
     def _build_sidebar(self) -> QWidget:
         wrapper = QWidget()
@@ -571,12 +662,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         try:
-            self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
-            self.settings.main_splitter_sizes = list(self.main_splitter.sizes())
-            self.settings.workspace_columns_sizes = self.details.columns_sizes()
-            g = self.geometry()
-            self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
-            self.settings.save()
+            self._persist_layout()
         except Exception:
             log.exception("Falha ao salvar geometria/splitters")
         super().closeEvent(event)

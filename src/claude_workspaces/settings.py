@@ -23,8 +23,8 @@ class Settings:
     pycharm_command: str = "pycharm"
     rider_command: str = "rider"
     # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
-    body_splitter_sizes: list[int] = field(default_factory=list)
-    main_splitter_sizes: list[int] = field(default_factory=list)
+    body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, right_pane]
+    right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]
     workspace_columns_sizes: list[int] = field(default_factory=list)
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
 

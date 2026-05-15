@@ -7,6 +7,7 @@ def test_defaults():
     assert s.claude_command == "claude"
     assert s.terminal_command == "konsole"
     assert s.body_splitter_sizes == []
+    assert s.right_splitter_sizes == []
     assert s.window_geometry == []
 
 
