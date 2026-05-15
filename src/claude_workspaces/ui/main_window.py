@@ -1299,7 +1299,35 @@ class MainWindow(QMainWindow):
                 return
             self.workspaces.append(ws)
             save_workspaces(self.workspaces)
+            # Aplicar template (CLAUDE.md) se marcado
+            tpl = dialog.selected_template()
+            if (
+                dialog.init_claude_md()
+                and tpl is not None
+                and tpl.claude_md
+                and ws.folders
+            ):
+                self._apply_template_claude_md(ws, tpl)
             self.refresh_list()
+
+    def _apply_template_claude_md(self, workspace: Workspace, template) -> None:
+        target = Path(workspace.folders[0]) / "CLAUDE.md"
+        if target.exists():
+            reply = QMessageBox.question(
+                self,
+                "CLAUDE.md já existe",
+                f"{target} já existe. Sobrescrever?",
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        try:
+            target.write_text(template.claude_md, encoding="utf-8")
+        except OSError as e:
+            QMessageBox.warning(
+                self,
+                "Falha ao gravar CLAUDE.md",
+                str(e),
+            )
 
     def edit_workspace(self, workspace: Workspace) -> None:
         dialog = WorkspaceDialog(workspace=workspace, parent=self)

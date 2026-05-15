@@ -3,6 +3,8 @@ import os
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -17,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import Workspace
+from ..workspace_templates import WorkspaceTemplate, all_templates
 
 
 class _FoldersList(QListWidget):
@@ -68,6 +71,27 @@ class WorkspaceDialog(QDialog):
         self.resize(560, 460)
 
         layout = QVBoxLayout(self)
+
+        # Templates só aparecem ao CRIAR (não editar)
+        self._templates: list[WorkspaceTemplate] = (
+            all_templates() if workspace is None else []
+        )
+        self._template_combo: QComboBox | None = None
+        self._init_claude_md_chk: QCheckBox | None = None
+        if self._templates:
+            tpl_form = QFormLayout()
+            self._template_combo = QComboBox()
+            for t in self._templates:
+                self._template_combo.addItem(t.name)
+            self._template_combo.currentIndexChanged.connect(self._on_template_changed)
+            tpl_form.addRow("Modelo:", self._template_combo)
+            layout.addLayout(tpl_form)
+
+            self._init_claude_md_chk = QCheckBox(
+                "Inicializar CLAUDE.md na pasta primária com conteúdo do template"
+            )
+            self._init_claude_md_chk.setEnabled(False)
+            layout.addWidget(self._init_claude_md_chk)
 
         form = QFormLayout()
         self.name_edit = QLineEdit(workspace.name if workspace else "")
@@ -129,6 +153,32 @@ class WorkspaceDialog(QDialog):
         item = self.folders_list.takeItem(row)
         self.folders_list.insertItem(new_row, item)
         self.folders_list.setCurrentRow(new_row)
+
+    def _on_template_changed(self, idx: int) -> None:
+        if idx < 0 or idx >= len(self._templates):
+            return
+        tpl = self._templates[idx]
+        # Só pre-preenche descrição se ainda estiver vazia
+        if not self.desc_edit.toPlainText().strip() and tpl.description:
+            self.desc_edit.setPlainText(tpl.description)
+        if self._init_claude_md_chk is not None:
+            self._init_claude_md_chk.setEnabled(bool(tpl.claude_md))
+            if not tpl.claude_md:
+                self._init_claude_md_chk.setChecked(False)
+
+    def selected_template(self) -> WorkspaceTemplate | None:
+        if self._template_combo is None:
+            return None
+        idx = self._template_combo.currentIndex()
+        if 0 <= idx < len(self._templates):
+            return self._templates[idx]
+        return None
+
+    def init_claude_md(self) -> bool:
+        return bool(
+            self._init_claude_md_chk is not None
+            and self._init_claude_md_chk.isChecked()
+        )
 
     def workspace(self) -> Workspace:
         folders = [self.folders_list.item(i).text() for i in range(self.folders_list.count())]
