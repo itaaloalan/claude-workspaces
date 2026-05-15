@@ -55,6 +55,15 @@ class SettingsPanel(QWidget):
         self._terminal_cmd.setPlaceholderText("konsole")
         form.addRow("Terminal:", self._terminal_cmd)
 
+        self._shell_cmd = QLineEdit()
+        self._shell_cmd.setPlaceholderText("(vazio = shell de login do /etc/passwd)")
+        self._shell_cmd.setToolTip(
+            "Shell usado pra rodar Claude/terminal interativo. Vazio = autodetectar "
+            "o shell de login do usuário (fish/zsh/bash). Aliases do shell são "
+            "carregados porque rodamos com -i."
+        )
+        form.addRow("Shell:", self._shell_cmd)
+
         self._vscode_cmd = QLineEdit()
         self._vscode_cmd.setPlaceholderText("code")
         form.addRow("VS Code:", self._vscode_cmd)
@@ -107,6 +116,7 @@ class SettingsPanel(QWidget):
         self._claude_cmd.setText(self.settings.claude_command)
         self._claude_args.setText(" ".join(shlex.quote(a) for a in self.settings.claude_extra_args))
         self._terminal_cmd.setText(self.settings.terminal_command)
+        self._shell_cmd.setText(self.settings.shell_command)
         self._vscode_cmd.setText(self.settings.vscode_command)
         self._intellij_cmd.setText(self.settings.intellij_command)
         self._webstorm_cmd.setText(self.settings.webstorm_command)
@@ -121,6 +131,7 @@ class SettingsPanel(QWidget):
             QMessageBox.warning(self, "Args inválidos", f"Não consegui parsear: {e}")
             return
         self.settings.terminal_command = self._terminal_cmd.text().strip() or "konsole"
+        self.settings.shell_command = self._shell_cmd.text().strip()
         self.settings.vscode_command = self._vscode_cmd.text().strip() or "code"
         self.settings.intellij_command = self._intellij_cmd.text().strip() or "idea"
         self.settings.webstorm_command = self._webstorm_cmd.text().strip() or "webstorm"

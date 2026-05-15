@@ -186,6 +186,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
                 argv,
                 self.workspace.primary_folder,
                 label=f"claude — {self.workspace.name}",
+                shell=self.settings.shell_command or None,
             )
         except Exception as e:
             log.exception("Falha ao abrir Claude embutido")
@@ -195,7 +196,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         if not self.workspace or not self.workspace.primary_folder:
             return
         try:
-            self.terminal.start_interactive_shell(self.workspace.primary_folder)
+            self.terminal.start_interactive_shell(
+                self.workspace.primary_folder,
+                shell=self.settings.shell_command or None,
+            )
         except Exception as e:
             log.exception("Falha ao abrir shell embutido")
             QMessageBox.warning(self, "Falha", str(e))

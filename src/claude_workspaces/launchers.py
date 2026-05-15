@@ -1,5 +1,6 @@
 import logging
 import os
+import pwd
 import shlex
 import shutil
 import subprocess
@@ -10,6 +11,21 @@ from .settings import Settings
 
 
 log = logging.getLogger(__name__)
+
+
+def effective_shell(settings: Settings | None = None) -> str:
+    """Resolve the shell to use for interactive command wrapping.
+
+    Order: settings.shell_command (if set) → login shell from /etc/passwd →
+    $SHELL env var → /bin/bash. The login shell is preferred over $SHELL
+    because the harness may inject a different SHELL at runtime.
+    """
+    if settings and settings.shell_command:
+        return settings.shell_command
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell
+    except KeyError:
+        return os.environ.get("SHELL", "/bin/bash")
 
 
 IDE_LABEL: dict[str, str] = {
@@ -32,10 +48,6 @@ def _require(cmd: str, label: str | None = None) -> None:
         raise LauncherError(msg)
 
 
-def _user_shell() -> str:
-    return os.environ.get("SHELL", "/bin/bash")
-
-
 def _spawn(argv: list[str], cwd: str | Path) -> subprocess.Popen:
     log.info("Spawning: %s (cwd=%s)", argv, cwd)
     try:
@@ -46,7 +58,7 @@ def _spawn(argv: list[str], cwd: str | Path) -> subprocess.Popen:
 
 
 def _run_in_terminal(
-    terminal_cmd: str,
+    settings: Settings,
     inner_cmd_parts: list[str],
     cwd: str | Path,
 ) -> subprocess.Popen:
@@ -54,7 +66,7 @@ def _run_in_terminal(
     shell so user-defined aliases (e.g. `ia` → `claude`) resolve."""
     inner = shlex.join(inner_cmd_parts)
     return _spawn(
-        [terminal_cmd, "-e", _user_shell(), "-ic", inner],
+        [settings.terminal_command, "-e", effective_shell(settings), "-ic", inner],
         cwd,
     )
 
@@ -66,13 +78,13 @@ def launch_claude(workspace: Workspace, settings: Settings) -> None:
     cmd = [settings.claude_command, *settings.claude_extra_args]
     for extra in workspace.extra_folders:
         cmd += ["--add-dir", extra]
-    _run_in_terminal(settings.terminal_command, cmd, workspace.primary_folder)
+    _run_in_terminal(settings, cmd, workspace.primary_folder)
 
 
 def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
     _require(settings.terminal_command, "terminal")
     cmd = [settings.claude_command, *settings.claude_extra_args]
-    _run_in_terminal(settings.terminal_command, cmd, directory)
+    _run_in_terminal(settings, cmd, directory)
 
 
 def launch_konsole(workspace: Workspace, settings: Settings) -> None:

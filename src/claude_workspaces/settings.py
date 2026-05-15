@@ -16,6 +16,7 @@ class Settings:
     claude_command: str = "claude"
     claude_extra_args: list[str] = field(default_factory=list)
     terminal_command: str = "konsole"
+    shell_command: str = ""  # "" = autodetect from /etc/passwd (login shell)
     vscode_command: str = "code"
     intellij_command: str = "idea"
     webstorm_command: str = "webstorm"

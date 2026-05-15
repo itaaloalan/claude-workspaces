@@ -1,5 +1,6 @@
 import logging
 import os
+import pwd
 import shlex
 from pathlib import Path
 
@@ -16,6 +17,13 @@ from PySide6.QtWidgets import (
 )
 
 from ..pty_session import PtySession
+
+
+def _login_shell() -> str:
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell
+    except KeyError:
+        return os.environ.get("SHELL", "/bin/bash")
 
 
 log = logging.getLogger(__name__)
@@ -131,15 +139,18 @@ class TerminalWidget(QWidget):
         inner_argv: list[str],
         cwd: str,
         label: str | None = None,
+        shell: str | None = None,
     ) -> None:
-        """Roda comando através do shell interativo do usuário para que
-        aliases (e.g. `ia` → `claude`) resolvam."""
-        shell = os.environ.get("SHELL", "/bin/bash")
+        """Roda comando através do shell interativo para que aliases
+        (e.g. `ia` → `claude`) resolvam. Sem `shell`, usa o shell de
+        login do /etc/passwd (não o `$SHELL` herdado, que pode estar
+        sobrescrito pelo processo pai)."""
+        shell = shell or _login_shell()
         inner = shlex.join(inner_argv)
         self.start_command([shell, "-ic", inner], cwd, label or inner)
 
-    def start_interactive_shell(self, cwd: str) -> None:
-        shell = os.environ.get("SHELL", "/bin/bash")
+    def start_interactive_shell(self, cwd: str, shell: str | None = None) -> None:
+        shell = shell or _login_shell()
         self.start_command([shell, "-i"], cwd, label=shell)
 
     def terminate(self) -> None:
