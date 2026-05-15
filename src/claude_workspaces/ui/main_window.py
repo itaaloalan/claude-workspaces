@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -1024,6 +1024,9 @@ class MainWindow(QMainWindow):
                     return w
         return None
 
+    # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
+    _CHILD_HEIGHT = 48
+
     def _add_terminal_child(
         self,
         ws_item: QTreeWidgetItem,
@@ -1035,6 +1038,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, tab_id)
+        child.setSizeHint(0, QSize(0, self._CHILD_HEIGHT))
         widget = TerminalChildWidget(title)
         full_title = title
         term = self._terminal_widget_for(tab_id)
@@ -1047,7 +1051,6 @@ class MainWindow(QMainWindow):
         )
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
-        child.setSizeHint(0, widget.sizeHint())
         ws_item.setExpanded(True)
         self._terminal_tree_items[tab_id] = child
 
@@ -1074,7 +1077,6 @@ class MainWindow(QMainWindow):
         widget.update_state(
             self._resolve_state(is_working, is_running), status, spinner_char=spinner
         )
-        item.setSizeHint(0, widget.sizeHint())
 
     def _tick_spinner(self) -> None:
         self._spinner_frame = (self._spinner_frame + 1) % len(self.SPINNER_FRAMES)
