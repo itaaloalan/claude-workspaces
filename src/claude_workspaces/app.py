@@ -8,7 +8,9 @@ from .ui.main_window import MainWindow
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Claude Workspaces")
+    app.setApplicationDisplayName("Claude Workspaces")
     app.setOrganizationName("claude-workspaces")
+    app.setDesktopFileName("claude-workspaces")
     window = MainWindow()
     window.show()
     return app.exec()

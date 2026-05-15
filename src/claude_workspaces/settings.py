@@ -1,0 +1,56 @@
+import json
+from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
+
+
+def config_dir() -> Path:
+    return Path.home() / ".config" / "claude-workspaces"
+
+
+def settings_file() -> Path:
+    return config_dir() / "settings.json"
+
+
+@dataclass
+class Settings:
+    claude_command: str = "claude"
+    claude_extra_args: list[str] = field(default_factory=list)
+    terminal_command: str = "konsole"
+    vscode_command: str = "code"
+    intellij_command: str = "idea"
+    webstorm_command: str = "webstorm"
+    pycharm_command: str = "pycharm"
+    rider_command: str = "rider"
+
+    @classmethod
+    def load(cls) -> "Settings":
+        path = settings_file()
+        if not path.exists():
+            return cls()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return cls()
+        valid = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in valid})
+
+    def save(self) -> None:
+        path = settings_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(asdict(self), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def update_from(self, other: "Settings") -> None:
+        for f in fields(self):
+            setattr(self, f.name, getattr(other, f.name))
+
+    def ide_command(self, ide_key: str) -> str:
+        return {
+            "intellij": self.intellij_command,
+            "webstorm": self.webstorm_command,
+            "pycharm": self.pycharm_command,
+            "rider": self.rider_command,
+            "vscode": self.vscode_command,
+        }.get(ide_key, "")
