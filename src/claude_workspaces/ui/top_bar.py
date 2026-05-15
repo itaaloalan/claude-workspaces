@@ -14,6 +14,7 @@ class TopBar(QWidget):
     Substitui o QTabWidget anterior."""
 
     search_changed = Signal(str)
+    search_submitted = Signal()
     settings_clicked = Signal()
     home_clicked = Signal()
     toggle_sidebar_clicked = Signal()
@@ -52,7 +53,7 @@ class TopBar(QWidget):
         row.addWidget(logo)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Filtrar workspaces… (Ctrl+F)")
+        self.search.setPlaceholderText("Filtrar por nome, pasta ou tarefa… (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(380)
         self.search.setStyleSheet(
@@ -61,6 +62,7 @@ class TopBar(QWidget):
             "QLineEdit:focus { border-color: #3d6ea8; }"
         )
         self.search.textChanged.connect(self.search_changed.emit)
+        self.search.returnPressed.connect(self.search_submitted.emit)
         row.addWidget(self.search, stretch=1)
 
         row.addStretch()

@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
 
         self.top_bar = TopBar()
         self.top_bar.search_changed.connect(self._apply_filter)
+        self.top_bar.search_submitted.connect(self._search_submit)
         self.top_bar.settings_clicked.connect(self._show_settings)
         self.top_bar.home_clicked.connect(self._show_workspaces)
         self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
@@ -342,7 +343,10 @@ class MainWindow(QMainWindow):
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             ws = item.data(Qt.ItemDataRole.UserRole)
-            haystack = f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}".lower()
+            tasks_blob = " ".join(t.title for t in ws.tasks)
+            haystack = (
+                f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}\n{tasks_blob}"
+            ).lower()
             item.setHidden(bool(needle) and needle not in haystack)
         current = self.list_widget.currentItem()
         if current and current.isHidden():
@@ -350,6 +354,14 @@ class MainWindow(QMainWindow):
                 if not self.list_widget.item(i).isHidden():
                     self.list_widget.setCurrentRow(i)
                     return
+
+    def _search_submit(self) -> None:
+        """Enter na busca: foca o primeiro workspace visível."""
+        rows = self._visible_rows()
+        if not rows:
+            return
+        self.list_widget.setCurrentRow(rows[0])
+        self.list_widget.setFocus()
 
     def _refresh_item_label(self, workspace_id: str) -> None:
         for i in range(self.list_widget.count()):

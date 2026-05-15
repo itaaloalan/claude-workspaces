@@ -14,6 +14,11 @@ dependencies = [
     "PySide6>=6.6",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+]
+
 [project.scripts]
 claude-workspaces = "claude_workspaces.app:main"
 
@@ -22,3 +27,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 claude_workspaces = ["ui/static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
