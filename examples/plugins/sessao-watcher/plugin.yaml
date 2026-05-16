@@ -1,0 +1,30 @@
+id: com.exemplo.sessao-watcher
+name: Sessão Watcher
+version: 0.1.0
+author: exemplo
+description: Notifica quando sessões ficam aguardando input por muito tempo
+license: MIT
+engine:
+  claude-workspaces: ">=1.0.0 <2.0.0"
+
+extensions:
+  hooks:
+    - event: session.status-changed
+      handler: ./src/hooks/on-status.ts
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  network:
+    hosts: []
+  notifications: true
+  workspaces: all
+
+config:
+  - key: threshold_minutes
+    type: integer
+    default: 5
+    min: 1
+    max: 60
+    label: "Considerar parada após (min)"
