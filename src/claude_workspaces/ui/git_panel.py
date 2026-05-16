@@ -66,6 +66,10 @@ class GitPanel(QWidget):
     """
 
     open_file_requested = Signal(str)
+    # Emitido após cada commit local. Args: (workspace_id, folder, sha, message)
+    # sha vai vazio se não conseguirmos resolver o HEAD pós-commit — assinante
+    # deve tratar como "houve commit mesmo sem detalhe".
+    commit_created = Signal(str, str, str, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -811,12 +815,28 @@ class GitPanel(QWidget):
             ok, out = git_commit(folder, message)
             if not ok:
                 errors.append(f"{Path(folder).name}: commit falhou — {out}")
+            elif self.workspace is not None:
+                sha = self._head_sha(folder)
+                self.commit_created.emit(self.workspace.id, folder, sha, message)
 
         if errors:
             QMessageBox.warning(self, "Erros no commit", "\n\n".join(errors)[:2000])
         else:
             self._msg.clear()
         self.refresh()
+
+    @staticmethod
+    def _head_sha(folder: str) -> str:
+        """`git rev-parse HEAD` resumido; vazio se algo falhar."""
+        import subprocess
+        try:
+            r = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=folder, capture_output=True, text=True, timeout=2,
+            )
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
 
     def _do_fetch_all(self) -> None:
         if not self.workspace:

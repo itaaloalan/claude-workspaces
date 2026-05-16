@@ -7,16 +7,16 @@ Responsabilidades:
 - Expõe `publish(event, payload)` para o resto do app despachar eventos
   do catálogo da seção 7 da spec.
 
-A implementação das sub-APIs do ctx é mínima nesta primeira entrega:
-- `log`: escreve em `<install_dir>/.logs/YYYY-MM-DD.log`
+Sub-APIs do ctx implementadas:
+- `log`: arquivo em `<install_dir>/.logs/YYYY-MM-DD.log`
 - `storage`: usa `PluginStorage` direto
-- `ui.notify/toast`: emite sinal Qt que MainWindow ou outro receptor pode
-  pegar via `host.notifications.connect(...)`
-- `workspaces`, `sessions`, `fs`, `http`, `config`: stubs que levantam
-  `NotImplementedError` — ligados conforme features forem usadas
+- `ui.notify/toast/badge`: emite sinal Qt
+- `config`: lê defaults do manifesto
+- `workspaces`, `sessions`: leem dos providers injetados pelo host (callables
+  que retornam o estado atual). Filtragem por `permissions.workspaces`.
 
-Isso permite que plugins de hook simples (notificação por evento) já
-funcionem; APIs mais ricas são plugadas incrementalmente sem mudar a spec."""
+Stubs honestos (NotImplementedError):
+- `fs`, `http` — virão quando uso real surgir."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
-from ..plugin_api import BaseContext  # noqa: F401 — usado em type hints
+from ..plugin_api import Session, Workspace
 from ..plugins import (
     EventBus,
     InstalledPlugin,
@@ -41,6 +41,22 @@ from ..plugins import (
 )
 
 log = logging.getLogger(__name__)
+
+
+# -------------------- Providers (injetados pelo MainWindow) ----------------
+
+WorkspaceListProvider = Callable[[], list[Workspace]]
+"""Retorna todos os workspaces (objetos do `plugin_api.Workspace`, não os
+internos). O host serializa pra `Workspace` da spec dentro de _PluginWorkspaces."""
+
+CurrentWorkspaceProvider = Callable[[], Workspace | None]
+"""Retorna o workspace atualmente selecionado, ou None."""
+
+SessionListProvider = Callable[[str | None], list[Session]]
+"""Recebe filtro opcional de status, retorna sessões abertas hoje."""
+
+SessionFocusFn = Callable[[str], None]
+"""Foca uma sessão pelo ID na UI. Síncrono (re-disparado no Qt thread)."""
 
 
 # -------------------- APIs mínimas ----------------------------------------
@@ -124,6 +140,82 @@ class _NotImplementedAPI:
         return _stub
 
 
+class _PluginWorkspaces:
+    """`ctx.workspaces.*` — filtrado por `permissions.workspaces`."""
+
+    def __init__(
+        self,
+        list_provider: WorkspaceListProvider,
+        current_provider: CurrentWorkspaceProvider,
+        inst: InstalledPlugin,
+    ) -> None:
+        self._list = list_provider
+        self._current = current_provider
+        self._perms = inst.manifest.permissions
+
+    def _allowed(self, ws_id: str) -> bool:
+        return self._perms.workspace_allowed(ws_id)
+
+    async def list(self) -> list[Workspace]:
+        return [w for w in self._list() if self._allowed(w.id)]
+
+    async def current(self) -> Workspace | None:
+        ws = self._current()
+        if ws is None:
+            return None
+        return ws if self._allowed(ws.id) else None
+
+    async def get(self, id: str) -> Workspace:
+        if not self._allowed(id):
+            raise PermissionError(f"workspace {id!r} fora das permissões declaradas")
+        for w in self._list():
+            if w.id == id:
+                return w
+        raise KeyError(f"workspace {id!r} não encontrado")
+
+
+class _PluginSessions:
+    """`ctx.sessions.*` — filtrado pelas mesmas regras de workspaces."""
+
+    def __init__(
+        self,
+        list_provider: SessionListProvider,
+        focus_fn: SessionFocusFn,
+        inst: InstalledPlugin,
+    ) -> None:
+        self._list = list_provider
+        self._focus = focus_fn
+        self._perms = inst.manifest.permissions
+
+    def _allowed(self, ws_id: str) -> bool:
+        return self._perms.workspace_allowed(ws_id)
+
+    async def list(self, *, status: str | None = None) -> list[Session]:
+        return [s for s in self._list(status) if self._allowed(s.workspace_id)]
+
+    async def get(self, id: str) -> Session:
+        for s in self._list(None):
+            if s.id == id:
+                if not self._allowed(s.workspace_id):
+                    raise PermissionError(
+                        f"sessão {id!r} pertence a workspace fora das permissões"
+                    )
+                return s
+        raise KeyError(f"sessão {id!r} não encontrada")
+
+    async def focus(self, id: str) -> None:
+        # valida permissão olhando a session correspondente
+        for s in self._list(None):
+            if s.id == id:
+                if not self._allowed(s.workspace_id):
+                    raise PermissionError(
+                        f"sessão {id!r} pertence a workspace fora das permissões"
+                    )
+                self._focus(id)
+                return
+        raise KeyError(f"sessão {id!r} não encontrada")
+
+
 class _PluginUI:
     """ui.notify/toast/badge — emitem sinal Qt que o host pode escutar."""
 
@@ -168,22 +260,41 @@ class _AsyncStorage:
 
 
 class _Ctx:
-    """`BaseContext` concreto. Não usa Protocol pra não exigir runtime_checkable
-    em runtime — o duck typing dos handlers basta."""
+    """`BaseContext` concreto. Duck typing — não usamos Protocol em runtime."""
 
     def __init__(self, host: PluginHost, inst: InstalledPlugin) -> None:
         self.log = _PluginLog(inst.install_dir, inst.id)
         self.config = _PluginConfig(inst)
         self.storage = _AsyncStorage(inst.storage())
         self.ui = _PluginUI(host, inst.id)
-        # APIs ainda não plugadas — stubs honestos
-        self.workspaces = _NotImplementedAPI("workspaces")
-        self.sessions = _NotImplementedAPI("sessions")
+        self.workspaces = _PluginWorkspaces(
+            host._ws_list, host._ws_current, inst
+        )
+        self.sessions = _PluginSessions(
+            host._sessions_list, host._session_focus, inst
+        )
+        # Stubs honestos — implementação real quando algum plugin precisar
         self.fs = _NotImplementedAPI("fs")
         self.http = _NotImplementedAPI("http")
 
 
 # -------------------- Host -------------------------------------------------
+
+
+def _empty_ws_list() -> list[Workspace]:
+    return []
+
+
+def _empty_current() -> Workspace | None:
+    return None
+
+
+def _empty_sessions(_status: str | None) -> list[Session]:
+    return []
+
+
+def _no_focus(_id: str) -> None:
+    pass
 
 
 class PluginHost(QObject):
@@ -195,8 +306,20 @@ class PluginHost(QObject):
 
     notifications = Signal(str, str, dict)
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        ws_list_provider: WorkspaceListProvider = _empty_ws_list,
+        ws_current_provider: CurrentWorkspaceProvider = _empty_current,
+        sessions_list_provider: SessionListProvider = _empty_sessions,
+        session_focus_fn: SessionFocusFn = _no_focus,
+    ) -> None:
         super().__init__()
+        self._ws_list = ws_list_provider
+        self._ws_current = ws_current_provider
+        self._sessions_list = sessions_list_provider
+        self._session_focus = session_focus_fn
+
         self.registry = PluginRegistry()
         self.bus = EventBus()
         # Loop dedicado pra rodar handlers — não bloqueia a GUI nem disputa

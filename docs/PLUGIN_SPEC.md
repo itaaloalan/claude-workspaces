@@ -387,7 +387,7 @@ author: exemplo
 description: Notifica quando sessões ficam aguardando input por muito tempo
 license: MIT
 engine:
-  claude-workspaces: ">=1.0.0 <2.0.0"
+  claude-workspaces: ">=2.0.0 <3.0.0"
 
 extensions:
   hooks:

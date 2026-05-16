@@ -1,4 +1,6 @@
 import logging
+import time
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
@@ -1124,6 +1126,11 @@ class MainWindow(QMainWindow):
     ) -> None:
         """Slot do TerminalCoordinator.tab_activity_changed.
         Atualiza o tree child. Inbox/spinner já foram tratados no coord."""
+        # Despacha eventos pro plugin bus (session.created/status-changed/completed)
+        self._dispatch_session_events(
+            tab_id, workspace_id, title, is_working, is_running
+        )
+
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is None:
             return
@@ -1137,9 +1144,89 @@ class MainWindow(QMainWindow):
     def _handle_tab_removed(self, tab_id: int) -> None:
         """Slot do TerminalCoordinator.tab_removed.
         Estado já foi limpo no coord; aqui só remove o item do tree."""
+        # Limpa cache do plugin host e dispara session.completed se ainda não foi
+        if self._plugin_host is not None:
+            cached = self._plugin_session_cache.pop(tab_id, None)
+            if cached and cached.get("status") != "completed":
+                duration_ms = max(
+                    0, int((time.monotonic() - cached["created_at_mono"]) * 1000)
+                )
+                self._publish_session_event(
+                    "session.completed",
+                    tab_id,
+                    {"reason": "closed", "durationMs": duration_ms},
+                )
         item = self.terminals_coord.state.tree_items.get(tab_id)
         if item is not None and item.parent() is not None:
             item.parent().removeChild(item)
+
+    def _dispatch_session_events(
+        self,
+        tab_id: int,
+        workspace_id: str,
+        title: str,
+        is_working: bool,
+        is_running: bool,
+    ) -> None:
+        """Mantém o cache de sessões e despacha session.* pro plugin bus.
+
+        Tradução: 1ª vez vendo tab_id → session.created. Mudança de status
+        no cache → session.status-changed. is_running=False → session.completed."""
+        if self._plugin_host is None:
+            return
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        ws_name = ws.name if ws else workspace_id
+        new_status = self._plugin_session_status_for(is_working, is_running)
+        cached = self._plugin_session_cache.get(tab_id)
+        now = time.monotonic()
+        if cached is None:
+            self._plugin_session_cache[tab_id] = {
+                "workspace_id": workspace_id,
+                "workspace_name": ws_name,
+                "status": new_status,
+                "title": title,
+                "created_at_mono": now,
+                "last_change_mono": now,
+            }
+            self._publish_session_event(
+                "session.created",
+                tab_id,
+                {
+                    "workspaceId": workspace_id,
+                    "createdAt": datetime.now().isoformat(timespec="seconds"),
+                },
+            )
+            return
+
+        # Atualiza título sempre (parte do estado, não evento)
+        cached["title"] = title
+        cached["workspace_name"] = ws_name
+
+        old_status = cached["status"]
+        if new_status != old_status:
+            duration_ms = max(
+                0, int((now - cached["last_change_mono"]) * 1000)
+            )
+            cached["status"] = new_status
+            cached["last_change_mono"] = now
+            self._publish_session_event(
+                "session.status-changed",
+                tab_id,
+                {
+                    "oldStatus": old_status,
+                    "newStatus": new_status,
+                    "durationMs": duration_ms,
+                },
+            )
+            if new_status == "completed":
+                total_ms = max(
+                    0, int((now - cached["created_at_mono"]) * 1000)
+                )
+                self._publish_session_event(
+                    "session.completed",
+                    tab_id,
+                    {"reason": "ended", "durationMs": total_ms},
+                )
 
     def _on_spinner_tick(self, spinner_char: str) -> None:
         """Slot do TerminalCoordinator.spinner_tick — atualiza children
@@ -1297,6 +1384,10 @@ class MainWindow(QMainWindow):
                 self.terminal_host.setCurrentWidget(area)
 
     def _cleanup_terminal_for(self, workspace_id: str) -> None:
+        if self._plugin_host is not None:
+            self._plugin_host.publish(
+                "workspace.closed", {"workspaceId": workspace_id}
+            )
         area = self.terminals_coord.cleanup_area(workspace_id)
         if area is None:
             return
@@ -1413,10 +1504,70 @@ class MainWindow(QMainWindow):
         """Sobe o subsistema de plugins. Falha aqui não derruba o app — o
         host vira `None` e o resto roda normal."""
         try:
+            from ..plugin_api import Session as PluginSession
+            from ..plugin_api import Workspace as PluginWorkspace
             from ..services.plugin_host import PluginHost
 
-            self._plugin_host = PluginHost()
+            # Cache local de sessões observadas (tab_id → metadados).
+            # Atualizado por _handle_tab_activity; serve como fonte de verdade
+            # pro provider de ctx.sessions.
+            self._plugin_session_cache: dict[int, dict] = {}
+
+            def ws_to_plugin(ws: Workspace) -> PluginWorkspace:
+                return PluginWorkspace(
+                    id=ws.id, name=ws.name, folders=tuple(ws.folders)
+                )
+
+            def list_ws() -> list[PluginWorkspace]:
+                return [ws_to_plugin(w) for w in self.workspaces_coord.workspaces]
+
+            def current_ws() -> PluginWorkspace | None:
+                ws = self._current_workspace()
+                return ws_to_plugin(ws) if ws else None
+
+            def list_sessions(status_filter: str | None) -> list[PluginSession]:
+                out: list[PluginSession] = []
+                for tab_id, meta in self._plugin_session_cache.items():
+                    if status_filter and meta["status"] != status_filter:
+                        continue
+                    out.append(
+                        PluginSession(
+                            id=str(tab_id),
+                            workspace_id=meta["workspace_id"],
+                            workspace_name=meta["workspace_name"],
+                            status=meta["status"],
+                            last_message=meta.get("title"),
+                        )
+                    )
+                return out
+
+            def focus_session(session_id: str) -> None:
+                # Tab IDs vivem como inteiros; recebemos string da API.
+                try:
+                    tab_id = int(session_id)
+                except ValueError:
+                    return
+                meta = self._plugin_session_cache.get(tab_id)
+                if meta is None:
+                    return
+                self._focus_tab_from_inbox(meta["workspace_id"], tab_id)
+
+            self._plugin_host = PluginHost(
+                ws_list_provider=list_ws,
+                ws_current_provider=current_ws,
+                sessions_list_provider=list_sessions,
+                session_focus_fn=focus_session,
+            )
             self._plugin_host.notifications.connect(self._on_plugin_notification)
+            # commit.created vem do GitPanel quando o usuário commita pela UI.
+            # Commits feitos por fora (terminal, IDE) não geram evento — limitação
+            # aceitável; quando vier integração com FileSystemWatcher no .git/HEAD
+            # isso pode ser ampliado.
+            try:
+                git_panel = self.details.git_panel()
+                git_panel.commit_created.connect(self._on_commit_created)
+            except Exception:
+                log.exception("Falha conectando commit_created ao plugin host")
             log.info(
                 "Plugin host iniciado (%d plugin(s) carregado(s))",
                 len(self._plugin_host.runtime._modules),
@@ -1424,9 +1575,42 @@ class MainWindow(QMainWindow):
         except Exception:
             log.exception("Falha iniciando plugin host — plugins ficam desligados")
 
+    def _on_commit_created(
+        self, workspace_id: str, _folder: str, sha: str, message: str
+    ) -> None:
+        if self._plugin_host is None:
+            return
+        self._plugin_host.publish(
+            "commit.created",
+            {"workspaceId": workspace_id, "sha": sha, "message": message},
+        )
+
     def _on_plugin_notification(
         self, plugin_id: str, kind: str, payload: dict
     ) -> None:
         """Encaminha ui.notify/toast/badge dos plugins. Ainda mínimo:
         loga; integração com bandeja/inbox vem depois."""
         log.info("plugin %s %s: %s", plugin_id, kind, payload)
+
+    def _plugin_session_status_for(self, is_working: bool, is_running: bool) -> str:
+        """Mapeia o estado interno (working/running) pros status da spec.
+
+        Tabela:
+        - running + working → 'running'
+        - running + idle    → 'awaiting-input'
+        - !running          → 'completed'
+        """
+        if not is_running:
+            return "completed"
+        return "running" if is_working else "awaiting-input"
+
+    def _publish_session_event(
+        self, event: str, tab_id: int, extra: dict | None = None
+    ) -> None:
+        """Helper: monta payload com `sessionId` e despacha pro bus."""
+        if self._plugin_host is None:
+            return
+        payload = {"sessionId": str(tab_id)}
+        if extra:
+            payload.update(extra)
+        self._plugin_host.publish(event, payload)

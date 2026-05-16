@@ -24,8 +24,10 @@ from .storage import PluginStorage
 
 log = logging.getLogger(__name__)
 
-# Versão atual do host — usada pra checar engine.claude-workspaces na install.
-HOST_VERSION = "1.0.0"
+# Versão da spec de plugins implementada por este host (PLUGIN_SPEC.md §14).
+# É independente da versão do pacote `claude-workspaces` em pyproject.toml.
+# Plugins declaram seu suporte via `engine.claude-workspaces` no manifesto.
+HOST_VERSION = "2.0.0"
 
 
 def plugins_dir() -> Path:

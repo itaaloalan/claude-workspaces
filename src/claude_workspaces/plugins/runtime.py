@@ -38,6 +38,12 @@ from .registry import InstalledPlugin, PluginRegistry
 
 log = logging.getLogger(__name__)
 
+
+# Timeouts da spec (seções 4.1, 4.2). Handler que estoura é cancelado e
+# logado — host não derruba.
+HOOK_TIMEOUT_S = 5.0
+COMMAND_TIMEOUT_S = 30.0
+
 _PAYLOAD_FOR_EVENT: dict[str, type] = {
     "session.created": plugin_api.SessionCreatedPayload,
     "session.status-changed": plugin_api.SessionStatusChangedPayload,
@@ -301,7 +307,9 @@ class PluginRuntime:
 
         def dispatcher(raw_payload: dict[str, Any]) -> None:
             payload = _payload_from_dict(event, raw_payload)
-            self._run_async(fn(ctx, payload), inst.id, event)
+            self._run_async(
+                fn(ctx, payload), inst.id, event, timeout=HOOK_TIMEOUT_S
+            )
 
         sub = self._bus.subscribe(
             inst.id,
@@ -356,7 +364,9 @@ class PluginRuntime:
             log.warning("Comando não encontrado: %s/%s", plugin_id, command_id)
             return
         ctx = self._ctx_factory(inst)
-        self._run_async(fn(ctx), plugin_id, f"command:{command_id}")
+        self._run_async(
+            fn(ctx), plugin_id, f"command:{command_id}", timeout=COMMAND_TIMEOUT_S
+        )
 
     def build_panel(self, plugin_id: str, panel_id: str):
         """Constrói o QWidget de um panel. Retorna None se não achar."""
@@ -374,32 +384,48 @@ class PluginRuntime:
 
     # ----- runner async ----
 
-    def _run_async(self, coro: Awaitable, plugin_id: str, label: str) -> None:
-        """Agenda uma coroutine no loop. Tolerante a loop ausente
-        (em testes síncronos, executa via asyncio.run em thread).
+    def _run_async(
+        self,
+        coro: Awaitable,
+        plugin_id: str,
+        label: str,
+        *,
+        timeout: float | None = None,
+    ) -> None:
+        """Agenda uma coroutine no loop com timeout opcional.
 
-        Erros são logados, nunca propagados — handler que crasha não
-        deve derrubar o host."""
+        Tolerante a loop ausente (em testes síncronos, executa via asyncio.run).
+        Erros e timeouts são logados, nunca propagados."""
         loop = self._loop or _get_running_loop_or_none()
         if loop is not None and loop.is_running():
-            asyncio.run_coroutine_threadsafe(_safe(coro, plugin_id, label), loop)
+            asyncio.run_coroutine_threadsafe(
+                _safe(coro, plugin_id, label, timeout), loop
+            )
             return
-        # fallback: roda síncrono (testes)
         try:
-            asyncio.run(_safe(coro, plugin_id, label))
+            asyncio.run(_safe(coro, plugin_id, label, timeout))
         except RuntimeError as e:
-            # já tem loop ativo na thread — não temos pra onde despachar
             log.warning(
                 "Não consegui despachar %s do plugin %s: %s",
                 label, plugin_id, e,
             )
 
 
-async def _safe(coro: Awaitable, plugin_id: str, label: str) -> None:
+async def _safe(
+    coro: Awaitable, plugin_id: str, label: str, timeout: float | None = None
+) -> None:
     try:
-        await coro
+        if timeout is None:
+            await coro
+        else:
+            await asyncio.wait_for(coro, timeout=timeout)
     except asyncio.CancelledError:
         raise
+    except TimeoutError:
+        log.warning(
+            "Handler do plugin %s estourou %ss em %s — cancelado",
+            plugin_id, timeout, label,
+        )
     except Exception:  # noqa: BLE001
         log.exception(
             "Handler do plugin %s falhou em %s — host segue rodando",

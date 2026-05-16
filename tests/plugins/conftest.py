@@ -30,7 +30,7 @@ VALID_MANIFEST: dict[str, Any] = {
     "author": "Italo",
     "description": "Plugin de teste",
     "license": "MIT",
-    "engine": {"claude-workspaces": ">=1.0.0 <2.0.0"},
+    "engine": {"claude-workspaces": ">=2.0.0 <3.0.0"},
     "extensions": {
         "hooks": [
             {"event": "workspace.opened", "handler": "./src/hooks/on_open.py"}
