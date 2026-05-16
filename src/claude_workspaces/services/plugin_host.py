@@ -102,18 +102,16 @@ class _PluginLog:
 
 
 class _PluginConfig:
-    """Lê config do plugin a partir do manifesto (valor default).
-
-    A v2 ainda não tem override do usuário por plugin — quando vier, a
-    fonte muda pra um JSON em `<install_dir>/.state/config.json` mas a
-    API pública não."""
+    """Lê config do plugin: override em `.state/config.json` cai pra default."""
 
     def __init__(self, inst: InstalledPlugin) -> None:
-        self._defaults: dict[str, Any] = {f.key: f.default for f in inst.manifest.config}
+        from ..plugins.config_store import PluginConfigStore
+        defaults: dict[str, Any] = {f.key: f.default for f in inst.manifest.config}
+        self._store = PluginConfigStore(inst.install_dir, defaults)
         self._listeners: list[Callable[[str, Any], None]] = []
 
     async def get(self, key: str) -> Any:
-        return self._defaults.get(key)
+        return self._store.get(key)
 
     def on_change(self, cb: Callable[[str, Any], None]):
         self._listeners.append(cb)

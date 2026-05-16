@@ -16,17 +16,21 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QBrush, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFormLayout,
     QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QToolButton,
     QVBoxLayout,
@@ -41,6 +45,8 @@ from ...plugins import (
     RegistryError,
     ValidationError,
 )
+from ...plugins.config_store import PluginConfigStore
+from ...plugins.manifest import ConfigFieldType
 from ...plugins.manifest_loader import load_manifest
 from ...services.system_open import open_in_file_manager
 from ...settings import Settings
@@ -472,17 +478,40 @@ class PluginsView(QWidget):
                 perm_l.addLayout(row)
         self._detail_layout.addWidget(perm_box)
 
-        # Config exposta
+        # Config editável — auto-save no commit (focus-out pra texto/número,
+        # toggle pra bool, change pra enum). Cada save persiste no store e
+        # aciona reload do plugin no runtime; o listener ctx.config.on_change
+        # registrado pelo plugin recebe o valor novo no próximo load.
         if m.config:
-            cfg_box = QGroupBox("Configurações expostas")
-            cfg_l = QFormLayout(cfg_box)
+            defaults = {f.key: f.default for f in m.config}
+            store = PluginConfigStore(inst.install_dir, defaults)
+            cfg_box = QGroupBox("Configurações")
+            cfg_outer = QVBoxLayout(cfg_box)
+            cfg_outer.setSpacing(8)
+            hint = QLabel(
+                "<span style='color:#9aa4b1;'>"
+                "Mude qualquer valor abaixo e ele salva sozinho. O plugin "
+                "recarrega na hora pra pegar o valor novo."
+                "</span>"
+            )
+            hint.setWordWrap(True)
+            cfg_outer.addWidget(hint)
+            cfg_form = QFormLayout()
+            cfg_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+            cfg_form.setSpacing(8)
             for f in m.config:
-                lab_text = f"<b>{f.label}</b><br><code>{f.key}</code>"
-                value_text = (
-                    f"default: <code>{f.default}</code>  "
-                    f"<span style='color:#888;'>· tipo: {f.type.value}</span>"
-                )
-                cfg_l.addRow(QLabel(lab_text), QLabel(value_text))
+                label_w = self._cfg_label(f)
+                editor, status = self._cfg_editor(f, store, inst)
+                # Cada linha empacota editor + status num container só
+                # pro QFormLayout alinhar bonitinho.
+                holder = QWidget()
+                hl = QVBoxLayout(holder)
+                hl.setContentsMargins(0, 0, 0, 0)
+                hl.setSpacing(2)
+                hl.addWidget(editor)
+                hl.addWidget(status)
+                cfg_form.addRow(label_w, holder)
+            cfg_outer.addLayout(cfg_form)
             self._detail_layout.addWidget(cfg_box)
 
         # Ações finais
@@ -576,6 +605,180 @@ class PluginsView(QWidget):
             footer.setWordWrap(True)
             layout.addWidget(footer)
         return card
+
+    # ----- helpers de config editável ---------------------------------------
+
+    def _cfg_label(self, field) -> QWidget:
+        """Label da linha do form com label + key técnica embaixo."""
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        head = QLabel(f"<b>{field.label}</b>")
+        head.setWordWrap(True)
+        v.addWidget(head)
+        key = QLabel(f"<code style='color:#666; font-size:11px;'>{field.key}</code>")
+        v.addWidget(key)
+        return w
+
+    def _cfg_editor(
+        self, field, store: PluginConfigStore, inst: InstalledPlugin
+    ) -> tuple[QWidget, QLabel]:
+        """Constrói widget pro tipo do field e plugando o auto-save."""
+        current = store.get(field.key)
+        if current is None:
+            current = field.default
+
+        status = QLabel("")
+        status.setStyleSheet("color: #6b7785; font-size: 11px;")
+
+        def mark_saved() -> None:
+            status.setText(
+                "<span style='color:#5ac35a;'>✓ salvo</span>"
+                if store.is_overridden(field.key)
+                else "<span style='color:#888;'>· no padrão</span>"
+            )
+
+        def commit(value) -> None:
+            # Se ficou idêntico ao default, remove o override em vez de
+            # gravar o mesmo valor (evita poluir o JSON e fica óbvio
+            # quando o usuário "tá no padrão").
+            if value == field.default:
+                store.reset(field.key)
+            else:
+                try:
+                    store.set(field.key, value)
+                except Exception:
+                    log.exception("Falha salvando config %s.%s", inst.id, field.key)
+                    status.setText("<span style='color:#d57272;'>erro ao salvar</span>")
+                    return
+            mark_saved()
+            # Reload só se o plugin tá habilitado — recarregar disabled
+            # não tem efeito útil e ainda assusta o usuário.
+            if inst.enabled and self._runtime_reloader is not None:
+                try:
+                    self._runtime_reloader(inst.id, "load")
+                except Exception:
+                    log.exception("Falha recarregando plugin pós-config %s", inst.id)
+
+        editor: QWidget
+        ft = field.type
+        if ft == ConfigFieldType.BOOLEAN:
+            cb = QCheckBox()
+            cb.setChecked(bool(current))
+            cb.toggled.connect(commit)
+            editor = cb
+        elif ft == ConfigFieldType.INTEGER:
+            sp = QSpinBox()
+            # Spin precisa de bounds explícitos; manifesto pode dar min/max,
+            # senão usamos uma janela ampla mas não absurda.
+            sp.setMinimum(field.min if field.min is not None else -1_000_000)
+            sp.setMaximum(field.max if field.max is not None else 1_000_000)
+            try:
+                sp.setValue(int(current))
+            except (TypeError, ValueError):
+                sp.setValue(int(field.default))
+            sp.editingFinished.connect(lambda s=sp: commit(s.value()))
+            editor = sp
+        elif ft == ConfigFieldType.ENUM:
+            cb_e = QComboBox()
+            for opt in field.options:
+                cb_e.addItem(opt)
+            if current in field.options:
+                cb_e.setCurrentText(str(current))
+            cb_e.currentTextChanged.connect(commit)
+            editor = cb_e
+        else:  # STRING
+            if field.multiline:
+                te = QPlainTextEdit()
+                te.setPlainText("" if current is None else str(current))
+                te.setFixedHeight(80)
+                # editingFinished não existe em QPlainTextEdit — usamos
+                # focusOut via eventFilter? Pra manter simples, salvamos
+                # no textChanged com um pequeno debounce via QTimer.
+                from PySide6.QtCore import QTimer
+                timer = QTimer(te)
+                timer.setSingleShot(True)
+                timer.setInterval(600)
+                timer.timeout.connect(lambda t=te: commit(t.toPlainText()))
+                te.textChanged.connect(timer.start)
+                editor = te
+            else:
+                le = QLineEdit()
+                le.setText("" if current is None else str(current))
+                le.editingFinished.connect(lambda w=le: commit(w.text()))
+                editor = le
+
+        # Reset-pro-default só faz sentido se o valor atual difere do default.
+        # Embrulhamos editor + botão num linha pra esquerda/direita.
+        row = QWidget()
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(6)
+        rl.addWidget(editor, stretch=1)
+        reset_btn = QToolButton()
+        reset_btn.setText("↺")
+        reset_btn.setToolTip("Voltar pro valor padrão do plugin")
+        reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        reset_btn.setStyleSheet(
+            "QToolButton { color:#8fb4e0; background:transparent; "
+            "border:none; padding:2px 6px; font-size:14px; }"
+            "QToolButton:hover { color:#cfe2ff; }"
+            "QToolButton:disabled { color:#444; }"
+        )
+        reset_btn.setEnabled(store.is_overridden(field.key))
+
+        def do_reset() -> None:
+            # Reaplica default no widget; commit() ainda roda e tira o override.
+            d = field.default
+            if isinstance(editor, QCheckBox):
+                editor.setChecked(bool(d))
+            elif isinstance(editor, QSpinBox):
+                editor.setValue(int(d))
+            elif isinstance(editor, QComboBox):
+                editor.setCurrentText(str(d))
+            elif isinstance(editor, QPlainTextEdit):
+                editor.setPlainText("" if d is None else str(d))
+            elif isinstance(editor, QLineEdit):
+                editor.setText("" if d is None else str(d))
+            commit(d)
+            reset_btn.setEnabled(False)
+
+        reset_btn.clicked.connect(do_reset)
+
+        # Mantém o estado do reset sincronizado com saves subsequentes.
+        original_commit = commit
+
+        def commit_then_refresh(value) -> None:
+            original_commit(value)
+            reset_btn.setEnabled(store.is_overridden(field.key))
+
+        # Re-conecta os signals pro wrapper (substituindo o anterior).
+        try:
+            if isinstance(editor, QCheckBox):
+                editor.toggled.disconnect()
+                editor.toggled.connect(commit_then_refresh)
+            elif isinstance(editor, QSpinBox):
+                editor.editingFinished.disconnect()
+                editor.editingFinished.connect(lambda s=editor: commit_then_refresh(s.value()))
+            elif isinstance(editor, QComboBox):
+                editor.currentTextChanged.disconnect()
+                editor.currentTextChanged.connect(commit_then_refresh)
+            elif isinstance(editor, QPlainTextEdit):
+                # Mantém o timer; só troca o slot
+                pass
+            elif isinstance(editor, QLineEdit):
+                editor.editingFinished.disconnect()
+                editor.editingFinished.connect(
+                    lambda w=editor: commit_then_refresh(w.text())
+                )
+        except (RuntimeError, TypeError):
+            # disconnect() pode falhar em casos raros; safe no-op.
+            pass
+
+        rl.addWidget(reset_btn)
+        mark_saved()
+        return row, status
 
     def _ext_line(self, *, icon: str, headline: str, sub: str, tech: str) -> QFrame:
         """Renderiza uma linha de extensão: ícone grande + headline + sub + tech."""
