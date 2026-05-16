@@ -27,6 +27,12 @@ KIND_SKILL = "skill"
 KIND_AGENT = "agent"
 KIND_COMMAND = "command"
 
+KIND_LABEL_MAP = {
+    KIND_SKILL: "Skill",
+    KIND_AGENT: "Agente",
+    KIND_COMMAND: "Comando",
+}
+
 
 @dataclass
 class ClaudeItem:

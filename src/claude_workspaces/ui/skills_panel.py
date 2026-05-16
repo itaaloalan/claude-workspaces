@@ -1,3 +1,5 @@
+import logging
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
@@ -20,13 +22,13 @@ from ..skills_discovery import (
     ClaudeItem,
     list_all_items,
 )
-from ..skills_telemetry import SkillUsage, aggregate_skill_usage
+from ..skills_discovery import KIND_LABEL_MAP as KIND_LABEL
+from ..skills_lint import LintIssue, lint_all, summarize_severity
+from ..skills_telemetry import SkillUsage, aggregate_usage
+from .skill_detail_dialog import SkillDetailDialog
 
-KIND_LABEL = {
-    KIND_SKILL: "Skill",
-    KIND_AGENT: "Agente",
-    KIND_COMMAND: "Comando",
-}
+log = logging.getLogger(__name__)
+
 KIND_COLOR = {
     KIND_SKILL: "#6aa9e0",
     KIND_AGENT: "#b08cd6",
@@ -58,7 +60,10 @@ class SkillsPanel(QWidget):
         super().__init__(parent)
         self.workspace: Workspace | None = None
         self._all: list[ClaudeItem] = []
-        self._usage: dict[str, SkillUsage] = {}
+        self._usage: dict[tuple[str, str], SkillUsage] = {}
+        self._lint: dict = {}
+        self._show_zombies_only: bool = False
+        self._show_lint_only: bool = False
         self._kind_filter = self.KIND_FILTER_ALL
         self._source_filter = self.SOURCE_FILTER_ALL
 
@@ -94,6 +99,26 @@ class SkillsPanel(QWidget):
             self._source_chips,
         ))
 
+        # Toggles "saúde": zumbis (sem uso) e issues de lint
+        toggles_row = QHBoxLayout()
+        toggles_row.setSpacing(6)
+        self._zombie_toggle = QPushButton("👻 Zumbis")
+        self._zombie_toggle.setCheckable(True)
+        self._zombie_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._zombie_toggle.setStyleSheet(_CHIP_CSS)
+        self._zombie_toggle.setToolTip("Só skills/agentes nunca usados (ou usados há +30d)")
+        self._zombie_toggle.toggled.connect(self._set_zombies_only)
+        toggles_row.addWidget(self._zombie_toggle)
+        self._lint_toggle = QPushButton("⚠ Com lint")
+        self._lint_toggle.setCheckable(True)
+        self._lint_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._lint_toggle.setStyleSheet(_CHIP_CSS)
+        self._lint_toggle.setToolTip("Só itens com issues de frontmatter/body")
+        self._lint_toggle.toggled.connect(self._set_lint_only)
+        toggles_row.addWidget(self._lint_toggle)
+        toggles_row.addStretch()
+        outer.addLayout(toggles_row)
+
         # Search
         self._search = QLineEdit()
         self._search.setPlaceholderText("Filtrar por texto…")
@@ -121,6 +146,7 @@ class SkillsPanel(QWidget):
         )
         self._list.setWordWrap(True)
         self._list.itemClicked.connect(self._on_click)
+        self._list.itemDoubleClicked.connect(self._on_double_click)
         outer.addWidget(self._list, stretch=1)
 
         footer = QHBoxLayout()
@@ -175,6 +201,14 @@ class SkillsPanel(QWidget):
         self._source_filter = value
         self._render()
 
+    def _set_zombies_only(self, checked: bool) -> None:
+        self._show_zombies_only = checked
+        self._render()
+
+    def _set_lint_only(self, checked: bool) -> None:
+        self._show_lint_only = checked
+        self._render()
+
     def set_workspace(self, workspace: Workspace | None) -> None:
         self.workspace = workspace
         self.refresh()
@@ -183,10 +217,19 @@ class SkillsPanel(QWidget):
         folders = self.workspace.folders if self.workspace else []
         self._all = list_all_items(folders)
         try:
-            self._usage = aggregate_skill_usage()
+            self._usage = aggregate_usage()
         except Exception:
+            log.exception("Falha agregando uso de skills/agents")
             self._usage = {}
+        try:
+            self._lint = lint_all(self._all)
+        except Exception:
+            log.exception("Falha rodando lint do catálogo")
+            self._lint = {}
         self._render()
+
+    def _usage_for(self, item: ClaudeItem) -> SkillUsage | None:
+        return self._usage.get((item.kind, item.name))
 
     def _matches_source(self, item: ClaudeItem) -> bool:
         if self._source_filter == self.SOURCE_FILTER_ALL:
@@ -195,17 +238,26 @@ class SkillsPanel(QWidget):
             return item.source.startswith("plugin:")
         return item.source == self._source_filter
 
+    def _is_zombie(self, item: ClaudeItem) -> bool:
+        if item.kind not in (KIND_SKILL, KIND_AGENT):
+            return False
+        u = self._usage_for(item)
+        return u is None or u.count == 0
+
     def _render(self) -> None:
+        from PySide6.QtGui import QBrush, QColor
+
         needle = self._search.text().strip().lower()
-        # Pra ordenar Skills por uso (decrescente) quando filtro de tipo
-        # mostra só skills ou todos — quem foi usado fica em cima.
-        items = list(self._all)
-        if self._kind_filter == self.KIND_FILTER_ALL or self._kind_filter == KIND_SKILL:
-            items.sort(
-                key=lambda i: -(self._usage.get(i.name).count if self._usage.get(i.name) else 0)
-                if i.kind == KIND_SKILL
-                else 0
-            )
+        # Sort: itens com uso primeiro (count desc), zumbis depois,
+        # mas issues de lint puxam pra cima dentro do bucket.
+        def sort_key(i: ClaudeItem) -> tuple[int, int, str]:
+            u = self._usage_for(i)
+            count = u.count if u else 0
+            sev = summarize_severity(self._lint.get(i.path, []))
+            sev_rank = {"error": -3, "warning": -2, "info": -1, "": 0}[sev]
+            return (-count, sev_rank, i.name.lower())
+
+        items = sorted(self._all, key=sort_key)
         self._list.clear()
         shown = 0
         for item in items:
@@ -216,15 +268,30 @@ class SkillsPanel(QWidget):
             hay = f"{item.name}\n{item.description}\n{item.source}".lower()
             if needle and needle not in hay:
                 continue
-            usage = self._usage.get(item.name) if item.kind == KIND_SKILL else None
+            if self._show_zombies_only and not self._is_zombie(item):
+                continue
+            item_issues: list[LintIssue] = self._lint.get(item.path, [])
+            if self._show_lint_only and not item_issues:
+                continue
+            usage = self._usage_for(item)
+            sev = summarize_severity(item_issues)
+            lint_prefix = ""
+            if sev == "error":
+                lint_prefix = "⛔ "
+            elif sev == "warning":
+                lint_prefix = "⚠ "
+            elif sev == "info":
+                lint_prefix = "ℹ "
             stats_suffix = ""
             if usage and usage.count > 0:
                 stats_suffix = f"  ·  {usage.count} uso(s)"
                 ago = usage.last_used_label()
                 if ago:
                     stats_suffix += f"  ·  {ago}"
+            elif item.kind in (KIND_SKILL, KIND_AGENT):
+                stats_suffix = "  ·  👻 zumbi"
             label = (
-                f"[{KIND_LABEL[item.kind]}]  {item.invocation}"
+                f"{lint_prefix}[{KIND_LABEL[item.kind]}]  {item.invocation}"
                 f"  ·  {item.source_label}{stats_suffix}"
             )
             if item.description:
@@ -234,7 +301,15 @@ class SkillsPanel(QWidget):
                 label += f"\n{desc}"
             li = QListWidgetItem(label)
             li.setData(Qt.ItemDataRole.UserRole, item)
-            tooltip = f"{item.path}\n\nClique pra copiar  {item.invocation}"
+            tooltip_parts = [
+                str(item.path),
+                "Clique: abrir detalhe · Duplo clique: copiar invocação",
+            ]
+            if item_issues:
+                tooltip_parts.append("")
+                tooltip_parts.append(f"Lint ({len(item_issues)} issue(s)):")
+                for i in item_issues:
+                    tooltip_parts.append(f"  {i.badge()} {i.code} · {i.message}")
             if usage and usage.count > 0:
                 ws_breakdown = "\n".join(
                     f"  · {cwd}: {n}x"
@@ -242,13 +317,13 @@ class SkillsPanel(QWidget):
                         usage.by_workspace.items(), key=lambda kv: -kv[1]
                     )[:5]
                 )
-                tooltip += (
-                    f"\n\nUsos: {usage.count}\n"
+                tooltip_parts.append("")
+                tooltip_parts.append(
+                    f"Usos: {usage.count}\n"
                     f"Último: {usage.last_used_label()}\n"
                     f"Por workspace:\n{ws_breakdown}"
                 )
-            li.setToolTip(tooltip)
-            from PySide6.QtGui import QBrush, QColor
+            li.setToolTip("\n".join(tooltip_parts))
             li.setForeground(QBrush(QColor(KIND_COLOR.get(item.kind, "#c8c8c8"))))
             self._list.addItem(li)
             shown += 1
@@ -259,6 +334,17 @@ class SkillsPanel(QWidget):
             self._counter.setText(f"{shown}/{total}")
 
     def _on_click(self, item: QListWidgetItem) -> None:
+        """Single click → abrir dialog de detalhe."""
+        ci = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(ci, ClaudeItem):
+            return
+        catalog_names = {i.name for i in self._all}
+        usage = self._usage_for(ci)
+        dlg = SkillDetailDialog(ci, usage, catalog_names, parent=self)
+        dlg.show()
+
+    def _on_double_click(self, item: QListWidgetItem) -> None:
+        """Duplo clique → copiar invocação (atalho rápido)."""
         ci = item.data(Qt.ItemDataRole.UserRole)
         if not isinstance(ci, ClaudeItem):
             return
