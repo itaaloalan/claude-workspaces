@@ -1,5 +1,6 @@
 from claude_workspaces.claude_activity import (
     _is_idle_marker,
+    has_idle_marker,
     parse_status,
     strip_ansi,
 )
@@ -113,3 +114,43 @@ def test_only_box_drawing_filtered():
     buf = "──────────\n│         │\nReal text\n".encode()
     a = parse_status(buf, last_output_age=0.5)
     assert a.status == "Real text"
+
+
+# ---------- has_idle_marker ----------
+
+
+def test_has_idle_marker_vazio():
+    assert has_idle_marker(b"") is False
+
+
+def test_has_idle_marker_detecta_auto_mode():
+    buf = (
+        b"Welcome to Claude Code\n"
+        b"Tips for getting started\n"
+        b"\n"
+        b"auto mode on (shift+tab to cycle)\n"
+    )
+    assert has_idle_marker(buf) is True
+
+
+def test_has_idle_marker_detecta_shortcuts():
+    buf = b"some output\n? for shortcuts\n"
+    assert has_idle_marker(buf) is True
+
+
+def test_has_idle_marker_falso_quando_working():
+    buf = b"auto mode on\n* Stewing... (5s, 100 tokens, esc to interrupt)\n"
+    # Working marker depois do idle marker → não está pronto
+    assert has_idle_marker(buf) is False
+
+
+def test_has_idle_marker_falso_sem_marker():
+    buf = b"$ echo hello\nhello\n"
+    assert has_idle_marker(buf) is False
+
+
+def test_has_idle_marker_falso_quando_idle_muito_antigo():
+    """Idle marker muito longe do fim do buffer não conta — Claude
+    pode ter trabalhado de novo desde então."""
+    buf = b"auto mode on\n" + b"linha\n" * 10
+    assert has_idle_marker(buf) is False
