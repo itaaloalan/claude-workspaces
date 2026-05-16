@@ -33,3 +33,16 @@ def open_in_editor(path: str, editor_command: str = "code") -> None:
         raise LaunchError(
             f"editor '{editor_command}' não encontrado no PATH"
         ) from e
+
+
+def open_url(url: str) -> None:
+    """Abre URL no navegador padrão via xdg-open. Levanta LaunchError se
+    o binário não estiver disponível."""
+    if not url:
+        return
+    try:
+        subprocess.Popen(["xdg-open", url])
+    except FileNotFoundError as e:
+        raise LaunchError(
+            "xdg-open não está instalado (pacote xdg-utils)"
+        ) from e

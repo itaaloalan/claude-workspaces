@@ -4,6 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QBrush, QClipboard, QColor, QFont, QGuiApplication
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -178,11 +179,13 @@ class GitPanel(QWidget):
         layout.addWidget(_btn("↻", "Atualizar", self.refresh))
         layout.addWidget(_btn("⇡⇣", "Fetch (todos os repos)", self._do_fetch_all))
         layout.addWidget(_btn("⤓", "Pull ff-only (todos os repos)", self._do_pull_all))
-        layout.addWidget(_btn(
+        # PR button guardado em self pra poder desabilitar enquanto gh roda
+        self._pr_btn = _btn(
             "⮏ PR",
             "Abrir Pull Request no GitHub (branch atual → base)",
             self._do_open_pr,
-        ))
+        )
+        layout.addWidget(self._pr_btn)
         self._toggle_diff_btn = _btn("👁", "Mostrar / esconder diff", self._toggle_diff)
         layout.addWidget(self._toggle_diff_btn)
 
@@ -883,12 +886,34 @@ class GitPanel(QWidget):
                 return folder
         return None
 
+    def _set_pr_busy(self, busy: bool, label: str = "") -> None:
+        """Liga/desliga estado de busy do botão PR: troca label, desabilita,
+        WaitCursor global e força um repaint pra usuário ver o feedback
+        durante a operação síncrona."""
+        if busy:
+            self._pr_btn.setEnabled(False)
+            self._pr_btn.setText(label or "⏳ PR")
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        else:
+            QApplication.restoreOverrideCursor()
+            self._pr_btn.setEnabled(True)
+            self._pr_btn.setText("⮏ PR")
+        # Força paint imediato pra o estado do botão refletir antes da
+        # próxima chamada bloqueante (push, gh pr view, gh pr create)
+        QApplication.processEvents()
+
     def _do_open_pr(self) -> None:
         # Imports locais — pesadinho (subprocess via gh) e não usado no
         # caminho comum; mantém startup do painel leve
-        from ..pr_actions import create_pr_github, gh_available, push_with_upstream
+        from ..pr_actions import (
+            create_pr_github,
+            find_existing_pr,
+            gh_available,
+            push_with_upstream,
+        )
         from ..pr_draft import build_draft_for_folder
         from ..pr_provider import branch_state, detect_github
+        from ..services.system_open import open_url
         from .open_pr_dialog import OpenPullRequestDialog
 
         folder = self._pick_pr_folder()
@@ -953,6 +978,28 @@ class GitPanel(QWidget):
             )
             return
 
+        # Checa PR existente ANTES de oferecer push/dialog — se já tem,
+        # usuário só quer abrir a URL. Evita duplicado e roundtrip
+        try:
+            self._set_pr_busy(True, "🔍 PR")
+            existing = find_existing_pr(folder, state.current)
+        finally:
+            self._set_pr_busy(False)
+        if existing and existing.state == "OPEN":
+            reply = QMessageBox.question(
+                self,
+                "PR já existe",
+                f"Já existe PR aberto pra <b>{state.current}</b>:<br>"
+                f"#{existing.number} — {existing.url}<br><br>"
+                "Abrir no navegador?",
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                try:
+                    open_url(existing.url)
+                except Exception as e:
+                    log.warning("Falha abrindo URL: %s", e)
+            return
+
         # Garante upstream — gh pr create exige a branch publicada
         if not state.has_upstream:
             reply = QMessageBox.question(
@@ -963,7 +1010,11 @@ class GitPanel(QWidget):
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return
-            ok, out = push_with_upstream(folder, state.current)
+            try:
+                self._set_pr_busy(True, "⬆ push")
+                ok, out = push_with_upstream(folder, state.current)
+            finally:
+                self._set_pr_busy(False)
             if not ok:
                 QMessageBox.warning(
                     self, "Push falhou", out[:2000] or "(sem output)"
@@ -987,7 +1038,11 @@ class GitPanel(QWidget):
             QMessageBox.warning(self, "Título vazio", "Título do PR é obrigatório.")
             return
 
-        result = create_pr_github(folder, title, body, base, draft=is_draft)
+        try:
+            self._set_pr_busy(True, "⏳ PR")
+            result = create_pr_github(folder, title, body, base, draft=is_draft)
+        finally:
+            self._set_pr_busy(False)
         if not result.ok:
             QMessageBox.warning(self, "gh pr create falhou", result.error[:2000])
             return
@@ -995,13 +1050,20 @@ class GitPanel(QWidget):
         # Copia URL pra clipboard pra usuário colar no Slack/etc
         if result.url:
             QGuiApplication.clipboard().setText(result.url, QClipboard.Mode.Clipboard)
-        QMessageBox.information(
+
+        # Pergunta se quer abrir no navegador agora
+        reply = QMessageBox.question(
             self,
             "PR aberto",
             f"<b>{title}</b><br><br>"
-            f"<a href='{result.url}'>{result.url}</a><br><br>"
-            "URL copiada pro clipboard.",
+            f"{result.url}<br><br>"
+            "URL copiada pro clipboard. Abrir no navegador?",
         )
+        if reply == QMessageBox.StandardButton.Yes and result.url:
+            try:
+                open_url(result.url)
+            except Exception as e:
+                log.warning("Falha abrindo URL: %s", e)
 
 
 def open_path_in_editor(path: str, editor_command: str = "code") -> None:
