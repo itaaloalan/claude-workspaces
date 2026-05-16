@@ -350,6 +350,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
             since = datetime.now(UTC) - timedelta(days=30)
             all_usage = aggregate_usage_by_workspace(since=since)
         except Exception:
+            log.debug("usage telemetry falhou no workspace %s",
+                      getattr(self.workspace, "id", "?"), exc_info=True)
             self._usage_label.setVisible(False)
             return
         total_in = 0

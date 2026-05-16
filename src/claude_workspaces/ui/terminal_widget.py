@@ -187,6 +187,7 @@ class TerminalWidget(QWidget):
             from ..claude_sessions import list_sessions
             sessions = list_sessions(self._claude_cwd, limit=8)
         except Exception:
+            log.debug("session resolution falhou em %s", self._claude_cwd, exc_info=True)
             return
         if not sessions:
             return

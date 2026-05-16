@@ -207,6 +207,7 @@ class LaunchClaudeDialog(QDialog):
             p = worktree_path_for(folders[0], branch)
             self.path_preview.setText(str(p))
         except Exception:
+            log.debug("path preview falhou", exc_info=True)
             self.path_preview.setText("(path inválido)")
 
     # ---------- API pública ----------

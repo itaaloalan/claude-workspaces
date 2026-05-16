@@ -41,10 +41,13 @@ class PtySession(QObject):
             raise
 
         if pid == 0:
+            # No child do fork: NÃO podemos usar logging normal (handlers
+            # do parent não funcionam no child). Errors aqui escrevem
+            # direto em stderr e saem com 127 (convenção de exec failure).
             try:
                 os.chdir(cwd)
-            except OSError:
-                pass
+            except OSError as e:
+                os.write(2, f"pty child: chdir({cwd}) falhou: {e}\n".encode())
             new_env = os.environ.copy()
             if env:
                 new_env.update(env)
@@ -52,7 +55,8 @@ class PtySession(QObject):
             new_env.setdefault("COLORTERM", "truecolor")
             try:
                 os.execvpe(argv[0], argv, new_env)
-            except Exception:
+            except Exception as e:
+                os.write(2, f"pty child: exec({argv[0]}) falhou: {e}\n".encode())
                 os._exit(127)
 
         self.pid = pid
