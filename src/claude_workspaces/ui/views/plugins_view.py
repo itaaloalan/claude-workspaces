@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -78,9 +80,69 @@ class PluginsView(QWidget):
         toolbar.addWidget(refresh_btn)
         outer.addLayout(toolbar)
 
+        # Explicação amigável (pra quem nunca mexeu com plugin)
+        explain_card = QFrame()
+        explain_card.setStyleSheet(
+            "QFrame { background: #1d2733; border: 1px solid #2c3e54; "
+            "border-radius: 8px; }"
+        )
+        ex_l = QVBoxLayout(explain_card)
+        ex_l.setContentsMargins(14, 12, 14, 12)
+        ex_l.setSpacing(6)
+
+        ex_title_row = QHBoxLayout()
+        ex_title_row.setSpacing(8)
+        ex_title = QLabel(
+            "<b style='color:#cfe2ff;'>💡 Primeira vez aqui? "
+            "O que é um plugin?</b>"
+        )
+        ex_title_row.addWidget(ex_title)
+        ex_title_row.addStretch()
+        self._explain_toggle = QToolButton()
+        self._explain_toggle.setText("ocultar")
+        self._explain_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._explain_toggle.setStyleSheet(
+            "QToolButton { color: #8fb4e0; background: transparent; "
+            "border: none; padding: 2px 6px; }"
+            "QToolButton:hover { color: #cfe2ff; }"
+        )
+        self._explain_toggle.clicked.connect(self._toggle_explain)
+        ex_title_row.addWidget(self._explain_toggle)
+        ex_l.addLayout(ex_title_row)
+
+        self._explain_body = QLabel(
+            "<div style='color:#d4dae3; line-height:150%;'>"
+            "Pense num plugin como um <b>mini-app</b> que você encaixa aqui dentro "
+            "pra ganhar uma habilidade nova — sem precisar programar nada.<br><br>"
+            "Cada plugin pode, por exemplo:"
+            "<ul style='margin-top:2px;'>"
+            "<li><b>Adicionar um comando</b> que você dispara pela paleta "
+            "(<code>Ctrl+P</code>) — tipo \"limpar cache\" ou \"abrir relatório\".</li>"
+            "<li><b>Reagir a eventos</b> do app (um <i>hook</i>) — por exemplo, "
+            "rodar algo toda vez que uma sessão começa.</li>"
+            "<li><b>Mostrar um painel próprio</b> na interface, com botões e "
+            "informações daquele plugin.</li>"
+            "</ul>"
+            "<b>Como usar na prática:</b><br>"
+            "1. Clique em <b>📂 Instalar de pasta…</b> e escolha a pasta do "
+            "plugin (a que tem o arquivo <code>plugin.yaml</code> dentro).<br>"
+            "2. Ele aparece na lista abaixo. Use o switch <b>Habilitado</b> "
+            "pra ligar ou desligar quando quiser.<br>"
+            "3. Cada plugin pede só as <b>permissões</b> que precisa "
+            "(ler pastas, acessar a internet, etc.) — você vê tudo antes."
+            "</div>"
+        )
+        self._explain_body.setWordWrap(True)
+        self._explain_body.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction
+        )
+        ex_l.addWidget(self._explain_body)
+        outer.addWidget(explain_card)
+
         hint = QLabel(
-            "Plugins estendem o app via hooks/commands/panels. Instalados em "
-            f"<code>{self.registry.root}</code>. Veja a spec em "
+            "<span style='color:#8a8a8a;'>Detalhes técnicos:</span> "
+            "plugins estendem o app via hooks/commands/panels. Instalados em "
+            f"<code>{self.registry.root}</code>. Spec completa em "
             "<code>docs/PLUGIN_SPEC.md</code>."
         )
         hint.setWordWrap(True)
@@ -164,6 +226,11 @@ class PluginsView(QWidget):
             self._list.setCurrentRow(0)
         else:
             self._show_empty_detail()
+
+    def _toggle_explain(self) -> None:
+        visible = self._explain_body.isVisible()
+        self._explain_body.setVisible(not visible)
+        self._explain_toggle.setText("mostrar" if visible else "ocultar")
 
     # ----- detalhe ----------------------------------------------------------
 
