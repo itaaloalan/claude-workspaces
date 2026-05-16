@@ -21,6 +21,15 @@ class SessionCard(QFrame):
     handoff_requested = Signal(ClaudeSession)
     export_requested = Signal(ClaudeSession)
 
+    _BTN_GHOST = (
+        "QPushButton {"
+        "  background: transparent; color: #c8c8c8;"
+        "  border: 1px solid #3a3a3a; border-radius: 3px;"
+        "  padding: 1px 6px; font-size: 11px;"
+        "}"
+        "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
+    )
+
     def __init__(
         self,
         session: ClaudeSession,
@@ -35,26 +44,25 @@ class SessionCard(QFrame):
             "QFrame#SessionCard {"
             "  background: #1f1f1f;"
             "  border: 1px solid #2c2c2c;"
-            "  border-radius: 8px;"
+            "  border-radius: 6px;"
             "}"
             "QFrame#SessionCard:hover { border-color: #3d6ea8; }"
         )
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 10, 12, 10)
-        outer.setSpacing(4)
+        outer.setContentsMargins(8, 5, 8, 5)
+        outer.setSpacing(2)
 
         header = QHBoxLayout()
-        header.setSpacing(8)
+        header.setSpacing(6)
 
-        title_text = self._title_text()
-        title = QLabel(title_text)
-        title.setStyleSheet("font-weight: 600; color: #e6e6e6;")
+        title = QLabel(self._title_text())
+        title.setStyleSheet("font-weight: 600; color: #e6e6e6; font-size: 12px;")
         title.setWordWrap(True)
         header.addWidget(title, stretch=1)
 
         when = QLabel(self._when_text())
-        when.setStyleSheet("color: #a8a8a8; font-size: 11px;")
+        when.setStyleSheet("color: #8a8a8a; font-size: 10px;")
         when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         header.addWidget(when)
 
@@ -62,41 +70,31 @@ class SessionCard(QFrame):
 
         if show_origin:
             origin = QLabel(Path(session.origin_cwd).name)
-            origin.setStyleSheet("color: #6aa9e0; font-size: 11px;")
+            origin.setStyleSheet("color: #6aa9e0; font-size: 10px;")
             outer.addWidget(origin)
 
-        if session.preview:
-            preview = QLabel(self._preview_text())
-            preview.setStyleSheet("color: #c8c8c8; font-size: 12px;")
-            preview.setWordWrap(True)
-            outer.addWidget(preview)
-
         actions = QHBoxLayout()
+        actions.setSpacing(4)
         actions.addStretch()
 
-        delete_btn = QPushButton("Remover")
+        delete_btn = QPushButton("✕")
         delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         delete_btn.setToolTip("Excluir o arquivo desta sessão (.jsonl)")
         delete_btn.setStyleSheet(
             "QPushButton {"
-            "  background: transparent; color: #a8a8a8;"
-            "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
+            "  background: transparent; color: #888;"
+            "  border: 1px solid #3a3a3a; border-radius: 3px;"
+            "  padding: 1px 6px; font-size: 11px;"
             "}"
             "QPushButton:hover { color: #e57373; border-color: #a23a3a; }"
         )
         delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.session))
         actions.addWidget(delete_btn)
 
-        export_btn = QPushButton("📝 .md")
+        export_btn = QPushButton("📝")
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         export_btn.setToolTip("Exportar conversa como markdown")
-        export_btn.setStyleSheet(
-            "QPushButton {"
-            "  background: transparent; color: #c8c8c8;"
-            "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
-            "}"
-            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
-        )
+        export_btn.setStyleSheet(self._BTN_GHOST)
         export_btn.clicked.connect(lambda: self.export_requested.emit(self.session))
         actions.addWidget(export_btn)
 
@@ -105,13 +103,7 @@ class SessionCard(QFrame):
         handoff_btn.setToolTip(
             "Abrir novo Claude com briefing dessa sessão como primeira mensagem"
         )
-        handoff_btn.setStyleSheet(
-            "QPushButton {"
-            "  background: transparent; color: #c8c8c8;"
-            "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
-            "}"
-            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
-        )
+        handoff_btn.setStyleSheet(self._BTN_GHOST)
         handoff_btn.clicked.connect(lambda: self.handoff_requested.emit(self.session))
         actions.addWidget(handoff_btn)
 
@@ -120,7 +112,8 @@ class SessionCard(QFrame):
         resume_btn.setStyleSheet(
             "QPushButton {"
             "  background: #2d4a6e; color: #e6e6e6;"
-            "  border: 0; border-radius: 4px; padding: 4px 12px;"
+            "  border: 0; border-radius: 3px;"
+            "  padding: 2px 10px; font-size: 11px;"
             "}"
             "QPushButton:hover { background: #3d6ea8; }"
         )
@@ -133,13 +126,10 @@ class SessionCard(QFrame):
     def _title_text(self) -> str:
         if self.session.preview:
             text = self.session.preview.replace("\n", " ").strip()
-            if len(text) > 60:
-                return text[:59] + "…"
+            if len(text) > 70:
+                return text[:69] + "…"
             return text
         return "(sem prompt registrado)"
-
-    def _preview_text(self) -> str:
-        return ""  # já tá no título; espaço pra extensão futura
 
     def _when_text(self) -> str:
         when = datetime.fromtimestamp(self.session.mtime)
