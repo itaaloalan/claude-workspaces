@@ -8,6 +8,12 @@ from PySide6.QtWidgets import (
 )
 
 SHORTCUTS = [
+    ("Views", [
+        ("Ctrl+Shift+1", "🗂  Workspaces"),
+        ("Ctrl+Shift+2", "📚  Catálogo (skills/agents/commands)"),
+        ("Ctrl+Shift+3", "🪝  Hooks"),
+        ("Ctrl+Shift+4", "🔌  MCP servers"),
+    ]),
     ("Workspaces", [
         ("Ctrl+N", "Criar novo workspace"),
         ("Ctrl+1 … Ctrl+9", "Pular pro N-ésimo workspace visível"),

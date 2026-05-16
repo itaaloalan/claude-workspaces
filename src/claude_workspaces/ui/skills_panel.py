@@ -1,6 +1,6 @@
 import logging
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -56,10 +56,18 @@ class SkillsPanel(QWidget):
     KIND_FILTER_ALL = "all"
     SOURCE_FILTER_ALL = "all"
 
-    def __init__(self, parent: QWidget | None = None, settings=None) -> None:
+    item_selected = Signal(object)  # emite ClaudeItem ao clicar
+
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        settings=None,
+        auto_open_detail: bool = True,
+    ) -> None:
         super().__init__(parent)
         self.workspace: Workspace | None = None
         self._settings = settings
+        self._auto_open_detail = auto_open_detail
         self._all: list[ClaudeItem] = []
         self._usage: dict[tuple[str, str], SkillUsage] = {}
         self._lint: dict = {}
@@ -335,9 +343,12 @@ class SkillsPanel(QWidget):
             self._counter.setText(f"{shown}/{total}")
 
     def _on_click(self, item: QListWidgetItem) -> None:
-        """Single click → abrir dialog de detalhe."""
+        """Single click → emite signal + (opcional) abre dialog."""
         ci = item.data(Qt.ItemDataRole.UserRole)
         if not isinstance(ci, ClaudeItem):
+            return
+        self.item_selected.emit(ci)
+        if not self._auto_open_detail:
             return
         catalog_names = {i.name for i in self._all}
         usage = self._usage_for(ci)
@@ -354,6 +365,22 @@ class SkillsPanel(QWidget):
         )
         dlg.finished.connect(lambda _: self.refresh())
         dlg.show()
+
+    def selected_context(self) -> tuple[set[str], str | None]:
+        """Helper pro CatalogView: catalog_names + workspace_folder."""
+        catalog_names = {i.name for i in self._all}
+        ws_folder = (
+            self.workspace.folders[0]
+            if self.workspace and self.workspace.folders
+            else None
+        )
+        return catalog_names, ws_folder
+
+    def all_items(self) -> list[ClaudeItem]:
+        return list(self._all)
+
+    def lint_for(self, item: ClaudeItem):
+        return self._lint.get(item.path, [])
 
     def _on_double_click(self, item: QListWidgetItem) -> None:
         """Duplo clique → copiar invocação (atalho rápido)."""

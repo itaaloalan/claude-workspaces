@@ -27,6 +27,14 @@ from ..launchers import (
 )
 from ..models import Workspace
 from ..settings import Settings
+from .activity_bar import (
+    VIEW_CATALOG,
+    VIEW_HOOKS,
+    VIEW_MCP,
+    VIEW_SETTINGS,
+    VIEW_WORKSPACES,
+    ActivityBar,
+)
 from .coordinators import (
     DockCoordinator,
     LaunchCoordinator,
@@ -46,6 +54,7 @@ from .terminal_child_widget import (
 )
 from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
+from .views import CatalogView, HooksView, McpView
 from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
 
@@ -205,7 +214,29 @@ class MainWindow(QMainWindow):
         else:
             self.body_splitter.setSizes([240, 760, 340])
 
-        outer.addWidget(self.body_splitter, stretch=1)
+        # ---------- Top-level shell: activity bar + main stack ----------
+        # body_splitter (workspaces flow) é só uma das views do main_stack.
+        # Catálogo / Hooks / MCP têm seus próprios widgets que ocupam o
+        # mesmo espaço quando ativados pela activity bar.
+        shell_row = QHBoxLayout()
+        shell_row.setContentsMargins(0, 0, 0, 0)
+        shell_row.setSpacing(0)
+
+        self.activity_bar = ActivityBar()
+        self.activity_bar.view_changed.connect(self._on_activity_view_changed)
+        shell_row.addWidget(self.activity_bar)
+
+        self.main_stack = QStackedWidget()
+        self.main_stack.addWidget(self.body_splitter)            # 0: workspaces+settings
+        self.catalog_view = CatalogView(settings=self.settings)
+        self.main_stack.addWidget(self.catalog_view)             # 1: catálogo
+        self.hooks_view = HooksView()
+        self.main_stack.addWidget(self.hooks_view)               # 2: hooks
+        self.mcp_view = McpView()
+        self.main_stack.addWidget(self.mcp_view)                 # 3: mcp
+        shell_row.addWidget(self.main_stack, stretch=1)
+
+        outer.addLayout(shell_row, stretch=1)
         self.setCentralWidget(central)
 
         # Restaurar tamanhos das colunas internas dos details
@@ -283,6 +314,23 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._resume_last_session)
         # Busca em sessões
         QShortcut(QKeySequence("Ctrl+Shift+F"), self, self._show_sessions_search)
+        # Views (activity bar) — Ctrl+Shift+1..4 (Ctrl+1..9 já é workspace jump)
+        QShortcut(
+            QKeySequence("Ctrl+Shift+1"), self,
+            lambda: self.activity_bar.activate(VIEW_WORKSPACES),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Shift+2"), self,
+            lambda: self.activity_bar.activate(VIEW_CATALOG),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Shift+3"), self,
+            lambda: self.activity_bar.activate(VIEW_HOOKS),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Shift+4"), self,
+            lambda: self.activity_bar.activate(VIEW_MCP),
+        )
         # Help
         QShortcut(QKeySequence("Ctrl+/"), self, self._show_shortcuts)
         QShortcut(QKeySequence("F1"), self, self._show_shortcuts)
@@ -420,7 +468,34 @@ class MainWindow(QMainWindow):
         current = self.list_widget.currentItem()
         if current is None:
             return None
-        return current.data(Qt.ItemDataRole.UserRole)
+        data = current.data(0, Qt.ItemDataRole.UserRole)
+        if isinstance(data, Workspace):
+            return data
+        # Pode ser um filho (ClaudeSession) — sobe pro parent
+        parent = current.parent()
+        if parent is not None:
+            data = parent.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, Workspace):
+                return data
+        return None
+
+    def _on_activity_view_changed(self, view_id: str) -> None:
+        """Activity bar trocou a view top-level. Carrega lazy."""
+        if view_id == VIEW_WORKSPACES:
+            self.main_stack.setCurrentWidget(self.body_splitter)
+            self.content_stack.setCurrentIndex(0)
+        elif view_id == VIEW_SETTINGS:
+            self.main_stack.setCurrentWidget(self.body_splitter)
+            self.content_stack.setCurrentWidget(self._settings_scroll)
+        elif view_id == VIEW_CATALOG:
+            self.main_stack.setCurrentWidget(self.catalog_view)
+            self.catalog_view.set_workspace(self._current_workspace())
+        elif view_id == VIEW_HOOKS:
+            self.main_stack.setCurrentWidget(self.hooks_view)
+            self.hooks_view.set_workspace(self._current_workspace())
+        elif view_id == VIEW_MCP:
+            self.main_stack.setCurrentWidget(self.mcp_view)
+            self.mcp_view.set_workspace(self._current_workspace())
 
     def _new_terminal_tab(self) -> None:
         ws = self._current_workspace()
@@ -998,9 +1073,15 @@ class MainWindow(QMainWindow):
         ws_item.setExpanded(True)
 
     def _show_settings(self) -> None:
+        # Garante que estamos na view de workspaces (settings vive no
+        # content_stack interno do body_splitter)
+        self.main_stack.setCurrentWidget(self.body_splitter)
+        self.activity_bar.set_active(VIEW_SETTINGS)
         self.content_stack.setCurrentWidget(self._settings_scroll)
 
     def _show_workspaces(self) -> None:
+        self.main_stack.setCurrentWidget(self.body_splitter)
+        self.activity_bar.set_active(VIEW_WORKSPACES)
         self.content_stack.setCurrentIndex(0)
         current = self.list_widget.currentItem()
         if current:
