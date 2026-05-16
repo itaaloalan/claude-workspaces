@@ -403,11 +403,11 @@ class MainWindow(QMainWindow):
 
     def _quick_open_file(self) -> None:
         from PySide6.QtWidgets import QInputDialog
+
+        from ..services.quick_open import find_files
         ws = self._current_workspace()
         if not ws or not ws.folders:
             return
-        # Versão simples por enquanto — listar todos os arquivos é caro
-        # em repos grandes. Pedimos um padrão e usamos find/grep.
         pattern, ok = QInputDialog.getText(
             self,
             "Quick open",
@@ -415,24 +415,7 @@ class MainWindow(QMainWindow):
         )
         if not ok or not pattern.strip():
             return
-        pattern = pattern.strip()
-        import subprocess
-        matches: list[str] = []
-        for folder in ws.folders:
-            try:
-                r = subprocess.run(
-                    ["git", "ls-files"],
-                    cwd=folder,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if r.returncode == 0:
-                    for line in r.stdout.splitlines():
-                        if pattern.lower() in line.lower():
-                            matches.append(str(Path(folder) / line))
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                continue
+        matches = find_files(ws.folders, pattern.strip())
         if not matches:
             QMessageBox.information(
                 self, "Quick open", f"Nenhum arquivo casa com '{pattern}'"
@@ -440,20 +423,21 @@ class MainWindow(QMainWindow):
             return
         choice, ok = QInputDialog.getItem(
             self, "Quick open", f"{len(matches)} match(es):",
-            matches[:200], 0, False,
+            matches, 0, False,
         )
         if ok and choice:
             self._open_file_in_editor(choice)
 
     def _open_folder_in_file_manager(self) -> None:
+        from ..errors import LaunchError
+        from ..services.system_open import open_in_file_manager
         ws = self._current_workspace()
         if not ws or not ws.folders:
             return
-        import subprocess
         try:
-            subprocess.Popen(["xdg-open", ws.folders[0]])
-        except FileNotFoundError:
-            QMessageBox.warning(self, "xdg-open ausente", "Instale xdg-utils.")
+            open_in_file_manager(ws.folders[0])
+        except LaunchError as e:
+            QMessageBox.warning(self, "Falha ao abrir pasta", str(e))
 
     def _copy_primary_folder(self) -> None:
         from PySide6.QtGui import QGuiApplication

@@ -1,5 +1,4 @@
 import logging
-import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
@@ -661,9 +660,17 @@ class GitPanel(QWidget):
         menu.addAction(
             self._action(
                 "📁 Abrir pasta",
-                lambda: subprocess.Popen(["xdg-open", folder]),
+                lambda f=folder: self._open_folder(f),
             )
         )
+
+    def _open_folder(self, folder: str) -> None:
+        from ..errors import LaunchError
+        from ..services.system_open import open_in_file_manager
+        try:
+            open_in_file_manager(folder)
+        except LaunchError as e:
+            QMessageBox.warning(self, "Falha ao abrir pasta", str(e))
 
     @staticmethod
     def _action(text: str, slot) -> QAction:
@@ -789,12 +796,7 @@ class GitPanel(QWidget):
         errors: list[str] = []
         for folder, files in checked.items():
             # 1. Reset staging area pro estado limpo
-            subprocess.run(
-                ["git", "reset", "HEAD", "--"],
-                cwd=folder,
-                capture_output=True,
-                timeout=30,
-            )
+            unstage_all(folder)
             # 2. Stage só os arquivos marcados
             stage_failed = False
             for rel in files:
@@ -844,8 +846,6 @@ class GitPanel(QWidget):
 
 
 def open_path_in_editor(path: str, editor_command: str = "code") -> None:
-    try:
-        subprocess.Popen([editor_command, path])
-    except FileNotFoundError:
-        log.warning("Editor %r não encontrado", editor_command)
-        raise
+    """Compat: delega pro services.system_open.open_in_editor."""
+    from ..services.system_open import open_in_editor
+    open_in_editor(path, editor_command)
