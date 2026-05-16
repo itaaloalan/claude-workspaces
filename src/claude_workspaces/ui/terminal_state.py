@@ -49,3 +49,12 @@ class TerminalState:
 
     def running_count_of(self, workspace_id: str) -> int:
         return self.running_counts.get(workspace_id, 0)
+
+    def add_to_inbox(self, tab_id: int, info: dict) -> None:
+        self.inbox[tab_id] = info
+
+    def remove_from_inbox(self, tab_id: int) -> bool:
+        return self.inbox.pop(tab_id, None) is not None
+
+    def clear_inbox(self) -> None:
+        self.inbox.clear()
