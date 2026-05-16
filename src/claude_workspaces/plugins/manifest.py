@@ -7,23 +7,23 @@ e o registry sempre vão pelo loader pra garantir invariantes."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ExtensionKind(str, Enum):
+class ExtensionKind(StrEnum):
     COMMAND = "command"
     HOOK = "hook"
     PANEL = "panel"
 
 
-class PanelSlot(str, Enum):
+class PanelSlot(StrEnum):
     SIDEBAR_TOP = "sidebar-top"
     SIDEBAR_BOTTOM = "sidebar-bottom"
     WORKSPACE_TAB = "workspace-tab"
 
 
-class ConfigFieldType(str, Enum):
+class ConfigFieldType(StrEnum):
     STRING = "string"
     INTEGER = "integer"
     BOOLEAN = "boolean"

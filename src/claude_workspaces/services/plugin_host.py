@@ -127,7 +127,7 @@ class _NotImplementedAPI:
 class _PluginUI:
     """ui.notify/toast/badge — emitem sinal Qt que o host pode escutar."""
 
-    def __init__(self, host: "PluginHost", plugin_id: str) -> None:
+    def __init__(self, host: PluginHost, plugin_id: str) -> None:
         self._host = host
         self._id = plugin_id
 
@@ -171,7 +171,7 @@ class _Ctx:
     """`BaseContext` concreto. Não usa Protocol pra não exigir runtime_checkable
     em runtime — o duck typing dos handlers basta."""
 
-    def __init__(self, host: "PluginHost", inst: InstalledPlugin) -> None:
+    def __init__(self, host: PluginHost, inst: InstalledPlugin) -> None:
         self.log = _PluginLog(inst.install_dir, inst.id)
         self.config = _PluginConfig(inst)
         self.storage = _AsyncStorage(inst.storage())
