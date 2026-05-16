@@ -136,7 +136,10 @@ class PluginRegistry:
         shutil.copytree(
             bundle_dir,
             target,
-            ignore=shutil.ignore_patterns(".state", ".logs", "__pycache__"),
+            ignore=shutil.ignore_patterns(
+                ".state", ".logs",
+                "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
+            ),
         )
         # Habilita por padrão
         _set_enabled(target, True)

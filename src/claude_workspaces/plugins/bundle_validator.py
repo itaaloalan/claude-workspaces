@@ -37,7 +37,13 @@ _FORBIDDEN_FILES = frozenset({
     "setup.py", "setup.cfg", "pyproject.toml", "requirements.txt",
 })
 _FORBIDDEN_DIRS = frozenset({
-    "node_modules", ".git", "__pycache__", ".venv", "venv", ".pytest_cache",
+    "node_modules", ".git", ".venv", "venv",
+})
+# Caches gerados automaticamente pelo Python — não são erro de empacotamento,
+# o copytree em registry.py já ignora na instalação. Pulamos silenciosamente
+# na validação pra que rodar testes no diretório do exemplo não quebre o install.
+_SILENTLY_IGNORED_DIRS = frozenset({
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
 })
 
 _MIN_README_LEN = 100
@@ -72,6 +78,10 @@ def validate_layout(bundle_dir: Path, manifest: Manifest) -> list[str]:
     for path in _walk_relative(bundle_dir):
         rel = path.relative_to(bundle_dir)
         parts = rel.parts
+
+        # Caches do Python: ignorados silenciosamente (copytree também ignora)
+        if any(p in _SILENTLY_IGNORED_DIRS for p in parts):
+            continue
 
         # Diretórios proibidos em qualquer profundidade
         if any(p in _FORBIDDEN_DIRS for p in parts):

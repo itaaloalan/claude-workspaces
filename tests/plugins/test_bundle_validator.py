@@ -58,8 +58,17 @@ def test_setup_py_rejected(make_bundle):
     assert any("proibido" in e for e in errs)
 
 
-def test_pycache_rejected(make_bundle):
+def test_pycache_silently_ignored(make_bundle):
+    # __pycache__ aparece sozinho quando o dev roda testes no diretório do
+    # exemplo; não é erro de empacotamento. O copytree do registry já ignora,
+    # e o validador segue a mesma regra.
     bundle = make_bundle(extra_files={"src/hooks/__pycache__/x.pyc": "x"})
+    errs = _layout_errs(bundle)
+    assert not any("proibido" in e for e in errs)
+
+
+def test_venv_rejected(make_bundle):
+    bundle = make_bundle(extra_files={".venv/bin/python": "#!/bin/sh"})
     errs = _layout_errs(bundle)
     assert any("proibido" in e for e in errs)
 
