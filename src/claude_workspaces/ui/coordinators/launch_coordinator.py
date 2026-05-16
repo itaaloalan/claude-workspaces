@@ -9,10 +9,11 @@ Não toca QTreeWidget nem dock — só TerminalCoordinator + dialogs.
 
 import logging
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QMessageBox, QWidget
 
+from ...briefing_builder import build_briefing
 from ...claude_sessions import ClaudeSession
 from ...models import Workspace
 from ...services.launch_planner import build_claude_argv, plan_from_dialog
@@ -136,19 +137,37 @@ class LaunchCoordinator(QObject):
         self, workspace: Workspace, session: ClaudeSession
     ) -> None:
         from ..handoff_dialog import HandoffDialog
-        dialog = HandoffDialog(session, parent=self._parent_window)
+
+        primary = workspace.primary_folder() or ""
+        briefing_text = build_briefing(session, primary)
+
+        dialog = HandoffDialog(session, briefing_text, parent=self._parent_window)
         if not dialog.exec():
             return
         briefing = dialog.briefing()
         if not briefing:
             return
+        # Clipboard sempre — fallback se autodetect falhar
         QGuiApplication.clipboard().setText(briefing)
         terminal = self.launch_claude(workspace, "", "")
         if terminal is None:
             return
-        QTimer.singleShot(
-            4000, lambda: self._send_briefing(terminal, briefing)
-        )
+
+        def _on_ready(success: bool) -> None:
+            if success:
+                self._send_briefing(terminal, briefing)
+            else:
+                log.warning(
+                    "Claude não ficou pronto a tempo — briefing fica no clipboard"
+                )
+                QMessageBox.information(
+                    self._parent_window,
+                    "Briefing no clipboard",
+                    "Não consegui detectar o Claude pronto pra receber input. "
+                    "O briefing está no clipboard — cole quando ele subir.",
+                )
+
+        terminal.when_claude_ready(_on_ready, timeout_ms=30000)
 
     @staticmethod
     def _send_briefing(terminal: TerminalWidget, text: str) -> None:

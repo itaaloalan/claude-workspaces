@@ -24,6 +24,10 @@ CR_RE = re.compile(r"\r(?!\n)")
 # Marcadores do prompt idle do Claude Code (auto-mode footer e variantes).
 # Comparação é feita após normalização alfa-numérica (sem espaços, hífens,
 # pontuação), então "auto-mode on" casa com "auto mode on".
+#
+# IMPORTANTE: "esc to interrupt" também aparece em estados de IDLE (footer)
+# mas é o marker dominante quando Claude está trabalhando, então é
+# tratado especialmente: WORKING_RE captura a linha de trabalho inteira.
 IDLE_MARKERS = (
     "auto mode on",
     "auto-mode on",
@@ -32,6 +36,21 @@ IDLE_MARKERS = (
     "esc to interrupt",
     "press shift+tab",
     "for shortcuts",         # "? for shortcuts"
+    "accept edits on",
+    "bypass permissions",
+    "plan mode on",
+)
+
+# Subconjunto usado pra detectar "Claude pronto pra receber input" —
+# exclui "esc to interrupt" porque essa string aparece DENTRO da linha de
+# working ("* Word... · X tokens · esc to interrupt"), então casar por
+# ela leva a falso positivo de "pronto" enquanto Claude trabalha.
+PROMPT_READY_MARKERS = (
+    "auto mode on",
+    "auto-mode on",
+    "shift+tab to cycle",
+    "press shift+tab",
+    "for shortcuts",
     "accept edits on",
     "bypass permissions",
     "plan mode on",
@@ -100,6 +119,37 @@ def _has_working_marker(lines: list[str]) -> bool:
 
 def _looks_like_prompt(line: str) -> bool:
     return line in PROMPT_TAILS or line.endswith(" $")
+
+
+def _is_prompt_ready_marker(line: str) -> bool:
+    norm = _normalize(line)
+    if not norm:
+        return False
+    return any(_normalize(m) in norm for m in PROMPT_READY_MARKERS)
+
+
+def has_idle_marker(buffer_bytes: bytes) -> bool:
+    """True se o buffer contém um prompt-ready marker do Claude perto do
+    fim das últimas linhas E não há working marker mais recente. Usado pra
+    detectar quando o TUI está pronto pra receber input. Decodifica +
+    strip_ansi por conta, então pode receber o buffer cru do pty."""
+    try:
+        text = buffer_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        return False
+    text = strip_ansi(text)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    lines = [ln for ln in lines if _is_meaningful(ln)]
+    if not lines:
+        return False
+    ready_idx = _last_index(lines, _is_prompt_ready_marker)
+    if ready_idx < 0 or ready_idx < len(lines) - 5:
+        return False
+    # Working marker em qualquer linha igual ou mais recente vence
+    working_idx = _last_index(lines, lambda ln: bool(WORKING_RE.search(ln)))
+    if working_idx >= ready_idx:
+        return False
+    return True
 
 
 def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:

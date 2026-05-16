@@ -46,6 +46,22 @@ def project_sessions_dir(project_path: str) -> Path:
     return Path.home() / ".claude" / "projects" / _encode_project_path(project_path)
 
 
+def _extract_text(content) -> str:
+    """Normaliza o campo `content` (str ou lista de blocos) pra um texto único.
+    Pula blocos não-textuais (tool_use, tool_result, image)."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for c in content:
+            if isinstance(c, dict) and c.get("type") == "text":
+                t = (c.get("text") or "").strip()
+                if t:
+                    parts.append(t)
+        return "\n".join(parts).strip()
+    return ""
+
+
 def _read_first_user_message(jsonl_path: Path) -> str:
     """Lê a primeira mensagem do usuário (texto) num arquivo .jsonl de sessão."""
     try:
@@ -60,20 +76,42 @@ def _read_first_user_message(jsonl_path: Path) -> str:
                 inner = msg.get("message")
                 if not isinstance(inner, dict):
                     continue
-                content = inner.get("content")
-                if isinstance(content, str):
-                    text = content.strip()
-                    if text:
-                        return text
-                elif isinstance(content, list):
-                    for c in content:
-                        if isinstance(c, dict) and c.get("type") == "text":
-                            text = (c.get("text") or "").strip()
-                            if text:
-                                return text
+                text = _extract_text(inner.get("content"))
+                if text:
+                    return text
     except OSError:
         log.warning("Não consegui ler arquivo de sessão %s", jsonl_path)
     return ""
+
+
+def read_recent_turns(
+    jsonl_path: Path, max_total: int = 6
+) -> list[tuple[str, str]]:
+    """Lê os últimos N turnos do JSONL (user + assistant, só com texto).
+    Devolve em ordem cronológica (mais antigo → mais recente).
+    Pula tool_use/tool_result/imagens."""
+    all_turns: list[tuple[str, str]] = []
+    try:
+        with jsonl_path.open(encoding="utf-8") as fp:
+            for line in fp:
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                msg_type = msg.get("type")
+                if msg_type not in ("user", "assistant"):
+                    continue
+                inner = msg.get("message")
+                if not isinstance(inner, dict):
+                    continue
+                text = _extract_text(inner.get("content"))
+                if not text:
+                    continue
+                all_turns.append((msg_type, text))
+    except OSError:
+        log.warning("Não consegui ler arquivo de sessão %s", jsonl_path)
+        return []
+    return all_turns[-max_total:]
 
 
 def list_sessions(project_path: str, limit: int = 15) -> list[ClaudeSession]:

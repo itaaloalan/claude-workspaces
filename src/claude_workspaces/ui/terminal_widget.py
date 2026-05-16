@@ -3,6 +3,7 @@ import os
 import pwd
 import shlex
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
@@ -131,6 +132,12 @@ class TerminalWidget(QWidget):
         self._pending: tuple[list[str], str, str | None] | None = None
         self._bridge_ready = False
 
+        # Callback "Claude pronto pra receber input" — usado pelo handoff
+        # pra evitar QTimer de 4s fixo. Disparado uma vez quando aparece
+        # idle marker no buffer (ou fallback por timeout).
+        self._ready_callback: Callable[[bool], None] | None = None
+        self._ready_timeout: QTimer | None = None
+
     def _on_bridge_ready(self) -> None:
         log.info("Terminal bridge pronto")
         self._bridge_ready = True
@@ -217,7 +224,7 @@ class TerminalWidget(QWidget):
         self._activity_dirty = True
 
     def _poll_activity(self) -> None:
-        from ..claude_activity import parse_status
+        from ..claude_activity import has_idle_marker, parse_status
         age = (
             time.monotonic() - self._last_output_time
             if self._last_output_time
@@ -225,6 +232,12 @@ class TerminalWidget(QWidget):
         )
         # Tenta resolver o título da sessão (Claude grava JSONL ~1-3s após start)
         self._try_resolve_session()
+        # Verifica callback de "pronto" independente do dirty check —
+        # depende do buffer corrente, não do diff de status
+        if self._ready_callback is not None and has_idle_marker(
+            bytes(self._output_buffer)
+        ):
+            self._fire_ready_callback(True)
         if not self._activity_dirty and self._last_working and age <= 2.5:
             return
         self._activity_dirty = False
@@ -236,6 +249,50 @@ class TerminalWidget(QWidget):
             self._last_status = activity.status
             self._last_working = activity.is_working
             self.activity_changed.emit(activity.status, activity.is_working)
+
+    def when_claude_ready(
+        self,
+        callback: Callable[[bool], None],
+        timeout_ms: int = 30000,
+    ) -> None:
+        """Chama `callback(success)` uma vez quando detectar que o Claude
+        está pronto pra receber input (idle marker no buffer). Se não
+        detectar até `timeout_ms`, chama com success=False.
+
+        Substitui o `QTimer.singleShot(4000)` do handoff, que era frágil
+        (Claude pode demorar mais que 4s pra subir em máquina lenta)."""
+        from ..claude_activity import has_idle_marker
+
+        if not self._is_running:
+            callback(False)
+            return
+        # Já pronto agora — dispara no próximo tick pra não confundir caller
+        if has_idle_marker(bytes(self._output_buffer)):
+            QTimer.singleShot(0, lambda: callback(True))
+            return
+        # Já tem um callback pendente — descarta o anterior (rare race, mas
+        # melhor não silently combinar)
+        if self._ready_callback is not None:
+            log.warning("when_claude_ready: callback anterior substituído")
+            if self._ready_timeout is not None:
+                self._ready_timeout.stop()
+        self._ready_callback = callback
+        self._ready_timeout = QTimer(self)
+        self._ready_timeout.setSingleShot(True)
+        self._ready_timeout.timeout.connect(lambda: self._fire_ready_callback(False))
+        self._ready_timeout.start(timeout_ms)
+
+    def _fire_ready_callback(self, success: bool) -> None:
+        cb = self._ready_callback
+        self._ready_callback = None
+        if self._ready_timeout is not None:
+            self._ready_timeout.stop()
+            self._ready_timeout = None
+        if cb is not None:
+            try:
+                cb(success)
+            except Exception:
+                log.exception("Falha no callback de when_claude_ready")
 
     def _on_session_finished(self) -> None:
         self._status.setText("(processo encerrado)")
