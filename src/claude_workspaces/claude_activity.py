@@ -5,8 +5,11 @@ trabalhando/aguardando.
 Heurística:
 - Strip de ANSI/carriage-returns
 - Pega a última linha "interessante" (com pelo menos um alfanumérico)
-- Decide working baseado em (a) tempo desde último output do pty e
-  (b) presença de marcadores idle conhecidos
+- Detecção POSITIVA de working: procura o indicador do Claude
+  ("* Word… · X tokens · esc to interrupt") nas últimas linhas.
+  Sem esse indicador, NÃO marca como working — mesmo que tenha tido
+  output recente (footer/prompt repintando, cursor piscando etc.).
+- Fallback genérico (shell qualquer): output recente + sem prompt → working.
 """
 
 import re
@@ -18,16 +21,31 @@ ANSI_OTHER_RE = re.compile(r"\x1b[78NDEcMH=>\(\)*+]\S?")  # single-char e charse
 CTRL_RE = re.compile(r"[\x00-\x08\x0b-\x1f]")  # mantém \n e \t
 CR_RE = re.compile(r"\r(?!\n)")
 
-# Marcadores do prompt idle do Claude Code (auto-mode footer)
+# Marcadores do prompt idle do Claude Code (auto-mode footer e variantes).
+# Comparação é feita após normalização alfa-numérica (sem espaços, hífens,
+# pontuação), então "auto-mode on" casa com "auto mode on".
 IDLE_MARKERS = (
     "auto mode on",
+    "auto-mode on",
+    "auto update",
     "shift+tab to cycle",
     "esc to interrupt",
     "press shift+tab",
-    "automodeon",  # ANSI-stripped sem espaços (acontece com algumas builds do Claude)
-    "shifttab",
-    "esctointerrupt",
+    "for shortcuts",         # "? for shortcuts"
+    "accept edits on",
+    "bypass permissions",
+    "plan mode on",
 )
+
+# Indicador positivo de trabalho no Claude TUI:
+#   "* Stewing… (5s · ↓ 0 tokens · esc to interrupt)"
+#   "* Cultivating thoughts… (2s · 1.3k tokens · esc to interrupt)"
+# Casa pelo prefixo "* <word>" + "tokens" na mesma linha.
+WORKING_RE = re.compile(r"\*\s+\w+.*?tokens", re.IGNORECASE)
+
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
+
+PROMPT_TAILS = (">", "$", "%", "#")
 
 
 @dataclass
@@ -50,9 +68,38 @@ def _is_meaningful(line: str) -> bool:
     return any(c.isalnum() for c in line)
 
 
+def _normalize(text: str) -> str:
+    """Reduz a [a-z0-9] pra casar markers ignorando espaços, hífens, pontos
+    e caracteres unicode decorativos."""
+    return _NON_ALNUM_RE.sub("", text.lower())
+
+
 def _is_idle_marker(line: str) -> bool:
-    low = line.lower().replace(" ", "")
-    return any(m.replace(" ", "") in low for m in IDLE_MARKERS)
+    norm = _normalize(line)
+    if not norm:
+        return False
+    return any(_normalize(m) in norm for m in IDLE_MARKERS)
+
+
+def _last_index(lines: list[str], predicate) -> int:
+    """Índice da última linha que casa o predicado, ou -1."""
+    for i in range(len(lines) - 1, -1, -1):
+        if predicate(lines[i]):
+            return i
+    return -1
+
+
+def _has_working_marker(lines: list[str]) -> bool:
+    """Procura o indicador ativo do Claude (* Word… tokens) nas últimas
+    linhas. Janela curta (6) pra não casar conteúdo velho na buffer."""
+    for line in lines[-6:]:
+        if WORKING_RE.search(line):
+            return True
+    return False
+
+
+def _looks_like_prompt(line: str) -> bool:
+    return line in PROMPT_TAILS or line.endswith(" $")
 
 
 def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
@@ -70,17 +117,27 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
 
     last = lines[-1]
     last_is_idle = _is_idle_marker(last)
-    looks_prompt = last in (">", "$", "%", "#") or last.endswith(" $")
+    looks_prompt = _looks_like_prompt(last)
+
+    # Posição da última ocorrência de cada marker. Quem aparece DEPOIS no
+    # buffer ganha — assim Claude trabalhando seguido do footer cai pra
+    # idle, e Claude começando a trabalhar (working marker novo) supera
+    # um footer velho.
+    idle_idx = _last_index(lines, _is_idle_marker)
+    working_idx = _last_index(lines, lambda ln: bool(WORKING_RE.search(ln)))
+    tail_has_idle = idle_idx >= 0 and idle_idx >= len(lines) - 5
+    has_working = working_idx >= 0 and working_idx >= len(lines) - 6
+    idle_is_more_recent = idle_idx > working_idx
 
     # Pra mostrar como "última ação": prefere a última linha que NÃO
-    # seja o footer/auto-mode/prompt. Sem isso, o status mostraria sempre
+    # seja footer/auto-mode/prompt. Sem isso, o status mostraria sempre
     # 'auto mode on (shift+tab to cycle) · ...' depois que Claude termina.
     display_line = last
     if last_is_idle or looks_prompt:
         for line in reversed(lines[:-1]):
             if _is_idle_marker(line):
                 continue
-            if line in (">", "$", "%", "#") or line.endswith(" $"):
+            if _looks_like_prompt(line):
                 continue
             display_line = line
             break
@@ -93,6 +150,17 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
         display = display[:89] + "…"
 
     recent = last_output_age < 2.5
-    is_working = recent and not last_is_idle and not looks_prompt
+
+    # Detecção positiva: só é "working" se virmos o indicador do Claude
+    # rodando E houve output recente. Quando idle marker aparece DEPOIS do
+    # working marker (Claude terminou e mostrou o footer), cai pra idle
+    # mesmo com working marker ainda no buffer.
+    if has_working and not (tail_has_idle and idle_is_more_recent):
+        is_working = recent
+    elif tail_has_idle or looks_prompt:
+        is_working = False
+    else:
+        # Fallback pra shells genéricos sem markers do Claude.
+        is_working = recent and not looks_prompt
 
     return Activity(status=display, is_working=is_working)

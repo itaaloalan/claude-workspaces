@@ -35,8 +35,11 @@ def test_idle_marker_detection():
     assert _is_idle_marker("auto mode on (shift+tab to cycle)")
     assert _is_idle_marker("AUTO MODE ON")
     assert _is_idle_marker("automodeon")  # ANSI-stripped sem espaços
+    assert _is_idle_marker("auto-mode on")  # variante com hífen
     assert _is_idle_marker("press shift+tab to cycle")
     assert _is_idle_marker("esc to interrupt")
+    assert _is_idle_marker("? for shortcuts")
+    assert _is_idle_marker("⏵⏵ accept edits on (shift+tab to cycle)")
     assert not _is_idle_marker("Editing src/Foo.java")
     assert not _is_idle_marker("Stewing... (5s)")
 
@@ -54,10 +57,41 @@ def test_skips_footer_uses_previous_line():
     assert a.is_working is False  # output velho
 
 
-def test_recent_output_marks_working():
-    buf = b"* Stewing... (5s)\nReading file foo.java\n"
+def test_recent_output_marks_working_with_marker():
+    """Detecção positiva: precisa do indicador completo do Claude."""
+    buf = b"* Stewing... (5s, 1.2k tokens, esc to interrupt)\nReading file foo.java\n"
     a = parse_status(buf, last_output_age=0.5)
     assert a.is_working is True
+
+
+def test_idle_marker_overrides_recent_output():
+    """Cursor piscando no prompt mantém output recente, mas sem o
+    indicador de working o estado tem que cair pra idle."""
+    buf = (
+        b"Resposta finalizada.\n"
+        b"auto-mode on (shift+tab to cycle) esc to interrupt\n"
+    )
+    a = parse_status(buf, last_output_age=0.3)
+    assert a.is_working is False
+
+
+def test_idle_footer_with_hyphen_variant():
+    """Variante com hífen ('auto-mode') também tem que ser idle."""
+    buf = b"Resposta.\nauto-mode on - shift+tab to cycle\n"
+    a = parse_status(buf, last_output_age=0.3)
+    assert a.is_working is False
+
+
+def test_working_marker_then_idle_marker_at_tail():
+    """Buffer com working antigo + idle marker recente = idle."""
+    buf = (
+        b"* Stewing... (3s, 800 tokens, esc to interrupt)\n"
+        b"Done.\n"
+        b"auto mode on (shift+tab to cycle)\n"
+    )
+    a = parse_status(buf, last_output_age=0.5)
+    # Idle marker no tail e working marker fora da janela do tail → idle
+    assert a.is_working is False
 
 
 def test_strips_star_prefix():
