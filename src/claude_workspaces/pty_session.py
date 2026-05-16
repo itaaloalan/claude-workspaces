@@ -20,6 +20,11 @@ class PtySession(QObject):
         self.pid: int | None = None
         self.master_fd: int | None = None
         self._notifier: QSocketNotifier | None = None
+        # Último tamanho pedido pelo frontend xterm.js. Pode chegar ANTES
+        # do start() (resize via WebChannel é assíncrono e o JS faz fit
+        # antes da gente forkar) — guardamos pra aplicar pós-fork e evitar
+        # que Claude/TUI renderize com 80 colunas default.
+        self._pending_size: tuple[int, int] | None = None
 
     def is_running(self) -> bool:
         return self.pid is not None
@@ -65,6 +70,13 @@ class PtySession(QObject):
         flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
         fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
+        # Aplica resize pendente imediatamente — antes que SIGWINCH seja
+        # necessário, o kernel já entrega o tamanho correto via ioctl pro
+        # próximo `tcgetattr`/leitura de winsize do filho recém-execado.
+        if self._pending_size is not None:
+            cols, rows = self._pending_size
+            self._apply_size(cols, rows)
+
         self._notifier = QSocketNotifier(master_fd, QSocketNotifier.Type.Read, self)
         self._notifier.activated.connect(self._on_readable)
 
@@ -93,7 +105,15 @@ class PtySession(QObject):
             log.warning("Falha ao escrever no pty (pid=%s)", self.pid)
 
     def resize(self, cols: int, rows: int) -> None:
-        if self.master_fd is None or cols <= 0 or rows <= 0:
+        if cols <= 0 or rows <= 0:
+            return
+        self._pending_size = (cols, rows)
+        if self.master_fd is None:
+            return
+        self._apply_size(cols, rows)
+
+    def _apply_size(self, cols: int, rows: int) -> None:
+        if self.master_fd is None:
             return
         size = struct.pack("HHHH", rows, cols, 0, 0)
         try:
