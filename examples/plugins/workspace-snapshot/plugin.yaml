@@ -1,0 +1,40 @@
+id: com.exemplo.workspace-snapshot
+name: Workspace Snapshot
+version: 0.1.0
+author: exemplo
+description: Tira um snapshot ao abrir um workspace e gera um resumo do que aconteceu ao fechar
+license: MIT
+engine:
+  claude-workspaces: ">=2.0.0 <3.0.0"
+
+extensions:
+  hooks:
+    - event: workspace.opened
+      handler: ./src/hooks/on_opened.py
+    - event: workspace.closed
+      handler: ./src/hooks/on_closed.py
+    - event: session.created
+      handler: ./src/hooks/on_session_created.py
+    - event: commit.created
+      handler: ./src/hooks/on_commit_created.py
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  network:
+    hosts: []
+  notifications: true
+  workspaces: all
+
+config:
+  - key: notify_on_close
+    type: boolean
+    default: true
+    label: "Mostrar notificação com o resumo ao fechar o workspace"
+  - key: min_duration_seconds
+    type: integer
+    default: 30
+    min: 0
+    max: 3600
+    label: "Duração mínima (em segundos) para gerar resumo ao fechar"

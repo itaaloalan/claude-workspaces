@@ -1,0 +1,39 @@
+id: com.exemplo.idle-rescue
+name: Idle Rescue
+version: 0.1.0
+author: exemplo
+description: Detecta sessões aguardando input por muito tempo e sugere um prompt de retomada
+license: MIT
+engine:
+  claude-workspaces: ">=2.0.0 <3.0.0"
+
+extensions:
+  hooks:
+    - event: session.status-changed
+      handler: ./src/hooks/on_status.py
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  network:
+    hosts: []
+  notifications: true
+  workspaces: all
+
+config:
+  - key: idle_threshold_minutes
+    type: integer
+    default: 10
+    min: 1
+    max: 120
+    label: "Considerar parada após (min)"
+  - key: nudge_style
+    type: enum
+    default: "gentil"
+    options: ["gentil", "direto", "tecnico"]
+    label: "Tom da sugestão de retomada"
+  - key: include_last_message
+    type: boolean
+    default: true
+    label: "Incluir trecho da última mensagem na notificação"

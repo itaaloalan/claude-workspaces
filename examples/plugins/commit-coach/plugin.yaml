@@ -1,0 +1,38 @@
+id: com.exemplo.commit-coach
+name: Commit Coach
+version: 0.1.0
+author: exemplo
+description: Avalia commits recém-criados (Conventional Commits + tamanho) e dá um toast
+license: MIT
+engine:
+  claude-workspaces: ">=2.0.0 <3.0.0"
+
+extensions:
+  hooks:
+    - event: commit.created
+      handler: ./src/hooks/on_commit.py
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  network:
+    hosts: []
+  notifications: true
+  workspaces: all
+
+config:
+  - key: enforce_conventional
+    type: boolean
+    default: true
+    label: "Exigir formato Conventional Commits"
+  - key: max_subject_length
+    type: integer
+    default: 72
+    min: 30
+    max: 120
+    label: "Tamanho máximo do assunto (1ª linha)"
+  - key: warn_on_wip
+    type: boolean
+    default: true
+    label: "Avisar quando a mensagem parece WIP (\"wip\", \"tmp\", \"fix me\")"

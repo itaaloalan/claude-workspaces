@@ -1,0 +1,39 @@
+id: com.exemplo.focus-timer
+name: Focus Timer
+version: 0.1.0
+author: exemplo
+description: Acumula tempo por status (running / awaiting-input) e mostra resumo do dia
+license: MIT
+engine:
+  claude-workspaces: ">=2.0.0 <3.0.0"
+
+extensions:
+  hooks:
+    - event: session.status-changed
+      handler: ./src/hooks/on_status.py
+    - event: session.completed
+      handler: ./src/hooks/on_completed.py
+  commands:
+    - id: show-today
+      title: "Focus: resumo de hoje"
+      handler: ./src/commands/show_today.py
+      description: "Mostra quanto tempo as sessões passaram em cada status hoje"
+    - id: reset-today
+      title: "Focus: zerar contadores de hoje"
+      handler: ./src/commands/reset_today.py
+      description: "Apaga os totais acumulados do dia"
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+  network:
+    hosts: []
+  notifications: true
+  workspaces: all
+
+config:
+  - key: count_idle_as_focus
+    type: boolean
+    default: false
+    label: "Contar status idle como tempo de foco"
