@@ -51,6 +51,26 @@ log = logging.getLogger(__name__)
 
 _STATUS_COLOR = {True: "#5ac35a", False: "#888"}
 
+# Eventos técnicos → descrição amigável (qual situação real dispara isso).
+# Fonte de verdade: docs/PLUGIN_SPEC.md §7. Se um evento novo for
+# adicionado lá e não aqui, cai num fallback genérico.
+_EVENT_HUMAN: dict[str, str] = {
+    "session.created": "uma nova sessão é criada",
+    "session.status-changed": "uma sessão muda de status (rodando, parada, etc.)",
+    "session.message-sent": "você envia uma mensagem numa sessão",
+    "session.completed": "uma sessão termina",
+    "workspace.opened": "você abre um workspace",
+    "workspace.closed": "um workspace é fechado",
+    "commit.created": "um novo commit aparece num workspace",
+    "plugin.config-changed": "você muda alguma configuração desse próprio plugin",
+}
+
+_PANEL_SLOT_HUMAN: dict[str, str] = {
+    "sidebar-top": "na barra lateral (topo)",
+    "sidebar-bottom": "na barra lateral (rodapé)",
+    "workspace-tab": "como aba dentro do workspace",
+}
+
 
 class PluginsView(QWidget):
     """Lista + gerencia plugins instalados.
@@ -346,6 +366,14 @@ class PluginsView(QWidget):
         desc.setStyleSheet("color: #d0d0d0;")
         self._detail_layout.addWidget(desc)
 
+        # "Como funciona" — explica em PT-BR claro se o plugin é automático,
+        # manual, visual ou combinação. Resolve a dúvida principal do usuário
+        # ("isso roda sozinho ou eu preciso fazer algo?") antes dele cair nas
+        # listas técnicas abaixo.
+        how_card = self._build_how_it_works_card(m)
+        if how_card is not None:
+            self._detail_layout.addWidget(how_card)
+
         # Identidade + paths
         meta_box = QGroupBox("Identidade")
         meta_l = QFormLayout(meta_box)
@@ -360,70 +388,88 @@ class PluginsView(QWidget):
         meta_l.addRow("<b>install</b>", QLabel(f"<code>{inst.install_dir}</code>"))
         self._detail_layout.addWidget(meta_box)
 
-        # Extensões
-        ext_lines = []
-        if m.commands:
-            ext_lines.append(
-                f"<b>commands</b> ({len(m.commands)}): "
-                + ", ".join(f"<code>{c.id}</code>" for c in m.commands)
-            )
-        if m.hooks:
-            ext_lines.append(
-                f"<b>hooks</b> ({len(m.hooks)}): "
-                + ", ".join(f"<code>{h.event}</code>" for h in m.hooks)
-            )
-        if m.panels:
-            ext_lines.append(
-                f"<b>panels</b> ({len(m.panels)}): "
-                + ", ".join(f"<code>{p.id}@{p.slot.value}</code>" for p in m.panels)
-            )
-        if ext_lines:
-            ext_box = QGroupBox("Extensões")
+        # Extensões — uma linha por extensão, com ícone que diferencia o que
+        # roda sozinho do que você precisa ativar manualmente. Identificador
+        # técnico vai num <span> apagado pra quem precisa, sem poluir.
+        if m.commands or m.hooks or m.panels:
+            ext_box = QGroupBox("O que esse plugin entrega")
             ext_l = QVBoxLayout(ext_box)
-            for line in ext_lines:
-                lab = QLabel(line)
-                lab.setWordWrap(True)
-                ext_l.addWidget(lab)
+            ext_l.setSpacing(6)
+            for c in m.commands:
+                ext_l.addWidget(self._ext_line(
+                    icon="▶️",
+                    headline=f"Comando manual: <b>{c.title}</b>",
+                    sub="Você dispara abrindo a paleta (<b>Ctrl+P</b>) e procurando "
+                        "pelo nome. Não roda sozinho.",
+                    tech=f"id: <code>{c.id}</code>",
+                ))
+            for h in m.hooks:
+                event_label = _EVENT_HUMAN.get(
+                    h.event, f"o evento <code>{h.event}</code>"
+                )
+                ext_l.addWidget(self._ext_line(
+                    icon="🔁",
+                    headline=f"Reage sozinho quando {event_label}",
+                    sub="Funciona em segundo plano enquanto o plugin estiver "
+                        "habilitado — você não precisa fazer nada.",
+                    tech=f"evento: <code>{h.event}</code>",
+                ))
+            for p in m.panels:
+                slot_label = _PANEL_SLOT_HUMAN.get(
+                    p.slot.value, f"no slot <code>{p.slot.value}</code>"
+                )
+                ext_l.addWidget(self._ext_line(
+                    icon="🪟",
+                    headline=f"Painel: <b>{p.title}</b>",
+                    sub=f"Aparece {slot_label} sempre que o plugin estiver "
+                        "habilitado.",
+                    tech=f"id: <code>{p.id}</code>",
+                ))
             self._detail_layout.addWidget(ext_box)
 
-        # Permissões
+        # Permissões — frase verbal ("Pode X") em vez de jargão técnico.
+        # O plugin SÓ consegue fazer o que tá listado aqui; o resto é
+        # bloqueado pelo runtime.
         p = m.permissions
-        perm_lines = []
-        if p.filesystem.read:
-            perm_lines.append(
-                "<b>fs.read</b>: " + ", ".join(
-                    f"<code>{g}</code>" for g in p.filesystem.read
-                )
-            )
-        if p.filesystem.write:
-            perm_lines.append(
-                "<b>fs.write</b>: " + ", ".join(
-                    f"<code>{g}</code>" for g in p.filesystem.write
-                )
-            )
-        if p.network.hosts:
-            perm_lines.append(
-                "<b>network</b>: " + ", ".join(
-                    f"<code>{h}</code>" for h in p.network.hosts
-                )
-            )
-        if p.notifications:
-            perm_lines.append("<b>notifications</b>: sim")
-        ws_str = (
-            "todos"
-            if p.workspaces == "all"
-            else ", ".join(f"<code>{w}</code>" for w in p.workspaces)
-        )
-        perm_lines.append(f"<b>workspaces</b>: {ws_str}")
-        perm_box = QGroupBox("Permissões")
+        perm_box = QGroupBox("O que o plugin pode fazer no seu computador")
         perm_l = QVBoxLayout(perm_box)
+        perm_l.setSpacing(6)
+        perm_lines: list[tuple[str, str]] = []
+        if p.filesystem.read:
+            paths = ", ".join(f"<code>{g}</code>" for g in p.filesystem.read)
+            perm_lines.append(("📂", f"<b>Ler arquivos</b> em: {paths}"))
+        if p.filesystem.write:
+            paths = ", ".join(f"<code>{g}</code>" for g in p.filesystem.write)
+            perm_lines.append(("✏️", f"<b>Escrever arquivos</b> em: {paths}"))
+        if p.network.hosts:
+            hosts = ", ".join(f"<code>{h}</code>" for h in p.network.hosts)
+            perm_lines.append(("🌐", f"<b>Acessar a internet</b>, só em: {hosts}"))
+        if p.notifications:
+            perm_lines.append(("🔔", "<b>Mostrar notificações</b> e avisos pra você"))
+        if p.workspaces == "all":
+            perm_lines.append(("🗂", "<b>Ver e agir em qualquer workspace</b> que você tiver"))
+        elif p.workspaces:
+            ws = ", ".join(f"<code>{w}</code>" for w in p.workspaces)
+            perm_lines.append(("🗂", f"<b>Ver e agir só nestes workspaces</b>: {ws}"))
         if not perm_lines:
-            perm_l.addWidget(QLabel("<i>(nenhuma declarada)</i>"))
+            perm_l.addWidget(QLabel(
+                "<i style='color:#888;'>Plugin não pediu nenhuma permissão — "
+                "fica isolado, sem tocar em arquivos nem internet.</i>"
+            ))
         else:
-            for line in perm_lines:
-                lab = QLabel(line)
-                lab.setWordWrap(True)
-                perm_l.addWidget(lab)
+            for icon, text in perm_lines:
+                row = QHBoxLayout()
+                row.setSpacing(8)
+                icon_lab = QLabel(icon)
+                icon_lab.setStyleSheet("font-size: 14px;")
+                icon_lab.setFixedWidth(20)
+                icon_lab.setAlignment(Qt.AlignmentFlag.AlignTop)
+                row.addWidget(icon_lab)
+                text_lab = QLabel(text)
+                text_lab.setWordWrap(True)
+                text_lab.setStyleSheet("color: #d0d0d0;")
+                row.addWidget(text_lab, stretch=1)
+                perm_l.addLayout(row)
         self._detail_layout.addWidget(perm_box)
 
         # Config exposta
@@ -470,6 +516,94 @@ class PluginsView(QWidget):
         self._detail_layout.addLayout(action_row)
 
         self._detail_layout.addStretch()
+
+    # ----- helpers de explicação --------------------------------------------
+
+    def _build_how_it_works_card(self, manifest) -> QFrame | None:
+        """Card amarelo/verde que responde 'esse plugin roda sozinho?'.
+
+        Combina as extensões pra montar uma frase que diga o que o usuário
+        precisa fazer (ou não fazer) pra ver valor. Retorna None se o
+        manifesto não declarou nenhuma extensão (não deveria acontecer pós-
+        validação, mas defensivo)."""
+        has_hooks = bool(manifest.hooks)
+        has_commands = bool(manifest.commands)
+        has_panels = bool(manifest.panels)
+        if not (has_hooks or has_commands or has_panels):
+            return None
+
+        parts: list[str] = []
+        if has_hooks:
+            parts.append(
+                "<b>roda em segundo plano</b> e reage sozinho a coisas que "
+                "acontecem no app (você não precisa fazer nada)"
+            )
+        if has_commands:
+            parts.append(
+                "oferece <b>comandos manuais</b> que você dispara pela "
+                "paleta com <b>Ctrl+P</b>"
+            )
+        if has_panels:
+            parts.append(
+                "mostra um <b>painel próprio</b> na interface enquanto "
+                "estiver habilitado"
+            )
+        if len(parts) == 1:
+            body = "Esse plugin " + parts[0] + "."
+        else:
+            body = "Esse plugin " + "; ".join(parts[:-1]) + "; e " + parts[-1] + "."
+
+        card = QFrame()
+        card.setStyleSheet(
+            "QFrame { background: #1d2733; border: 1px solid #2c3e54; "
+            "border-radius: 8px; }"
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 12)
+        layout.setSpacing(4)
+        title = QLabel("<b style='color:#cfe2ff;'>💡 Como funciona</b>")
+        layout.addWidget(title)
+        text = QLabel(f"<div style='color:#d4dae3; line-height:150%;'>{body}</div>")
+        text.setWordWrap(True)
+        layout.addWidget(text)
+        # Lembra do enable/disable, que é a única ação realmente necessária
+        # pro hook/panel começar a agir.
+        if has_hooks or has_panels:
+            footer = QLabel(
+                "<span style='color:#8fb4e0;'>Tudo isso só acontece com o "
+                "switch <b>Habilitado</b> ligado.</span>"
+            )
+            footer.setWordWrap(True)
+            layout.addWidget(footer)
+        return card
+
+    def _ext_line(self, *, icon: str, headline: str, sub: str, tech: str) -> QFrame:
+        """Renderiza uma linha de extensão: ícone grande + headline + sub + tech."""
+        frame = QFrame()
+        frame.setStyleSheet(
+            "QFrame { background: transparent; border: none; }"
+        )
+        row = QHBoxLayout(frame)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        icon_lab = QLabel(icon)
+        icon_lab.setStyleSheet("font-size: 18px;")
+        icon_lab.setFixedWidth(24)
+        icon_lab.setAlignment(Qt.AlignmentFlag.AlignTop)
+        row.addWidget(icon_lab)
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
+        head = QLabel(f"<div style='color:#e6e6e6;'>{headline}</div>")
+        head.setWordWrap(True)
+        text_col.addWidget(head)
+        sub_lab = QLabel(f"<div style='color:#9aa4b1;'>{sub}</div>")
+        sub_lab.setWordWrap(True)
+        text_col.addWidget(sub_lab)
+        tech_lab = QLabel(f"<span style='color:#666; font-size:11px;'>{tech}</span>")
+        tech_lab.setWordWrap(True)
+        text_col.addWidget(tech_lab)
+        row.addLayout(text_col, stretch=1)
+        return frame
 
     # ----- ações ------------------------------------------------------------
 
