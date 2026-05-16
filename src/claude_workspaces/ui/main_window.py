@@ -25,10 +25,14 @@ from ..launchers import (
 )
 from ..models import Workspace
 from ..settings import Settings
-from ..storage import load_workspaces, save_workspaces
+from .coordinators import (
+    DockCoordinator,
+    LaunchCoordinator,
+    TerminalCoordinator,
+    WorkspaceCoordinator,
+)
 from .memory_panel import MemoryPanel
-from .panels import DockPanel, DockPanelSpec
-from .right_dock import RightDock
+from .panels import DockPanelSpec
 from .settings_panel import SettingsPanel
 from .skills_panel import SkillsPanel
 from .terminal_area import TerminalArea
@@ -38,7 +42,6 @@ from .terminal_child_widget import (
     STATE_WORKING,
     TerminalChildWidget,
 )
-from .terminal_state import TerminalState
 from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
 from .workspace_details import WorkspaceDetailsPanel
@@ -53,26 +56,41 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Claude Workspaces")
 
         self.settings = Settings.load()
-        self.workspaces: list[Workspace] = load_workspaces()
-        # Migração silenciosa: se algum workspace veio sem id (arquivo
-        # antigo), salva de volta com ids preenchidos pelo from_dict.
-        self._migrate_ids_if_needed()
 
-        self._terminal_areas: dict[str, TerminalArea] = {}  # key=workspace.id
+        # ---------- Coordinators (composição) ----------
+        self.workspaces_coord = WorkspaceCoordinator(self)
+        self.terminals_coord = TerminalCoordinator(self)
+        self.launch_coord = LaunchCoordinator(
+            self.settings, self.terminals_coord, self
+        )
+
+        # Backward-compat: shadow attrs apontam pros coordinators
         self._terminal_placeholder_idx: int = 0
         self._sidebar_last_size: int = 260
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
-        # Estado dos terminais (tree_items, activity, inbox, running_counts)
-        # agrupado pra cleanup atômico via release_tab(tab_id)
-        self._terminals = TerminalState()
-        self._spinner_frame: int = 0
-        # Cache de texto de sessões pro filtro (lazy, key=ws.id)
-        self._session_text_cache: dict[str, str] = {}
 
         self._build_ui()
+
+        # Signal wiring entre coordinators e UI
+        self.workspaces_coord.workspaces_changed.connect(self.refresh_list)
+        self.workspaces_coord.workspace_deleted.connect(self._cleanup_terminal_for)
+        self.terminals_coord.workspace_running_changed.connect(self._on_workspace_running)
+        self.terminals_coord.tab_activity_changed.connect(self._handle_tab_activity)
+        self.terminals_coord.tab_removed.connect(self._handle_tab_removed)
+        self.terminals_coord.inbox_changed.connect(self.top_bar.set_inbox_count)
+        self.terminals_coord.spinner_tick.connect(self._on_spinner_tick)
+        self.terminals_coord.terminal_area_created.connect(self._on_area_created)
+        self.launch_coord.sessions_refresh_requested.connect(
+            self.details.refresh_sessions_soon
+        )
+
         self._restore_geometry()
         self.refresh_list()
+
+    @property
+    def workspaces(self) -> list[Workspace]:
+        return self.workspaces_coord.workspaces
 
     # ---------- construção ----------
 
@@ -504,31 +522,19 @@ class MainWindow(QMainWindow):
     ]
 
     def _build_right_dock(self) -> QWidget:
-        dock = RightDock()
-        dock.setStyleSheet("background: #141414;")
-        collapsed = self.settings.right_dock_collapsed or {}
-
-        self._dock_panels: list[DockPanel] = []
+        self.dock_coord = DockCoordinator(
+            self.settings, self.DOCK_PANEL_SPECS, self, self
+        )
+        dock = self.dock_coord.build()
+        # Backward-compat: panels acessíveis via attrs nomeados (alguns
+        # callers usam self._skills_panel etc.)
         for spec in self.DOCK_PANEL_SPECS:
-            panel = spec.factory(self)
-            dock.add_panel(
-                spec.panel_id,
-                spec.title,
-                panel,
-                open_=not collapsed.get(spec.panel_id, not spec.default_open),
-            )
-            self._dock_panels.append(panel)
-            # Mantém atributos nomeados pra backward-compat com referências
-            # diretas (ex: _memory_panel, _skills_panel)
+            panel = self.dock_coord.panel(spec.panel_id)
             setattr(self, f"_{spec.panel_id}_panel", panel)
-
-        dock.panel_toggled.connect(self._on_dock_toggled)
+        self.dock_coord.panel_toggled.connect(
+            lambda *_: self._schedule_layout_save()
+        )
         return dock
-
-    def _on_dock_toggled(self, panel_id: str, is_open: bool) -> None:
-        # Persiste estado (chave 'collapsed' = inverso de 'open')
-        self.settings.right_dock_collapsed[panel_id] = not is_open
-        self._schedule_layout_save()
 
     def _build_terminal_pane(self) -> QWidget:
         pane = QWidget()
@@ -626,10 +632,7 @@ class MainWindow(QMainWindow):
         self.list_widget.setPalette(pal)
         layout.addWidget(self.list_widget, stretch=1)
 
-        # Timer pra animar o spinner dos terminais em "working"
-        self._spinner_timer = QTimer(self)
-        self._spinner_timer.setInterval(100)
-        self._spinner_timer.timeout.connect(self._tick_spinner)
+        # Spinner é gerido pelo TerminalCoordinator (signal spinner_tick)
 
         add_btn = QPushButton("+ Novo Workspace")
         add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
@@ -665,7 +668,7 @@ class MainWindow(QMainWindow):
                     current_id = pdata.id
 
         self.list_widget.clear()
-        self._terminals.tree_items.clear()
+        self.terminals_coord.state.tree_items.clear()
 
         for ws in self.workspaces:
             item = QTreeWidgetItem([self._item_label(ws)])
@@ -683,7 +686,7 @@ class MainWindow(QMainWindow):
         )
 
         # Reanexa abas de terminais já existentes
-        for ws_id, area in self._terminal_areas.items():
+        for ws_id, area in self.terminals_coord._areas.items():
             ws_item = self._find_workspace_item(ws_id)
             if ws_item is None:
                 continue
@@ -695,8 +698,8 @@ class MainWindow(QMainWindow):
                 base_title = widget.property("_base_title") or area.tabs.tabText(i)
                 self._add_terminal_child(
                     ws_item, tab_id, base_title,
-                    self._terminals.activity.get(tab_id, ("", False, base_title))[0],
-                    self._terminals.activity.get(tab_id, ("", False, base_title))[1],
+                    self.terminals_coord.state.activity.get(tab_id, ("", False, base_title))[0],
+                    self.terminals_coord.state.activity.get(tab_id, ("", False, base_title))[1],
                     widget.is_running(),
                 )
 
@@ -734,7 +737,7 @@ class MainWindow(QMainWindow):
         return None
 
     def _item_label(self, ws: Workspace) -> str:
-        count = self._terminals.running_counts.get(ws.id, 0)
+        count = self.terminals_coord.state.running_counts.get(ws.id, 0)
         if count > 0:
             dot = "●" if count == 1 else f"●×{count}"
             return f"{dot} {ws.name}"
@@ -763,28 +766,11 @@ class MainWindow(QMainWindow):
                     return
 
     def _session_text_for(self, ws: Workspace) -> str:
-        """Concat dos previews das últimas sessões do Claude desse workspace.
-        Cacheado por ws.id — invalidado em refresh_list e em CRUD do workspace."""
-        if ws.id in self._session_text_cache:
-            return self._session_text_cache[ws.id]
-        text = ""
-        if ws.folders:
-            try:
-                from ..claude_sessions import list_sessions_for_paths
-                cwd, _ = ws.launch_paths()
-                paths = list({cwd, *ws.folders})
-                sessions = list_sessions_for_paths(paths, limit=15)
-                text = " ".join(s.preview for s in sessions if s.preview)
-            except Exception:
-                text = ""
-        self._session_text_cache[ws.id] = text
-        return text
+        """Delega pro WorkspaceCoordinator (cache lazy)."""
+        return self.workspaces_coord.session_text_for(ws)
 
     def _invalidate_session_cache(self, ws_id: str | None = None) -> None:
-        if ws_id is None:
-            self._session_text_cache.clear()
-        else:
-            self._session_text_cache.pop(ws_id, None)
+        self.workspaces_coord.invalidate_cache(ws_id)
 
     def _search_submit(self) -> None:
         """Enter na busca: foca o primeiro workspace visível."""
@@ -804,9 +790,9 @@ class MainWindow(QMainWindow):
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:
-            self._terminals.running_counts.pop(workspace_id, None)
+            self.terminals_coord.state.running_counts.pop(workspace_id, None)
         else:
-            self._terminals.running_counts[workspace_id] = count
+            self.terminals_coord.state.running_counts[workspace_id] = count
         self._refresh_item_label(workspace_id)
 
     # ---------- seleção / settings ----------
@@ -834,13 +820,8 @@ class MainWindow(QMainWindow):
         self._sync_terminal_for(ws)
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
-        """Propaga set_workspace pra todos os panels do dock que
-        implementam o contrato DockPanel."""
-        for panel in self._dock_panels:
-            try:
-                panel.set_workspace(workspace)
-            except Exception:
-                log.exception("set_workspace falhou em %r", type(panel).__name__)
+        """Delega pro DockCoordinator."""
+        self.dock_coord.broadcast_workspace(workspace)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
         # Double-click ou Enter — sessão histórica retoma via --resume
@@ -859,7 +840,7 @@ class MainWindow(QMainWindow):
         if not isinstance(data, int):  # tab_id
             return
         tab_id = data
-        area = self._terminal_areas.get(pdata.id)
+        area = self.terminals_coord._areas.get(pdata.id)
         if area is None:
             return
         for i in range(area.tabs.count()):
@@ -909,96 +890,60 @@ class MainWindow(QMainWindow):
     # ---------- terminal ----------
 
     def _sync_terminal_for(self, workspace: Workspace) -> None:
-        area = self._terminal_areas.get(workspace.id)
+        area = self.terminals_coord._areas.get(workspace.id)
         if area is not None:
             self.terminal_host.setCurrentWidget(area)
         else:
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
 
     def _get_terminal_area(self, workspace: Workspace) -> TerminalArea:
-        area = self._terminal_areas.get(workspace.id)
-        if area is None:
-            area = TerminalArea()
-            ws_id = workspace.id
-            area.running_count_changed.connect(
-                lambda c, wid=ws_id: self._on_workspace_running(wid, c)
-            )
-            area.tab_activity_changed.connect(
-                lambda tab_id, title, status, working, running, wid=ws_id:
-                    self._on_tab_activity(wid, tab_id, title, status, working, running)
-            )
-            area.tab_removed.connect(self._on_tab_removed)
-            area.tabs.currentChanged.connect(
-                lambda idx, a=area: self._on_terminal_tab_focused(a, idx)
-            )
-            self._terminal_areas[ws_id] = area
-            self.terminal_host.addWidget(area)
-        return area
+        """Compat: delega pro TerminalCoordinator."""
+        return self.terminals_coord.get_or_create_area(workspace)
 
-    def _on_terminal_tab_focused(self, area: TerminalArea, idx: int) -> None:
-        if idx < 0:
-            return
-        widget = area.tabs.widget(idx)
-        if widget is None:
-            return
-        tab_id = id(widget)
-        if self._terminals.inbox.pop(tab_id, None) is not None:
-            self._refresh_inbox_badge()
+    def _on_area_created(self, workspace_id: str, area: TerminalArea) -> None:
+        """TerminalCoordinator criou uma nova area — adiciona no host."""
+        self.terminal_host.addWidget(area)
 
-    def _on_tab_activity(
+    def _handle_tab_activity(
         self,
-        workspace_id: str,
         tab_id: int,
         title: str,
         status: str,
         is_working: bool,
         is_running: bool,
+        workspace_id: str,
     ) -> None:
-        prev_status, prev_working, prev_title = self._terminals.activity.get(
-            tab_id, ("", False, title)
-        )
-        self._terminals.activity[tab_id] = (status, is_working, title)
-
-        # Detecção de "precisa de atenção": estava working e agora não está
-        # (mas ainda rodando). Adiciona ao inbox global.
-        if prev_working and not is_working and is_running:
-            self._terminals.inbox[tab_id] = {
-                "workspace_id": workspace_id,
-                "title": title,
-                "status": status,
-            }
-            self._refresh_inbox_badge()
-        elif is_working and tab_id in self._terminals.inbox:
-            # Voltou a trabalhar — sai do inbox
-            self._terminals.inbox.pop(tab_id, None)
-            self._refresh_inbox_badge()
-        elif not is_running and tab_id in self._terminals.inbox:
-            # Terminou — sai do inbox
-            self._terminals.inbox.pop(tab_id, None)
-            self._refresh_inbox_badge()
-
+        """Slot do TerminalCoordinator.tab_activity_changed.
+        Atualiza o tree child. Inbox/spinner já foram tratados no coord."""
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is None:
             return
-        if tab_id in self._terminals.tree_items:
+        if tab_id in self.terminals_coord.state.tree_items:
             self._update_terminal_child(tab_id, title, status, is_working, is_running)
         else:
             self._add_terminal_child(
                 ws_item, tab_id, title, status, is_working, is_running
             )
-        any_working = any(w for _, w, _ in self._terminals.activity.values())
-        if any_working and not self._spinner_timer.isActive():
-            self._spinner_timer.start()
-        elif not any_working and self._spinner_timer.isActive():
-            self._spinner_timer.stop()
 
-    def _refresh_inbox_badge(self) -> None:
-        self.top_bar.set_inbox_count(len(self._terminals.inbox))
+    def _handle_tab_removed(self, tab_id: int) -> None:
+        """Slot do TerminalCoordinator.tab_removed.
+        Estado já foi limpo no coord; aqui só remove o item do tree."""
+        item = self.terminals_coord.state.tree_items.get(tab_id)
+        if item is not None and item.parent() is not None:
+            item.parent().removeChild(item)
+
+    def _on_spinner_tick(self, spinner_char: str) -> None:
+        """Slot do TerminalCoordinator.spinner_tick — atualiza children
+        que estão working com o frame atual."""
+        for tab_id, (status, working, title) in list(self.terminals_coord.state.activity.items()):
+            if working:
+                self._update_terminal_child(tab_id, title, status, True, True)
 
     def _show_inbox(self) -> None:
         from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QMenu
-        if not self._terminals.inbox:
+        entries = self.terminals_coord.inbox_entries()
+        if not entries:
             menu = QMenu(self)
             empty = QAction("(nenhum console aguardando)", menu)
             empty.setEnabled(False)
@@ -1006,11 +951,8 @@ class MainWindow(QMainWindow):
             menu.exec_(self.top_bar.mapToGlobal(self.top_bar.rect().bottomRight()))
             return
         menu = QMenu(self)
-        for tab_id, info in list(self._terminals.inbox.items()):
-            ws = next(
-                (w for w in self.workspaces if w.id == info["workspace_id"]),
-                None,
-            )
+        for tab_id, info in list(entries.items()):
+            ws = self.workspaces_coord.find_by_id(info["workspace_id"])
             ws_name = ws.name if ws else "?"
             label = f"{ws_name} · {info['title']}"
             if info.get("status"):
@@ -1026,23 +968,17 @@ class MainWindow(QMainWindow):
             menu.addAction(act)
         menu.addSeparator()
         clear = QAction("Limpar inbox", menu)
-        clear.triggered.connect(self._clear_inbox)
+        clear.triggered.connect(self.terminals_coord.clear_inbox)
         menu.addAction(clear)
-        # Posiciona logo abaixo do bell
         anchor = self.top_bar._inbox_btn
         menu.exec_(anchor.mapToGlobal(anchor.rect().bottomLeft()))
 
-    def _clear_inbox(self) -> None:
-        self._terminals.inbox.clear()
-        self._refresh_inbox_badge()
-
     def _focus_tab_from_inbox(self, workspace_id: str, tab_id: int) -> None:
-        self._terminals.inbox.pop(tab_id, None)
-        self._refresh_inbox_badge()
+        self.terminals_coord.remove_from_inbox(tab_id)
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is not None:
             self.list_widget.setCurrentItem(ws_item)
-        area = self._terminal_areas.get(workspace_id)
+        area = self.terminals_coord.area_for(workspace_id)
         if area is None:
             return
         for i in range(area.tabs.count()):
@@ -1050,18 +986,6 @@ class MainWindow(QMainWindow):
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 break
-
-    def _on_tab_removed(self, tab_id: int) -> None:
-        item = self._terminals.tree_items.get(tab_id)
-        inbox_changed = self._terminals.release_tab(tab_id)
-        if inbox_changed:
-            self._refresh_inbox_badge()
-        if item is not None and item.parent() is not None:
-            item.parent().removeChild(item)
-        if not self._terminals.any_working():
-            self._spinner_timer.stop()
-
-    SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
     def _resolve_state(self, is_working: bool, is_running: bool) -> str:
         if not is_running:
@@ -1071,7 +995,7 @@ class MainWindow(QMainWindow):
         return STATE_IDLE
 
     def _terminal_widget_for(self, tab_id: int) -> TerminalWidget | None:
-        for area in self._terminal_areas.values():
+        for area in self.terminals_coord._areas.values():
             for i in range(area.tabs.count()):
                 w = area.tabs.widget(i)
                 if id(w) == tab_id and isinstance(w, TerminalWidget):
@@ -1099,14 +1023,15 @@ class MainWindow(QMainWindow):
         if term is not None:
             full_title = term.full_title() or title
         widget.set_title(title, full_title)
-        spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
         widget.update_state(
-            self._resolve_state(is_working, is_running), status, spinner_char=spinner
+            self._resolve_state(is_working, is_running),
+            status,
+            spinner_char=self.terminals_coord.current_spinner_char(),
         )
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
         ws_item.setExpanded(True)
-        self._terminals.tree_items[tab_id] = child
+        self.terminals_coord.state.tree_items[tab_id] = child
 
     def _update_terminal_child(
         self,
@@ -1116,7 +1041,7 @@ class MainWindow(QMainWindow):
         is_working: bool,
         is_running: bool,
     ) -> None:
-        item = self._terminals.tree_items.get(tab_id)
+        item = self.terminals_coord.state.tree_items.get(tab_id)
         if item is None:
             return
         widget = self.list_widget.itemWidget(item, 0)
@@ -1127,144 +1052,39 @@ class MainWindow(QMainWindow):
         if term is not None:
             full_title = term.full_title() or title
         widget.set_title(title, full_title)
-        spinner = self.SPINNER_FRAMES[self._spinner_frame % len(self.SPINNER_FRAMES)]
         widget.update_state(
-            self._resolve_state(is_working, is_running), status, spinner_char=spinner
+            self._resolve_state(is_working, is_running),
+            status,
+            spinner_char=self.terminals_coord.current_spinner_char(),
         )
-
-    def _tick_spinner(self) -> None:
-        self._spinner_frame = (self._spinner_frame + 1) % len(self.SPINNER_FRAMES)
-        for tab_id, (status, working, title) in list(self._terminals.activity.items()):
-            if working:
-                self._update_terminal_child(tab_id, title, status, True, True)
 
     def _launch_claude_for(
         self, workspace: Workspace, resume_session_id: str, cwd_override: str
     ) -> None:
-        if not workspace.folders:
-            QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
-            return
-        from ..services.launch_planner import build_claude_argv, plan_from_dialog
-        from .launch_claude_dialog import LaunchClaudeDialog
-
-        cwd, extras = workspace.launch_paths()
-        worktree_label = ""
-        if cwd_override:
-            cwd = cwd_override
-            extras = []
-        elif not resume_session_id:
-            # Resume não passa pelo dialog (preserva a sessão exata)
-            dialog = LaunchClaudeDialog(workspace, self.settings, parent=self)
-            if not dialog.exec():
-                return
-            plan = plan_from_dialog(
-                dialog.result_folders(),
-                dialog.result_isolate(),
-                dialog.result_create_branch(),
-                dialog.result_branch(),
-                dialog.result_base_branch(),
-            )
-            if not plan.ok:
-                if plan.error:
-                    QMessageBox.warning(self, "Falha ao preparar launch", plan.error)
-                return
-            cwd, extras = plan.cwd, plan.extras
-            worktree_label = plan.worktree_label
-
-        argv = build_claude_argv(
-            self.settings.claude_command,
-            self.settings.claude_extra_args,
-            extras,
-            resume_session_id,
+        terminal = self.launch_coord.launch_claude(
+            workspace, resume_session_id, cwd_override
         )
-
-        area = self._get_terminal_area(workspace)
-        self.terminal_host.setCurrentWidget(area)
-        title = "claude (resume)" if resume_session_id else "claude"
-        title = f"{title} #{area.count() + 1}{worktree_label}"
-        terminal = area.add_terminal(title)
-        # Dá pra terminal saber que é Claude (cwd + resume id), pra ele
-        # tentar achar o título da sessão (1º user prompt) e mostrar no tree
-        terminal.configure_claude(cwd, resume_session_id or None)
-        try:
-            terminal.start_shell_command(
-                argv,
-                cwd,
-                label=f"claude — {workspace.name}{worktree_label}",
-                shell=self.settings.shell_command or None,
-            )
-        except Exception as e:
-            log.exception("Falha ao abrir Claude embutido")
-            QMessageBox.warning(self, "Falha", str(e))
-            return
-        # JSONL da nova sessão aparece em ~1-3s; pede refresh dos cards
-        # de Sessões recentes (workspace_details agenda dois QTimer)
-        self.details.refresh_sessions_soon()
+        if terminal is not None:
+            area = self.terminals_coord.area_for(workspace.id)
+            if area is not None:
+                self.terminal_host.setCurrentWidget(area)
 
     def _handoff_session(self, workspace: Workspace, session) -> None:
-        from PySide6.QtGui import QGuiApplication
-
-        from .handoff_dialog import HandoffDialog
-        dialog = HandoffDialog(session, parent=self)
-        if not dialog.exec():
-            return
-        briefing = dialog.briefing()
-        if not briefing:
-            return
-        QGuiApplication.clipboard().setText(briefing)
-        # Abre um novo Claude no workspace (passa pelo LaunchClaudeDialog normal,
-        # respeitando defaults). Depois agenda envio do briefing após 4s pro
-        # Claude estar pronto pra receber input.
-        before_count = 0
-        area_before = self._terminal_areas.get(workspace.id)
-        if area_before is not None:
-            before_count = area_before.tabs.count()
-        self._launch_claude_for(workspace, "", "")
-        area_after = self._terminal_areas.get(workspace.id)
-        if area_after is None or area_after.tabs.count() == before_count:
-            return  # usuário cancelou o LaunchClaudeDialog
-        new_terminal = area_after.tabs.widget(area_after.tabs.count() - 1)
-        if not isinstance(new_terminal, TerminalWidget):
-            return
-        # Envia o briefing como input ~4s depois (espera Claude inicializar)
-        QTimer.singleShot(
-            4000, lambda: self._send_to_terminal(new_terminal, briefing)
-        )
-
-    def _send_to_terminal(self, terminal: "TerminalWidget", text: str) -> None:
-        if not terminal.session.is_running():
-            log.warning("Terminal não está rodando, abortando envio do briefing")
-            return
-        try:
-            payload = (text + "\n").encode("utf-8")
-            terminal.session.write(payload)
-        except Exception:
-            log.exception("Falha ao enviar briefing pro terminal")
+        self.launch_coord.handoff_session(workspace, session)
 
     def _launch_shell_for(self, workspace: Workspace) -> None:
-        if not workspace.folders:
-            return
-        cwd, _ = workspace.launch_paths()
-        area = self._get_terminal_area(workspace)
-        self.terminal_host.setCurrentWidget(area)
-        terminal = area.add_terminal(f"shell #{area.count() + 1}")
-        try:
-            terminal.start_interactive_shell(
-                cwd,
-                shell=self.settings.shell_command or None,
-            )
-        except Exception as e:
-            log.exception("Falha ao abrir shell embutido")
-            QMessageBox.warning(self, "Falha", str(e))
+        terminal = self.launch_coord.launch_shell(workspace)
+        if terminal is not None:
+            area = self.terminals_coord.area_for(workspace.id)
+            if area is not None:
+                self.terminal_host.setCurrentWidget(area)
 
     def _cleanup_terminal_for(self, workspace_id: str) -> None:
-        area = self._terminal_areas.pop(workspace_id, None)
+        area = self.terminals_coord.cleanup_area(workspace_id)
         if area is None:
             return
-        area.close_all()
         self.terminal_host.removeWidget(area)
         area.deleteLater()
-        self._terminals.running_counts.pop(workspace_id, None)
         if self.terminal_host.count() == 1:
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
 
@@ -1303,23 +1123,21 @@ class MainWindow(QMainWindow):
 
     def add_workspace(self) -> None:
         dialog = WorkspaceDialog(parent=self)
-        if dialog.exec():
-            ws = dialog.workspace()
-            if not ws.name:
-                QMessageBox.warning(self, "Workspace inválido", "O nome não pode ficar vazio.")
-                return
-            self.workspaces.append(ws)
-            save_workspaces(self.workspaces)
-            # Aplicar template (CLAUDE.md) se marcado
-            tpl = dialog.selected_template()
-            if (
-                dialog.init_claude_md()
-                and tpl is not None
-                and tpl.claude_md
-                and ws.folders
-            ):
-                self._apply_template_claude_md(ws, tpl)
-            self.refresh_list()
+        if not dialog.exec():
+            return
+        ws = dialog.workspace()
+        if not ws.name:
+            QMessageBox.warning(self, "Workspace inválido", "O nome não pode ficar vazio.")
+            return
+        self.workspaces_coord.add(ws)
+        tpl = dialog.selected_template()
+        if (
+            dialog.init_claude_md()
+            and tpl is not None
+            and tpl.claude_md
+            and ws.folders
+        ):
+            self._apply_template_claude_md(ws, tpl)
 
     def _apply_template_claude_md(self, workspace: Workspace, template) -> None:
         target = Path(workspace.folders[0]) / "CLAUDE.md"
@@ -1334,51 +1152,24 @@ class MainWindow(QMainWindow):
         try:
             target.write_text(template.claude_md, encoding="utf-8")
         except OSError as e:
-            QMessageBox.warning(
-                self,
-                "Falha ao gravar CLAUDE.md",
-                str(e),
-            )
+            QMessageBox.warning(self, "Falha ao gravar CLAUDE.md", str(e))
 
     def edit_workspace(self, workspace: Workspace) -> None:
         dialog = WorkspaceDialog(workspace=workspace, parent=self)
-        if dialog.exec():
-            updated = dialog.workspace()  # mesma id
-            idx = next(
-                (i for i, w in enumerate(self.workspaces) if w.id == workspace.id),
-                None,
-            )
-            if idx is None:
-                return
-            self.workspaces[idx] = updated
-            save_workspaces(self.workspaces)
-            self._invalidate_session_cache(updated.id)
-            self.refresh_list()
-            # Reapresenta com os novos dados (mesmo id = mesmo terminal area)
+        if not dialog.exec():
+            return
+        updated = dialog.workspace()
+        if self.workspaces_coord.replace(updated):
             self.details.show_workspace(updated)
 
     def delete_workspace(self, workspace: Workspace) -> None:
-        reply = QMessageBox.question(
-            self,
-            "Remover workspace",
-            f"Remover o workspace '{workspace.name}'?",
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.workspaces = [w for w in self.workspaces if w.id != workspace.id]
-            save_workspaces(self.workspaces)
-            self._cleanup_terminal_for(workspace.id)
-            self._invalidate_session_cache(workspace.id)
-            self.refresh_list()
+        if not self.workspaces_coord.confirm_delete(workspace, parent=self):
+            return
+        # _cleanup_terminal_for é chamado via workspace_deleted signal
+        self.workspaces_coord.delete(workspace.id)
 
     # ---------- persistência ----------
 
-    def _migrate_ids_if_needed(self) -> None:
-        # from_dict já preenche id ausente; só precisamos persistir se algo mudou.
-        # Detectamos pela presença do campo no arquivo original — mas como
-        # comparar é caro, salva sempre quando há ao menos 1 workspace.
-        # Custo: 1 write inicial, garantia de migração estável.
-        if self.workspaces:
-            save_workspaces(self.workspaces)
 
     def _restore_geometry(self) -> None:
         geom = self.settings.window_geometry
