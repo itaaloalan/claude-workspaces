@@ -12,6 +12,12 @@ class Workspace:
     folders: list[str] = field(default_factory=list)
     description: str = ""
     id: str = field(default_factory=_new_id)
+    # Overrides do LaunchClaudeDialog. Quando None/vazio, usa o valor
+    # global das Configurações. Defaults pra preservar comportamento
+    # antigo de workspaces criados antes desses campos existirem.
+    branch_prefix: str = ""           # "" → settings.branch_prefix
+    default_isolate_worktree: bool | None = None
+    default_create_new_branch: bool | None = None
 
     @property
     def primary_folder(self) -> str | None:
@@ -43,9 +49,19 @@ class Workspace:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Workspace":
+        # default_*_*: aceita True/False/None do JSON; campo ausente vira None
+        isolate = data.get("default_isolate_worktree")
+        if isolate is not None and not isinstance(isolate, bool):
+            isolate = None
+        create_branch = data.get("default_create_new_branch")
+        if create_branch is not None and not isinstance(create_branch, bool):
+            create_branch = None
         return cls(
             name=data["name"],
             folders=list(data.get("folders", [])),
             description=data.get("description", ""),
             id=str(data.get("id") or _new_id()),
+            branch_prefix=str(data.get("branch_prefix") or ""),
+            default_isolate_worktree=isolate,
+            default_create_new_branch=create_branch,
         )

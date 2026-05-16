@@ -35,6 +35,41 @@ def test_workspace_from_dict_fills_missing_id():
     assert ws.name == "p"
 
 
+def test_workspace_overrides_default_to_none():
+    """Workspace antigo (sem campos de override) carrega com None/vazio."""
+    ws = Workspace.from_dict({"name": "p", "folders": ["/a"]})
+    assert ws.branch_prefix == ""
+    assert ws.default_isolate_worktree is None
+    assert ws.default_create_new_branch is None
+
+
+def test_workspace_overrides_roundtrip():
+    ws = Workspace(
+        name="p",
+        folders=["/a"],
+        branch_prefix="italo",
+        default_isolate_worktree=True,
+        default_create_new_branch=False,
+    )
+    back = Workspace.from_dict(ws.to_dict())
+    assert back.branch_prefix == "italo"
+    assert back.default_isolate_worktree is True
+    assert back.default_create_new_branch is False
+
+
+def test_workspace_overrides_corrupt_bool_becomes_none():
+    """Se o JSON tem string ou número onde devia ter bool, vira None
+    (em vez de quebrar a desserialização)."""
+    ws = Workspace.from_dict({
+        "name": "p",
+        "folders": ["/a"],
+        "default_isolate_worktree": "yes",  # tipo errado
+        "default_create_new_branch": 1,     # tipo errado
+    })
+    assert ws.default_isolate_worktree is None
+    assert ws.default_create_new_branch is None
+
+
 def test_workspace_from_dict_ignores_legacy_tasks():
     """Workspaces antigos com chave 'tasks' devem ser carregados sem erro."""
     legacy = {"name": "p", "folders": ["/a"], "tasks": [{"id": "x", "title": "old"}]}

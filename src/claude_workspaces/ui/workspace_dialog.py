@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -126,12 +127,64 @@ class WorkspaceDialog(QDialog):
         folder_actions.addStretch()
         layout.addLayout(folder_actions)
 
+        layout.addWidget(self._build_overrides_section(workspace))
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _build_overrides_section(self, workspace: Workspace | None) -> QGroupBox:
+        """Overrides per-workspace pros defaults de Git/Worktree.
+        Vazio/Padrão = usa o valor das Configurações globais."""
+        box = QGroupBox("Git / Worktree (override do projeto)")
+        v = QVBoxLayout(box)
+        v.setSpacing(4)
+
+        info = QLabel(
+            "Se preenchido, esses valores sobrescrevem o default global ao "
+            "abrir Claude neste workspace."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        v.addWidget(info)
+
+        form = QFormLayout()
+
+        self.branch_prefix_edit = QLineEdit(
+            workspace.branch_prefix if workspace else ""
+        )
+        self.branch_prefix_edit.setPlaceholderText("(usar global)")
+        form.addRow("Prefixo da branch:", self.branch_prefix_edit)
+
+        self.isolate_combo = QComboBox()
+        self.isolate_combo.addItems(["Usar global", "Sim", "Não"])
+        if workspace and workspace.default_isolate_worktree is True:
+            self.isolate_combo.setCurrentIndex(1)
+        elif workspace and workspace.default_isolate_worktree is False:
+            self.isolate_combo.setCurrentIndex(2)
+        form.addRow("Isolar worktree por padrão:", self.isolate_combo)
+
+        self.create_branch_combo = QComboBox()
+        self.create_branch_combo.addItems(["Usar global", "Sim", "Não"])
+        if workspace and workspace.default_create_new_branch is True:
+            self.create_branch_combo.setCurrentIndex(1)
+        elif workspace and workspace.default_create_new_branch is False:
+            self.create_branch_combo.setCurrentIndex(2)
+        form.addRow("Criar nova branch por padrão:", self.create_branch_combo)
+
+        v.addLayout(form)
+        return box
+
+    def _override_value(self, combo) -> bool | None:
+        idx = combo.currentIndex()
+        if idx == 1:
+            return True
+        if idx == 2:
+            return False
+        return None
 
     def add_folder(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Selecionar pasta")
@@ -181,6 +234,9 @@ class WorkspaceDialog(QDialog):
 
     def workspace(self) -> Workspace:
         folders = [self.folders_list.item(i).text() for i in range(self.folders_list.count())]
+        branch_prefix = self.branch_prefix_edit.text().strip()
+        isolate = self._override_value(self.isolate_combo)
+        create_branch = self._override_value(self.create_branch_combo)
         if self._original is not None:
             # Preserva id — edição não invalida referências existentes em
             # _terminal_areas / _running_counts da MainWindow
@@ -189,9 +245,15 @@ class WorkspaceDialog(QDialog):
                 name=self.name_edit.text().strip(),
                 folders=folders,
                 description=self.desc_edit.toPlainText().strip(),
+                branch_prefix=branch_prefix,
+                default_isolate_worktree=isolate,
+                default_create_new_branch=create_branch,
             )
         return Workspace(
             name=self.name_edit.text().strip(),
             folders=folders,
             description=self.desc_edit.toPlainText().strip(),
+            branch_prefix=branch_prefix,
+            default_isolate_worktree=isolate,
+            default_create_new_branch=create_branch,
         )

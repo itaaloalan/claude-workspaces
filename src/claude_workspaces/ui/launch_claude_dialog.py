@@ -97,23 +97,34 @@ class LaunchClaudeDialog(QDialog):
             no_repo.setStyleSheet("color: #b0b0b0;")
             v.addWidget(no_repo)
 
+        # Defaults: workspace override > settings
+        isolate_default = (
+            workspace.default_isolate_worktree
+            if workspace.default_isolate_worktree is not None
+            else self.settings.default_isolate_worktree
+        )
+        create_branch_default = (
+            workspace.default_create_new_branch
+            if workspace.default_create_new_branch is not None
+            else self.settings.default_create_new_branch
+        )
+        prefix = workspace.branch_prefix or self.settings.branch_prefix
+
         self.isolate_chk = QCheckBox(
             "Isolar em git worktree (working tree separada)"
         )
         self.isolate_chk.setEnabled(self._is_repo)
-        # Default vem das configs
-        if self._is_repo and self.settings.default_isolate_worktree:
+        if self._is_repo and isolate_default:
             self.isolate_chk.setChecked(True)
         v.addWidget(self.isolate_chk)
 
         self.new_branch_chk = QCheckBox("Criar nova branch")
-        self.new_branch_chk.setChecked(self.settings.default_create_new_branch)
+        self.new_branch_chk.setChecked(create_branch_default)
         self.new_branch_chk.setEnabled(False)
         v.addWidget(self.new_branch_chk)
 
         form = QFormLayout()
-        # "Nova branch" — text edit, prefixada com settings.branch_prefix
-        self.branch_edit = QLineEdit(suggest_branch_name(self.settings.branch_prefix))
+        self.branch_edit = QLineEdit(suggest_branch_name(prefix))
         self.branch_edit.setEnabled(False)
         form.addRow("Nome da nova branch:", self.branch_edit)
 
