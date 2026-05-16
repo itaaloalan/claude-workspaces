@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git push origin main)",
+      "Bash(git push origin italo/*)",
+      "Bash(git -C * push origin main)",
+      "Bash(git -C * push origin italo/*)",
+      "Bash(git merge italo/*)",
+      "Bash(git merge italo/* *)",
+      "Bash(git -C * merge italo/*)",
+      "Bash(git -C * merge italo/* *)",
+      "Bash(.venv/bin/pip install -e .)",
+      "Bash(.venv/bin/pip install -e *)",
+      "Bash(*/.venv/bin/pip install -e *)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Merging feature branches matching italo/* into main and pushing main to origin is the standard release workflow for this repo, pre-authorized by the user. Reinstalling the editable package via .venv/bin/pip install -e . after main is updated is also part of this workflow."
+    ]
+  }
+}

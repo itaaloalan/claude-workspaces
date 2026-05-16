@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QBrush, QColor, QFont
+from PySide6.QtGui import QAction, QBrush, QClipboard, QColor, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -174,6 +174,11 @@ class GitPanel(QWidget):
         layout.addWidget(_btn("↻", "Atualizar", self.refresh))
         layout.addWidget(_btn("⇡⇣", "Fetch (todos os repos)", self._do_fetch_all))
         layout.addWidget(_btn("⤓", "Pull ff-only (todos os repos)", self._do_pull_all))
+        layout.addWidget(_btn(
+            "⮏ PR",
+            "Abrir Pull Request no GitHub (branch atual → base)",
+            self._do_open_pr,
+        ))
         self._toggle_diff_btn = _btn("👁", "Mostrar / esconder diff", self._toggle_diff)
         layout.addWidget(self._toggle_diff_btn)
 
@@ -843,6 +848,140 @@ class GitPanel(QWidget):
         if results:
             QMessageBox.information(self, "Pull", "\n".join(results)[:2000])
         self.refresh()
+
+    def _pick_pr_folder(self) -> str | None:
+        """Escolhe o folder pra abrir PR: primária se for repo, senão
+        primeira pasta que é repo. None se nenhum."""
+        if not self.workspace:
+            return None
+        primary = self.workspace.primary_folder()
+        if primary and self._statuses.get(primary) and self._statuses[primary].is_repo:
+            return primary
+        for folder in self.workspace.folders:
+            st = self._statuses.get(folder)
+            if st and st.is_repo:
+                return folder
+        return None
+
+    def _do_open_pr(self) -> None:
+        # Imports locais — pesadinho (subprocess via gh) e não usado no
+        # caminho comum; mantém startup do painel leve
+        from ..pr_actions import create_pr_github, gh_available, push_with_upstream
+        from ..pr_draft import build_draft_for_folder
+        from ..pr_provider import branch_state, detect_github
+        from .open_pr_dialog import OpenPullRequestDialog
+
+        folder = self._pick_pr_folder()
+        if not folder:
+            QMessageBox.warning(
+                self,
+                "Sem repo",
+                "Nenhuma pasta do workspace é um repositório git.",
+            )
+            return
+
+        gh = detect_github(folder)
+        if not gh:
+            QMessageBox.warning(
+                self,
+                "Remote não é GitHub",
+                "O remote `origin` deste repo não é GitHub — só GitHub é "
+                "suportado por enquanto.",
+            )
+            return
+
+        if not gh_available():
+            QMessageBox.warning(
+                self,
+                "gh CLI ausente",
+                "O binário `gh` não está no PATH. Instale o GitHub CLI "
+                "(`paru -S github-cli`) e faça `gh auth login`.",
+            )
+            return
+
+        state = branch_state(folder)
+        if state.error:
+            QMessageBox.warning(self, "Estado do branch", state.error)
+            return
+        if not state.current:
+            QMessageBox.warning(self, "HEAD inválido", "Sem branch atual.")
+            return
+        if state.current == state.base:
+            QMessageBox.warning(
+                self,
+                "Está no base",
+                f"Você está em `{state.base}` — troque pra uma feature branch "
+                "antes de abrir PR.",
+            )
+            return
+        if state.dirty:
+            reply = QMessageBox.question(
+                self,
+                "Working tree sujo",
+                "Existem mudanças não-commitadas. Elas NÃO entram no PR. "
+                "Quer continuar mesmo assim?",
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        if state.ahead == 0:
+            QMessageBox.warning(
+                self,
+                "Sem commits",
+                f"`{state.current}` não tem commits acima de `{state.base}`. "
+                "Faça commit antes de abrir PR.",
+            )
+            return
+
+        # Garante upstream — gh pr create exige a branch publicada
+        if not state.has_upstream:
+            reply = QMessageBox.question(
+                self,
+                "Sem upstream",
+                f"`{state.current}` não tem upstream. Faço `git push -u "
+                f"origin {state.current}` agora?",
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            ok, out = push_with_upstream(folder, state.current)
+            if not ok:
+                QMessageBox.warning(
+                    self, "Push falhou", out[:2000] or "(sem output)"
+                )
+                return
+
+        draft = build_draft_for_folder(folder, state.base, fallback_title=state.current)
+
+        dialog = OpenPullRequestDialog(
+            repo_label=gh.full_name,
+            branch=state.current,
+            base=state.base,
+            title=draft.title,
+            body=draft.body,
+            parent=self,
+        )
+        if not dialog.exec():
+            return
+        title, base, body, is_draft = dialog.values()
+        if not title:
+            QMessageBox.warning(self, "Título vazio", "Título do PR é obrigatório.")
+            return
+
+        result = create_pr_github(folder, title, body, base, draft=is_draft)
+        if not result.ok:
+            QMessageBox.warning(self, "gh pr create falhou", result.error[:2000])
+            return
+
+        # Copia URL pra clipboard pra usuário colar no Slack/etc
+        if result.url:
+            QGuiApplication.clipboard().setText(result.url, QClipboard.Mode.Clipboard)
+        QMessageBox.information(
+            self,
+            "PR aberto",
+            f"<b>{title}</b><br><br>"
+            f"<a href='{result.url}'>{result.url}</a><br><br>"
+            "URL copiada pro clipboard.",
+        )
 
 
 def open_path_in_editor(path: str, editor_command: str = "code") -> None:
