@@ -177,7 +177,15 @@ class MainWindow(QMainWindow):
         self.right_splitter.setStretchFactor(0, 1)
         self.right_splitter.setStretchFactor(1, 1)
         if self.settings.right_splitter_sizes:
-            self.right_splitter.setSizes(self.settings.right_splitter_sizes)
+            sizes = list(self.settings.right_splitter_sizes)
+            # Legacy: usuários antigos têm [sum, 0] (terminal escondido).
+            # Promove pra "minimizado mas header visível"
+            if len(sizes) >= 2 and sizes[1] <= 4:
+                header_h = self._terminal_header_height()
+                total = sum(sizes) or 800
+                sizes = [max(total - header_h, 200), header_h]
+                self.terminal_host.setVisible(False)
+            self.right_splitter.setSizes(sizes)
         else:
             self.right_splitter.setSizes([380, 520])
 
@@ -320,16 +328,38 @@ class MainWindow(QMainWindow):
             self.body_splitter.setSizes([target, max(sum(sizes) - target, 200)])
         self._schedule_layout_save()
 
+    def _terminal_header_height(self) -> int:
+        """Altura do header do terminal — usado como 'min height' quando
+        minimizado (barra fica visível e clicável pra restaurar)."""
+        if hasattr(self, "_terminal_header"):
+            return max(self._terminal_header.sizeHint().height(), 28)
+        return 32
+
+    def _terminal_is_minimized(self) -> bool:
+        sizes = self.right_splitter.sizes()
+        if not sizes or len(sizes) < 2:
+            return False
+        return sizes[1] <= self._terminal_header_height() + 4
+
     def _toggle_terminal(self) -> None:
         sizes = self.right_splitter.sizes()
-        if not sizes:
+        if not sizes or len(sizes) < 2:
             return
-        if sizes[1] > 0:
+        header_h = self._terminal_header_height()
+        if not self._terminal_is_minimized():
+            # Minimizar: terminal_host some, mas o header continua
+            # visível (clicável pra restaurar)
             self._terminal_last_size = sizes[1]
-            self.right_splitter.setSizes([sum(sizes), 0])
+            self.terminal_host.setVisible(False)
+            self.right_splitter.setSizes(
+                [max(sum(sizes) - header_h, 200), header_h]
+            )
         else:
             target = self._terminal_last_size or 420
-            self.right_splitter.setSizes([max(sum(sizes) - target, 200), target])
+            self.terminal_host.setVisible(True)
+            self.right_splitter.setSizes(
+                [max(sum(sizes) - target, 200), target]
+            )
         self._refresh_terminal_btns()
         self._schedule_layout_save()
 
@@ -338,6 +368,7 @@ class MainWindow(QMainWindow):
         total = sum(sizes) or 800
         if sizes[0] > 0:
             self._content_last_size = sizes[0]
+        self.terminal_host.setVisible(True)
         self.right_splitter.setSizes([0, total])
         self._refresh_terminal_btns()
         self._schedule_layout_save()
@@ -345,6 +376,7 @@ class MainWindow(QMainWindow):
     def _restore_terminal(self) -> None:
         sizes = self.right_splitter.sizes()
         total = sum(sizes) or 800
+        self.terminal_host.setVisible(True)
         # 50/50 — equilíbrio razoável após maximizar ou minimizar
         half = total // 2
         self.right_splitter.setSizes([total - half, half])
@@ -356,11 +388,12 @@ class MainWindow(QMainWindow):
         if not sizes or len(sizes) < 2:
             return
         content_visible = sizes[0] > 0
-        terminal_visible = sizes[1] > 0
+        minimized = self._terminal_is_minimized()
         self._term_max_btn.setEnabled(content_visible)
-        self._term_min_btn.setEnabled(terminal_visible)
+        self._term_min_btn.setEnabled(not minimized)
         # Restaurar só faz sentido se algum lado está colapsado
-        self._term_restore_btn.setEnabled(not (content_visible and terminal_visible))
+        terminal_full = not minimized
+        self._term_restore_btn.setEnabled(not (content_visible and terminal_full))
 
     def _launch_current_claude(self) -> None:
         current = self.list_widget.currentItem()
@@ -627,6 +660,14 @@ class MainWindow(QMainWindow):
         header.setStyleSheet(
             "background: #161616; border-bottom: 1px solid #2a2a2a;"
         )
+        header.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Clique no header (fora dos botões) expande o terminal se
+        # estiver minimizado
+        def _on_header_click(_ev):
+            if self._terminal_is_minimized():
+                self._toggle_terminal()
+        header.mousePressEvent = _on_header_click  # type: ignore[assignment]
+        self._terminal_header = header
         h = QHBoxLayout(header)
         h.setContentsMargins(8, 4, 8, 4)
         h.setSpacing(6)
