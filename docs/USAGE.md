@@ -1,104 +1,186 @@
 # Manual de uso
 
-## Instalação rápida (Arch / CachyOS / KDE)
+Visão geral do que cada parte da janela faz e como usar.
 
-```bash
-# 1. Dependências de sistema
-sudo pacman -S pyside6 konsole
+## Layout
 
-# 2. Clone e instale o launcher no menu do KDE
-git clone https://github.com/itaaloalan/claude-workspaces.git ~/Projetos/claude-workspaces
-cd ~/Projetos/claude-workspaces
-./packaging/install-launcher.sh
+```
+┌──────────────────────────────────────────────────────────────┐
+│ ☰  Claude Workspaces  [busca…]                🔔  ⚙ Configurar│  ← topbar
+├──────────┬──────────────────────────────────────────┬────────┤
+│ WORK-    │  Workspace selecionado                    │ Git   │
+│ SPACES   │  ─ título, stack, pastas, MCP, uso (30d)  │ ····  │
+│          │  ─ ações (Abrir Claude / Terminal / IDEs) │       │
+│ ▼ ogpms  │  ─ Sessões recentes (cards)               │       │
+│  ⠋ Cons1 │                                            │ Mem.  │
+│  ❚❚ Cons2│                                            │       │
+│ ▼ map    │                                            │ Skills│
+│          ├──────────────────────────────────────────┬┤       │
+│          │ Terminal embutido (várias abas)          ││       │
+│          │  ─ ⬇ ▢ ❐  (minimizar/maximizar/restaurar)││       │
+└──────────┴──────────────────────────────────────────┴────────┘
 ```
 
-Procure por **Claude Workspaces** no menu iniciar do KDE.
-
-### Outras distros
-
-Você precisa de:
-
-- Python 3.11+
-- PySide6 (`pip install PySide6` ou pacote do sistema)
-- Um terminal compatível com a flag `-e` (Konsole, xterm, alacritty, foot)
-- O CLI do [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude` no PATH)
-
-Rodar direto do source:
-
-```bash
-PYTHONPATH=src python3 -m claude_workspaces
-```
-
-Ou instalar como pacote:
-
-```bash
-pipx install --editable .
-```
+- **Topbar**: toggle sidebar (☰), título, busca de workspaces, **bell** (consoles aguardando), Configurar.
+- **Sidebar**: lista de workspaces. Cada workspace pode expandir e mostrar os consoles ativos como filhos com status colorido.
+- **Centro/topo**: detalhes do workspace selecionado.
+- **Centro/baixo**: terminal embutido (xterm.js + pty), com tabs por sessão.
+- **Dock direito**: Git, Memória (CLAUDE.md), Skills — colapsáveis via tool strip vertical.
 
 ## Criando um workspace
 
-1. Clique em **+ Novo** na barra lateral
-2. Dê um **nome** (ex: "API Petrobras")
-3. Adicione uma **descrição** (opcional)
-4. Use **Adicionar pasta** uma ou mais vezes — a **primeira pasta** é o `cwd` que o Claude vai usar; as demais entram via `--add-dir`
-5. Use **Mover ↑ / ↓** para reordenar se quiser
-6. **OK** salva
+1. Clique **+ Novo Workspace** (sidebar) ou pressione `Ctrl+N`.
+2. Opcional: escolha um **Modelo** (Java+Spring+PostgreSQL, Web Next.js, Python FastAPI). Pré-preenche descrição + oferece criar `CLAUDE.md` inicial.
+3. **Nome**, **descrição**, **pastas** (drag-and-drop ou Adicionar pasta).
+4. A **primeira pasta** vira o `cwd`; as demais entram como `--add-dir`.
+5. Seção **Git/Worktree (override do projeto)** — opcional:
+   - **Prefixo da branch**: substitui o `claude/` global (ex: `italo`).
+   - **Isolar worktree por padrão**: `Usar global / Sim / Não`.
+   - **Criar nova branch por padrão**: `Usar global / Sim / Não`.
 
-O JSON fica em `~/.config/claude-workspaces/workspaces.json` — pode versionar, sincronizar ou editar manualmente.
+## Abrindo o Claude
 
-## Botões de "Abrir com"
+Ao clicar **Abrir Claude** num workspace, abre o `LaunchClaudeDialog`:
 
-Quando um workspace é selecionado, a área da direita mostra os botões disponíveis:
+- **Pastas**: checkbox por pasta do workspace. Primeira marcada vira `cwd`, demais `--add-dir`.
+- **Isolar em git worktree**: cria um worktree em `<repo-pai>/<repo>.claude/<branch>/`. Útil pra rodar múltiplos agentes em paralelo sem brigar de commit.
+- **Criar nova branch**: 
+  - Marcado + isolado → `git worktree add -b <branch> <path> <base>`
+  - Marcado + sem isolar → `git checkout -b <branch> [<base>]` in-place
+  - Desmarcado + isolado → checkout de branch existente num worktree
+  - Desmarcado + sem isolar → roda na branch atual (nada muda)
 
-| Botão | O que faz |
-|---|---|
-| **Abrir Claude** | Abre o terminal configurado rodando `claude --add-dir ...` no `cwd` do workspace |
-| **Abrir Terminal** | Abre só o terminal (Konsole por padrão) no `cwd` |
-| **Abrir IntelliJ IDEA / WebStorm / PyCharm / Rider** | Aparecem dinamicamente quando a stack é detectada nos arquivos do projeto |
-| **Abrir VS Code** | Sempre presente, passa todas as pastas do workspace como args |
+Os defaults vêm de **Configurações → Worktree** ou do override do workspace (se setado).
 
-### Auto-detecção de stack
+## Sidebar: árvore de atividade
 
-| Stack | Arquivos detectados | IDE sugerida |
-|---|---|---|
-| Java | `pom.xml`, `build.gradle(.kts)`, `settings.gradle(.kts)` | IntelliJ IDEA |
-| Web | `package.json`, `yarn.lock`, `pnpm-lock.yaml` | WebStorm |
-| Python | `pyproject.toml`, `setup.py`, `requirements.txt`, `Pipfile` | PyCharm |
-| C# | `*.csproj`, `*.sln`, `*.fsproj` | Rider |
+Cada workspace que tem console aberto vira expansível. Cada filho mostra:
 
-Workspaces poliglotas mostram **todos** os botões aplicáveis.
+```
+⠋  Verificar falha ao inserir um novo status...
+    Trabalhando
+    Lendo arquivo MapBaseTest.java
+```
 
-## Aba Configurações
+Estados (cor + ícone):
+- **Trabalhando** (amarelo + spinner ⠋⠙⠹…): Claude está pensando ou rodando tool
+- **Aguardando** (laranja + ❚❚): Claude terminou turno, espera input
+- **Concluído** (verde + ✓): processo do Claude encerrado
 
-Customize os comandos usados pelos botões:
+**Double-click** num filho foca a aba do terminal correspondente. Sessões antigas (do histórico) aparecem como children também — double-click retoma via `--resume` no terminal embutido.
 
-- **Comando do Claude** — default `claude`. Se você tem alias `ia` no fish/zsh, coloque `ia` aqui (o app roda via `$SHELL -ic` então aliases são resolvidos).
-- **Args extras do Claude** — passados em todas as chamadas (ex: `--dangerously-skip-permissions`).
-- **Terminal** — default `konsole`. Pode ser `alacritty`, `kitty`, `foot`, etc.; o app passa `-e <shell>` para executar.
-- **Comandos das IDEs** — default `idea`, `webstorm`, `pycharm`, `rider`, `code`. Ajuste se sua instalação usar outro nome (ex: `code-insiders`, `intellij-idea-ultimate`).
+## Inbox global (bell 🔔)
 
-Configurações são salvas em `~/.config/claude-workspaces/settings.json`.
+Quando algum console transiciona de **Trabalhando → Aguardando**, ele entra no inbox global e o bell ficar laranja com contador. Click no bell → menu com lista; click num item pula pro workspace + aba correspondente e remove do inbox.
 
-## Barra lateral
+Inbox também limpa quando: você foca o tab manualmente, o tab é fechado, ou clica em "Limpar inbox".
 
-- Clique em **☰** ou arraste a borda do divisor para esconder/mostrar a sidebar.
-- O **🔧 Hack este app** (pé da sidebar) abre o Claude no próprio repositório do `claude-workspaces` para você iterar usando o próprio app.
+## Painel Git (dock direito)
 
-## Logs
+Modelo IntelliJ Commit:
 
-Logs ficam em `~/.local/state/claude-workspaces/app.log` (rotação automática em ~2MB, 3 backups).
+- **Tree de arquivos** agrupado em "Changes" (tracked modificado) e "Unversioned Files" (untracked). Checkbox por arquivo controla se entra no próximo commit.
+- **Toolbar**: refresh, fetch, pull (ff-only), toggle do diff inline.
+- **Click num arquivo** (com diff visível) mostra o diff colorido.
+- **Double-click** abre o arquivo no editor configurado (VS Code por default).
+- **Right-click** abre menu sensível ao estado:
+  - Untracked → Add (stage), Deletar arquivo
+  - Changes → Stage / Unstage / Rollback (git restore)
+  - Grupos → Add todos / Unstage todos / Rollback todos
+  - Repo → Pull / Fetch / Stage tudo / Abrir pasta
+- **Área de commit** no rodapé: texto livre + botão `Commit (N)`. O commit reseta o staging, stage apenas os marcados, e roda `git commit -m`.
 
-A aba **Configurações** tem um botão **Abrir log** que abre o arquivo no editor padrão.
+Auto-refresh via `QFileSystemWatcher` em `.git/index`, `.git/HEAD`, `.git/FETCH_HEAD` + poll de 30s.
 
-## Atalhos úteis
+## Painel Memória (dock direito)
+
+Editor inline do `CLAUDE.md` da **pasta primária** do workspace. Claude Code já carrega esse arquivo automaticamente quando inicia naquele `cwd` — o painel só dá UI ergonômica pra editar/salvar sem abrir IDE. Auto-save após 3s de inatividade.
+
+## Painel Skills (dock direito)
+
+Lista **Skills + Agents + Comandos** disponíveis:
+
+- **Filtros de tipo**: Todos / Skills / Agentes / Comandos.
+- **Filtros de fonte**: Todas / Projeto / Global (`~/.claude/skills/`) / Plugin (marketplaces).
+- **Busca por texto** na descrição.
+- Skills mostram **contagem de uso** lida dos JSONLs do Claude (ex: `/commit-arquivo · 47 uso(s) · 3d atrás`). Tooltip detalha breakdown por workspace.
+- **Click copia** `/nome` na clipboard. Cola no Claude pra invocar.
+
+## MCP postgres
+
+Cada workspace pode ter um MCP `postgres` associado (linha "MCP:" no detalhes). 
+
+- **Criar MCP** / **Editar MCP** abre dialog com URL postgres (`postgresql://user:senha@host:5432/db`).
+- O nome do MCP é o nome do workspace (ex: workspace `ogpms` cria MCP chamado `ogpms`).
+- App grava em `~/.claude.json` preservando o resto (cria backup `.bak-<ts>` antes, mantém 3).
+- **Remover** desconfigura. Senha mascarada (`•••`) na exibição.
+
+## Telemetria de uso/custo
+
+Quando um workspace tem sessões nos últimos 30 dias, aparece uma linha:
+
+```
+Uso (30d): in 1.2M  ·  out 80K  ·  cache 5.4M  ·  ≈ US$ 12.34
+```
+
+Cost é estimado com preços hardcoded (atualizar `usage_telemetry.PRICING` quando Anthropic muda). Modelos desconhecidos contam tokens mas não custo.
+
+## Busca em sessões (Ctrl+Shift+F)
+
+Dialog dedicado pra busca de texto livre em **todas** as sessões antigas do Claude:
+
+- Linha de busca debounced 300ms
+- Combo de período (Tudo / Hoje / Semana / Mês / 3 meses) — default Semana
+- Resultados mostram prompt original + timestamp + workspace + matches + **snippet com contexto** (±80 chars)
+- Enter ou double-click retoma a sessão no terminal interno (acha automaticamente o workspace pelo cwd)
+
+## Sessões recentes (cards)
+
+No painel central. Mostra preview do 1º prompt, timestamp, badge da pasta de origem (multi-folder workspaces). Botões:
+
+- **Remover**: apaga o `.jsonl` da sessão (irreversível).
+- **→ Handoff**: abre dialog pra montar briefing e inicia novo Claude com esse briefing pré-enviado após 4s (e copia pra clipboard como backup).
+- **Retomar**: abre nova aba do terminal com `claude --resume <id>`.
+
+## Configurações
+
+Acesse via `Ctrl+,` ou botão Configurar.
+
+- **Comandos** (Claude, terminal, shell, IDEs): defaults `claude / konsole / (login shell) / code / idea / webstorm / pycharm / rider`. Override conforme sua instalação.
+- **Args extras do Claude**: passados em todas as chamadas (ex: `--dangerously-skip-permissions`).
+- **Worktree/Git defaults**:
+  - Isolar worktree por padrão
+  - Criar nova branch por padrão (quando isolar)
+  - Prefixo da branch (ex: `italo` → branches sugeridas viram `italo/<timestamp>`)
+- **Notificações**: instala/remove hook `Stop` no `~/.claude/settings.json` pra disparar `notify-send` ao fim de cada turno do Claude.
+- **Abrir log**: abre `~/.local/state/claude-workspaces/app.log` no editor padrão.
+
+Workspaces podem override os defaults de worktree/git individualmente (campo "Git/Worktree (override do projeto)" no `WorkspaceDialog`).
+
+## Persistência de layout
+
+Splitters, geometria da janela e estado dos painéis do dock (aberto/fechado) são salvos automaticamente após 600ms de inatividade. Arraste o handle, redimensione a janela, abra/feche painéis — tudo volta ao mesmo lugar na próxima sessão.
+
+## Comandos úteis
 
 ```bash
 # Ver últimos erros
 tail -f ~/.local/state/claude-workspaces/app.log
 
-# Limpar workspaces (cuidado, sem confirmação)
-rm ~/.config/claude-workspaces/workspaces.json
-
-# Resetar configurações
+# Resetar config (mantém workspaces)
 rm ~/.config/claude-workspaces/settings.json
+
+# Listar worktrees criados pelo app
+ls ~/Projetos/**/*.claude/
+
+# Forçar restauração de splitter ao default (sem mexer no resto)
+python3 -c "
+import json
+p = '~/.config/claude-workspaces/settings.json'
+import os; p = os.path.expanduser(p)
+d = json.load(open(p))
+d.pop('body_splitter_sizes', None)
+d.pop('right_splitter_sizes', None)
+json.dump(d, open(p, 'w'), indent=2)
+"
 ```
