@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QToolButton,
@@ -248,11 +249,16 @@ class PluginsView(QWidget):
         left_l.addWidget(self._counter)
         splitter.addWidget(left)
 
-        # Right: detail container
-        self._detail_scroll = QWidget()
-        self._detail_layout = QVBoxLayout(self._detail_scroll)
-        self._detail_layout.setContentsMargins(8, 0, 0, 0)
+        # Right: detail container (scrollable — sem isso o conteúdo
+        # comprime e fica ilegível quando a janela é curta)
+        self._detail_scroll = QScrollArea()
+        self._detail_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._detail_scroll.setWidgetResizable(True)
+        self._detail_inner = QWidget()
+        self._detail_layout = QVBoxLayout(self._detail_inner)
+        self._detail_layout.setContentsMargins(8, 0, 8, 8)
         self._detail_layout.setSpacing(10)
+        self._detail_scroll.setWidget(self._detail_inner)
         splitter.addWidget(self._detail_scroll)
 
         splitter.setStretchFactor(0, 0)
@@ -311,8 +317,8 @@ class PluginsView(QWidget):
 
     @staticmethod
     def _clear_layout(layout) -> None:
-        # Sub-layouts (chip_row, action_row) parentam seus botões a
-        # _detail_scroll — sem descer recursivamente, eles viram fantasmas.
+        # Sub-layouts (chip_row, action_row) parentam seus botões ao
+        # _detail_inner — sem descer recursivamente, eles viram fantasmas.
         while layout.count():
             item = layout.takeAt(0)
             w = item.widget()
