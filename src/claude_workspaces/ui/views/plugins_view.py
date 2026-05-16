@@ -281,11 +281,22 @@ class PluginsView(QWidget):
     # ----- detalhe ----------------------------------------------------------
 
     def _clear_detail(self) -> None:
-        while self._detail_layout.count():
-            child = self._detail_layout.takeAt(0)
-            w = child.widget()
-            if w:
+        self._clear_layout(self._detail_layout)
+
+    @staticmethod
+    def _clear_layout(layout) -> None:
+        # Sub-layouts (chip_row, action_row) parentam seus botões a
+        # _detail_scroll — sem descer recursivamente, eles viram fantasmas.
+        while layout.count():
+            item = layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
                 w.deleteLater()
+                continue
+            sub = item.layout()
+            if sub is not None:
+                PluginsView._clear_layout(sub)
+                sub.deleteLater()
 
     def _show_empty_detail(self) -> None:
         lab = QLabel(
