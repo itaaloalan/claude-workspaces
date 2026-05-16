@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QGuiApplication
+from PySide6.QtGui import QAction, QBrush, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -40,6 +41,7 @@ from ...plugins import (
     RegistryError,
     ValidationError,
 )
+from ...plugins.manifest_loader import load_manifest
 from ...services.system_open import open_in_file_manager
 from ...settings import Settings
 from ..new_plugin_request_dialog import NewPluginRequestDialog
@@ -85,6 +87,33 @@ class PluginsView(QWidget):
         )
         new_btn.clicked.connect(self._open_new_plugin_request)
         toolbar.addWidget(new_btn)
+
+        # Botão "Exemplos" — só aparece se acharmos examples/plugins/ no repo
+        self._examples_btn: QToolButton | None = None
+        examples = self._discover_examples()
+        if examples:
+            ex_btn = QToolButton()
+            ex_btn.setText("📦 Exemplos ▾")
+            ex_btn.setToolTip(
+                "Instala um dos bundles de exemplo que vêm com o app — "
+                "um clique, sem precisar escolher pasta"
+            )
+            ex_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+            menu = QMenu(ex_btn)
+            for entry in examples:
+                act = QAction(f"{entry['name']}   ·   {entry['description']}", menu)
+                act.setToolTip(str(entry["path"]))
+                act.triggered.connect(
+                    lambda _checked=False, p=entry["path"]: self._install_example(p)
+                )
+                menu.addAction(act)
+            ex_btn.setMenu(menu)
+            ex_btn.setStyleSheet(
+                "QToolButton { padding: 4px 10px; }"
+            )
+            toolbar.addWidget(ex_btn)
+            self._examples_btn = ex_btn
+
         install_btn = QPushButton("📂 Instalar de pasta…")
         install_btn.setToolTip("Selecione a pasta do bundle (com plugin.yaml na raiz)")
         install_btn.clicked.connect(self._install_from_folder)
@@ -138,11 +167,14 @@ class PluginsView(QWidget):
             "informações daquele plugin.</li>"
             "</ul>"
             "<b>Como usar na prática:</b><br>"
-            "1. Clique em <b>📂 Instalar de pasta…</b> e escolha a pasta do "
-            "plugin (a que tem o arquivo <code>plugin.yaml</code> dentro).<br>"
-            "2. Ele aparece na lista abaixo. Use o switch <b>Habilitado</b> "
-            "pra ligar ou desligar quando quiser.<br>"
-            "3. Cada plugin pede só as <b>permissões</b> que precisa "
+            "1. <b>Quer experimentar agora?</b> Clique em "
+            "<b>📦 Exemplos ▾</b> ali em cima e escolha um — vai instalar "
+            "na hora, sem precisar selecionar pasta.<br>"
+            "2. Pra instalar um plugin externo, use <b>📂 Instalar de pasta…</b> "
+            "e aponte pra pasta que tem o <code>plugin.yaml</code>.<br>"
+            "3. Plugins instalados aparecem na lista abaixo. Use o switch "
+            "<b>Habilitado</b> pra ligar/desligar quando quiser.<br>"
+            "4. Cada plugin pede só as <b>permissões</b> que precisa "
             "(ler pastas, acessar a internet, etc.) — você vê tudo antes."
             "</div>"
         )
@@ -552,3 +584,65 @@ class PluginsView(QWidget):
             open_in_file_manager(path)
         except LaunchError as e:
             QMessageBox.warning(self, "Falha ao abrir", str(e))
+
+    # ----- exemplos prontos -------------------------------------------------
+
+    def _discover_examples(self) -> list[dict]:
+        """Procura bundles em examples/plugins/ do repo (quando rodando do source).
+
+        Retorna lista de dicts com `name`, `description`, `path`. Ordem
+        alfabética por nome. Falhas de parsing de algum exemplo são engolidas
+        (são bundles do projeto, não input do usuário — se quebrarem, o
+        analyzer principal pega depois)."""
+        repo = find_app_repo_root()
+        if repo is None:
+            return []
+        examples_dir = repo / "examples" / "plugins"
+        if not examples_dir.is_dir():
+            return []
+        out: list[dict] = []
+        for child in sorted(examples_dir.iterdir()):
+            if not (child / "plugin.yaml").is_file():
+                continue
+            try:
+                m = load_manifest(child)
+                name = m.name
+                desc = m.description
+            except Exception:  # noqa: BLE001
+                name = child.name
+                desc = ""
+            out.append({"name": name, "description": desc, "path": child})
+        return out
+
+    def _install_example(self, path: Path) -> None:
+        """Instala um exemplo direto, perguntando antes de sobrescrever."""
+        try:
+            inst = self.registry.install(path, overwrite=False)
+        except ValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Validação falhou",
+                "<b>O exemplo não passou na validação:</b><br><br>"
+                + "<br>".join(f"• {x}" for x in e.errors[:20]),
+            )
+            return
+        except RegistryError as e:
+            reply = QMessageBox.question(
+                self,
+                "Exemplo já instalado",
+                f"{e}<br><br>Reinstalar (substitui o existente)?",
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                inst = self.registry.install(path, overwrite=True)
+            except (ValidationError, RegistryError) as e2:
+                QMessageBox.warning(self, "Falha no reinstall", str(e2))
+                return
+
+        self._after_change(inst.id, "load")
+        QMessageBox.information(
+            self,
+            "Exemplo instalado",
+            f"<b>{inst.manifest.name}</b> v{inst.manifest.version} pronto.",
+        )
