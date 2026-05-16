@@ -56,9 +56,10 @@ class SkillsPanel(QWidget):
     KIND_FILTER_ALL = "all"
     SOURCE_FILTER_ALL = "all"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, settings=None) -> None:
         super().__init__(parent)
         self.workspace: Workspace | None = None
+        self._settings = settings
         self._all: list[ClaudeItem] = []
         self._usage: dict[tuple[str, str], SkillUsage] = {}
         self._lint: dict = {}
@@ -340,7 +341,18 @@ class SkillsPanel(QWidget):
             return
         catalog_names = {i.name for i in self._all}
         usage = self._usage_for(ci)
-        dlg = SkillDetailDialog(ci, usage, catalog_names, parent=self)
+        ws_folder = (
+            self.workspace.folders[0]
+            if self.workspace and self.workspace.folders
+            else None
+        )
+        dlg = SkillDetailDialog(
+            ci, usage, catalog_names,
+            workspace_folder=ws_folder,
+            settings=self._settings,
+            parent=self,
+        )
+        dlg.finished.connect(lambda _: self.refresh())
         dlg.show()
 
     def _on_double_click(self, item: QListWidgetItem) -> None:

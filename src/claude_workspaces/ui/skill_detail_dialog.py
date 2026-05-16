@@ -8,7 +8,7 @@ perder a lista atrás.
 import logging
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QGuiApplication
+from PySide6.QtGui import QAction, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -16,12 +16,16 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
+from ..errors import LaunchError
+from ..services.skills_install import available_scopes, install_item
 from ..skills_discovery import KIND_LABEL_MAP, ClaudeItem
 from ..skills_lint import lint_item
 from ..skills_telemetry import SkillUsage
@@ -35,6 +39,8 @@ class SkillDetailDialog(QDialog):
         item: ClaudeItem,
         usage: SkillUsage | None,
         catalog_names: set[str] | None,
+        workspace_folder: str | None = None,
+        settings=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -42,6 +48,8 @@ class SkillDetailDialog(QDialog):
         self.setModal(False)
         self.resize(720, 640)
         self._item = item
+        self._workspace_folder = workspace_folder
+        self._settings = settings
 
         outer = QVBoxLayout(self)
         outer.setSpacing(10)
@@ -51,9 +59,26 @@ class SkillDetailDialog(QDialog):
         title = QLabel(f"<h2 style='margin:0;'>{item.invocation}</h2>")
         header.addWidget(title)
         header.addStretch()
+        install_btn = self._build_install_button()
+        if install_btn:
+            header.addWidget(install_btn)
+        edit_btn = QPushButton("✏️ Editar")
+        edit_btn.setToolTip("Abrir editor visual com validação live")
+        edit_btn.clicked.connect(self._open_editor)
+        # Não editamos plugins (read-only, vivem em ~/.claude/plugins/)
+        if item.source.startswith("plugin:"):
+            edit_btn.setEnabled(False)
+            edit_btn.setToolTip("Plugin é read-only — instale localmente pra editar")
+        header.addWidget(edit_btn)
+        if self._settings is not None:
+            play_btn = QPushButton("▶ Testar…")
+            play_btn.setToolTip("Rodar claude --print com este recurso e prompt isolado")
+            play_btn.clicked.connect(self._open_playground)
+            header.addWidget(play_btn)
         copy_btn = QPushButton(f"📋 Copiar {item.invocation}")
         copy_btn.clicked.connect(self._copy_invocation)
         header.addWidget(copy_btn)
+        self._catalog_names = catalog_names or set()
         outer.addLayout(header)
 
         meta = QLabel(
@@ -136,6 +161,63 @@ class SkillDetailDialog(QDialog):
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         outer.addWidget(buttons)
+
+    def _build_install_button(self) -> QPushButton | None:
+        scopes = available_scopes(self._item, self._workspace_folder)
+        if not scopes:
+            return None
+        btn = QPushButton("📥 Instalar em…")
+        btn.setToolTip("Copia este recurso pra outro escopo")
+        menu = QMenu(btn)
+        for scope, ws_folder, label in scopes:
+            act = QAction(label, menu)
+            act.triggered.connect(
+                lambda _, s=scope, w=ws_folder, lab=label: self._do_install(s, w, lab)
+            )
+            menu.addAction(act)
+        btn.setMenu(menu)
+        return btn
+
+    def _do_install(self, scope: str, ws_folder: str | None, label: str) -> None:
+        try:
+            try:
+                target = install_item(self._item, scope, ws_folder, overwrite=False)
+            except LaunchError as exists_err:
+                if "já existe" not in str(exists_err):
+                    raise
+                resp = QMessageBox.question(
+                    self,
+                    "Sobrescrever?",
+                    f"Já existe em {scope}.\n\nSobrescrever {self._item.name}?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if resp != QMessageBox.StandardButton.Yes:
+                    return
+                target = install_item(self._item, scope, ws_folder, overwrite=True)
+        except LaunchError as e:
+            QMessageBox.critical(self, "Falha ao instalar", str(e))
+            return
+        QMessageBox.information(
+            self, "Instalado",
+            f"{self._item.name} instalado em:\n{target}\n\n"
+            "Reinicie o Claude no workspace pra ver o recurso disponível.",
+        )
+
+    def _open_editor(self) -> None:
+        from .skill_editor_dialog import SkillEditorDialog
+        dlg = SkillEditorDialog(self._item, self._catalog_names, parent=self)
+        if dlg.exec():
+            # Recarrega o markdown e refresha lint após edição
+            self._body_view.setMarkdown(self._read_body())
+
+    def _open_playground(self) -> None:
+        from .skill_playground_dialog import SkillPlaygroundDialog
+        dlg = SkillPlaygroundDialog(
+            self._item, self._settings,
+            cwd=self._workspace_folder, parent=self,
+        )
+        dlg.show()
 
     def _copy_invocation(self) -> None:
         QGuiApplication.clipboard().setText(self._item.invocation)

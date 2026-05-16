@@ -148,6 +148,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.details)
 
         self.settings_panel = SettingsPanel(self.settings)
+        self.settings_panel.set_workspace_getter(self._current_workspace)
         self.content_stack.addWidget(self.settings_panel)
         self.content_stack.setMinimumHeight(0)
 
@@ -580,7 +581,7 @@ class MainWindow(QMainWindow):
         DockPanelSpec(
             panel_id="skills",
             title="Skills",
-            factory=lambda mw: SkillsPanel(),
+            factory=lambda mw: SkillsPanel(settings=mw.settings),
             default_open=False,
         ),
     ]

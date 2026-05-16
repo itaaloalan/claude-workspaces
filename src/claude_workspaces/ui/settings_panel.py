@@ -34,6 +34,7 @@ class SettingsPanel(QWidget):
     def __init__(self, settings: Settings) -> None:
         super().__init__()
         self.settings = settings
+        self._workspace_getter = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(20, 20, 20, 20)
@@ -99,6 +100,7 @@ class SettingsPanel(QWidget):
 
         outer.addWidget(self._build_worktree_section())
         outer.addWidget(self._build_notifications_section())
+        outer.addWidget(self._build_inspectors_section())
 
         actions = QHBoxLayout()
         save_btn = QPushButton("Salvar")
@@ -241,6 +243,49 @@ class SettingsPanel(QWidget):
 
         self._refresh_hook_status()
         return box
+
+    def _build_inspectors_section(self) -> QWidget:
+        box = QGroupBox("Inspetores")
+        layout = QVBoxLayout(box)
+        intro = QLabel(
+            "Ferramentas read-only pra entender o estado do Claude no "
+            "workspace atual."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(intro)
+
+        row = QHBoxLayout()
+        hooks_btn = QPushButton("🪝 Inspetor de hooks…")
+        hooks_btn.setToolTip("Hooks de Stop/PostToolUse/etc por escopo")
+        hooks_btn.clicked.connect(self._open_hooks_inspector)
+        row.addWidget(hooks_btn)
+        mcp_btn = QPushButton("🔌 Explorer de MCP…")
+        mcp_btn.setToolTip(
+            "Lista servidores MCP configurados em ~/.claude.json e .mcp.json"
+        )
+        mcp_btn.clicked.connect(self._open_mcp_explorer)
+        row.addWidget(mcp_btn)
+        row.addStretch()
+        layout.addLayout(row)
+        return box
+
+    def _open_hooks_inspector(self) -> None:
+        from .hooks_inspector_dialog import HooksInspectorDialog
+        ws = self._workspace_getter() if self._workspace_getter else None
+        dlg = HooksInspectorDialog(ws, parent=self)
+        dlg.show()
+
+    def _open_mcp_explorer(self) -> None:
+        from .mcp_explorer_dialog import McpExplorerDialog
+        ws = self._workspace_getter() if self._workspace_getter else None
+        dlg = McpExplorerDialog(ws, parent=self)
+        dlg.show()
+
+    def set_workspace_getter(self, getter) -> None:
+        """MainWindow injeta um callable que retorna o workspace ativo,
+        pra que o inspector enxergue hooks do projeto selecionado."""
+        self._workspace_getter = getter
 
     def _refresh_hook_status(self) -> None:
         if is_hook_installed():
