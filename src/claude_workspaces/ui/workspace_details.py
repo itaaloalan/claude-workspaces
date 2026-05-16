@@ -36,8 +36,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
     launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
     launch_shell_requested = Signal(Workspace)
     handoff_requested = Signal(Workspace, ClaudeSession)
+    export_session_requested = Signal(ClaudeSession)
     columns_splitter_moved = Signal()
-    open_file_requested = Signal(str)  # caminho absoluto pra abrir no editor
+    open_file_requested = Signal(str)
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -427,6 +428,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
             card.resume_requested.connect(self._on_resume_card)
             card.delete_requested.connect(self._on_delete_session)
             card.handoff_requested.connect(self._on_handoff_card)
+            card.export_requested.connect(self.export_session_requested.emit)
             item = QListWidgetItem()
             item.setSizeHint(card.sizeHint())
             self._sessions_list.addItem(item)

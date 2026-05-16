@@ -19,6 +19,7 @@ class SessionCard(QFrame):
     resume_requested = Signal(ClaudeSession)
     delete_requested = Signal(ClaudeSession)
     handoff_requested = Signal(ClaudeSession)
+    export_requested = Signal(ClaudeSession)
 
     def __init__(
         self,
@@ -85,6 +86,19 @@ class SessionCard(QFrame):
         )
         delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.session))
         actions.addWidget(delete_btn)
+
+        export_btn = QPushButton("📝 .md")
+        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_btn.setToolTip("Exportar conversa como markdown")
+        export_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; color: #c8c8c8;"
+            "  border: 1px solid #3a3a3a; border-radius: 4px; padding: 4px 10px;"
+            "}"
+            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
+        )
+        export_btn.clicked.connect(lambda: self.export_requested.emit(self.session))
+        actions.addWidget(export_btn)
 
         handoff_btn = QPushButton("→ Handoff")
         handoff_btn.setCursor(Qt.CursorShape.PointingHandCursor)

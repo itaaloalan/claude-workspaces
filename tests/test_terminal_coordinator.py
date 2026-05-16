@@ -5,7 +5,6 @@ Foca em: transição working→idle vira inbox; release_tab cascateia;
 spinner liga/desliga; multi-tab tracking.
 """
 
-from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtWidgets import QApplication

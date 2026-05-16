@@ -144,6 +144,7 @@ class MainWindow(QMainWindow):
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.open_file_requested.connect(self._open_file_in_editor)
         self.details.handoff_requested.connect(self._handoff_session)
+        self.details.export_session_requested.connect(self._export_session)
         self.content_stack.addWidget(self.details)
 
         self.settings_panel = SettingsPanel(self.settings)
@@ -254,6 +255,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+P"), self, self._quick_open_file)
         QShortcut(QKeySequence("Ctrl+O"), self, self._open_folder_in_file_manager)
         QShortcut(QKeySequence("Ctrl+Shift+C"), self, self._copy_primary_folder)
+        # Resume da última sessão do workspace atual
+        QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._resume_last_session)
         # Busca em sessões
         QShortcut(QKeySequence("Ctrl+Shift+F"), self, self._show_sessions_search)
         # Help
@@ -449,6 +452,83 @@ class MainWindow(QMainWindow):
     def _show_shortcuts(self) -> None:
         from .shortcuts_dialog import ShortcutsDialog
         ShortcutsDialog(self).exec()
+
+    def _resume_last_session(self) -> None:
+        """Ctrl+Shift+R: retoma a sessão Claude mais recente do workspace
+        atual, in-place no terminal embutido."""
+        ws = self._current_workspace()
+        if ws is None or not ws.folders:
+            return
+        try:
+            from ..claude_sessions import list_sessions_for_paths
+            cwd, _ = ws.launch_paths()
+            paths = list({cwd, *ws.folders})
+            sessions = list_sessions_for_paths(paths, limit=1)
+        except Exception:
+            log.exception("Falha ao listar última sessão do %s", ws.id)
+            return
+        if not sessions:
+            QMessageBox.information(
+                self,
+                "Sem sessões",
+                f"Nenhuma sessão registrada para o workspace '{ws.name}'.",
+            )
+            return
+        s = sessions[0]
+        self._launch_claude_for(ws, s.id, s.origin_cwd)
+
+    def _export_session(self, session) -> None:
+        """Exporta sessão JSONL como markdown — abre dialog com preview +
+        opções de salvar arquivo e copiar pro clipboard."""
+        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtWidgets import QDialog, QFileDialog, QPlainTextEdit, QPushButton
+
+        from ..services.session_export import export_to_markdown
+
+        try:
+            md = export_to_markdown(session.path)
+        except Exception:
+            log.exception("Falha exportando sessão %s", session.id)
+            QMessageBox.warning(
+                self, "Falha", "Não foi possível ler o arquivo da sessão."
+            )
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Exportar sessão — {session.id[:8]}")
+        dlg.resize(820, 600)
+        v = QVBoxLayout(dlg)
+        preview = QPlainTextEdit(md)
+        preview.setReadOnly(False)
+        v.addWidget(preview, stretch=1)
+
+        row = QHBoxLayout()
+        copy_btn = QPushButton("Copiar pra clipboard")
+        save_btn = QPushButton("Salvar como…")
+        close_btn = QPushButton("Fechar")
+        row.addWidget(copy_btn)
+        row.addWidget(save_btn)
+        row.addStretch()
+        row.addWidget(close_btn)
+        v.addLayout(row)
+
+        copy_btn.clicked.connect(
+            lambda: QGuiApplication.clipboard().setText(preview.toPlainText())
+        )
+        def do_save():
+            default = f"claude-session-{session.id[:8]}.md"
+            path, _ = QFileDialog.getSaveFileName(
+                dlg, "Salvar markdown", default, "Markdown (*.md);;Todos (*)"
+            )
+            if not path:
+                return
+            try:
+                Path(path).write_text(preview.toPlainText(), encoding="utf-8")
+            except OSError as e:
+                QMessageBox.warning(dlg, "Falha ao salvar", str(e))
+        save_btn.clicked.connect(do_save)
+        close_btn.clicked.connect(dlg.accept)
+        dlg.exec()
 
     def _show_sessions_search(self) -> None:
         from .sessions_search_dialog import SessionsSearchDialog
