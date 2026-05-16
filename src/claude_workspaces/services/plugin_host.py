@@ -14,9 +14,11 @@ Sub-APIs do ctx implementadas:
 - `config`: lê defaults do manifesto
 - `workspaces`, `sessions`: leem dos providers injetados pelo host (callables
   que retornam o estado atual). Filtragem por `permissions.workspaces`.
-
-Stubs honestos (NotImplementedError):
-- `fs`, `http` — virão quando uso real surgir."""
+- `fs`: read/write/list com enforcement glob contra
+  `permissions.filesystem.{read,write}`. Symlinks/`..` resolvidos antes do
+  match — não escapam.
+- `http`: get/post (urllib) com host exato contra
+  `permissions.network.hosts`."""
 
 from __future__ import annotations
 
@@ -256,6 +258,151 @@ class _AsyncStorage:
         self._b.clear()
 
 
+class _PluginFS:
+    """`ctx.fs.*` — enforcement via glob contra permissions.filesystem.{read,write}.
+
+    Regras:
+    - Path é resolvido (`Path.resolve()`) antes do match — `..` e symlinks
+      não escapam.
+    - `~` é expandido (`expanduser`) antes do match e do open.
+    - Glob compara com `fnmatch` contra o path resolvido absoluto.
+    - I/O acontece em executor padrão pra não bloquear o loop.
+    """
+
+    def __init__(self, inst: InstalledPlugin) -> None:
+        self._perms = inst.manifest.permissions
+        self._plugin_id = inst.id
+
+    @staticmethod
+    def _normalize(path: str) -> Path:
+        p = Path(path).expanduser()
+        # resolve sem strict — funciona pra paths que vão ser criados
+        return p.resolve(strict=False)
+
+    @staticmethod
+    def _expand_globs(globs: tuple[str, ...]) -> list[str]:
+        return [str(Path(g).expanduser()) for g in globs]
+
+    def _check(self, path: str, kind: str) -> Path:
+        import fnmatch
+
+        resolved = self._normalize(path)
+        globs = (
+            self._perms.filesystem.read
+            if kind == "read"
+            else self._perms.filesystem.write
+        )
+        for pattern in self._expand_globs(globs):
+            if fnmatch.fnmatchcase(str(resolved), pattern):
+                return resolved
+        raise PermissionError(
+            f"{self._plugin_id}: ctx.fs.{kind} negado pra {path!r} — "
+            f"não bate com {list(globs)}"
+        )
+
+    async def read(self, path: str) -> str:
+        resolved = self._check(path, "read")
+        return await asyncio.to_thread(resolved.read_text, encoding="utf-8")
+
+    async def write(self, path: str, content: str) -> None:
+        resolved = self._check(path, "write")
+
+        def _do_write() -> None:
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
+
+        await asyncio.to_thread(_do_write)
+
+    async def list(self, path: str) -> list[str]:
+        resolved = self._check(path, "read")
+
+        def _do_list() -> list[str]:
+            if not resolved.is_dir():
+                raise NotADirectoryError(str(resolved))
+            return sorted(p.name for p in resolved.iterdir())
+
+        return await asyncio.to_thread(_do_list)
+
+
+class _PluginHttp:
+    """`ctx.http.*` — enforcement via permissions.network.hosts (exato, sem wildcards).
+
+    Usa `urllib.request` em thread separada — sem dependência externa.
+    Plugins que precisam de coisas avançadas (streams, cookies) podem
+    pedir mais APIs; pra GET/POST de bater REST simples isso basta."""
+
+    def __init__(self, inst: InstalledPlugin) -> None:
+        self._allowed_hosts = frozenset(inst.manifest.permissions.network.hosts)
+        self._plugin_id = inst.id
+
+    def _check(self, url: str) -> None:
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(url)
+        except ValueError as e:
+            raise ValueError(f"URL inválida: {url!r}") from e
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError(
+                f"esquema não suportado: {parsed.scheme!r} (apenas http/https)"
+            )
+        host = parsed.hostname or ""
+        if host not in self._allowed_hosts:
+            raise PermissionError(
+                f"{self._plugin_id}: host {host!r} fora de "
+                f"permissions.network.hosts ({sorted(self._allowed_hosts)})"
+            )
+
+    async def get(
+        self, url: str, *, headers: dict[str, str] | None = None
+    ):
+
+        self._check(url)
+        return await asyncio.to_thread(self._fetch, "GET", url, None, headers)
+
+    async def post(
+        self,
+        url: str,
+        *,
+        body: bytes | str,
+        headers: dict[str, str] | None = None,
+    ):
+        self._check(url)
+        body_bytes = body.encode("utf-8") if isinstance(body, str) else body
+        return await asyncio.to_thread(self._fetch, "POST", url, body_bytes, headers)
+
+    @staticmethod
+    def _fetch(
+        method: str,
+        url: str,
+        body: bytes | None,
+        headers: dict[str, str] | None,
+    ):
+        from urllib.error import HTTPError, URLError
+        from urllib.request import Request, urlopen
+
+        from ..plugin_api import HttpResponse
+
+        req = Request(url, data=body, method=method, headers=headers or {})
+        try:
+            with urlopen(req, timeout=30) as resp:
+                content = resp.read()
+                return HttpResponse(
+                    status=resp.status,
+                    headers={k.lower(): v for k, v in resp.headers.items()},
+                    body=content,
+                )
+        except HTTPError as e:
+            # 4xx/5xx ainda viram HttpResponse pro plugin tratar
+            return HttpResponse(
+                status=e.code,
+                headers={k.lower(): v for k, v in (e.headers or {}).items()},
+                body=e.read() if hasattr(e, "read") else b"",
+            )
+        except URLError as e:
+            raise ConnectionError(f"falha conectando a {url}: {e}") from e
+
+
 # -------------------- ctx concreto -----------------------------------------
 
 
@@ -273,9 +420,8 @@ class _Ctx:
         self.sessions = _PluginSessions(
             host._sessions_list, host._session_focus, inst
         )
-        # Stubs honestos — implementação real quando algum plugin precisar
-        self.fs = _NotImplementedAPI("fs")
-        self.http = _NotImplementedAPI("http")
+        self.fs = _PluginFS(inst)
+        self.http = _PluginHttp(inst)
 
 
 # -------------------- Host -------------------------------------------------

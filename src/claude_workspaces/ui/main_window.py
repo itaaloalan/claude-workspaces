@@ -345,6 +345,8 @@ class MainWindow(QMainWindow):
             QKeySequence("Ctrl+Shift+5"), self,
             lambda: self.activity_bar.activate(VIEW_PLUGINS),
         )
+        # Paleta de comandos de plugins
+        QShortcut(QKeySequence("Ctrl+P"), self, self._open_plugin_palette)
         # Help
         QShortcut(QKeySequence("Ctrl+/"), self, self._show_shortcuts)
         QShortcut(QKeySequence("F1"), self, self._show_shortcuts)
@@ -1617,6 +1619,15 @@ class MainWindow(QMainWindow):
         errs = runtime.load(inst)
         for e in errs:
             log.warning("Plugin %s ao recarregar: %s", plugin_id, e)
+
+    def _open_plugin_palette(self) -> None:
+        """Ctrl+P: dialog com comandos declarados por plugins habilitados."""
+        if self._plugin_host is None:
+            return
+        from .plugin_palette_dialog import PluginPaletteDialog
+
+        dlg = PluginPaletteDialog(self._plugin_host, parent=self)
+        dlg.exec()
 
     def _on_plugin_notification(
         self, plugin_id: str, kind: str, payload: dict
