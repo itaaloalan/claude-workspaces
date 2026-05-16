@@ -830,6 +830,7 @@ class MainWindow(QMainWindow):
         self.list_widget.setIndentation(14)
         self.list_widget.setExpandsOnDoubleClick(False)
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
+        self.list_widget.itemClicked.connect(self._on_tree_item_clicked)
         self.list_widget.itemActivated.connect(self._on_tree_item_activated)
         self.list_widget.setStyleSheet(
             "QTreeWidget { background: transparent; border: 0; color: #e6e6e6; }"
@@ -1040,6 +1041,20 @@ class MainWindow(QMainWindow):
         """Delega pro DockCoordinator."""
         self.dock_coord.broadcast_workspace(workspace)
 
+    def _on_tree_item_clicked(self, item: QTreeWidgetItem, _col: int) -> None:
+        # Clique simples numa aba ativa/em ação (tab_id) já foca a aba.
+        # Sessões históricas (ClaudeSession) continuam exigindo duplo-clique
+        # pra evitar relaunch acidental.
+        if item.parent() is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(data, int):  # só tab_id de aba viva
+            return
+        pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(pdata, Workspace):
+            return
+        self._focus_terminal_tab(pdata, data)
+
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
         # Double-click ou Enter — sessão histórica retoma via --resume
         # NO TERMINAL INTERNO; terminal vivo foca a aba existente.
@@ -1056,8 +1071,10 @@ class MainWindow(QMainWindow):
             return
         if not isinstance(data, int):  # tab_id
             return
-        tab_id = data
-        area = self.terminals_coord._areas.get(pdata.id)
+        self._focus_terminal_tab(pdata, data)
+
+    def _focus_terminal_tab(self, workspace: Workspace, tab_id: int) -> None:
+        area = self.terminals_coord._areas.get(workspace.id)
         if area is None:
             return
         for i in range(area.tabs.count()):
