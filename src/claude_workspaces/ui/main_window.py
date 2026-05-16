@@ -1144,13 +1144,17 @@ class MainWindow(QMainWindow):
         if term is not None:
             full_title = term.full_title() or title
         widget.set_title(title, full_title)
+        state = self._resolve_state(is_working, is_running)
         widget.update_state(
-            self._resolve_state(is_working, is_running),
+            state,
             status,
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
+        # Tarefas concluídas (processo finalizado) ficam ocultas na sidebar —
+        # ainda acessíveis via "↻ última sessão" do workspace.
+        child.setHidden(state == STATE_DONE)
         ws_item.setExpanded(True)
         self.terminals_coord.state.tree_items[tab_id] = child
 
@@ -1173,11 +1177,15 @@ class MainWindow(QMainWindow):
         if term is not None:
             full_title = term.full_title() or title
         widget.set_title(title, full_title)
+        state = self._resolve_state(is_working, is_running)
         widget.update_state(
-            self._resolve_state(is_working, is_running),
+            state,
             status,
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
+        # Esconde na sidebar quando a tarefa termina; reaparece se o processo
+        # voltar a rodar (raro, mas mantém consistência).
+        item.setHidden(state == STATE_DONE)
 
     def _launch_claude_for(
         self, workspace: Workspace, resume_session_id: str, cwd_override: str
