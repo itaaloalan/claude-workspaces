@@ -30,6 +30,7 @@ from ..launchers import (
 from ..models import Workspace
 from ..settings import Settings
 from .activity_bar import (
+    VIEW_APPS,
     VIEW_CATALOG,
     VIEW_HOOKS,
     VIEW_MCP,
@@ -57,7 +58,7 @@ from .terminal_child_widget import (
 )
 from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
-from .views import CatalogView, HooksView, McpView, PluginsView
+from .views import AppsView, CatalogView, HooksView, McpView, PluginsView
 from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
 
@@ -244,6 +245,7 @@ class MainWindow(QMainWindow):
         self.main_stack.addWidget(self.mcp_view)                 # 3: mcp
         self.plugins_view = PluginsView(settings=self.settings)
         self.main_stack.addWidget(self.plugins_view)             # 4: plugins
+        self.apps_view: AppsView | None = None  # lazy: QtWebEngine pesa
         shell_row.addWidget(self.main_stack, stretch=1)
 
         outer.addLayout(shell_row, stretch=1)
@@ -344,6 +346,10 @@ class MainWindow(QMainWindow):
         QShortcut(
             QKeySequence("Ctrl+Shift+5"), self,
             lambda: self.activity_bar.activate(VIEW_PLUGINS),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Shift+6"), self,
+            lambda: self.activity_bar.activate(VIEW_APPS),
         )
         # Paleta de comandos de plugins
         QShortcut(QKeySequence("Ctrl+P"), self, self._open_plugin_palette)
@@ -515,6 +521,12 @@ class MainWindow(QMainWindow):
         elif view_id == VIEW_PLUGINS:
             self.main_stack.setCurrentWidget(self.plugins_view)
             self.plugins_view.refresh()
+        elif view_id == VIEW_APPS:
+            if self.apps_view is None:
+                self.apps_view = AppsView(settings=self.settings)
+                self.main_stack.addWidget(self.apps_view)
+            self.main_stack.setCurrentWidget(self.apps_view)
+            self.apps_view.refresh()
 
     def _new_terminal_tab(self) -> None:
         ws = self._current_workspace()

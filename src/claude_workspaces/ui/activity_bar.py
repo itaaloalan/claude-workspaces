@@ -20,6 +20,7 @@ VIEW_CATALOG = "catalog"
 VIEW_HOOKS = "hooks"
 VIEW_MCP = "mcp"
 VIEW_PLUGINS = "plugins"
+VIEW_APPS = "apps"
 VIEW_SETTINGS = "settings"
 
 
@@ -64,6 +65,7 @@ class ActivityBar(QWidget):
             ("🪝", VIEW_HOOKS, "Hooks (Ctrl+3)"),
             ("🔌", VIEW_MCP, "MCP servers (Ctrl+4)"),
             ("🧩", VIEW_PLUGINS, "Plugins (Ctrl+5)"),
+            ("🧰", VIEW_APPS, "Apps auxiliares (Ctrl+6)"),
         ):
             btn = self._make_button(icon, view_id, tooltip)
             layout.addWidget(btn)

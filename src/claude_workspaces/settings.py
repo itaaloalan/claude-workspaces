@@ -33,6 +33,8 @@ class Settings:
     default_isolate_worktree: bool = False
     default_create_new_branch: bool = True
     branch_prefix: str = "claude"  # prefixo das branches sugeridas pro worktree
+    # Apps auxiliares (PWAs embutidos): [{name, url, icon, slug}]
+    apps: list[dict] = field(default_factory=list)
 
     @classmethod
     def load(cls) -> "Settings":

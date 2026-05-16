@@ -5,9 +5,10 @@ quando ativada. Reutilizam serviços e widgets do app principal mas não
 dependem da MainWindow diretamente.
 """
 
+from .apps_view import AppsView
 from .catalog_view import CatalogView
 from .hooks_view import HooksView
 from .mcp_view import McpView
 from .plugins_view import PluginsView
 
-__all__ = ["CatalogView", "HooksView", "McpView", "PluginsView"]
+__all__ = ["AppsView", "CatalogView", "HooksView", "McpView", "PluginsView"]
