@@ -8,5 +8,6 @@ dependem da MainWindow diretamente.
 from .catalog_view import CatalogView
 from .hooks_view import HooksView
 from .mcp_view import McpView
+from .plugins_view import PluginsView
 
-__all__ = ["CatalogView", "HooksView", "McpView"]
+__all__ = ["CatalogView", "HooksView", "McpView", "PluginsView"]

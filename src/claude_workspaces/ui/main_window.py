@@ -33,6 +33,7 @@ from .activity_bar import (
     VIEW_CATALOG,
     VIEW_HOOKS,
     VIEW_MCP,
+    VIEW_PLUGINS,
     VIEW_SETTINGS,
     VIEW_WORKSPACES,
     ActivityBar,
@@ -56,7 +57,7 @@ from .terminal_child_widget import (
 )
 from .terminal_widget import TerminalWidget
 from .top_bar import TopBar
-from .views import CatalogView, HooksView, McpView
+from .views import CatalogView, HooksView, McpView, PluginsView
 from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
 
@@ -241,6 +242,8 @@ class MainWindow(QMainWindow):
         self.main_stack.addWidget(self.hooks_view)               # 2: hooks
         self.mcp_view = McpView()
         self.main_stack.addWidget(self.mcp_view)                 # 3: mcp
+        self.plugins_view = PluginsView()
+        self.main_stack.addWidget(self.plugins_view)             # 4: plugins
         shell_row.addWidget(self.main_stack, stretch=1)
 
         outer.addLayout(shell_row, stretch=1)
@@ -337,6 +340,10 @@ class MainWindow(QMainWindow):
         QShortcut(
             QKeySequence("Ctrl+Shift+4"), self,
             lambda: self.activity_bar.activate(VIEW_MCP),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Shift+5"), self,
+            lambda: self.activity_bar.activate(VIEW_PLUGINS),
         )
         # Help
         QShortcut(QKeySequence("Ctrl+/"), self, self._show_shortcuts)
@@ -503,6 +510,9 @@ class MainWindow(QMainWindow):
         elif view_id == VIEW_MCP:
             self.main_stack.setCurrentWidget(self.mcp_view)
             self.mcp_view.set_workspace(self._current_workspace())
+        elif view_id == VIEW_PLUGINS:
+            self.main_stack.setCurrentWidget(self.plugins_view)
+            self.plugins_view.refresh()
 
     def _new_terminal_tab(self) -> None:
         ws = self._current_workspace()
@@ -1559,6 +1569,9 @@ class MainWindow(QMainWindow):
                 session_focus_fn=focus_session,
             )
             self._plugin_host.notifications.connect(self._on_plugin_notification)
+            # PluginsView dispara load/unload do runtime quando o usuário
+            # instala, desinstala, habilita ou desabilita pela UI.
+            self.plugins_view.set_runtime_reloader(self._reload_plugin_runtime)
             # commit.created vem do GitPanel quando o usuário commita pela UI.
             # Commits feitos por fora (terminal, IDE) não geram evento — limitação
             # aceitável; quando vier integração com FileSystemWatcher no .git/HEAD
@@ -1584,6 +1597,26 @@ class MainWindow(QMainWindow):
             "commit.created",
             {"workspaceId": workspace_id, "sha": sha, "message": message},
         )
+
+    def _reload_plugin_runtime(self, plugin_id: str, action: str) -> None:
+        """Aciona o runtime quando a PluginsView muda o estado do plugin.
+
+        action: 'load' (depois de install/enable) ou 'unload' (uninstall/disable)."""
+        if self._plugin_host is None:
+            return
+        runtime = self._plugin_host.runtime
+        if action == "unload":
+            runtime.unload(plugin_id)
+            return
+        inst = self._plugin_host.registry.get(plugin_id)
+        if inst is None:
+            log.warning("Reloader: plugin %s não está no registry", plugin_id)
+            return
+        # `load` é idempotente; pra reinstalação descarrega antes
+        runtime.unload(plugin_id)
+        errs = runtime.load(inst)
+        for e in errs:
+            log.warning("Plugin %s ao recarregar: %s", plugin_id, e)
 
     def _on_plugin_notification(
         self, plugin_id: str, kind: str, payload: dict

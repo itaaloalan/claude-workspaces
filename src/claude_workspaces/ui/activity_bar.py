@@ -19,6 +19,7 @@ VIEW_WORKSPACES = "workspaces"
 VIEW_CATALOG = "catalog"
 VIEW_HOOKS = "hooks"
 VIEW_MCP = "mcp"
+VIEW_PLUGINS = "plugins"
 VIEW_SETTINGS = "settings"
 
 
@@ -62,6 +63,7 @@ class ActivityBar(QWidget):
             ("📚", VIEW_CATALOG, "Catálogo de skills/agents/commands (Ctrl+2)"),
             ("🪝", VIEW_HOOKS, "Hooks (Ctrl+3)"),
             ("🔌", VIEW_MCP, "MCP servers (Ctrl+4)"),
+            ("🧩", VIEW_PLUGINS, "Plugins (Ctrl+5)"),
         ):
             btn = self._make_button(icon, view_id, tooltip)
             layout.addWidget(btn)
