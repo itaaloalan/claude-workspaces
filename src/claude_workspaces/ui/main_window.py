@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QTreeWidget,
@@ -149,14 +151,27 @@ class MainWindow(QMainWindow):
 
         self.settings_panel = SettingsPanel(self.settings)
         self.settings_panel.set_workspace_getter(self._current_workspace)
-        self.content_stack.addWidget(self.settings_panel)
+        # Wrap em QScrollArea — SettingsPanel tem várias rows de form
+        # e seu minimumSizeHint natural (~870px) trava o right_splitter
+        # com collapsible=False, impedindo o terminal de crescer/maximizar.
+        self._settings_scroll = QScrollArea()
+        self._settings_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._settings_scroll.setWidgetResizable(True)
+        self._settings_scroll.setWidget(self.settings_panel)
+        self.content_stack.addWidget(self._settings_scroll)
         self.content_stack.setMinimumHeight(0)
+        self.content_stack.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored
+        )
 
         self.right_splitter.addWidget(self.content_stack)
 
         # Painel do terminal: barra de controle (maximizar/minimizar)
         # + stack de TerminalAreas por workspace
         self._terminal_pane = self._build_terminal_pane()
+        self._terminal_pane.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored
+        )
         self.right_splitter.addWidget(self._terminal_pane)
 
         self.right_splitter.setStretchFactor(0, 1)
@@ -942,7 +957,7 @@ class MainWindow(QMainWindow):
         ws_item.setExpanded(True)
 
     def _show_settings(self) -> None:
-        self.content_stack.setCurrentWidget(self.settings_panel)
+        self.content_stack.setCurrentWidget(self._settings_scroll)
 
     def _show_workspaces(self) -> None:
         self.content_stack.setCurrentIndex(0)
