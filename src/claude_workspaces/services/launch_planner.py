@@ -8,6 +8,7 @@ Permite testar o fluxo de decisão sem subir a UI.
 
 from dataclasses import dataclass
 
+from ..git_actions import checkout_new_branch
 from ..git_worktree import add_worktree
 
 
@@ -31,15 +32,17 @@ def plan_from_dialog(
     base_branch: str,
     *,
     worktree_creator=add_worktree,
+    branch_checkout=checkout_new_branch,
 ) -> LaunchPlan:
     """Mapeia escolhas do LaunchClaudeDialog pra LaunchPlan.
 
-    - cwd = primeira pasta marcada; demais entram como --add-dir
-    - se isolate: cria worktree em cwd (com -b <branch> ou checkout
-      de branch existente); cwd vira o path do worktree
-    - retorna .error preenchido em caso de falha (caller mostra dialog)
+    4 combinações:
+      isolate=Y + new_branch=Y → worktree com -b <branch> <base>
+      isolate=Y + new_branch=N → worktree em branch existente
+      isolate=N + new_branch=Y → git checkout -b <branch> no cwd (in-place)
+      isolate=N + new_branch=N → cwd e branch atual, sem mudar nada
 
-    worktree_creator é injetável pra testes (sem mexer em git real).
+    worktree_creator e branch_checkout são injetáveis pra testes.
     """
     if not selected_folders:
         return LaunchPlan(cwd="", extras=[], error="nenhuma pasta selecionada")
@@ -47,15 +50,14 @@ def plan_from_dialog(
     cwd = selected_folders[0]
     extras = list(selected_folders[1:])
     label = ""
+    branch = (branch_name or "").strip()
+    base = (base_branch or "").strip() or None
 
     if isolate_worktree:
-        branch = (branch_name or "").strip()
         if not branch:
             return LaunchPlan(
                 cwd=cwd, extras=extras, error="branch inválida (vazia)"
             )
-        base = (base_branch or "").strip() or None
-        # Quando NÃO criamos a branch, base não se aplica
         effective_base = base if create_branch else None
         ok, msg, dest = worktree_creator(
             cwd, branch, effective_base, create_branch=create_branch
@@ -65,6 +67,18 @@ def plan_from_dialog(
                 cwd=cwd, extras=extras, error=f"worktree falhou: {msg}"
             )
         cwd = str(dest)
+        label = f" · {branch}"
+    elif create_branch:
+        # Sem worktree, criar branch in-place via `git checkout -b`
+        if not branch:
+            return LaunchPlan(
+                cwd=cwd, extras=extras, error="branch inválida (vazia)"
+            )
+        ok, msg = branch_checkout(cwd, branch, base)
+        if not ok:
+            return LaunchPlan(
+                cwd=cwd, extras=extras, error=f"checkout falhou: {msg}"
+            )
         label = f" · {branch}"
 
     return LaunchPlan(cwd=cwd, extras=extras, worktree_label=label)

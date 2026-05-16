@@ -96,3 +96,20 @@ def delete_untracked(folder: str, file_path: str) -> tuple[bool, str]:
         return False, f"não é arquivo: {full}"
     except OSError as e:
         return False, str(e)
+
+
+def checkout_new_branch(
+    folder: str, branch: str, base: str | None = None
+) -> tuple[bool, str]:
+    """`git checkout -b <branch> [<base>]` no folder.
+
+    Cria a branch nova e troca pra ela in-place (sem worktree). Mantém
+    mudanças não-commitadas (git carrega elas pra nova branch se não
+    houver conflito). Caller deve avisar o usuário se necessário.
+    """
+    if not branch.strip():
+        return False, "branch inválida (vazia)"
+    args = ["git", "checkout", "-b", branch]
+    if base:
+        args.append(base)
+    return _run(args, folder)

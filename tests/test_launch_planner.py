@@ -14,7 +14,8 @@ def test_no_folders_is_error():
 
 
 def test_single_folder_no_worktree():
-    plan = plan_from_dialog(["/tmp/a"], False, True, "ignored", "ignored")
+    """Sem isolate e sem nova branch → nenhuma mudança em git, só cwd."""
+    plan = plan_from_dialog(["/tmp/a"], False, False, "", "")
     assert plan.ok
     assert plan.cwd == "/tmp/a"
     assert plan.extras == []
@@ -84,6 +85,54 @@ def test_extras_preserved_after_worktree():
     )
     assert plan.cwd == "/tmp/wt"
     assert plan.extras == ["/b", "/c"]
+
+
+def test_create_branch_without_worktree_calls_checkout():
+    """isolate=False + new_branch=True → git checkout -b no cwd."""
+    seen = {}
+    def fake_checkout(folder, branch, base=None):
+        seen["args"] = (folder, branch, base)
+        return True, ""
+    plan = plan_from_dialog(
+        ["/repo"], False, True, "feature/z", "main",
+        branch_checkout=fake_checkout,
+    )
+    assert plan.ok
+    assert seen["args"] == ("/repo", "feature/z", "main")
+    assert plan.cwd == "/repo"  # in-place, cwd não muda
+    assert plan.worktree_label == " · feature/z"
+
+
+def test_create_branch_without_worktree_empty_base():
+    seen = {}
+    def fake_checkout(folder, branch, base=None):
+        seen["args"] = (folder, branch, base)
+        return True, ""
+    plan_from_dialog(
+        ["/repo"], False, True, "feature/q", "",
+        branch_checkout=fake_checkout,
+    )
+    assert seen["args"] == ("/repo", "feature/q", None)
+
+
+def test_create_branch_without_worktree_propagates_failure():
+    def fake_checkout(folder, branch, base=None):
+        return False, "uncommitted changes"
+    plan = plan_from_dialog(
+        ["/repo"], False, True, "x", "main",
+        branch_checkout=fake_checkout,
+    )
+    assert not plan.ok
+    assert "checkout falhou" in plan.error
+    assert "uncommitted" in plan.error
+
+
+def test_no_isolate_no_create_branch_runs_unchanged():
+    """Sem worktree e sem nova branch → roda direto sem mexer em git."""
+    plan = plan_from_dialog(["/repo"], False, False, "ignored", "ignored")
+    assert plan.ok
+    assert plan.cwd == "/repo"
+    assert plan.worktree_label == ""  # nenhuma branch mudou
 
 
 def test_build_argv_minimal():

@@ -120,7 +120,11 @@ class LaunchClaudeDialog(QDialog):
 
         self.new_branch_chk = QCheckBox("Criar nova branch")
         self.new_branch_chk.setChecked(create_branch_default)
-        self.new_branch_chk.setEnabled(False)
+        # Sempre disponível quando há repo (independente de worktree).
+        # Quando isolate=False + new_branch=True: roda git checkout -b
+        # no cwd antes de iniciar Claude. Quando isolate=True: usado pelo
+        # worktree.
+        self.new_branch_chk.setEnabled(self._is_repo)
         v.addWidget(self.new_branch_chk)
 
         form = QFormLayout()
@@ -183,12 +187,13 @@ class LaunchClaudeDialog(QDialog):
     def _sync_enabled_states(self) -> None:
         isolating = self.isolate_chk.isChecked() and self._is_repo
         new_branch = self.new_branch_chk.isChecked()
-        # new_branch_chk fica desabilitado quando não está isolando — sem
-        # worktree, não criamos branch. Esse setEnabled estava faltando
-        # antes, então o chk ficava trancado mesmo com isolate marcado.
-        self.new_branch_chk.setEnabled(isolating)
-        self.branch_edit.setEnabled(isolating and new_branch)
-        self.base_edit.setEnabled(isolating and new_branch)
+        # new_branch_chk: sempre disponível em repo (mesmo sem worktree)
+        self.new_branch_chk.setEnabled(self._is_repo)
+        # branch_edit + base_edit: relevantes quando create_branch=True
+        self.branch_edit.setEnabled(self._is_repo and new_branch)
+        self.base_edit.setEnabled(self._is_repo and new_branch)
+        # existing_combo: só faz sentido em worktree (sem isolate, ficamos
+        # na branch atual; o combo não muda nada)
         self.existing_combo.setEnabled(isolating and not new_branch)
 
     def _refresh_preview(self) -> None:
