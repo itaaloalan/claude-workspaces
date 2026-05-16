@@ -18,9 +18,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QMessageBox,
-    QPushButton,
     QScrollArea,
     QTextBrowser,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -118,25 +118,28 @@ class SkillDetailView(QWidget):
 
         # Header — título + ações
         header = QHBoxLayout()
+        header.setSpacing(6)
         title = QLabel(f"<h2 style='margin:0;'>{item.invocation}</h2>")
         header.addWidget(title)
         header.addStretch()
         install_btn = self._build_install_button()
         if install_btn:
             header.addWidget(install_btn)
-        edit_btn = QPushButton("✏️ Editar")
-        edit_btn.setToolTip("Abrir editor visual com validação live")
+        edit_btn = self._mk_action_btn("✏️  Editar", "Abrir editor visual com validação live")
         edit_btn.clicked.connect(self._open_editor)
         if item.source.startswith("plugin:"):
             edit_btn.setEnabled(False)
             edit_btn.setToolTip("Plugin é read-only — instale localmente pra editar")
         header.addWidget(edit_btn)
         if self._settings is not None:
-            play_btn = QPushButton("▶ Testar…")
-            play_btn.setToolTip("Rodar claude --print com este recurso isolado")
+            play_btn = self._mk_action_btn(
+                "▶  Testar…", "Rodar claude --print com este recurso isolado",
+            )
             play_btn.clicked.connect(self._open_playground)
             header.addWidget(play_btn)
-        copy_btn = QPushButton(f"📋 Copiar {item.invocation}")
+        copy_btn = self._mk_action_btn(
+            f"📋  Copiar {item.invocation}", "Copiar invocação pro clipboard",
+        )
         copy_btn.clicked.connect(self._copy_invocation)
         header.addWidget(copy_btn)
         self._inner_layout.addLayout(header)
@@ -219,14 +222,29 @@ class SkillDetailView(QWidget):
 
     # ---------- helpers (mesma lógica do dialog) ----------
 
-    def _build_install_button(self) -> QPushButton | None:
+    def _mk_action_btn(self, text: str, tooltip: str) -> QToolButton:
+        """Botão de ação uniforme — QToolButton text-only, altura fixa."""
+        btn = QToolButton()
+        btn.setText(text)
+        btn.setToolTip(tooltip)
+        btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        btn.setAutoRaise(False)
+        btn.setMinimumHeight(28)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        return btn
+
+    def _build_install_button(self) -> QToolButton | None:
         if not self._item:
             return None
         scopes = available_scopes(self._item, self._workspace_folder)
         if not scopes:
             return None
-        btn = QPushButton("📥 Instalar em…")
-        btn.setToolTip("Copia este recurso pra outro escopo")
+        btn = self._mk_action_btn(
+            "📥  Instalar em…  ▾", "Copia este recurso pra outro escopo",
+        )
+        # InstantPopup: o botão inteiro abre o menu, sem separador vertical
+        # que faz o QPushButton.setMenu() parecer "dois botões grudados"
+        btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(btn)
         for scope, ws_folder, label in scopes:
             act = QAction(label, menu)
