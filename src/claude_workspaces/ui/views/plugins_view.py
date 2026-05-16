@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtGui import QBrush, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...errors import LaunchError
+from ...launchers import LauncherError, find_app_repo_root, launch_claude_in_dir
 from ...plugins import (
     InstalledPlugin,
     PluginRegistry,
@@ -40,6 +41,8 @@ from ...plugins import (
     ValidationError,
 )
 from ...services.system_open import open_in_file_manager
+from ...settings import Settings
+from ..new_plugin_request_dialog import NewPluginRequestDialog
 
 log = logging.getLogger(__name__)
 
@@ -57,11 +60,16 @@ class PluginsView(QWidget):
     # Emitido quando a lista de plugins muda (host pode recarregar tudo)
     plugins_changed = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        settings: Settings | None = None,
+    ) -> None:
         super().__init__(parent)
         self.registry = PluginRegistry()
         self._plugins: list[InstalledPlugin] = []
         self._runtime_reloader = None  # injected by MainWindow
+        self._settings = settings
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 12, 16, 12)
@@ -71,6 +79,12 @@ class PluginsView(QWidget):
         toolbar = QHBoxLayout()
         toolbar.addWidget(QLabel("<h2 style='margin:0;'>🧩 Plugins</h2>"))
         toolbar.addStretch()
+        new_btn = QPushButton("✨ Solicitar novo plugin")
+        new_btn.setToolTip(
+            "Monta um pedido seguindo o PLUGIN_SPEC pra mandar pro Claude"
+        )
+        new_btn.clicked.connect(self._open_new_plugin_request)
+        toolbar.addWidget(new_btn)
         install_btn = QPushButton("📂 Instalar de pasta…")
         install_btn.setToolTip("Selecione a pasta do bundle (com plugin.yaml na raiz)")
         install_btn.clicked.connect(self._install_from_folder)
@@ -415,6 +429,41 @@ class PluginsView(QWidget):
         self._detail_layout.addStretch()
 
     # ----- ações ------------------------------------------------------------
+
+    def _open_new_plugin_request(self) -> None:
+        dialog = NewPluginRequestDialog(parent=self)
+        repo = find_app_repo_root()
+        can_launch = self._settings is not None and repo is not None
+        dialog.enable_launch(can_launch)
+        if not dialog.exec():
+            return
+        # Accept = "Abrir Claude com este pedido"
+        briefing = dialog.briefing()
+        if not briefing:
+            return
+        QGuiApplication.clipboard().setText(briefing)
+        if not can_launch:
+            QMessageBox.information(
+                self,
+                "Pedido copiado",
+                "O pedido está no clipboard. Cole numa sessão do Claude.",
+            )
+            return
+        try:
+            launch_claude_in_dir(repo, self._settings)
+        except LauncherError as e:
+            QMessageBox.warning(
+                self,
+                "Falha ao abrir Claude",
+                f"{e}<br><br>O pedido continua no clipboard.",
+            )
+            return
+        QMessageBox.information(
+            self,
+            "Claude aberto",
+            "Pedido no clipboard. Quando o Claude estiver pronto, cole "
+            "(Ctrl+Shift+V) pra enviar.",
+        )
 
     def _install_from_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(

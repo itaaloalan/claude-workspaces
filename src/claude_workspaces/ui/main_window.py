@@ -242,7 +242,7 @@ class MainWindow(QMainWindow):
         self.main_stack.addWidget(self.hooks_view)               # 2: hooks
         self.mcp_view = McpView()
         self.main_stack.addWidget(self.mcp_view)                 # 3: mcp
-        self.plugins_view = PluginsView()
+        self.plugins_view = PluginsView(settings=self.settings)
         self.main_stack.addWidget(self.plugins_view)             # 4: plugins
         shell_row.addWidget(self.main_stack, stretch=1)
 
