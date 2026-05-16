@@ -533,7 +533,7 @@ def _is_valid_handler_path(path: Any, kind: str) -> bool:
         return False
     if not path.startswith(expected_prefix):
         return False
-    if not path.endswith(".ts"):
+    if not path.endswith(".py"):
         return False
     # sem segmentos perigosos
     if ".." in path.split("/"):

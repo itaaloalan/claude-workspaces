@@ -1,8 +1,16 @@
 """Subsistema de plugins.
 
-Implementa a spec em `docs/PLUGIN_SPEC.md`. Esta camada é Python puro:
-loader/validador/registry/storage/event-bus. O runtime de execução dos
-handlers TypeScript é responsabilidade da fase 2 (não incluída ainda)."""
+Implementa a spec em `docs/PLUGIN_SPEC.md` v2.0 (plugins em Python).
+A camada pública pra autores é `claude_workspaces.plugin_api`.
+
+Componentes:
+- manifest_loader / manifest: parser + tipos do plugin.yaml
+- bundle_validator: layout do bundle (seção 2)
+- static_analyzer: análise AST das proibições (seção 9)
+- registry: instalar/desinstalar/listar plugins
+- storage: persistência isolada por plugin (seção 5.5)
+- events: bus thread-safe com throttle/debounce
+- runtime: importlib + asyncio runner pros handlers"""
 
 from __future__ import annotations
 
@@ -37,6 +45,7 @@ from .manifest import (
 )
 from .manifest_loader import load_manifest
 from .registry import HOST_VERSION, InstalledPlugin, PluginRegistry, plugins_dir
+from .runtime import CtxFactory, PluginRuntime
 from .storage import PluginStorage
 
 __all__ = [
@@ -73,4 +82,7 @@ __all__ = [
     "SESSION_STATUSES",
     "is_known_event",
     "is_high_frequency",
+    # runtime
+    "PluginRuntime",
+    "CtxFactory",
 ]

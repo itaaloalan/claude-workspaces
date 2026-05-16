@@ -1,15 +1,13 @@
-"""Análise estática dos `.ts` do bundle (seção 9 da spec).
+"""Análise estática AST dos `.py` do bundle (seção 9 da spec).
 
-Não é um parser TypeScript: usamos regex sobre o texto fonte. Falsos
-positivos são tolerados para regras de segurança críticas — o autor
-prefere uma rejeição justificada a um vazamento.
+Usamos `ast.parse` + `ast.walk` — preciso, sem falsos positivos comuns de regex.
 
-A spec exige análise estática **antes** do install. Aqui implementamos
-o lado puro/Python; a parte "execução em sandbox sem rede" (também
-mencionada na seção 9) é responsabilidade do runtime (fase 2)."""
+A spec exige análise antes do install. Aqui ficamos no lado puro (Python).
+Não há sandbox kernel-level; o contrato de segurança é por API + revisão."""
 
 from __future__ import annotations
 
+import ast
 import base64
 import binascii
 import re
@@ -17,267 +15,387 @@ from pathlib import Path
 
 from .manifest import Manifest
 
-# ---- Padrões proibidos (todos retornam (regex, mensagem)) -----------------
+# ---- Allowlists -----------------------------------------------------------
 
-# Imports nativos / módulos proibidos (cobre `import` e `require`).
-_FORBIDDEN_MODULES = (
-    "node:child_process",
-    "node:fs",
-    "node:net",
-    "node:http",
-    "node:https",
-    "node:os",
-    "node:path",
-    "node:process",
-    "node:vm",
-    "node:worker_threads",
-    "child_process",
-    "fs",
-    "net",
-    "http",
-    "https",
-    "os",
-    "vm",
-    "worker_threads",
+# Pacotes permitidos no topo de imports (qualquer dotted prefix).
+_ALLOWED_TOP_PACKAGES: frozenset[str] = frozenset({
+    "claude_workspaces",  # apenas `claude_workspaces.plugin_api` na prática
+    "PySide6",            # pra panels
+})
+
+# Stdlib seguro (seção 9). Subpacotes (`x.y`) são aceitos via prefixo.
+_ALLOWED_STDLIB: frozenset[str] = frozenset({
+    "asyncio",
+    "collections",
+    "contextlib",
+    "dataclasses",
+    "datetime",
+    "enum",
+    "functools",
+    "itertools",
+    "json",
+    "math",
+    "re",
+    "string",
+    "textwrap",
+    "time",
+    "typing",
+    # parciais
+    "os.path",
+    "pathlib",  # PurePath OK, Path = banido por uso (não import)
+})
+
+# Importar esses módulos = rejeição imediata.
+_FORBIDDEN_MODULES: frozenset[str] = frozenset({
+    "os",  # OK só via "os.path" (tratado à parte)
+    "sys",
+    "subprocess",
+    "socket",
+    "urllib",
+    "urllib.request",
+    "requests",
+    "httpx",
+    "aiohttp",
+    "multiprocessing",
+    "threading",
+    "ctypes",
+    "importlib",
+    "pkgutil",
+    "pickle",
+    "shelve",
+    "marshal",
+    "shutil",
+    "tempfile",
+    "fcntl",
+    "mmap",
+})
+
+# Funções built-in proibidas (chamadas).
+_FORBIDDEN_CALLS: frozenset[str] = frozenset({
+    "eval",
+    "exec",
+    "compile",
+    "__import__",
+    "open",          # use ctx.fs.*
+    "input",
+    "breakpoint",
+    "globals",
+    "locals",
+    "vars",
+})
+
+# Atributos dunder que dão fuga do sandbox.
+_FORBIDDEN_ATTRS: frozenset[str] = frozenset({
+    "__builtins__",
+    "__globals__",
+    "__import__",
+    "__subclasses__",
+    "__bases__",
+    "__mro__",
+    "__dict__",
+})
+
+# Heurística pra dunder via subclass-escape: `().__class__.__subclasses__()`.
+# Aceitamos `__class__` isolado (legítimo p/ isinstance/typing).
+_DUNDER_ESCAPE_CHAINS: tuple[tuple[str, ...], ...] = (
+    ("__class__", "__subclasses__"),
+    ("__class__", "__bases__"),
+    ("__class__", "__mro__"),
 )
 
-_IMPORT_RE = re.compile(
-    r"""^\s*import\s+[^'"]*?from\s*['"]([^'"]+)['"]""",
-    re.MULTILINE,
-)
-_BARE_IMPORT_RE = re.compile(
-    r"""^\s*import\s*['"]([^'"]+)['"]""",
-    re.MULTILINE,
-)
-_REQUIRE_RE = re.compile(
-    r"""\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)""",
-)
-_DYN_IMPORT_RE = re.compile(
-    r"""\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)""",
-)
-
-# Allowlist da seção 9: nenhum pacote npm é permitido em v1.
-# Apenas imports relativos (./) e o pacote oficial do host.
-_ALLOWED_PACKAGES = frozenset({"@claude-workspaces/api"})
-
-_EVAL_RE = re.compile(r"\beval\s*\(")
-_NEW_FUNCTION_RE = re.compile(r"\bnew\s+Function\s*\(")
-_GLOBAL_THIS_RE = re.compile(r"\bglobalThis\b")
-_WINDOW_RE = re.compile(r"\bwindow\b")
-_WEBASSEMBLY_RE = re.compile(r"\bWebAssembly\b")
-
-# Polling com intervalo abaixo de 1000ms é proibido pela seção 9.6.
-# Detectamos `setInterval(..., N)` onde N é literal e < 1000.
-_SET_INTERVAL_RE = re.compile(
-    r"\bsetInterval\s*\([^,]+,\s*(\d+)\s*[,)]"
-)
-
-# Spawn de processo via APIs Web (Worker é tratado à parte — não é processo
-# mas a spec impede WebAssembly e a sec 6 dá a regra geral: sem spawn).
-_WORKER_RE = re.compile(r"\bnew\s+Worker\s*\(")
-
-# Strings base64 grandes que decodificam pra algo parecido com código JS/TS.
-_BASE64_RE = re.compile(r"['\"]([A-Za-z0-9+/]{80,}={0,2})['\"]")
-_HEX_RE = re.compile(r"['\"]([0-9a-fA-F]{160,})['\"]")
-
-# Heurística de "isto parece código" — pra reduzir falsos positivos.
+_BASE64_RE = re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")
+_HEX_RE = re.compile(r"[0-9a-fA-F]{160,}")
 _CODE_HINTS_RE = re.compile(
-    r"(function\s*\(|=>|\beval\b|\bimport\b|\brequire\b|"
-    r"class\s+\w+|\bconst\s+\w+\s*=|console\.|process\.)"
+    r"(def\s+\w+|import\s+|class\s+\w+|lambda|exec\(|eval\(|"
+    r"__import__|asyncio\.|globals\(|locals\()"
 )
 
-# Path traversal em strings literais (escrita indireta).
-_TRAVERSAL_RE = re.compile(r"['\"][^'\"]*\.\./[^'\"]*['\"]")
+
+# ---- Entry point ---------------------------------------------------------
 
 
 def analyze_bundle(bundle_dir: Path, manifest: Manifest) -> list[str]:
-    """Roda todas as checagens da seção 9 nos .ts do bundle.
+    """Roda todas as checagens da seção 9 nos .py do bundle.
 
     Retorna lista de mensagens (vazia = limpo).
 
     Arquivos em `tests/` são ignorados: testes rodam no ambiente do autor,
-    não no host runtime — importar `../src/...` é o único caminho legítimo
-    e regras como "sem traversal" só fazem sentido em código runtime."""
+    não no host runtime."""
     errors: list[str] = []
-    ts_files: list[Path] = []
-    for child in sorted(bundle_dir.rglob("*.ts")):
+    py_files: list[Path] = []
+    for child in sorted(bundle_dir.rglob("*.py")):
         if not child.is_file():
             continue
         rel = child.relative_to(bundle_dir)
         if rel.parts and rel.parts[0] == "tests":
             continue
-        ts_files.append(child)
+        py_files.append(child)
 
-    if not ts_files:
-        # Cobertura: a validação de layout já avisa que faltam handlers.
+    if not py_files:
         return errors
 
-    for path in ts_files:
+    # Paths declarados como handlers no manifesto — só esses precisam exportar
+    # `handler`. Outros .py em src/{...} são bibliotecas auxiliares.
+    handler_rels: set[Path] = set()
+    for h in manifest.all_handlers():
+        rel = h[2:] if h.startswith("./") else h
+        handler_rels.add(Path(rel))
+    panel_handlers: set[Path] = {
+        Path(p.handler[2:] if p.handler.startswith("./") else p.handler)
+        for p in manifest.panels
+    }
+
+    for path in py_files:
         try:
             source = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
             errors.append(f"{path.name}: não consegui ler ({e})")
             continue
         rel = path.relative_to(bundle_dir)
-        errors.extend(_check_imports(source, rel))
-        errors.extend(_check_dynamic_code(source, rel))
-        errors.extend(_check_global_access(source, rel))
-        errors.extend(_check_polling(source, rel))
-        errors.extend(_check_workers(source, rel))
-        errors.extend(_check_traversal(source, rel))
-        errors.extend(_check_encoded_code(source, rel))
+        try:
+            tree = ast.parse(source, filename=str(rel))
+        except SyntaxError as e:
+            errors.append(f"{rel}: erro de sintaxe Python — {e.msg} (linha {e.lineno})")
+            continue
+        errors.extend(_check_imports(tree, rel))
+        errors.extend(_check_calls(tree, rel))
+        errors.extend(_check_dunders(tree, rel))
+        errors.extend(_check_traversal_literals(tree, rel))
+        errors.extend(_check_encoded_code(tree, rel))
+        if rel in handler_rels:
+            errors.extend(
+                _check_handler_signature(tree, rel, is_panel=rel in panel_handlers)
+            )
 
-    errors.extend(_check_permission_consistency(bundle_dir, manifest, ts_files))
+    errors.extend(_check_permission_consistency(manifest, py_files))
     return errors
 
 
-# ---- checagens individuais ----------------------------------------------
+# ---- Checagens individuais ----------------------------------------------
 
 
-def _check_imports(source: str, rel: Path) -> list[str]:
+def _is_allowed_import(module: str) -> bool:
+    if module in _ALLOWED_STDLIB:
+        return True
+    top = module.split(".", 1)[0]
+    if top in _ALLOWED_TOP_PACKAGES:
+        return True
+    # subpacotes de stdlib permitido (ex.: pathlib.PurePath sai como `pathlib`)
+    return any(
+        module == allowed or module.startswith(allowed + ".")
+        for allowed in _ALLOWED_STDLIB
+    )
+
+
+def _check_imports(tree: ast.AST, rel: Path) -> list[str]:
     errs: list[str] = []
-    for match in _IMPORT_RE.finditer(source):
-        errs.extend(_classify_import(match.group(1), rel))
-    for match in _BARE_IMPORT_RE.finditer(source):
-        errs.extend(_classify_import(match.group(1), rel))
-    for match in _REQUIRE_RE.finditer(source):
-        errs.extend(_classify_import(match.group(1), rel, dynamic=True))
-    for match in _DYN_IMPORT_RE.finditer(source):
-        errs.extend(_classify_import(match.group(1), rel, dynamic=True))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                errs.extend(_classify_import(alias.name, rel))
+        elif isinstance(node, ast.ImportFrom):
+            if node.level > 0:
+                # import relativo (`from .x import y`) — OK
+                continue
+            errs.extend(_classify_import(node.module or "", rel))
     return errs
 
 
-def _classify_import(module: str, rel: Path, dynamic: bool = False) -> list[str]:
-    label = "import dinâmico" if dynamic else "import"
+def _classify_import(module: str, rel: Path) -> list[str]:
+    if not module:
+        return [f"{rel}: import vazio"]
     if module in _FORBIDDEN_MODULES:
-        return [f"{rel}: {label} de módulo proibido {module!r} (seção 9.2)"]
-    if module.startswith("./") or module.startswith("../"):
-        if "../" in module:
-            return [f"{rel}: {label} relativo escapando do bundle: {module!r}"]
-        return []
-    if module in _ALLOWED_PACKAGES:
+        return [f"{rel}: import de módulo proibido {module!r} (seção 9.2)"]
+    if module.startswith("os.") and module != "os.path":
+        return [f"{rel}: import de submódulo de os proibido (apenas os.path): {module!r}"]
+    if _is_allowed_import(module):
         return []
     return [
-        f"{rel}: {label} de pacote fora do allowlist: {module!r} "
-        f"(seção 9.3 — apenas relativos ou {sorted(_ALLOWED_PACKAGES)} permitidos)"
+        f"{rel}: import fora do allowlist: {module!r} "
+        f"(seção 9.3 — só plugin_api, stdlib segura ou PySide6)"
     ]
 
 
-def _check_dynamic_code(source: str, rel: Path) -> list[str]:
+def _check_calls(tree: ast.AST, rel: Path) -> list[str]:
     errs: list[str] = []
-    if _EVAL_RE.search(source):
-        errs.append(f"{rel}: uso de eval() proibido (seção 9.1)")
-    if _NEW_FUNCTION_RE.search(source):
-        errs.append(f"{rel}: uso de new Function() proibido (seção 9.1)")
-    if _WEBASSEMBLY_RE.search(source):
-        errs.append(f"{rel}: WebAssembly não suportado em v1 (seção 9.10)")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in _FORBIDDEN_CALLS:
+                errs.append(
+                    f"{rel}:{node.lineno}: chamada proibida "
+                    f"{node.func.id}() (seção 9.1/9.9)"
+                )
     return errs
 
 
-def _check_global_access(source: str, rel: Path) -> list[str]:
-    errs: list[str] = []
-    if _GLOBAL_THIS_RE.search(source):
-        errs.append(f"{rel}: acesso a globalThis proibido (seção 9.4)")
-    if _WINDOW_RE.search(source):
-        errs.append(f"{rel}: acesso a window proibido (seção 9.4)")
-    return errs
+def _attr_chain(node: ast.AST) -> list[str]:
+    """Retorna a cadeia de atributos a partir de um `ast.Attribute` aninhado.
+
+    Ex.: `a.b.c` → ['a', 'b', 'c']."""
+    out: list[str] = []
+    while isinstance(node, ast.Attribute):
+        out.append(node.attr)
+        node = node.value
+    out.reverse()
+    return out
 
 
-def _check_polling(source: str, rel: Path) -> list[str]:
+def _check_dunders(tree: ast.AST, rel: Path) -> list[str]:
     errs: list[str] = []
-    for match in _SET_INTERVAL_RE.finditer(source):
-        try:
-            interval = int(match.group(1))
-        except ValueError:  # pragma: no cover — regex garante \d+
-            continue
-        if interval < 1000:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            chain = _attr_chain(node)
+            blocked = False
+            for forbidden_chain in _DUNDER_ESCAPE_CHAINS:
+                if _contains_subseq(chain, list(forbidden_chain)):
+                    errs.append(
+                        f"{rel}:{node.lineno}: acesso a "
+                        f"{'.'.join(forbidden_chain)} proibido (seção 9.4)"
+                    )
+                    blocked = True
+                    break
+            if blocked:
+                continue
+            attr = chain[-1] if chain else ""
+            if attr in _FORBIDDEN_ATTRS:
+                errs.append(
+                    f"{rel}:{node.lineno}: acesso a {attr} proibido (seção 9.4)"
+                )
+        elif isinstance(node, ast.Name) and node.id in _FORBIDDEN_ATTRS:
             errs.append(
-                f"{rel}: setInterval com {interval}ms — polling abaixo de "
-                f"1000ms é proibido (seção 9.6); use hooks"
+                f"{rel}:{node.lineno}: referência a {node.id} proibida (seção 9.4)"
             )
     return errs
 
 
-def _check_workers(source: str, rel: Path) -> list[str]:
-    if _WORKER_RE.search(source):
-        return [f"{rel}: new Worker(...) proibido (seção 9.9 — sem spawn)"]
-    return []
+def _contains_subseq(haystack: list[str], needle: list[str]) -> bool:
+    for i in range(len(haystack) - len(needle) + 1):
+        if haystack[i : i + len(needle)] == needle:
+            return True
+    return False
 
 
-def _check_traversal(source: str, rel: Path) -> list[str]:
-    if _TRAVERSAL_RE.search(source):
+def _check_traversal_literals(tree: ast.AST, rel: Path) -> list[str]:
+    errs: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if "../" in node.value or "..\\" in node.value:
+                errs.append(
+                    f"{rel}:{node.lineno}: string com '..' detectada — "
+                    f"path traversal proibido (seção 9.8)"
+                )
+    return errs
+
+
+def _check_encoded_code(tree: ast.AST, rel: Path) -> list[str]:
+    errs: list[str] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+            continue
+        s = node.value
+        if _BASE64_RE.fullmatch(s):
+            try:
+                decoded = base64.b64decode(s, validate=True).decode(
+                    "utf-8", errors="replace"
+                )
+            except (ValueError, binascii.Error):
+                continue
+            if _CODE_HINTS_RE.search(decoded):
+                errs.append(
+                    f"{rel}:{node.lineno}: string base64 ({len(s)} chars) "
+                    f"decodifica pra algo parecido com código (seção 9.7)"
+                )
+                return errs
+        if _HEX_RE.fullmatch(s):
+            try:
+                decoded = bytes.fromhex(s).decode("utf-8", errors="replace")
+            except ValueError:
+                continue
+            if _CODE_HINTS_RE.search(decoded):
+                errs.append(
+                    f"{rel}:{node.lineno}: string hex ({len(s)} chars) "
+                    f"decodifica pra algo parecido com código (seção 9.7)"
+                )
+                return errs
+    return errs
+
+
+def _check_handler_signature(
+    tree: ast.AST, rel: Path, *, is_panel: bool
+) -> list[str]:
+    """Handler declarado no manifesto precisa exportar `handler`.
+
+    Commands/hooks: `async def handler(ctx, payload?)`.
+    Panels: `def handler(ctx) -> QWidget` (síncrono)."""
+    handler_def: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+    if isinstance(tree, ast.Module):
+        for node in tree.body:
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == "handler"
+            ):
+                handler_def = node
+                break
+    if handler_def is None:
+        return [f"{rel}: falta `handler` exportado no top-level"]
+
+    if is_panel:
+        if isinstance(handler_def, ast.AsyncFunctionDef):
+            return [
+                f"{rel}: handler de panel precisa ser síncrono "
+                f"(`def handler(ctx) -> QWidget`)"
+            ]
+        return []
+    if not isinstance(handler_def, ast.AsyncFunctionDef):
         return [
-            f"{rel}: string com '../' detectada — escrita indireta via "
-            f"path traversal é proibida (seção 9.8)"
+            f"{rel}: handler de command/hook precisa ser "
+            f"`async def handler(ctx, ...)`"
         ]
     return []
 
 
-def _check_encoded_code(source: str, rel: Path) -> list[str]:
-    """Detecta blobs base64/hex que decodificam pra algo parecido com código."""
-    errs: list[str] = []
-    for match in _BASE64_RE.finditer(source):
-        blob = match.group(1)
-        try:
-            decoded = base64.b64decode(blob, validate=True).decode("utf-8", errors="replace")
-        except (ValueError, binascii.Error):
-            continue
-        if _CODE_HINTS_RE.search(decoded):
-            errs.append(
-                f"{rel}: string base64 ({len(blob)} chars) decodifica pra "
-                f"algo parecido com código (seção 9.7)"
-            )
-            break  # uma ocorrência é suficiente — não inundamos a saída
-    for match in _HEX_RE.finditer(source):
-        blob = match.group(1)
-        try:
-            decoded = bytes.fromhex(blob).decode("utf-8", errors="replace")
-        except ValueError:
-            continue
-        if _CODE_HINTS_RE.search(decoded):
-            errs.append(
-                f"{rel}: string hex ({len(blob)} chars) decodifica pra "
-                f"algo parecido com código (seção 9.7)"
-            )
-            break
-    return errs
+# ---- Permission consistency (seção 3.3.4-5) ------------------------------
+
+
+def _walk_ctx_attribute_calls(tree: ast.AST) -> set[tuple[str, ...]]:
+    """Coleta usos `ctx.x.y(...)` como (sub_api, method). Ex.: ctx.fs.read."""
+    out: set[tuple[str, ...]] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            chain = _attr_chain(node.func)
+            base_node = node.func
+            while isinstance(base_node, ast.Attribute):
+                base_node = base_node.value
+            if isinstance(base_node, ast.Name) and base_node.id == "ctx":
+                if len(chain) >= 2:
+                    out.add(tuple(chain[:2]))
+    return out
 
 
 def _check_permission_consistency(
-    bundle_dir: Path, manifest: Manifest, ts_files: list[Path]
+    manifest: Manifest, py_files: list[Path]
 ) -> list[str]:
-    """Item 3.3.4-5 da spec: toda permissão usada precisa estar declarada,
-    e toda permissão declarada precisa ser usada.
-
-    Heurística: procuramos chamadas `ctx.fs.*`, `ctx.http.*`, `ctx.ui.notify`,
-    `ctx.ui.toast`. Cruzamos com as permissões."""
     uses_fs_read = False
     uses_fs_write = False
     uses_http = False
     uses_notify = False
-    uses_workspaces_other = False
 
-    fs_read_re = re.compile(r"\bctx\.fs\.(read|list)\s*\(")
-    fs_write_re = re.compile(r"\bctx\.fs\.write\s*\(")
-    http_re = re.compile(r"\bctx\.http\.")
-    notify_re = re.compile(r"\bctx\.ui\.(notify|toast)\s*\(")
-    workspaces_re = re.compile(r"\bctx\.workspaces\.(list|get)\s*\(")
-
-    for path in ts_files:
+    for path in py_files:
         try:
             source = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            tree = ast.parse(source)
+        except (OSError, UnicodeDecodeError, SyntaxError):
             continue
-        if fs_read_re.search(source):
-            uses_fs_read = True
-        if fs_write_re.search(source):
-            uses_fs_write = True
-        if http_re.search(source):
-            uses_http = True
-        if notify_re.search(source):
-            uses_notify = True
-        if workspaces_re.search(source):
-            uses_workspaces_other = True
+        for sub, method in _walk_ctx_attribute_calls(tree):
+            if sub == "fs":
+                if method in {"read", "list"}:
+                    uses_fs_read = True
+                elif method == "write":
+                    uses_fs_write = True
+            elif sub == "http":
+                uses_http = True
+            elif sub == "ui" and method in {"notify", "toast"}:
+                uses_notify = True
 
     errs: list[str] = []
     perms = manifest.permissions
@@ -299,7 +417,6 @@ def _check_permission_consistency(
             "Plugin usa ctx.ui.notify/toast mas não declarou permissions.notifications"
         )
 
-    # Permissões declaradas mas não usadas (sec 3.3.4)
     if perms.can_read_path() and not uses_fs_read:
         errs.append(
             "permissions.filesystem.read declarado mas ctx.fs.read/list não é usado"
@@ -314,8 +431,4 @@ def _check_permission_consistency(
         errs.append(
             "permissions.notifications declarado mas ctx.ui.notify/toast não é usado"
         )
-    # workspaces=all é difícil checar consumo — só validamos consistência se
-    # uma lista finita foi declarada mas o código não acessa workspaces alheios.
-    # (purposadamente sem warning aqui — muitos hooks recebem workspace via payload.)
-    _ = bundle_dir, uses_workspaces_other  # silenciar linter
     return errs

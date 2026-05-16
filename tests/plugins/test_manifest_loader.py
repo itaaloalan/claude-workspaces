@@ -81,7 +81,7 @@ def test_unknown_event(make_bundle):
         overrides={
             "extensions": {
                 "hooks": [
-                    {"event": "session.weird", "handler": "./src/hooks/on-open.ts"}
+                    {"event": "session.weird", "handler": "./src/hooks/on_open.py"}
                 ]
             }
         }
@@ -98,7 +98,7 @@ def test_high_frequency_event_requires_throttle(make_bundle):
                 "hooks": [
                     {
                         "event": "session.message-sent",
-                        "handler": "./src/hooks/on-open.ts",
+                        "handler": "./src/hooks/on_open.py",
                     }
                 ]
             }
@@ -116,7 +116,7 @@ def test_high_frequency_with_throttle_passes(make_bundle):
                 "hooks": [
                     {
                         "event": "session.message-sent",
-                        "handler": "./src/hooks/on-open.ts",
+                        "handler": "./src/hooks/on_open.py",
                         "throttle-ms": 1000,
                     }
                 ]
@@ -134,7 +134,7 @@ def test_throttle_and_debounce_exclusive(make_bundle):
                 "hooks": [
                     {
                         "event": "session.message-sent",
-                        "handler": "./src/hooks/on-open.ts",
+                        "handler": "./src/hooks/on_open.py",
                         "throttle-ms": 1000,
                         "debounce-ms": 500,
                     }
@@ -152,7 +152,7 @@ def test_invalid_handler_path(make_bundle):
         overrides={
             "extensions": {
                 "hooks": [
-                    {"event": "workspace.opened", "handler": "./elsewhere/x.ts"}
+                    {"event": "workspace.opened", "handler": "./elsewhere/x.py"}
                 ]
             }
         }
@@ -162,7 +162,7 @@ def test_invalid_handler_path(make_bundle):
     assert any("handler inválido" in e for e in ei.value.errors)
 
 
-def test_handler_must_be_ts(make_bundle):
+def test_handler_must_be_py(make_bundle):
     bundle = make_bundle(
         overrides={
             "extensions": {
@@ -200,13 +200,13 @@ def test_command_validates(make_bundle):
                     {
                         "id": "contar",
                         "title": "Contar",
-                        "handler": "./src/commands/contar.ts",
+                        "handler": "./src/commands/contar.py",
                         "description": "Mostra contagem",
                     }
                 ]
             }
         },
-        extra_files={"src/commands/contar.ts": "export default async () => {};"},
+        extra_files={"src/commands/contar.py": "export default async () => {};"},
         skip_default_handler=True,
     )
     m = load_manifest(bundle)
@@ -222,14 +222,14 @@ def test_panel_validates(make_bundle):
                         "id": "stale",
                         "title": "Sessões paradas",
                         "slot": "sidebar-top",
-                        "handler": "./src/panels/stale.ts",
+                        "handler": "./src/panels/stale.py",
                         "icon": "./assets/icon.svg",
                     }
                 ]
             }
         },
         extra_files={
-            "src/panels/stale.ts": "export default function (ctx: any) {}",
+            "src/panels/stale.py": "export default function (ctx: any) {}",
             "assets/icon.svg": "<svg/>",
         },
         skip_default_handler=True,
@@ -247,7 +247,7 @@ def test_panel_invalid_slot(make_bundle):
                         "id": "stale",
                         "title": "X",
                         "slot": "lateral-right",
-                        "handler": "./src/panels/stale.ts",
+                        "handler": "./src/panels/stale.py",
                         "icon": "./assets/icon.svg",
                     }
                 ]

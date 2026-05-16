@@ -80,6 +80,10 @@ class MainWindow(QMainWindow):
         self._sidebar_last_size: int = 260
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
+        # Plugin host é inicializado depois do _build_ui — mas algumas callbacks
+        # disparam antes disso. Pré-inicializa como None pra que checks `is not None`
+        # funcionem sem AttributeError.
+        self._plugin_host = None
 
         self._build_ui()
 
@@ -98,6 +102,7 @@ class MainWindow(QMainWindow):
 
         self._restore_geometry()
         self.refresh_list()
+        self._init_plugin_host()
 
     @property
     def workspaces(self) -> list[Workspace]:
@@ -1014,6 +1019,8 @@ class MainWindow(QMainWindow):
         self.details.show_workspace(ws)
         self._broadcast_workspace(ws)
         self._sync_terminal_for(ws)
+        if self._plugin_host is not None:
+            self._plugin_host.publish("workspace.opened", {"workspaceId": ws.id})
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
         """Delega pro DockCoordinator."""
@@ -1395,4 +1402,31 @@ class MainWindow(QMainWindow):
             self._persist_layout()
         except Exception:
             log.exception("Falha ao salvar geometria/splitters")
+        try:
+            if self._plugin_host is not None:
+                self._plugin_host.shutdown()
+        except Exception:
+            log.exception("Falha desligando plugin host")
         super().closeEvent(event)
+
+    def _init_plugin_host(self) -> None:
+        """Sobe o subsistema de plugins. Falha aqui não derruba o app — o
+        host vira `None` e o resto roda normal."""
+        try:
+            from ..services.plugin_host import PluginHost
+
+            self._plugin_host = PluginHost()
+            self._plugin_host.notifications.connect(self._on_plugin_notification)
+            log.info(
+                "Plugin host iniciado (%d plugin(s) carregado(s))",
+                len(self._plugin_host.runtime._modules),
+            )
+        except Exception:
+            log.exception("Falha iniciando plugin host — plugins ficam desligados")
+
+    def _on_plugin_notification(
+        self, plugin_id: str, kind: str, payload: dict
+    ) -> None:
+        """Encaminha ui.notify/toast/badge dos plugins. Ainda mínimo:
+        loga; integração com bandeja/inbox vem depois."""
+        log.info("plugin %s %s: %s", plugin_id, kind, payload)

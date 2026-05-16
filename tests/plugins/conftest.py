@@ -33,7 +33,7 @@ VALID_MANIFEST: dict[str, Any] = {
     "engine": {"claude-workspaces": ">=1.0.0 <2.0.0"},
     "extensions": {
         "hooks": [
-            {"event": "workspace.opened", "handler": "./src/hooks/on-open.ts"}
+            {"event": "workspace.opened", "handler": "./src/hooks/on_open.py"}
         ]
     },
     "permissions": {
@@ -44,12 +44,12 @@ VALID_MANIFEST: dict[str, Any] = {
     },
 }
 
-VALID_HANDLER_TS = """\
-import { HookContext } from "@claude-workspaces/api";
+VALID_HANDLER_PY = """\
+from claude_workspaces.plugin_api import HookContext
 
-export default async function (ctx: HookContext, payload: any): Promise<void> {
-  ctx.log.info("hello");
-}
+
+async def handler(ctx: HookContext, payload) -> None:
+    ctx.log.info("hello")
 """
 
 VALID_README = (
@@ -64,7 +64,7 @@ def make_bundle(tmp_path: Path):
     Uso:
         bundle = make_bundle()                                  # nome auto
         bundle = make_bundle(overrides={"id": "...", "name": "..."})
-        bundle = make_bundle(extra_files={"src/extra.ts": "..."})
+        bundle = make_bundle(extra_files={"src/hooks/extra.py": "..."})
     """
     counter = {"n": 0}
 
@@ -72,7 +72,7 @@ def make_bundle(tmp_path: Path):
         *,
         overrides: dict[str, Any] | None = None,
         readme: str = VALID_README,
-        handler_ts: str = VALID_HANDLER_TS,
+        handler_py: str = VALID_HANDLER_PY,
         extra_files: dict[str, str] | None = None,
         skip_default_handler: bool = False,
         bundle_name: str | None = None,
@@ -91,8 +91,10 @@ def make_bundle(tmp_path: Path):
 
         if not skip_default_handler:
             (root / "src" / "hooks").mkdir(parents=True, exist_ok=True)
-            (root / "src" / "hooks" / "on-open.ts").write_text(
-                handler_ts, encoding="utf-8"
+            (root / "src" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "src" / "hooks" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "src" / "hooks" / "on_open.py").write_text(
+                handler_py, encoding="utf-8"
             )
 
         if extra_files:

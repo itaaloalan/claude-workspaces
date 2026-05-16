@@ -27,13 +27,18 @@ _TOP_LEVEL_DIRS = frozenset({"src", "assets", "tests"})
 _SRC_SUBDIRS = frozenset({"commands", "hooks", "panels"})
 
 # Extensões permitidas por contexto.
-_SRC_EXTS = frozenset({".ts"})
-_TEST_EXTS = frozenset({".ts"})
+_SRC_EXTS = frozenset({".py"})
+_TEST_EXTS = frozenset({".py"})
 _ASSET_EXTS = frozenset({".svg", ".png"})
 
 # Arquivos cuja presença causa rejeição imediata.
-_FORBIDDEN_FILES = frozenset({"package.json", "package-lock.json", "yarn.lock", "tsconfig.json"})
-_FORBIDDEN_DIRS = frozenset({"node_modules", ".git"})
+_FORBIDDEN_FILES = frozenset({
+    "package.json", "package-lock.json", "yarn.lock", "tsconfig.json",
+    "setup.py", "setup.cfg", "pyproject.toml", "requirements.txt",
+})
+_FORBIDDEN_DIRS = frozenset({
+    "node_modules", ".git", "__pycache__", ".venv", "venv", ".pytest_cache",
+})
 
 _MIN_README_LEN = 100
 
@@ -78,9 +83,9 @@ def validate_layout(bundle_dir: Path, manifest: Manifest) -> list[str]:
             errors.append(f"Arquivo proibido: {rel}")
             continue
 
-        # .js explicitamente banido na seção 2
-        if rel.suffix == ".js":
-            errors.append(f".js não é permitido: {rel}")
+        # extensões explicitamente banidas (seção 2)
+        if rel.suffix in {".js", ".ts", ".pyc", ".so", ".pyd"}:
+            errors.append(f"{rel.suffix} não é permitido no bundle: {rel}")
             continue
 
         # Validar localização do arquivo
@@ -130,20 +135,27 @@ def _validate_file_location(rel: Path) -> str | None:
         return f"Diretório de top-level não permitido: {top}/ (em {rel})"
 
     if top == "src":
-        # src/<subdir>/<arquivo>.ts
-        if len(parts) < 3:
-            return f"Arquivo direto em src/ não é permitido: {rel} — use src/commands|hooks|panels/"
+        # src/__init__.py é permitido (faz src/ ser um pacote)
+        if len(parts) == 2:
+            if rel.name == "__init__.py":
+                return None
+            return (
+                f"Arquivo direto em src/ não é permitido: {rel} — "
+                f"use src/commands|hooks|panels/"
+            )
         if parts[1] not in _SRC_SUBDIRS:
             return f"Subdiretório de src/ não permitido: src/{parts[1]}/ (em {rel})"
         if rel.suffix not in _SRC_EXTS:
-            return f"Extensão não permitida em src/: {rel} (esperado .ts)"
+            return f"Extensão não permitida em src/: {rel} (esperado .py)"
         return None
 
     if top == "tests":
         if rel.suffix not in _TEST_EXTS:
-            return f"Extensão não permitida em tests/: {rel} (esperado .ts)"
-        if not rel.name.endswith(".test.ts"):
-            return f"Teste deve seguir convenção *.test.ts: {rel}"
+            return f"Extensão não permitida em tests/: {rel} (esperado .py)"
+        if rel.name == "__init__.py":
+            return None
+        if not rel.name.startswith("test_"):
+            return f"Teste deve seguir convenção test_*.py: {rel}"
         return None
 
     if top == "assets":

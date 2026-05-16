@@ -10,7 +10,7 @@ engine:
 extensions:
   hooks:
     - event: session.status-changed
-      handler: ./src/hooks/on-status.ts
+      handler: ./src/hooks/on_status.py
 
 permissions:
   filesystem:
