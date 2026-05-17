@@ -79,16 +79,21 @@ class _PluginLog:
             payload = f" {data}" if data else ""
             with f.open("a", encoding="utf-8") as fp:
                 fp.write(f"{ts} [{level}] {msg}{payload}\n")
-        except OSError:
-            pass  # silencioso por design — log nunca derruba handler
+        except OSError as e:
+            # silencioso por design — log nunca derruba handler — mas
+            # registra no logger central pra debug
+            log.debug(
+                "[%s] não consegui escrever .logs/ (%s): %s",
+                self._id, type(e).__name__, e,
+            )
         log.log(
             {"info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}[
                 level
             ],
-            "[%s] %s%s",
+            "[plugin %s] %s%s",
             self._id,
             msg,
-            f" {data}" if data else "",
+            f" | {data}" if data else "",
         )
 
     def info(self, msg: str, **data: Any) -> None:
@@ -479,16 +484,47 @@ class PluginHost(QObject):
             ctx_factory=lambda inst: _Ctx(self, inst),
             loop=self._loop,
         )
+        log.info("PluginHost subindo: lendo registry em %s", self.registry.root)
+        installed = self.registry.list_installed()
+        n_enabled = sum(1 for i in installed if i.enabled)
+        log.info(
+            "Registry encontrou %d plugin(s) instalado(s), %d enabled",
+            len(installed), n_enabled,
+        )
+        for inst in installed:
+            log.info(
+                "  · %s v%s — %s (hooks=%d, commands=%d, panels=%d)",
+                inst.id,
+                inst.manifest.version,
+                "enabled" if inst.enabled else "DISABLED",
+                len(inst.manifest.hooks),
+                len(inst.manifest.commands),
+                len(inst.manifest.panels),
+            )
         # Carrega tudo que estiver enabled
         errs_by_plugin = self.runtime.load_all()
+        n_failed = 0
         for pid, errs in errs_by_plugin.items():
             for e in errs:
-                log.warning("Plugin %s: %s", pid, e)
+                log.warning("[%s] %s", pid, e)
+            if errs:
+                n_failed += 1
+        log.info(
+            "PluginHost pronto: %d plugin(s) carregado(s) com sucesso, "
+            "%d com erros, %d subscriber(s) no event bus",
+            len(errs_by_plugin) - n_failed,
+            n_failed,
+            self.bus.subscriber_count(),
+        )
 
     def publish(self, event: str, payload: dict[str, Any]) -> int:
         """Despacha um evento do catálogo (seção 7) para todos plugins."""
         if not is_known_event(event):
-            log.warning("Evento desconhecido publicado: %s", event)
+            log.warning(
+                "publish: evento %r não está no catálogo da spec — typo? "
+                "payload=%s",
+                event, payload,
+            )
         return self.bus.publish(event, payload)
 
     def shutdown(self) -> None:

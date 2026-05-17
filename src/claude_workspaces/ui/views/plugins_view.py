@@ -98,6 +98,7 @@ class PluginsView(QWidget):
         self.registry = PluginRegistry()
         self._plugins: list[InstalledPlugin] = []
         self._runtime_reloader = None  # injected by MainWindow
+        self._test_runner = None  # injected by MainWindow; (plugin_id, kind, id) → dict
         self._settings = settings
 
         outer = QVBoxLayout(self)
@@ -274,6 +275,11 @@ class PluginsView(QWidget):
         """MainWindow injeta callable que aciona PluginRuntime quando algo muda."""
         self._runtime_reloader = fn
 
+    def set_test_runner(self, fn) -> None:
+        """MainWindow injeta callable (plugin_id, kind, identifier) → dict
+        que dispara hook/command/panel manualmente pra fins de teste."""
+        self._test_runner = fn
+
     def refresh(self) -> None:
         try:
             self._plugins = self.registry.list_installed()
@@ -439,6 +445,14 @@ class PluginsView(QWidget):
                 ))
             self._detail_layout.addWidget(ext_box)
 
+        # Bloco "Testar comportamento": botões pra disparar manualmente cada
+        # extensão e ver, na prática, se o plugin faz o que promete. Pra hooks,
+        # publica um payload sintético; pra commands, invoca direto; pra
+        # panels, tenta construir o widget.
+        if (m.commands or m.hooks or m.panels) and self._test_runner is not None:
+            test_box = self._build_test_panel(inst)
+            self._detail_layout.addWidget(test_box)
+
         # Permissões — frase verbal ("Pode X") em vez de jargão técnico.
         # O plugin SÓ consegue fazer o que tá listado aqui; o resto é
         # bloqueado pelo runtime.
@@ -551,6 +565,156 @@ class PluginsView(QWidget):
         self._detail_layout.addLayout(action_row)
 
         self._detail_layout.addStretch()
+
+    # ----- testar comportamento ---------------------------------------------
+
+    def _build_test_panel(self, inst: InstalledPlugin) -> QGroupBox:
+        """Bloco com botões pra disparar cada hook/command/panel manualmente.
+
+        Cada botão chama `self._test_runner(plugin_id, kind, identifier)` que
+        é injetado pelo MainWindow via PluginCoordinator. Resultado aparece
+        no status_label embaixo."""
+        box = QGroupBox("🧪 Testar comportamento")
+        box.setStyleSheet(
+            "QGroupBox { background: #1a2230; border: 1px solid #2e4258; "
+            "border-radius: 6px; margin-top: 6px; padding-top: 8px; }"
+            "QGroupBox::title { color: #8fb4e0; subcontrol-origin: margin; "
+            "left: 10px; padding: 0 4px; }"
+        )
+        layout = QVBoxLayout(box)
+        layout.setSpacing(6)
+        intro = QLabel(
+            "Cada botão executa <b>uma vez</b> a ação como se o evento real "
+            "tivesse acontecido. Use pra confirmar visualmente que o plugin "
+            "faz o que promete (notificação, log, arquivo gerado, etc.)."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #b8c4d4; font-size: 11px;")
+        layout.addWidget(intro)
+
+        if not inst.enabled:
+            warn = QLabel(
+                "<span style='color:#d5a572;'>⚠ Plugin está <b>desabilitado</b>. "
+                "Hooks não vão disparar; commands ainda podem ser invocados se "
+                "o runtime mantiver o handler — habilite acima pra um teste "
+                "realista.</span>"
+            )
+            warn.setWordWrap(True)
+            layout.addWidget(warn)
+
+        status = QLabel("")
+        status.setWordWrap(True)
+        status.setStyleSheet(
+            "color: #d0d0d0; background: #0f1620; padding: 6px 8px; "
+            "border-radius: 4px; font-family: monospace; font-size: 11px;"
+        )
+        status.setVisible(False)
+
+        def _run(kind: str, identifier: str, descr: str) -> None:
+            if self._test_runner is None:
+                status.setText("⚠ test runner não disponível")
+                status.setVisible(True)
+                return
+            try:
+                result = self._test_runner(inst.id, kind, identifier)
+            except Exception as e:  # noqa: BLE001
+                log.exception("Falha no test runner")
+                status.setText(f"❌ erro: {e}")
+                status.setVisible(True)
+                return
+            icon = "✅" if result.get("ok") else "❌"
+            text = f"{icon} {descr}\n   {result.get('message', '')}"
+            payload = result.get("payload")
+            if payload:
+                text += f"\n   payload: {payload}"
+            widget = result.get("widget")
+            if widget is not None:
+                # Mostra o panel construído num modal pra preview
+                from PySide6.QtWidgets import QDialog
+                dlg = QDialog(self)
+                dlg.setWindowTitle(
+                    f"Preview do panel: {inst.manifest.name} · {identifier}"
+                )
+                dlg_layout = QVBoxLayout(dlg)
+                dlg_layout.addWidget(widget)
+                dlg.resize(640, 480)
+                dlg.exec()
+                text += "\n   (panel foi exibido num modal)"
+            status.setText(text)
+            status.setVisible(True)
+
+        for cmd in inst.manifest.commands:
+            row = QHBoxLayout()
+            label = QLabel(
+                f"▶️ <b>{cmd.title}</b>  "
+                f"<span style='color:#6b7785; font-size:11px;'>"
+                f"command · {cmd.id}</span>"
+            )
+            row.addWidget(label, stretch=1)
+            btn = QPushButton("Executar agora")
+            btn.setStyleSheet(
+                "QPushButton { background: #2e4258; color: #cfe2ff; "
+                "border: 1px solid #3d6ea8; border-radius: 4px; "
+                "padding: 4px 10px; }"
+                "QPushButton:hover { background: #3d6ea8; }"
+            )
+            btn.clicked.connect(
+                lambda _=False, c=cmd: _run(
+                    "command", c.id, f"command {c.id} invocado"
+                )
+            )
+            row.addWidget(btn)
+            layout.addLayout(row)
+
+        for hook in inst.manifest.hooks:
+            row = QHBoxLayout()
+            event_label = _EVENT_HUMAN.get(hook.event, hook.event)
+            label = QLabel(
+                f"🔁 <b>{hook.event}</b>  "
+                f"<span style='color:#6b7785; font-size:11px;'>"
+                f"hook · {event_label}</span>"
+            )
+            row.addWidget(label, stretch=1)
+            btn = QPushButton("Disparar evento")
+            btn.setStyleSheet(
+                "QPushButton { background: #2e4258; color: #cfe2ff; "
+                "border: 1px solid #3d6ea8; border-radius: 4px; "
+                "padding: 4px 10px; }"
+                "QPushButton:hover { background: #3d6ea8; }"
+            )
+            btn.clicked.connect(
+                lambda _=False, h=hook: _run(
+                    "hook", h.event, f"evento {h.event} publicado"
+                )
+            )
+            row.addWidget(btn)
+            layout.addLayout(row)
+
+        for panel in inst.manifest.panels:
+            row = QHBoxLayout()
+            label = QLabel(
+                f"🪟 <b>{panel.title}</b>  "
+                f"<span style='color:#6b7785; font-size:11px;'>"
+                f"panel · {panel.id}</span>"
+            )
+            row.addWidget(label, stretch=1)
+            btn = QPushButton("Pré-visualizar")
+            btn.setStyleSheet(
+                "QPushButton { background: #2e4258; color: #cfe2ff; "
+                "border: 1px solid #3d6ea8; border-radius: 4px; "
+                "padding: 4px 10px; }"
+                "QPushButton:hover { background: #3d6ea8; }"
+            )
+            btn.clicked.connect(
+                lambda _=False, p=panel: _run(
+                    "panel", p.id, f"panel {p.id} construído"
+                )
+            )
+            row.addWidget(btn)
+            layout.addLayout(row)
+
+        layout.addWidget(status)
+        return box
 
     # ----- helpers de explicação --------------------------------------------
 

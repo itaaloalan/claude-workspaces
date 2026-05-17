@@ -67,7 +67,11 @@ class _Subscription:
             self.handler(payload)
         except Exception:  # noqa: BLE001 — handlers que crashan não derrubam o bus
             log.exception(
-                "Handler do plugin %s falhou no evento %s", self.plugin_id, self.event
+                "[%s] handler do evento %s falhou (bus continua, demais "
+                "subscribers não são afetados) | payload=%s",
+                self.plugin_id,
+                self.event,
+                payload,
             )
 
     def dispatch(self, payload: dict[str, Any]) -> None:
@@ -138,9 +142,19 @@ class EventBus:
         if not is_known_event(event):
             # Não fail-hard: o host pode publicar eventos extras no futuro.
             # Mas avisa no log pra catch typos.
-            log.warning("Publicando evento desconhecido: %s", event)
+            log.warning("publish: evento desconhecido %r — typo?", event)
         with self._lock:
             subs = list(self._subs.get(event, ()))
+        if subs:
+            log.debug(
+                "publish %s → %d subscriber(s): %s | payload=%s",
+                event,
+                len(subs),
+                ",".join(sorted({s.plugin_id for s in subs})),
+                payload,
+            )
+        else:
+            log.debug("publish %s → 0 subscribers (ninguém escutando)", event)
         for sub in subs:
             sub.dispatch(payload)
         return len(subs)

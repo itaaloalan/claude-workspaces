@@ -152,6 +152,8 @@ class MainWindow(QMainWindow):
         # Plugin host depende do PluginsView e do GitPanel (ambos só existem
         # depois do _build_ui), por isso o init é tardio.
         self.plugin_coord.init(self.plugins_view, self.details.git_panel())
+        # ctx.ui.notify/toast → toast nativo. Sem isso plugins viram silenciosos.
+        self.plugin_coord.notification_received.connect(self._on_plugin_notification)
         # Restaura sessões Claude da execução anterior — defer pra deixar
         # a janela pintar primeiro, evitando flicker do dialog de launch.
         QTimer.singleShot(0, self._restore_sessions)
@@ -1113,6 +1115,57 @@ class MainWindow(QMainWindow):
             )
         except Exception:
             log.debug("showMessage falhou", exc_info=True)
+
+    def _on_plugin_notification(
+        self, plugin_id: str, kind: str, payload: dict
+    ) -> None:
+        """Sink final de ctx.ui.notify/toast/badge.
+
+        Sem isso a chamada do plugin morre num log. Aqui:
+        - notify/toast → tray.showMessage (se respeitando o toggle das settings)
+        - badge → ignorado (não há ícone de plugin pra pintar)
+        """
+        if kind == "badge":
+            log.debug(
+                "plugin %s pediu badge=%s (sem renderizador — ignorado)",
+                plugin_id, payload.get("count"),
+            )
+            return
+        if not self.settings.notify_native_enabled:
+            log.info(
+                "plugin %s tentou %s mas notify_native_enabled=False — "
+                "silenciado pelas settings | payload=%s",
+                plugin_id, kind, payload,
+            )
+            return
+        if self._tray is None:
+            log.warning(
+                "plugin %s pediu %s mas tray não está disponível | payload=%s",
+                plugin_id, kind, payload,
+            )
+            return
+        if kind == "notify":
+            title = str(payload.get("title", plugin_id))
+            body = str(payload.get("body", ""))
+        else:  # toast
+            level = str(payload.get("level", "info"))
+            title = f"[{plugin_id}] {level}"
+            body = str(payload.get("message", ""))
+        icon = QSystemTrayIcon.MessageIcon.Information
+        if payload.get("level") == "error":
+            icon = QSystemTrayIcon.MessageIcon.Critical
+        elif payload.get("level") == "warning":
+            icon = QSystemTrayIcon.MessageIcon.Warning
+        try:
+            self._tray.showMessage(title, body, icon, 6000)
+            log.info(
+                "plugin %s notificou: %s | %s", plugin_id, title, body[:120]
+            )
+        except Exception:
+            log.exception(
+                "plugin %s: showMessage falhou (title=%r body=%r)",
+                plugin_id, title, body,
+            )
 
     def _show_inbox(self) -> None:
         entries = self.terminals_coord.inbox_entries()

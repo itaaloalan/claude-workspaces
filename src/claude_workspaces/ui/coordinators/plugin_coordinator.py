@@ -52,6 +52,7 @@ class PluginCoordinator(QObject):
         self._focus_tab_fn = focus_tab_fn
         self._host = None
         self._session_cache: dict[int, dict] = {}
+        self._plugins_view = None
 
     @property
     def host(self):
@@ -64,6 +65,7 @@ class PluginCoordinator(QObject):
     def init(self, plugins_view, git_panel) -> None:
         """Sobe o subsistema de plugins. Falha aqui não derruba o app — o
         host vira `None` e o resto roda normal."""
+        self._plugins_view = plugins_view
         try:
             from ...plugin_api import Session as PluginSession
             from ...plugin_api import Workspace as PluginWorkspace
@@ -117,6 +119,7 @@ class PluginCoordinator(QObject):
             # PluginsView dispara load/unload do runtime quando o usuário
             # instala, desinstala, habilita ou desabilita pela UI.
             plugins_view.set_runtime_reloader(self._reload_plugin_runtime)
+            plugins_view.set_test_runner(self._run_test)
             try:
                 git_panel.commit_created.connect(self._on_commit_created)
             except Exception:
@@ -253,6 +256,117 @@ class PluginCoordinator(QObject):
             "commit.created",
             {"workspaceId": workspace_id, "sha": sha, "message": message},
         )
+
+    def _run_test(self, plugin_id: str, kind: str, identifier: str) -> dict:
+        """Dispara manualmente algo do plugin (hook/command/panel) com payload
+        sintético, pra que o usuário confirme visualmente que funciona.
+
+        kind:
+          - 'hook'    → publica o evento `identifier` com payload sintético
+                        (usando workspace/sessão reais quando disponíveis).
+                        Note que TODOS plugins inscritos no evento recebem.
+          - 'command' → invoca direto `runtime.invoke_command(plugin_id, identifier)`.
+          - 'panel'   → constrói o QWidget e retorna em result['widget'].
+
+        Retorna `{'ok': bool, 'message': str, ...}` que a UI mostra ao usuário."""
+        if self._host is None:
+            return {"ok": False, "message": "plugin host não está disponível"}
+        log.info(
+            "[%s] test runner: kind=%s id=%s", plugin_id, kind, identifier
+        )
+        if kind == "command":
+            try:
+                self._host.runtime.invoke_command(plugin_id, identifier)
+            except Exception as e:
+                log.exception("[%s] teste de command %s falhou", plugin_id, identifier)
+                return {"ok": False, "message": f"erro: {e}"}
+            return {
+                "ok": True,
+                "message": (
+                    f"command '{identifier}' invocado — veja o resultado na UI "
+                    f"(notificação, log, etc.)"
+                ),
+            }
+        if kind == "panel":
+            try:
+                widget = self._host.runtime.build_panel(plugin_id, identifier)
+            except Exception as e:
+                log.exception("[%s] teste de panel %s falhou", plugin_id, identifier)
+                return {"ok": False, "message": f"erro construindo panel: {e}"}
+            if widget is None:
+                return {"ok": False, "message": "build_panel retornou None"}
+            return {"ok": True, "message": "panel construído", "widget": widget}
+        if kind == "hook":
+            payload = self._synthetic_payload(identifier)
+            n = self._host.publish(identifier, payload)
+            msg = (
+                f"evento '{identifier}' publicado com payload sintético "
+                f"→ {n} subscriber(s) recebeu(am)"
+            )
+            if n == 0:
+                msg += (
+                    " — nenhum plugin escutava esse evento (esperado se o "
+                    "plugin tá disabled)"
+                )
+            return {"ok": True, "message": msg, "payload": payload}
+        return {"ok": False, "message": f"kind desconhecido: {kind!r}"}
+
+    def _synthetic_payload(self, event: str) -> dict:
+        """Monta payload sintético plausível pro evento, reusando IDs reais
+        de workspace/sessão quando disponíveis pra que hooks que fazem
+        `ctx.sessions.get(...)` consigam resolver."""
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        # workspace real, se houver
+        ws = self._current_workspace_fn()
+        ws_id = ws.id if ws else "test-workspace"
+        # sessão real (qualquer uma do cache)
+        session_id = "test-session-001"
+        for tab_id in self._session_cache:
+            session_id = str(tab_id)
+            break
+        if event == "session.created":
+            return {
+                "sessionId": session_id,
+                "workspaceId": ws_id,
+                "createdAt": now_iso,
+            }
+        if event == "session.status-changed":
+            # 30 min em awaiting-input — passa de qualquer threshold padrão
+            return {
+                "sessionId": session_id,
+                "oldStatus": "running",
+                "newStatus": "awaiting-input",
+                "durationMs": 30 * 60 * 1000,
+            }
+        if event == "session.message-sent":
+            return {
+                "sessionId": session_id,
+                "messageId": "test-msg-001",
+                "length": 42,
+            }
+        if event == "session.completed":
+            return {
+                "sessionId": session_id,
+                "reason": "ended",
+                "durationMs": 5 * 60 * 1000,
+            }
+        if event == "workspace.opened":
+            return {"workspaceId": ws_id}
+        if event == "workspace.closed":
+            return {"workspaceId": ws_id}
+        if event == "commit.created":
+            return {
+                "workspaceId": ws_id,
+                "sha": "test1234abc",
+                "message": "(teste) commit sintético disparado da UI",
+            }
+        if event == "plugin.config-changed":
+            return {
+                "key": "exemplo",
+                "oldValue": None,
+                "newValue": "teste",
+            }
+        return {}
 
     def _reload_plugin_runtime(self, plugin_id: str, action: str) -> None:
         """Aciona o runtime quando a PluginsView muda o estado do plugin.

@@ -239,39 +239,73 @@ class PluginRuntime:
     def load(self, inst: InstalledPlugin) -> list[str]:
         with self._lock:
             if inst.id in self._modules:
+                log.debug("[%s] já estava carregado — load() é no-op", inst.id)
                 return []  # já carregado
             errs: list[str] = []
             module_name = _module_name_for(inst.id)
             try:
                 _load_module(inst.install_dir, module_name)
             except Exception as e:  # noqa: BLE001
-                log.exception("Falha carregando plugin %s", inst.id)
+                log.exception(
+                    "[%s] falha ao importar bundle (módulo %s, dir=%s)",
+                    inst.id, module_name, inst.install_dir,
+                )
                 return [f"falha ao importar bundle: {e}"]
             self._modules[inst.id] = module_name
 
+            hooks_ok = commands_ok = panels_ok = 0
             for hook in inst.manifest.hooks:
                 err = self._register_hook(inst, module_name, hook)
                 if err:
                     errs.append(err)
+                else:
+                    hooks_ok += 1
             for cmd in inst.manifest.commands:
                 err = self._register_command(inst, module_name, cmd)
                 if err:
                     errs.append(err)
+                else:
+                    commands_ok += 1
             for panel in inst.manifest.panels:
                 err = self._register_panel(inst, module_name, panel)
                 if err:
                     errs.append(err)
+                else:
+                    panels_ok += 1
+
+            total = hooks_ok + commands_ok + panels_ok
+            expected = (
+                len(inst.manifest.hooks)
+                + len(inst.manifest.commands)
+                + len(inst.manifest.panels)
+            )
+            level = logging.INFO if not errs else logging.WARNING
+            log.log(
+                level,
+                "[%s] carregado: %d/%d extensão(ões) ativas "
+                "(hooks=%d, commands=%d, panels=%d) | versão=%s | erros=%d",
+                inst.id,
+                total,
+                expected,
+                hooks_ok,
+                commands_ok,
+                panels_ok,
+                inst.manifest.version,
+                len(errs),
+            )
             return errs
 
     def unload(self, plugin_id: str) -> None:
         with self._lock:
+            had_module = plugin_id in self._modules
             # cancela subs do bus
-            self._bus.unsubscribe_plugin(plugin_id)
+            removed_subs = self._bus.unsubscribe_plugin(plugin_id)
             self._subs.pop(plugin_id, None)
-            self._commands.pop(plugin_id, None)
-            self._panels.pop(plugin_id, None)
+            n_cmds = len(self._commands.pop(plugin_id, {}))
+            n_panels = len(self._panels.pop(plugin_id, {}))
             # remove módulos do sys.modules
             module_name = self._modules.pop(plugin_id, None)
+            n_modules = 0
             if module_name:
                 # remove submódulos primeiro
                 to_remove = [
@@ -280,7 +314,18 @@ class PluginRuntime:
                 ]
                 for name in to_remove:
                     sys.modules.pop(name, None)
-            log.info("Plugin descarregado: %s", plugin_id)
+                n_modules = len(to_remove)
+            if had_module:
+                log.info(
+                    "[%s] descarregado (hooks=%d, commands=%d, panels=%d, "
+                    "submodules=%d)",
+                    plugin_id, removed_subs, n_cmds, n_panels, n_modules,
+                )
+            else:
+                log.debug(
+                    "[%s] unload chamado mas plugin não estava carregado",
+                    plugin_id,
+                )
 
     def unload_all(self) -> None:
         with self._lock:
@@ -295,11 +340,15 @@ class PluginRuntime:
         try:
             mod = _load_handler_module(inst.install_dir, module_name, hook.handler)
         except Exception as e:  # noqa: BLE001
-            log.exception("Falha importando hook %s do plugin %s", hook.handler, inst.id)
+            log.exception(
+                "[%s] hook %s não importou (event=%s)",
+                inst.id, hook.handler, hook.event,
+            )
             return f"hook {hook.handler}: {e}"
         try:
             fn = _ensure_async_callable(getattr(mod, "handler", None), "hook", inst.id)
         except PluginError as e:
+            log.warning("[%s] hook %s descartado: %s", inst.id, hook.handler, e)
             return str(e)
 
         ctx = self._ctx_factory(inst)
@@ -307,6 +356,10 @@ class PluginRuntime:
 
         def dispatcher(raw_payload: dict[str, Any]) -> None:
             payload = _payload_from_dict(event, raw_payload)
+            log.debug(
+                "[%s] dispatch hook %s → %s",
+                inst.id, event, hook.handler,
+            )
             self._run_async(
                 fn(ctx, payload), inst.id, event, timeout=HOOK_TIMEOUT_S
             )
@@ -319,38 +372,72 @@ class PluginRuntime:
             debounce_ms=hook.debounce_ms,
         )
         self._subs.setdefault(inst.id, []).append(sub)
+        rate_note = ""
+        if hook.throttle_ms:
+            rate_note = f" throttle={hook.throttle_ms}ms"
+        elif hook.debounce_ms:
+            rate_note = f" debounce={hook.debounce_ms}ms"
+        log.info(
+            "[%s] hook registrado: %s → %s%s",
+            inst.id, event, hook.handler, rate_note,
+        )
         return None
 
     def _register_command(self, inst: InstalledPlugin, module_name: str, cmd) -> str | None:
         try:
             mod = _load_handler_module(inst.install_dir, module_name, cmd.handler)
         except Exception as e:  # noqa: BLE001
-            log.exception("Falha importando command %s do plugin %s", cmd.handler, inst.id)
+            log.exception(
+                "[%s] command %s não importou (id=%s)",
+                inst.id, cmd.handler, cmd.id,
+            )
             return f"command {cmd.handler}: {e}"
         try:
             fn = _ensure_async_callable(
                 getattr(mod, "handler", None), "command", inst.id
             )
         except PluginError as e:
+            log.warning("[%s] command %s descartado: %s", inst.id, cmd.id, e)
             return str(e)
         self._commands.setdefault(inst.id, {})[cmd.id] = fn
+        log.info(
+            "[%s] command registrado: %s (%s) → %s",
+            inst.id, cmd.id, cmd.title, cmd.handler,
+        )
         return None
 
     def _register_panel(self, inst: InstalledPlugin, module_name: str, panel) -> str | None:
         try:
             mod = _load_handler_module(inst.install_dir, module_name, panel.handler)
         except Exception as e:  # noqa: BLE001
-            log.exception("Falha importando panel %s do plugin %s", panel.handler, inst.id)
+            log.exception(
+                "[%s] panel %s não importou (id=%s)",
+                inst.id, panel.handler, panel.id,
+            )
             return f"panel {panel.handler}: {e}"
         fn = getattr(mod, "handler", None)
         if not callable(fn):
+            log.warning(
+                "[%s] panel %r descartado: handler não é callable",
+                inst.id, panel.id,
+            )
             return f"{inst.id}: handler de panel {panel.id!r} não é callable"
         if inspect.iscoroutinefunction(fn):
+            log.warning(
+                "[%s] panel %r descartado: handler é async (panels têm que "
+                "ser síncronos — retornam QWidget)",
+                inst.id, panel.id,
+            )
             return (
                 f"{inst.id}: handler de panel {panel.id!r} precisa ser síncrono "
                 f"(retorna QWidget)"
             )
         self._panels.setdefault(inst.id, {})[panel.id] = fn
+        log.info(
+            "[%s] panel registrado: %s slot=%s → %s "
+            "(atenção: host ainda não renderiza panels — apenas registra)",
+            inst.id, panel.id, panel.slot.value, panel.handler,
+        )
         return None
 
     # ----- chamadas externas ----
@@ -361,8 +448,14 @@ class PluginRuntime:
             fn = self._commands.get(plugin_id, {}).get(command_id)
             inst = self._registry.get(plugin_id)
         if fn is None or inst is None:
-            log.warning("Comando não encontrado: %s/%s", plugin_id, command_id)
+            known = sorted(self._commands.get(plugin_id, {}).keys())
+            log.warning(
+                "invoke_command: %s/%s não encontrado (commands conhecidos pro "
+                "plugin: %s; plugin no registry? %s)",
+                plugin_id, command_id, known, inst is not None,
+            )
             return
+        log.info("[%s] invocando command %s", plugin_id, command_id)
         ctx = self._ctx_factory(inst)
         self._run_async(
             fn(ctx), plugin_id, f"command:{command_id}", timeout=COMMAND_TIMEOUT_S
@@ -374,12 +467,19 @@ class PluginRuntime:
             fn = self._panels.get(plugin_id, {}).get(panel_id)
             inst = self._registry.get(plugin_id)
         if fn is None or inst is None:
+            log.warning(
+                "build_panel: %s/%s não encontrado", plugin_id, panel_id,
+            )
             return None
         ctx = self._ctx_factory(inst)
+        log.debug("[%s] construindo panel %s", plugin_id, panel_id)
         try:
             return fn(ctx)
         except Exception:  # noqa: BLE001
-            log.exception("Panel %s/%s falhou ao construir", plugin_id, panel_id)
+            log.exception(
+                "[%s] panel %s lançou no factory — retornando None",
+                plugin_id, panel_id,
+            )
             return None
 
     # ----- runner async ----
