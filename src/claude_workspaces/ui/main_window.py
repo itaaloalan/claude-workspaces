@@ -37,6 +37,11 @@ from ..logging_utils import log_exceptions
 from ..models import Workspace
 from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
+from ..session_persistence import (
+    SavedSession,
+    load_saved_sessions,
+    save_sessions,
+)
 from ..settings import Settings
 from .activity_bar import (
     VIEW_APPS,
@@ -147,6 +152,9 @@ class MainWindow(QMainWindow):
         # Plugin host depende do PluginsView e do GitPanel (ambos só existem
         # depois do _build_ui), por isso o init é tardio.
         self.plugin_coord.init(self.plugins_view, self.details.git_panel())
+        # Restaura sessões Claude da execução anterior — defer pra deixar
+        # a janela pintar primeiro, evitando flicker do dialog de launch.
+        QTimer.singleShot(0, self._restore_sessions)
 
     @property
     def workspaces(self) -> list[Workspace]:
@@ -1439,8 +1447,60 @@ class MainWindow(QMainWindow):
         # _persist_layout já é @log_exceptions; chamada aqui não precisa
         # de outro wrapper.
         self._persist_layout()
+        self._persist_active_sessions()
         self.plugin_coord.shutdown()
         super().closeEvent(event)
+
+    @log_exceptions(message="Falha ao persistir sessões Claude ativas")
+    def _persist_active_sessions(self) -> None:
+        saved: list[SavedSession] = []
+        for ws_id, area in self.terminals_coord._areas.items():
+            for i in range(area.tabs.count()):
+                widget = area.tabs.widget(i)
+                if not isinstance(widget, TerminalWidget):
+                    continue
+                if not widget.is_running():
+                    continue
+                session_id = widget.claimed_session_id()
+                cwd = widget.claude_cwd()
+                if not session_id or not cwd:
+                    continue
+                saved.append(SavedSession(
+                    workspace_id=ws_id,
+                    session_id=session_id,
+                    cwd=cwd,
+                ))
+        save_sessions(saved)
+
+    @log_exceptions(message="Falha ao restaurar sessões Claude")
+    def _restore_sessions(self) -> None:
+        """Recria abas Claude que estavam ativas na última execução.
+        Each entry vira `claude --resume <id>` no terminal embutido."""
+        saved = load_saved_sessions()
+        if not saved:
+            return
+        restored = 0
+        for entry in saved:
+            ws = self.workspaces_coord.find_by_id(entry.workspace_id)
+            if ws is None:
+                log.info(
+                    "Sessão %s ignorada: workspace %s não existe mais",
+                    entry.session_id, entry.workspace_id,
+                )
+                continue
+            if not entry.session_file().exists():
+                log.info(
+                    "Sessão %s ignorada: JSONL inexistente em %s",
+                    entry.session_id, entry.cwd,
+                )
+                continue
+            try:
+                self._launch_claude_for(ws, entry.session_id, entry.cwd)
+                restored += 1
+            except Exception:
+                log.exception("Falha ao restaurar sessão %s", entry.session_id)
+        if restored:
+            log.info("Restauradas %d sessão(ões) Claude da execução anterior", restored)
 
     def _open_plugin_palette(self) -> None:
         """Ctrl+P: dialog com comandos declarados por plugins habilitados."""

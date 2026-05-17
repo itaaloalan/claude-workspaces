@@ -270,6 +270,17 @@ class TerminalWidget(QWidget):
             TerminalWidget._claimed_session_ids.discard(self._claimed_session_id)
             self._claimed_session_id = None
 
+    def claimed_session_id(self) -> str | None:
+        """ID da sessão JSONL atualmente vinculada (resolvida pelo scan ou
+        passada via configure_claude com resume). Usado pelo restore na
+        próxima execução pra retomar via `claude --resume`."""
+        return self._claimed_session_id or self._claude_resume_id
+
+    def claude_cwd(self) -> str | None:
+        """cwd usado pra rodar Claude — necessário pro --resume casar o
+        diretório do JSONL no ~/.claude/projects/."""
+        return self._claude_cwd
+
     def _record_output(self, data: bytes) -> None:
         self._output_buffer.extend(data)
         if len(self._output_buffer) > 8192:
