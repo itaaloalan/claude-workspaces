@@ -13,12 +13,14 @@ signal loops.
 
 from .dock_coordinator import DockCoordinator
 from .launch_coordinator import LaunchCoordinator
+from .plugin_coordinator import PluginCoordinator
 from .terminal_coordinator import TerminalCoordinator
 from .workspace_coordinator import WorkspaceCoordinator
 
 __all__ = [
     "DockCoordinator",
     "LaunchCoordinator",
+    "PluginCoordinator",
     "TerminalCoordinator",
     "WorkspaceCoordinator",
 ]

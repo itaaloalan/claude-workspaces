@@ -1,33 +1,42 @@
 import logging
-import time
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtGui import (
+    QAction,
+    QBrush,
+    QCloseEvent,
+    QColor,
+    QGuiApplication,
+)
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QLabel,
+    QInputDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
     QStackedWidget,
-    QTreeWidget,
+    QStyle,
+    QSystemTrayIcon,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from ..claude_sessions import ClaudeSession, list_sessions_for_paths
+from ..errors import LaunchError
 from ..launchers import (
     LauncherError,
     find_app_repo_root,
     launch_claude_in_dir,
 )
+from ..logging_utils import log_exceptions
 from ..models import Workspace
+from ..services.quick_open import find_files
+from ..services.system_open import open_in_file_manager
 from ..settings import Settings
 from .activity_bar import (
     VIEW_APPS,
@@ -39,15 +48,22 @@ from .activity_bar import (
     VIEW_WORKSPACES,
     ActivityBar,
 )
+from .builders import SidebarBuilder, TerminalPaneBuilder
+from .builders.shortcuts_installer import install_shortcuts
 from .coordinators import (
     DockCoordinator,
     LaunchCoordinator,
+    PluginCoordinator,
     TerminalCoordinator,
     WorkspaceCoordinator,
 )
+from .git_panel import open_path_in_editor
+from .launch_claude_dialog import LaunchClaudeDialog  # noqa: F401  (importado p/ tests)
 from .memory_panel import MemoryPanel
 from .panels import DockPanelSpec
+from .session_export_dialog import open_session_export_dialog
 from .settings_panel import SettingsPanel
+from .shortcuts_dialog import ShortcutsDialog
 from .skills_panel import SkillsPanel
 from .terminal_area import TerminalArea
 from .terminal_child_widget import (
@@ -78,16 +94,19 @@ class MainWindow(QMainWindow):
         self.launch_coord = LaunchCoordinator(
             self.settings, self.terminals_coord, self
         )
+        self.plugin_coord = PluginCoordinator(
+            workspace_lookup=self.workspaces_coord.find_by_id,
+            current_workspace_fn=self._current_workspace,
+            all_workspaces_fn=lambda: self.workspaces_coord.workspaces,
+            focus_tab_fn=self._focus_tab_from_inbox,
+            parent=self,
+        )
 
-        # Backward-compat: shadow attrs apontam pros coordinators
+        # Shadow attrs (defaults — sobrescritos pelo restore se houver)
         self._terminal_placeholder_idx: int = 0
         self._sidebar_last_size: int = 260
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
-        # Plugin host é inicializado depois do _build_ui — mas algumas callbacks
-        # disparam antes disso. Pré-inicializa como None pra que checks `is not None`
-        # funcionem sem AttributeError.
-        self._plugin_host = None
 
         self._build_ui()
 
@@ -100,13 +119,24 @@ class MainWindow(QMainWindow):
         self.terminals_coord.inbox_changed.connect(self.top_bar.set_inbox_count)
         self.terminals_coord.spinner_tick.connect(self._on_spinner_tick)
         self.terminals_coord.terminal_area_created.connect(self._on_area_created)
+        self.terminals_coord.inbox_alert.connect(self._on_inbox_alert)
         self.launch_coord.sessions_refresh_requested.connect(
             self.details.refresh_sessions_soon
         )
 
+        # Notificações nativas (tray) + reminder config a partir das settings
+        self._tray: QSystemTrayIcon | None = None
+        self._init_tray()
+        self.terminals_coord.set_reminder_interval(
+            self.settings.notify_reminder_seconds,
+            enabled=self.settings.notify_reminder_enabled,
+        )
+
         self._restore_geometry()
         self.refresh_list()
-        self._init_plugin_host()
+        # Plugin host depende do PluginsView e do GitPanel (ambos só existem
+        # depois do _build_ui), por isso o init é tardio.
+        self.plugin_coord.init(self.plugins_view, self.details.git_panel())
 
     @property
     def workspaces(self) -> list[Workspace]:
@@ -169,6 +199,7 @@ class MainWindow(QMainWindow):
 
         self.settings_panel = SettingsPanel(self.settings)
         self.settings_panel.set_workspace_getter(self._current_workspace)
+        self.settings_panel.settings_saved.connect(self._on_settings_saved)
         # Wrap em QScrollArea — SettingsPanel tem várias rows de form
         # e seu minimumSizeHint natural (~870px) trava o right_splitter
         # com collapsible=False, impedindo o terminal de crescer/maximizar.
@@ -274,16 +305,14 @@ class MainWindow(QMainWindow):
     def _schedule_layout_save(self, *_args) -> None:
         self._layout_save_timer.start()
 
+    @log_exceptions(message="Falha ao persistir layout ao vivo")
     def _persist_layout(self) -> None:
-        try:
-            self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
-            self.settings.right_splitter_sizes = list(self.right_splitter.sizes())
-            self.settings.workspace_columns_sizes = self.details.columns_sizes()
-            g = self.geometry()
-            self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
-            self.settings.save()
-        except Exception:
-            log.exception("Falha ao persistir layout ao vivo")
+        self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
+        self.settings.right_splitter_sizes = list(self.right_splitter.sizes())
+        self.settings.workspace_columns_sizes = self.details.columns_sizes()
+        g = self.geometry()
+        self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
+        self.settings.save()
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -296,66 +325,7 @@ class MainWindow(QMainWindow):
             self._layout_save_timer.start()
 
     def _install_shortcuts(self) -> None:
-        # Layout
-        QShortcut(QKeySequence("Ctrl+B"), self, self._toggle_sidebar)
-        QShortcut(QKeySequence("Ctrl+J"), self, self._toggle_terminal)
-        QShortcut(QKeySequence("Ctrl+Shift+B"), self, self._toggle_right_dock)
-        # Workspace
-        QShortcut(QKeySequence("Ctrl+Return"), self, self._launch_current_claude)
-        QShortcut(QKeySequence("Ctrl+,"), self, self._show_settings)
-        QShortcut(QKeySequence("Ctrl+N"), self, self.add_workspace)
-        for i in range(1, 10):
-            QShortcut(
-                QKeySequence(f"Ctrl+{i}"),
-                self,
-                lambda idx=i - 1: self._jump_to_workspace(idx),
-            )
-        QShortcut(QKeySequence("Ctrl+Tab"), self, lambda: self._cycle_workspace(1))
-        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, lambda: self._cycle_workspace(-1))
-        # Terminal
-        QShortcut(QKeySequence("Ctrl+T"), self, self._new_terminal_tab)
-        QShortcut(QKeySequence("Ctrl+Shift+W"), self, self._close_active_terminal_tab)
-        QShortcut(QKeySequence("Ctrl+K"), self, self._clear_active_terminal)
-        QShortcut(QKeySequence("Ctrl+Alt+Right"), self, lambda: self._cycle_terminal_tab(1))
-        QShortcut(QKeySequence("Ctrl+Alt+Left"), self, lambda: self._cycle_terminal_tab(-1))
-        # Arquivos
-        QShortcut(QKeySequence("Ctrl+P"), self, self._quick_open_file)
-        QShortcut(QKeySequence("Ctrl+O"), self, self._open_folder_in_file_manager)
-        QShortcut(QKeySequence("Ctrl+Shift+C"), self, self._copy_primary_folder)
-        # Resume da última sessão do workspace atual
-        QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._resume_last_session)
-        # Busca em sessões
-        QShortcut(QKeySequence("Ctrl+Shift+F"), self, self._show_sessions_search)
-        # Views (activity bar) — Ctrl+Shift+1..4 (Ctrl+1..9 já é workspace jump)
-        QShortcut(
-            QKeySequence("Ctrl+Shift+1"), self,
-            lambda: self.activity_bar.activate(VIEW_WORKSPACES),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+Shift+2"), self,
-            lambda: self.activity_bar.activate(VIEW_CATALOG),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+Shift+3"), self,
-            lambda: self.activity_bar.activate(VIEW_HOOKS),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+Shift+4"), self,
-            lambda: self.activity_bar.activate(VIEW_MCP),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+Shift+5"), self,
-            lambda: self.activity_bar.activate(VIEW_PLUGINS),
-        )
-        QShortcut(
-            QKeySequence("Ctrl+Shift+6"), self,
-            lambda: self.activity_bar.activate(VIEW_APPS),
-        )
-        # Paleta de comandos de plugins
-        QShortcut(QKeySequence("Ctrl+P"), self, self._open_plugin_palette)
-        # Help
-        QShortcut(QKeySequence("Ctrl+/"), self, self._show_shortcuts)
-        QShortcut(QKeySequence("F1"), self, self._show_shortcuts)
+        install_shortcuts(self)
 
     def _visible_rows(self) -> list[int]:
         return [
@@ -560,9 +530,6 @@ class MainWindow(QMainWindow):
         area.tabs.setCurrentIndex(idx)
 
     def _quick_open_file(self) -> None:
-        from PySide6.QtWidgets import QInputDialog
-
-        from ..services.quick_open import find_files
         ws = self._current_workspace()
         if not ws or not ws.folders:
             return
@@ -587,8 +554,6 @@ class MainWindow(QMainWindow):
             self._open_file_in_editor(choice)
 
     def _open_folder_in_file_manager(self) -> None:
-        from ..errors import LaunchError
-        from ..services.system_open import open_in_file_manager
         ws = self._current_workspace()
         if not ws or not ws.folders:
             return
@@ -598,14 +563,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Falha ao abrir pasta", str(e))
 
     def _copy_primary_folder(self) -> None:
-        from PySide6.QtGui import QGuiApplication
         ws = self._current_workspace()
         if not ws or not ws.folders:
             return
         QGuiApplication.clipboard().setText(ws.folders[0])
 
     def _show_shortcuts(self) -> None:
-        from .shortcuts_dialog import ShortcutsDialog
         ShortcutsDialog(self).exec()
 
     def _resume_last_session(self) -> None:
@@ -615,7 +578,6 @@ class MainWindow(QMainWindow):
         if ws is None or not ws.folders:
             return
         try:
-            from ..claude_sessions import list_sessions_for_paths
             cwd, _ = ws.launch_paths()
             paths = list({cwd, *ws.folders})
             sessions = list_sessions_for_paths(paths, limit=1)
@@ -633,57 +595,8 @@ class MainWindow(QMainWindow):
         self._launch_claude_for(ws, s.id, s.origin_cwd)
 
     def _export_session(self, session) -> None:
-        """Exporta sessão JSONL como markdown — abre dialog com preview +
-        opções de salvar arquivo e copiar pro clipboard."""
-        from PySide6.QtGui import QGuiApplication
-        from PySide6.QtWidgets import QDialog, QFileDialog, QPlainTextEdit, QPushButton
-
-        from ..services.session_export import export_to_markdown
-
-        try:
-            md = export_to_markdown(session.path)
-        except Exception:
-            log.exception("Falha exportando sessão %s", session.id)
-            QMessageBox.warning(
-                self, "Falha", "Não foi possível ler o arquivo da sessão."
-            )
-            return
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle(f"Exportar sessão — {session.id[:8]}")
-        dlg.resize(820, 600)
-        v = QVBoxLayout(dlg)
-        preview = QPlainTextEdit(md)
-        preview.setReadOnly(False)
-        v.addWidget(preview, stretch=1)
-
-        row = QHBoxLayout()
-        copy_btn = QPushButton("Copiar pra clipboard")
-        save_btn = QPushButton("Salvar como…")
-        close_btn = QPushButton("Fechar")
-        row.addWidget(copy_btn)
-        row.addWidget(save_btn)
-        row.addStretch()
-        row.addWidget(close_btn)
-        v.addLayout(row)
-
-        copy_btn.clicked.connect(
-            lambda: QGuiApplication.clipboard().setText(preview.toPlainText())
-        )
-        def do_save():
-            default = f"claude-session-{session.id[:8]}.md"
-            path, _ = QFileDialog.getSaveFileName(
-                dlg, "Salvar markdown", default, "Markdown (*.md);;Todos (*)"
-            )
-            if not path:
-                return
-            try:
-                Path(path).write_text(preview.toPlainText(), encoding="utf-8")
-            except OSError as e:
-                QMessageBox.warning(dlg, "Falha ao salvar", str(e))
-        save_btn.clicked.connect(do_save)
-        close_btn.clicked.connect(dlg.accept)
-        dlg.exec()
+        """Exporta sessão JSONL como markdown — abre dialog com preview."""
+        open_session_export_dialog(session, parent=self)
 
     def _show_sessions_search(self) -> None:
         from .sessions_search_dialog import SessionsSearchDialog
@@ -756,130 +669,36 @@ class MainWindow(QMainWindow):
         return dock
 
     def _build_terminal_pane(self) -> QWidget:
-        pane = QWidget()
-        pane.setMinimumHeight(0)
-        layout = QVBoxLayout(pane)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        header = QWidget()
-        header.setStyleSheet(
-            "background: #161616; border-bottom: 1px solid #2a2a2a;"
-        )
-        header.setCursor(Qt.CursorShape.PointingHandCursor)
-        # Clique no header (fora dos botões) expande o terminal se
-        # estiver minimizado
-        def _on_header_click(_ev):
+        def on_header_click() -> None:
             if self._terminal_is_minimized():
                 self._toggle_terminal()
-        header.mousePressEvent = _on_header_click  # type: ignore[assignment]
-        self._terminal_header = header
-        h = QHBoxLayout(header)
-        h.setContentsMargins(8, 4, 8, 4)
-        h.setSpacing(6)
-        title = QLabel("Terminal")
-        title.setStyleSheet("color: #888; font-size: 11px;")
-        h.addWidget(title)
-        h.addStretch()
 
-        btn_css = (
-            "QPushButton { background: transparent; color: #aaa; "
-            "border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; }"
-            "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
-            "QPushButton:disabled { color: #444; }"
-        )
-        # Ícones estilo Windows: minimizar (linha), maximizar (quadrado),
-        # restaurar (quadrados sobrepostos)
-        self._term_min_btn = QPushButton("—")
-        self._term_min_btn.setToolTip("Minimizar terminal (Ctrl+J)")
-        self._term_min_btn.setFixedWidth(28)
-        self._term_min_btn.setStyleSheet(btn_css)
-        self._term_min_btn.clicked.connect(self._toggle_terminal)
-        h.addWidget(self._term_min_btn)
-
-        self._term_max_btn = QPushButton("▢")
-        self._term_max_btn.setToolTip("Maximizar terminal (esconder conteúdo)")
-        self._term_max_btn.setFixedWidth(28)
-        self._term_max_btn.setStyleSheet(btn_css)
-        self._term_max_btn.clicked.connect(self._maximize_terminal)
-        h.addWidget(self._term_max_btn)
-
-        self._term_restore_btn = QPushButton("❐")
-        self._term_restore_btn.setToolTip("Restaurar layout 50/50")
-        self._term_restore_btn.setFixedWidth(28)
-        self._term_restore_btn.setStyleSheet(btn_css)
-        self._term_restore_btn.clicked.connect(self._restore_terminal)
-        h.addWidget(self._term_restore_btn)
-
-        layout.addWidget(header)
-
-        self.terminal_host = QStackedWidget()
-        self.terminal_host.setMinimumHeight(0)
-        self._empty_terminal = QLabel(
-            "Nenhum terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' "
-            "para iniciar uma sessão. Cada workspace tem suas próprias abas."
-        )
-        self._empty_terminal.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_terminal.setStyleSheet(
-            "background: #0e0e0e; color: #555; padding: 28px;"
-        )
-        self._terminal_placeholder_idx = self.terminal_host.addWidget(self._empty_terminal)
-        layout.addWidget(self.terminal_host, stretch=1)
-
-        return pane
+        builder = TerminalPaneBuilder(
+            on_min_click=self._toggle_terminal,
+            on_max_click=self._maximize_terminal,
+            on_restore_click=self._restore_terminal,
+            on_header_click=on_header_click,
+        ).build()
+        self._terminal_header = builder.header
+        self._term_min_btn = builder.min_btn
+        self._term_max_btn = builder.max_btn
+        self._term_restore_btn = builder.restore_btn
+        self.terminal_host = builder.host
+        self._empty_terminal = builder.empty_label
+        self._terminal_placeholder_idx = builder.placeholder_idx
+        return builder.pane
 
     def _build_sidebar(self) -> QWidget:
-        wrapper = QWidget()
-        layout = QVBoxLayout(wrapper)
-        layout.setContentsMargins(10, 12, 10, 10)
-        layout.setSpacing(6)
-
-        layout.addWidget(QLabel("<b>WORKSPACES</b>"))
-
-        self.list_widget = QTreeWidget()
-        self.list_widget.setHeaderHidden(True)
-        self.list_widget.setRootIsDecorated(True)
-        self.list_widget.setIndentation(14)
-        self.list_widget.setExpandsOnDoubleClick(False)
-        self.list_widget.currentItemChanged.connect(self._on_selection_changed)
-        self.list_widget.itemClicked.connect(self._on_tree_item_clicked)
-        self.list_widget.itemActivated.connect(self._on_tree_item_activated)
-        self.list_widget.setStyleSheet(
-            "QTreeWidget { background: transparent; border: 0; color: #e6e6e6; }"
-            "QTreeWidget::item { padding: 4px 4px; color: #e6e6e6; }"
-            "QTreeWidget::item:hover { background: #2a3142; color: #fff; }"
-            "QTreeWidget::item:selected { background: #3d6ea8; color: #fff; }"
-            "QTreeWidget::item:selected:hover { background: #4a82c5; color: #fff; }"
-        )
-        from PySide6.QtGui import QColor, QPalette
-        pal = self.list_widget.palette()
-        for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
-            pal.setColor(grp, QPalette.ColorRole.Text, QColor("#e6e6e6"))
-            pal.setColor(grp, QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
-            pal.setColor(grp, QPalette.ColorRole.Highlight, QColor("#3d6ea8"))
-        self.list_widget.setPalette(pal)
-        layout.addWidget(self.list_widget, stretch=1)
-
-        # Spinner é gerido pelo TerminalCoordinator (signal spinner_tick)
-
-        add_btn = QPushButton("+ Novo Workspace")
-        add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
-        add_btn.clicked.connect(self.add_workspace)
-        layout.addWidget(add_btn)
-
-        sep = QWidget()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet("background: #2a2a2a;")
-        layout.addWidget(sep)
-
-        self.self_dev_btn = QPushButton("🔧 Hack este app")
-        self.self_dev_btn.setToolTip(
-            "Abre o Claude no diretório do próprio claude-workspaces pra iterar nele"
-        )
-        self.self_dev_btn.clicked.connect(self._launch_self_dev)
-        layout.addWidget(self.self_dev_btn)
-
-        return wrapper
+        builder = SidebarBuilder(
+            on_current_changed=self._on_selection_changed,
+            on_item_clicked=self._on_tree_item_clicked,
+            on_item_activated=self._on_tree_item_activated,
+            on_add_clicked=self.add_workspace,
+            on_self_dev_clicked=self._launch_self_dev,
+        ).build()
+        self.list_widget = builder.list_widget
+        self.self_dev_btn = builder.self_dev_btn
+        return builder.wrapper
 
     # ---------- listagem / filtro / badge ----------
 
@@ -1046,8 +865,7 @@ class MainWindow(QMainWindow):
         self.details.show_workspace(ws)
         self._broadcast_workspace(ws)
         self._sync_terminal_for(ws)
-        if self._plugin_host is not None:
-            self._plugin_host.publish("workspace.opened", {"workspaceId": ws.id})
+        self.plugin_coord.dispatch_workspace_opened(ws.id)
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
         """Delega pro DockCoordinator."""
@@ -1110,8 +928,6 @@ class MainWindow(QMainWindow):
     def _add_last_session_child(
         self, ws_item: QTreeWidgetItem, session: ClaudeSession
     ) -> None:
-        from PySide6.QtGui import QBrush, QColor
-
         label = "↻ " + session.label(max_preview=40)
         child = QTreeWidgetItem([label])
         child.setData(0, Qt.ItemDataRole.UserRole, session)
@@ -1167,8 +983,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         """Slot do TerminalCoordinator.tab_activity_changed.
         Atualiza o tree child. Inbox/spinner já foram tratados no coord."""
-        # Despacha eventos pro plugin bus (session.created/status-changed/completed)
-        self._dispatch_session_events(
+        self.plugin_coord.dispatch_session_event(
             tab_id, workspace_id, title, is_working, is_running
         )
 
@@ -1185,89 +1000,10 @@ class MainWindow(QMainWindow):
     def _handle_tab_removed(self, tab_id: int) -> None:
         """Slot do TerminalCoordinator.tab_removed.
         Estado já foi limpo no coord; aqui só remove o item do tree."""
-        # Limpa cache do plugin host e dispara session.completed se ainda não foi
-        if self._plugin_host is not None:
-            cached = self._plugin_session_cache.pop(tab_id, None)
-            if cached and cached.get("status") != "completed":
-                duration_ms = max(
-                    0, int((time.monotonic() - cached["created_at_mono"]) * 1000)
-                )
-                self._publish_session_event(
-                    "session.completed",
-                    tab_id,
-                    {"reason": "closed", "durationMs": duration_ms},
-                )
+        self.plugin_coord.dispatch_tab_removed(tab_id)
         item = self.terminals_coord.state.tree_items.get(tab_id)
         if item is not None and item.parent() is not None:
             item.parent().removeChild(item)
-
-    def _dispatch_session_events(
-        self,
-        tab_id: int,
-        workspace_id: str,
-        title: str,
-        is_working: bool,
-        is_running: bool,
-    ) -> None:
-        """Mantém o cache de sessões e despacha session.* pro plugin bus.
-
-        Tradução: 1ª vez vendo tab_id → session.created. Mudança de status
-        no cache → session.status-changed. is_running=False → session.completed."""
-        if self._plugin_host is None:
-            return
-        ws = self.workspaces_coord.find_by_id(workspace_id)
-        ws_name = ws.name if ws else workspace_id
-        new_status = self._plugin_session_status_for(is_working, is_running)
-        cached = self._plugin_session_cache.get(tab_id)
-        now = time.monotonic()
-        if cached is None:
-            self._plugin_session_cache[tab_id] = {
-                "workspace_id": workspace_id,
-                "workspace_name": ws_name,
-                "status": new_status,
-                "title": title,
-                "created_at_mono": now,
-                "last_change_mono": now,
-            }
-            self._publish_session_event(
-                "session.created",
-                tab_id,
-                {
-                    "workspaceId": workspace_id,
-                    "createdAt": datetime.now().isoformat(timespec="seconds"),
-                },
-            )
-            return
-
-        # Atualiza título sempre (parte do estado, não evento)
-        cached["title"] = title
-        cached["workspace_name"] = ws_name
-
-        old_status = cached["status"]
-        if new_status != old_status:
-            duration_ms = max(
-                0, int((now - cached["last_change_mono"]) * 1000)
-            )
-            cached["status"] = new_status
-            cached["last_change_mono"] = now
-            self._publish_session_event(
-                "session.status-changed",
-                tab_id,
-                {
-                    "oldStatus": old_status,
-                    "newStatus": new_status,
-                    "durationMs": duration_ms,
-                },
-            )
-            if new_status == "completed":
-                total_ms = max(
-                    0, int((now - cached["created_at_mono"]) * 1000)
-                )
-                self._publish_session_event(
-                    "session.completed",
-                    tab_id,
-                    {"reason": "ended", "durationMs": total_ms},
-                )
 
     def _on_spinner_tick(self, spinner_char: str) -> None:
         """Slot do TerminalCoordinator.spinner_tick — atualiza children
@@ -1276,9 +1012,86 @@ class MainWindow(QMainWindow):
             if working:
                 self._update_terminal_child(tab_id, title, status, True, True)
 
+    def _on_settings_saved(self) -> None:
+        """Re-aplica configs que afetam coordinators / tray ao salvar."""
+        self.terminals_coord.set_reminder_interval(
+            self.settings.notify_reminder_seconds,
+            enabled=self.settings.notify_reminder_enabled,
+        )
+        if self.settings.notify_native_enabled and self._tray is None:
+            self._init_tray()
+        elif not self.settings.notify_native_enabled and self._tray is not None:
+            self._tray.hide()
+            self._tray.deleteLater()
+            self._tray = None
+
+    def _init_tray(self) -> None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            log.info("System tray indisponível — toasts nativos desabilitados")
+            return
+        icon = self.windowIcon()
+        if icon.isNull():
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation)
+        self._tray = QSystemTrayIcon(icon, self)
+        self._tray.setToolTip("Claude Workspaces")
+        self._tray.activated.connect(self._on_tray_activated)
+        self._tray.messageClicked.connect(self._on_tray_message_clicked)
+        self._tray.show()
+        self._last_alert_tab_id: int | None = None
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+    def _on_tray_message_clicked(self) -> None:
+        """Click no toast → traz a aba aguardando pra frente."""
+        tab_id = getattr(self, "_last_alert_tab_id", None)
+        if tab_id is None:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            return
+        info = self.terminals_coord.inbox_entries().get(tab_id)
+        if info is None:
+            return
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self._focus_tab_from_inbox(info["workspace_id"], tab_id)
+
+    def _on_inbox_alert(
+        self, tab_id: int, info: dict, is_reminder: bool
+    ) -> None:
+        """Recebe alerta primário (working→idle) ou re-lembrete (timer).
+        Dispara toast nativo se ativado."""
+        if not self.settings.notify_native_enabled:
+            return
+        if self._tray is None:
+            return
+        ws = self.workspaces_coord.find_by_id(info.get("workspace_id", ""))
+        ws_name = ws.name if ws else "Workspace"
+        title_prefix = "🔁 Ainda aguardando" if is_reminder else "✅ Pronto"
+        title = f"{title_prefix} — {ws_name}"
+        body_parts: list[str] = []
+        if info.get("title"):
+            body_parts.append(str(info["title"]))
+        if info.get("status"):
+            status = str(info["status"])
+            if len(status) > 90:
+                status = status[:89] + "…"
+            body_parts.append(status)
+        body = "\n".join(body_parts) or "Console pronto pra próxima instrução."
+        self._last_alert_tab_id = tab_id
+        try:
+            self._tray.showMessage(
+                title, body, QSystemTrayIcon.MessageIcon.Information, 6000
+            )
+        except Exception:
+            log.debug("showMessage falhou", exc_info=True)
+
     def _show_inbox(self) -> None:
-        from PySide6.QtGui import QAction
-        from PySide6.QtWidgets import QMenu
         entries = self.terminals_coord.inbox_entries()
         if not entries:
             menu = QMenu(self)
@@ -1297,12 +1110,36 @@ class MainWindow(QMainWindow):
                 if len(sub) > 60:
                     sub = sub[:59] + "…"
                 label += f"  —  {sub}"
-            act = QAction(label, menu)
-            act.triggered.connect(
-                lambda _checked=False, wid=info["workspace_id"], tid=tab_id:
+            if info.get("dismissed"):
+                label = "👁  " + label  # marca visual de "já visto"
+            entry_menu = menu.addMenu(label)
+            focus_act = QAction("Focar console", entry_menu)
+            focus_act.triggered.connect(
+                lambda _c=False, wid=info["workspace_id"], tid=tab_id:
                     self._focus_tab_from_inbox(wid, tid)
             )
-            menu.addAction(act)
+            entry_menu.addAction(focus_act)
+            entry_menu.addSeparator()
+            seen_act = QAction("Já vi — não me lembre", entry_menu)
+            seen_act.triggered.connect(
+                lambda _c=False, tid=tab_id:
+                    self.terminals_coord.dismiss_inbox(tid)
+            )
+            entry_menu.addAction(seen_act)
+            for minutes in (5, 15, 30):
+                snz = QAction(f"Lembrar em {minutes} min", entry_menu)
+                snz.triggered.connect(
+                    lambda _c=False, tid=tab_id, s=minutes * 60:
+                        self.terminals_coord.snooze_inbox(tid, s)
+                )
+                entry_menu.addAction(snz)
+            entry_menu.addSeparator()
+            remove_act = QAction("Remover do inbox", entry_menu)
+            remove_act.triggered.connect(
+                lambda _c=False, tid=tab_id:
+                    self.terminals_coord.remove_from_inbox(tid)
+            )
+            entry_menu.addAction(remove_act)
         menu.addSeparator()
         clear = QAction("Limpar inbox", menu)
         clear.triggered.connect(self.terminals_coord.clear_inbox)
@@ -1425,10 +1262,7 @@ class MainWindow(QMainWindow):
                 self.terminal_host.setCurrentWidget(area)
 
     def _cleanup_terminal_for(self, workspace_id: str) -> None:
-        if self._plugin_host is not None:
-            self._plugin_host.publish(
-                "workspace.closed", {"workspaceId": workspace_id}
-            )
+        self.plugin_coord.dispatch_workspace_closed(workspace_id)
         area = self.terminals_coord.cleanup_area(workspace_id)
         if area is None:
             return
@@ -1440,7 +1274,6 @@ class MainWindow(QMainWindow):
     # ---------- tarefas ----------
 
     def _open_file_in_editor(self, abs_path: str) -> None:
-        from .git_panel import open_path_in_editor
         editor = self.settings.vscode_command or "code"
         try:
             open_path_in_editor(abs_path, editor)
@@ -1530,160 +1363,12 @@ class MainWindow(QMainWindow):
         self.resize(1200, 780)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        try:
-            self._persist_layout()
-        except Exception:
-            log.exception("Falha ao salvar geometria/splitters")
-        try:
-            if self._plugin_host is not None:
-                self._plugin_host.shutdown()
-        except Exception:
-            log.exception("Falha desligando plugin host")
+        # _persist_layout já é @log_exceptions; chamada aqui não precisa
+        # de outro wrapper.
+        self._persist_layout()
+        self.plugin_coord.shutdown()
         super().closeEvent(event)
-
-    def _init_plugin_host(self) -> None:
-        """Sobe o subsistema de plugins. Falha aqui não derruba o app — o
-        host vira `None` e o resto roda normal."""
-        try:
-            from ..plugin_api import Session as PluginSession
-            from ..plugin_api import Workspace as PluginWorkspace
-            from ..services.plugin_host import PluginHost
-
-            # Cache local de sessões observadas (tab_id → metadados).
-            # Atualizado por _handle_tab_activity; serve como fonte de verdade
-            # pro provider de ctx.sessions.
-            self._plugin_session_cache: dict[int, dict] = {}
-
-            def ws_to_plugin(ws: Workspace) -> PluginWorkspace:
-                return PluginWorkspace(
-                    id=ws.id, name=ws.name, folders=tuple(ws.folders)
-                )
-
-            def list_ws() -> list[PluginWorkspace]:
-                return [ws_to_plugin(w) for w in self.workspaces_coord.workspaces]
-
-            def current_ws() -> PluginWorkspace | None:
-                ws = self._current_workspace()
-                return ws_to_plugin(ws) if ws else None
-
-            def list_sessions(status_filter: str | None) -> list[PluginSession]:
-                out: list[PluginSession] = []
-                for tab_id, meta in self._plugin_session_cache.items():
-                    if status_filter and meta["status"] != status_filter:
-                        continue
-                    out.append(
-                        PluginSession(
-                            id=str(tab_id),
-                            workspace_id=meta["workspace_id"],
-                            workspace_name=meta["workspace_name"],
-                            status=meta["status"],
-                            last_message=meta.get("title"),
-                        )
-                    )
-                return out
-
-            def focus_session(session_id: str) -> None:
-                # Tab IDs vivem como inteiros; recebemos string da API.
-                try:
-                    tab_id = int(session_id)
-                except ValueError:
-                    return
-                meta = self._plugin_session_cache.get(tab_id)
-                if meta is None:
-                    return
-                self._focus_tab_from_inbox(meta["workspace_id"], tab_id)
-
-            self._plugin_host = PluginHost(
-                ws_list_provider=list_ws,
-                ws_current_provider=current_ws,
-                sessions_list_provider=list_sessions,
-                session_focus_fn=focus_session,
-            )
-            self._plugin_host.notifications.connect(self._on_plugin_notification)
-            # PluginsView dispara load/unload do runtime quando o usuário
-            # instala, desinstala, habilita ou desabilita pela UI.
-            self.plugins_view.set_runtime_reloader(self._reload_plugin_runtime)
-            # commit.created vem do GitPanel quando o usuário commita pela UI.
-            # Commits feitos por fora (terminal, IDE) não geram evento — limitação
-            # aceitável; quando vier integração com FileSystemWatcher no .git/HEAD
-            # isso pode ser ampliado.
-            try:
-                git_panel = self.details.git_panel()
-                git_panel.commit_created.connect(self._on_commit_created)
-            except Exception:
-                log.exception("Falha conectando commit_created ao plugin host")
-            log.info(
-                "Plugin host iniciado (%d plugin(s) carregado(s))",
-                len(self._plugin_host.runtime._modules),
-            )
-        except Exception:
-            log.exception("Falha iniciando plugin host — plugins ficam desligados")
-
-    def _on_commit_created(
-        self, workspace_id: str, _folder: str, sha: str, message: str
-    ) -> None:
-        if self._plugin_host is None:
-            return
-        self._plugin_host.publish(
-            "commit.created",
-            {"workspaceId": workspace_id, "sha": sha, "message": message},
-        )
-
-    def _reload_plugin_runtime(self, plugin_id: str, action: str) -> None:
-        """Aciona o runtime quando a PluginsView muda o estado do plugin.
-
-        action: 'load' (depois de install/enable) ou 'unload' (uninstall/disable)."""
-        if self._plugin_host is None:
-            return
-        runtime = self._plugin_host.runtime
-        if action == "unload":
-            runtime.unload(plugin_id)
-            return
-        inst = self._plugin_host.registry.get(plugin_id)
-        if inst is None:
-            log.warning("Reloader: plugin %s não está no registry", plugin_id)
-            return
-        # `load` é idempotente; pra reinstalação descarrega antes
-        runtime.unload(plugin_id)
-        errs = runtime.load(inst)
-        for e in errs:
-            log.warning("Plugin %s ao recarregar: %s", plugin_id, e)
 
     def _open_plugin_palette(self) -> None:
         """Ctrl+P: dialog com comandos declarados por plugins habilitados."""
-        if self._plugin_host is None:
-            return
-        from .plugin_palette_dialog import PluginPaletteDialog
-
-        dlg = PluginPaletteDialog(self._plugin_host, parent=self)
-        dlg.exec()
-
-    def _on_plugin_notification(
-        self, plugin_id: str, kind: str, payload: dict
-    ) -> None:
-        """Encaminha ui.notify/toast/badge dos plugins. Ainda mínimo:
-        loga; integração com bandeja/inbox vem depois."""
-        log.info("plugin %s %s: %s", plugin_id, kind, payload)
-
-    def _plugin_session_status_for(self, is_working: bool, is_running: bool) -> str:
-        """Mapeia o estado interno (working/running) pros status da spec.
-
-        Tabela:
-        - running + working → 'running'
-        - running + idle    → 'awaiting-input'
-        - !running          → 'completed'
-        """
-        if not is_running:
-            return "completed"
-        return "running" if is_working else "awaiting-input"
-
-    def _publish_session_event(
-        self, event: str, tab_id: int, extra: dict | None = None
-    ) -> None:
-        """Helper: monta payload com `sessionId` e despacha pro bus."""
-        if self._plugin_host is None:
-            return
-        payload = {"sessionId": str(tab_id)}
-        if extra:
-            payload.update(extra)
-        self._plugin_host.publish(event, payload)
+        self.plugin_coord.open_palette(self)
