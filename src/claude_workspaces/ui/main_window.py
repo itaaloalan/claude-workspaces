@@ -73,6 +73,12 @@ from .terminal_child_widget import (
     TerminalChildWidget,
 )
 from .terminal_widget import TerminalWidget
+from .theme import (
+    LAYOUT_SAVE_DEBOUNCE_MS,
+    SIDEBAR_DEFAULT_W,
+    SPLITTER_HANDLE_W,
+    TERMINAL_HEADER_MIN_H,
+)
 from .top_bar import TopBar
 from .views import AppsView, CatalogView, HooksView, McpView, PluginsView
 from .workspace_details import WorkspaceDetailsPanel
@@ -104,9 +110,13 @@ class MainWindow(QMainWindow):
 
         # Shadow attrs (defaults — sobrescritos pelo restore se houver)
         self._terminal_placeholder_idx: int = 0
-        self._sidebar_last_size: int = 260
+        self._sidebar_last_size: int = SIDEBAR_DEFAULT_W
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
+        # tab_id → título base (sem sufixo). Quando dois Claude começam com
+        # o mesmo primeiro prompt, o mais novo ganha sufixo " (2)" pra
+        # diferenciar visualmente.
+        self._tab_base_titles: dict[int, str] = {}
 
         self._build_ui()
 
@@ -168,7 +178,7 @@ class MainWindow(QMainWindow):
         # Splitter horizontal: sidebar full-height | painel direito
         self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.body_splitter.setChildrenCollapsible(True)
-        self.body_splitter.setHandleWidth(8)
+        self.body_splitter.setHandleWidth(SPLITTER_HANDLE_W)
         self.body_splitter.setStyleSheet(splitter_css)
 
         self._sidebar = self._build_sidebar()
@@ -183,7 +193,7 @@ class MainWindow(QMainWindow):
         # threshold (~15px). Toggle Ctrl+J / minimize button continuam
         # funcionando via setSizes([N, 0]) que ignora a constraint.
         self.right_splitter.setChildrenCollapsible(False)
-        self.right_splitter.setHandleWidth(8)
+        self.right_splitter.setHandleWidth(SPLITTER_HANDLE_W)
         self.right_splitter.setStyleSheet(splitter_css)
 
         self.content_stack = QStackedWidget()
@@ -290,7 +300,7 @@ class MainWindow(QMainWindow):
         # splitters dispara save após 600ms de inatividade
         self._layout_save_timer = QTimer(self)
         self._layout_save_timer.setSingleShot(True)
-        self._layout_save_timer.setInterval(600)
+        self._layout_save_timer.setInterval(LAYOUT_SAVE_DEBOUNCE_MS)
         self._layout_save_timer.timeout.connect(self._persist_layout)
 
         self.body_splitter.splitterMoved.connect(self._schedule_layout_save)
@@ -364,7 +374,7 @@ class MainWindow(QMainWindow):
             self._sidebar_last_size = sizes[0]
             self.body_splitter.setSizes([0, sum(sizes)])
         else:
-            target = self._sidebar_last_size or 260
+            target = self._sidebar_last_size or SIDEBAR_DEFAULT_W
             self.body_splitter.setSizes([target, max(sum(sizes) - target, 200)])
         self._schedule_layout_save()
 
@@ -372,7 +382,7 @@ class MainWindow(QMainWindow):
         """Altura do header do terminal — usado como 'min height' quando
         minimizado (barra fica visível e clicável pra restaurar)."""
         if hasattr(self, "_terminal_header"):
-            return max(self._terminal_header.sizeHint().height(), 28)
+            return max(self._terminal_header.sizeHint().height(), TERMINAL_HEADER_MIN_H)
         return 32
 
     def _terminal_is_minimized(self) -> bool:
@@ -1002,8 +1012,13 @@ class MainWindow(QMainWindow):
         Estado já foi limpo no coord; aqui só remove o item do tree."""
         self.plugin_coord.dispatch_tab_removed(tab_id)
         item = self.terminals_coord.state.tree_items.get(tab_id)
-        if item is not None and item.parent() is not None:
-            item.parent().removeChild(item)
+        parent_item = item.parent() if item is not None else None
+        if item is not None and parent_item is not None:
+            parent_item.removeChild(item)
+        self._tab_base_titles.pop(tab_id, None)
+        # Aba que saiu pode ter sido a única causa de colisão — re-disambigua
+        if parent_item is not None:
+            self._refresh_workspace_child_titles(parent_item)
 
     def _on_spinner_tick(self, spinner_char: str) -> None:
         """Slot do TerminalCoordinator.spinner_tick — atualiza children
@@ -1196,6 +1211,7 @@ class MainWindow(QMainWindow):
         term = self._terminal_widget_for(tab_id)
         if term is not None:
             full_title = term.full_title() or title
+        self._tab_base_titles[tab_id] = title
         widget.set_title(title, full_title)
         state = self._resolve_state(is_working, is_running)
         widget.update_state(
@@ -1210,6 +1226,9 @@ class MainWindow(QMainWindow):
         child.setHidden(state == STATE_DONE)
         ws_item.setExpanded(True)
         self.terminals_coord.state.tree_items[tab_id] = child
+        # Reaplica sufixos de desambiguação no workspace inteiro (cobre o
+        # caso de a nova aba colidir com outra que já estava sem sufixo).
+        self._refresh_workspace_child_titles(ws_item)
 
     def _update_terminal_child(
         self,
@@ -1229,7 +1248,10 @@ class MainWindow(QMainWindow):
         term = self._terminal_widget_for(tab_id)
         if term is not None:
             full_title = term.full_title() or title
-        widget.set_title(title, full_title)
+        previous_base = self._tab_base_titles.get(tab_id)
+        self._tab_base_titles[tab_id] = title
+        display = self._compute_disambiguated_title(item.parent(), tab_id, title)
+        widget.set_title(display, full_title)
         state = self._resolve_state(is_working, is_running)
         widget.update_state(
             state,
@@ -1239,6 +1261,57 @@ class MainWindow(QMainWindow):
         # Esconde na sidebar quando a tarefa termina; reaparece se o processo
         # voltar a rodar (raro, mas mantém consistência).
         item.setHidden(state == STATE_DONE)
+        # Se o título base mudou, pode ter resolvido (ou criado) colisão
+        # com siblings — re-desambigua o workspace inteiro.
+        if previous_base != title:
+            self._refresh_workspace_child_titles(item.parent())
+
+    def _compute_disambiguated_title(
+        self, ws_item: QTreeWidgetItem | None, tab_id: int, base_title: str
+    ) -> str:
+        """Se outros children do mesmo workspace têm o mesmo título base,
+        retorna `base (N)` em ordem de criação (tab_id crescente).
+        O mais antigo fica sem sufixo, os seguintes ganham (2), (3)..."""
+        if not base_title or ws_item is None:
+            return base_title
+        siblings_same: list[int] = []
+        for i in range(ws_item.childCount()):
+            sib = ws_item.child(i)
+            sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
+            if sib_id == tab_id:
+                continue
+            if self._tab_base_titles.get(sib_id, "") == base_title:
+                siblings_same.append(int(sib_id))
+        if not siblings_same:
+            return base_title
+        all_ids = sorted(siblings_same + [int(tab_id)])
+        position = all_ids.index(int(tab_id))
+        if position == 0:
+            return base_title
+        return f"{base_title} ({position + 1})"
+
+    def _refresh_workspace_child_titles(
+        self, ws_item: QTreeWidgetItem | None
+    ) -> None:
+        """Reaplica display title de cada child com a lógica de
+        desambiguação. Barato — só N children por workspace."""
+        if ws_item is None:
+            return
+        for i in range(ws_item.childCount()):
+            sib = ws_item.child(i)
+            sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
+            sib_widget = self.list_widget.itemWidget(sib, 0)
+            if not isinstance(sib_widget, TerminalChildWidget):
+                continue
+            base = self._tab_base_titles.get(sib_id, "")
+            if not base:
+                continue
+            full = base
+            term = self._terminal_widget_for(int(sib_id))
+            if term is not None:
+                full = term.full_title() or base
+            display = self._compute_disambiguated_title(ws_item, int(sib_id), base)
+            sib_widget.set_title(display, full)
 
     def _launch_claude_for(
         self, workspace: Workspace, resume_session_id: str, cwd_override: str
