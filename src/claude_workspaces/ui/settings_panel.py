@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -141,6 +142,9 @@ class SettingsPanel(QWidget):
         self._default_isolate_chk.setChecked(self.settings.default_isolate_worktree)
         self._default_new_branch_chk.setChecked(self.settings.default_create_new_branch)
         self._branch_prefix.setText(self.settings.branch_prefix)
+        self._notify_native_chk.setChecked(self.settings.notify_native_enabled)
+        self._notify_reminder_chk.setChecked(self.settings.notify_reminder_enabled)
+        self._notify_reminder_secs.setValue(self.settings.notify_reminder_seconds)
 
     def _on_save(self) -> None:
         self.settings.claude_command = self._claude_cmd.text().strip() or "claude"
@@ -161,6 +165,9 @@ class SettingsPanel(QWidget):
         self.settings.branch_prefix = (
             self._branch_prefix.text().strip().strip("/") or "claude"
         )
+        self.settings.notify_native_enabled = self._notify_native_chk.isChecked()
+        self.settings.notify_reminder_enabled = self._notify_reminder_chk.isChecked()
+        self.settings.notify_reminder_seconds = int(self._notify_reminder_secs.value())
 
         try:
             self.settings.save()
@@ -240,6 +247,40 @@ class SettingsPanel(QWidget):
         row.addWidget(self._hook_toggle_btn)
         row.addStretch()
         layout.addLayout(row)
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("<b>Re-lembretes</b>"))
+
+        re_intro = QLabel(
+            "Se uma tarefa termina e você não voltou pra aba, o app reavisa "
+            "no intervalo abaixo. No menu do sino 🔔 você pode adiar (snooze) "
+            "ou marcar como \"já vi — não me lembre\" pra silenciar essa "
+            "entrada específica."
+        )
+        re_intro.setWordWrap(True)
+        re_intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(re_intro)
+
+        self._notify_native_chk = QCheckBox(
+            "Mostrar notificação nativa (toast/tray) ao final de cada tarefa"
+        )
+        layout.addWidget(self._notify_native_chk)
+
+        self._notify_reminder_chk = QCheckBox(
+            "Reavisar tarefas paradas sem foco"
+        )
+        layout.addWidget(self._notify_reminder_chk)
+
+        re_form = QFormLayout()
+        self._notify_reminder_secs = QSpinBox()
+        self._notify_reminder_secs.setRange(15, 3600)
+        self._notify_reminder_secs.setSingleStep(15)
+        self._notify_reminder_secs.setSuffix(" s")
+        self._notify_reminder_secs.setToolTip(
+            "Tempo entre re-lembretes. Mínimo 15s, máximo 1h."
+        )
+        re_form.addRow("Reavisar a cada:", self._notify_reminder_secs)
+        layout.addLayout(re_form)
 
         self._refresh_hook_status()
         return box

@@ -65,6 +65,12 @@ class TerminalWidget(QWidget):
     running_changed = Signal(bool)
     activity_changed = Signal(str, bool)  # status_text, is_working
 
+    # IDs de sessões já reivindicadas por outros TerminalWidgets vivos.
+    # Why: dois terminais no mesmo cwd disputam o mesmo dir de JSONLs e
+    # o critério "mtime mais recente" devolve a sessão da aba mais ativa
+    # — bug em que a aba 2 mostrava o título da aba 1.
+    _claimed_session_ids: set[str] = set()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._is_running = False
@@ -83,6 +89,12 @@ class TerminalWidget(QWidget):
         self._claude_start_time: float = 0.0
         self._session_preview: str | None = None
         self._session_resolved: bool = False
+        # IDs presentes no dir ANTES do nosso start — qualquer um deles
+        # não é nosso, mesmo que esteja sendo atualizado agora (outra aba)
+        self._pre_existing_session_ids: set[str] = set()
+        # ID que reivindicamos pro registry global; usado pra liberar quando
+        # o terminal é destruído
+        self._claimed_session_id: str | None = None
         # Debounce do refit do xterm.js — durante drag de splitter / resize
         # de janela, evita disparar fits em rajada (cada um dispara 6 fits
         # com timeouts internos no JS → CPU thrash)
@@ -172,6 +184,19 @@ class TerminalWidget(QWidget):
         self._claude_start_time = time.time()
         self._session_preview = None
         self._session_resolved = False
+        # Snapshot dos JSONLs já existentes — qualquer um que apareça aqui
+        # NÃO é nossa sessão (ou é resume, tratado pelo branch separado)
+        if resume_id is None:
+            try:
+                from ..claude_sessions import list_sessions
+                self._pre_existing_session_ids = {
+                    s.id for s in list_sessions(cwd, limit=50)
+                }
+            except Exception:
+                log.debug("snapshot pré-existente falhou", exc_info=True)
+                self._pre_existing_session_ids = set()
+        else:
+            self._pre_existing_session_ids = set()
 
     def effective_title(self) -> str:
         """Título preferido — preview da sessão (truncado) ou _base_title."""
@@ -192,7 +217,7 @@ class TerminalWidget(QWidget):
             return
         try:
             from ..claude_sessions import list_sessions
-            sessions = list_sessions(self._claude_cwd, limit=8)
+            sessions = list_sessions(self._claude_cwd, limit=20)
         except Exception:
             log.debug("session resolution falhou em %s", self._claude_cwd, exc_info=True)
             return
@@ -203,18 +228,47 @@ class TerminalWidget(QWidget):
                 if s.id == self._claude_resume_id:
                     self._session_preview = s.preview or ""
                     self._session_resolved = True
+                    self._claim_session(s.id)
                     return
             return
-        # Sessão nova — pega a mais recente criada após nosso start
-        # (-5s pra tolerar drift). Se nada bater ainda, tenta no próximo tick.
-        matching = [s for s in sessions if s.mtime >= self._claude_start_time - 5]
-        if not matching:
+        # Sessão nova — exclui (a) JSONLs que já existiam ANTES do nosso
+        # start e (b) IDs já reivindicados por outros TerminalWidgets vivos.
+        # Sem esses filtros, duas abas no mesmo cwd disputavam o mesmo
+        # JSONL e a segunda exibia o título da primeira.
+        candidates = [
+            s for s in sessions
+            if s.id not in self._pre_existing_session_ids
+            and s.id not in TerminalWidget._claimed_session_ids
+            and s.mtime >= self._claude_start_time - 5
+        ]
+        if not candidates:
             return
-        matching.sort(key=lambda s: s.mtime, reverse=True)
-        preview = matching[0].preview or ""
+        # Desempate: a sessão recém-criada tem mtime próximo do nosso start.
+        # Sessões "alheias" sendo escritas no mesmo cwd têm mtime drift maior.
+        candidates.sort(key=lambda s: abs(s.mtime - self._claude_start_time))
+        chosen = candidates[0]
+        # Reivindica já — antes do preview resolver — pra evitar que outro
+        # terminal disputando o mesmo dir pegue esse ID na próxima tick
+        self._claim_session(chosen.id)
+        preview = chosen.preview or ""
         if preview:
             self._session_preview = preview
             self._session_resolved = True
+
+    def _claim_session(self, session_id: str) -> None:
+        if self._claimed_session_id == session_id:
+            return
+        if self._claimed_session_id is not None:
+            TerminalWidget._claimed_session_ids.discard(self._claimed_session_id)
+        self._claimed_session_id = session_id
+        TerminalWidget._claimed_session_ids.add(session_id)
+
+    def release_session_claim(self) -> None:
+        """Chamado quando o terminal é descartado — libera o ID claimed
+        pro próximo terminal poder reusar se for o caso (resume futuro)."""
+        if self._claimed_session_id is not None:
+            TerminalWidget._claimed_session_ids.discard(self._claimed_session_id)
+            self._claimed_session_id = None
 
     def _record_output(self, data: bytes) -> None:
         self._output_buffer.extend(data)

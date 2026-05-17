@@ -35,6 +35,13 @@ class Settings:
     branch_prefix: str = "claude"  # prefixo das branches sugeridas pro worktree
     # Apps auxiliares (PWAs embutidos): [{name, url, icon, slug}]
     apps: list[dict] = field(default_factory=list)
+    # Notificações: re-aviso para tabs que ficaram aguardando sem ser focadas.
+    # 0 desliga; valor mínimo prático é 15s (clamped no coordinator).
+    notify_reminder_enabled: bool = True
+    notify_reminder_seconds: int = 120
+    # Liga notificações nativas do sistema (QSystemTrayIcon.showMessage).
+    # Quando False, a inbox/badge ainda funcionam, mas sem toast.
+    notify_native_enabled: bool = True
 
     @classmethod
     def load(cls) -> "Settings":

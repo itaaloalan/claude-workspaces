@@ -86,6 +86,7 @@ class TerminalArea(QWidget):
         tab_id = id(widget) if widget is not None else 0
         if isinstance(widget, TerminalWidget):
             widget.terminate()
+            widget.release_session_claim()
         self.tabs.removeTab(index)
         if widget is not None:
             widget.deleteLater()
