@@ -24,6 +24,7 @@ from ..git_actions import (
 from ..git_actions import (
     delete_untracked,
     discard_unstaged,
+    head_sha,
     pull_ff_only,
     stage_all,
     stage_file,
@@ -824,7 +825,7 @@ class GitPanel(QWidget):
             if not ok:
                 errors.append(f"{Path(folder).name}: commit falhou — {out}")
             elif self.workspace is not None:
-                sha = self._head_sha(folder)
+                sha = head_sha(folder)
                 self.commit_created.emit(self.workspace.id, folder, sha, message)
 
         if errors:
@@ -832,19 +833,6 @@ class GitPanel(QWidget):
         else:
             self._msg.clear()
         self.refresh()
-
-    @staticmethod
-    def _head_sha(folder: str) -> str:
-        """`git rev-parse HEAD` resumido; vazio se algo falhar."""
-        import subprocess
-        try:
-            r = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=folder, capture_output=True, text=True, timeout=2,
-            )
-            return r.stdout.strip() if r.returncode == 0 else ""
-        except (OSError, subprocess.TimeoutExpired):
-            return ""
 
     def _do_fetch_all(self) -> None:
         if not self.workspace:

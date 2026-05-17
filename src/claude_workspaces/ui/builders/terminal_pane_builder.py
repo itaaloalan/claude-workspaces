@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..theme import TERMINAL_BTN_W
+
 
 class TerminalPaneBuilder:
     """Constrói o painel do terminal (header com botões + host stack).
@@ -77,21 +79,21 @@ class TerminalPaneBuilder:
         # restaurar (quadrados sobrepostos)
         self.min_btn = QPushButton("—")
         self.min_btn.setToolTip("Minimizar terminal (Ctrl+J)")
-        self.min_btn.setFixedWidth(28)
+        self.min_btn.setFixedWidth(TERMINAL_BTN_W)
         self.min_btn.setStyleSheet(btn_css)
         self.min_btn.clicked.connect(self._on_min_click)
         h.addWidget(self.min_btn)
 
         self.max_btn = QPushButton("▢")
         self.max_btn.setToolTip("Maximizar terminal (esconder conteúdo)")
-        self.max_btn.setFixedWidth(28)
+        self.max_btn.setFixedWidth(TERMINAL_BTN_W)
         self.max_btn.setStyleSheet(btn_css)
         self.max_btn.clicked.connect(self._on_max_click)
         h.addWidget(self.max_btn)
 
         self.restore_btn = QPushButton("❐")
         self.restore_btn.setToolTip("Restaurar layout 50/50")
-        self.restore_btn.setFixedWidth(28)
+        self.restore_btn.setFixedWidth(TERMINAL_BTN_W)
         self.restore_btn.setStyleSheet(btn_css)
         self.restore_btn.clicked.connect(self._on_restore_click)
         h.addWidget(self.restore_btn)

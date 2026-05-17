@@ -2,7 +2,7 @@
 
 Gerenciador de workspaces e console multi-sessão pra Claude Code, com terminal embutido, dock de ferramentas e visibilidade do que cada agente está fazendo.
 
-![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-130-green)
+![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-443-green)
 
 ## O problema
 
@@ -55,6 +55,17 @@ Pra instalar o `.desktop` no menu do KDE/GNOME:
 ./packaging/install-launcher.sh
 ```
 
+Pra rodar em background no login + atalho global de "trazer pra frente":
+
+```bash
+./packaging/install-systemd.sh
+```
+
+Esse script cria uma systemd user unit (`claude-workspaces.service`) e um
+helper `~/.local/bin/claude-workspaces-focus`. Vincule esse helper a um
+atalho global no seu DE (KDE/GNOME/Hyprland) e o app vem pra frente em
+qualquer lugar.
+
 ## Atalhos principais
 
 | Atalho | Função |
@@ -92,4 +103,4 @@ Pra instalar o `.desktop` no menu do KDE/GNOME:
 
 ## Status
 
-Funcional e em uso diário. 130 testes, CI rodando lint + pytest. Próximas direções: persistir aba de terminal entre execuções, integração com mais MCPs além do postgres, atalho global pra pular pro app via systemd unit.
+Funcional e em uso diário. 443 testes, CI rodando lint + pytest + mypy (não-bloqueante) + coverage. Veja [docs/MAINTAINABILITY.md](docs/MAINTAINABILITY.md) pro tracking de débito técnico — todos os itens da auditoria 2026-05-15 foram resolvidos.

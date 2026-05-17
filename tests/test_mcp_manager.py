@@ -88,3 +88,89 @@ def test_backup_created_on_save(fake_claude_json):
     mcp_manager.set_postgres_mcp("second", "postgres://x@h/b")
     backups = list(fake_claude_json.parent.glob(".claude.json.bak-*"))
     assert len(backups) >= 1
+
+
+# ---------- API genérica ----------
+
+def test_set_generic_mcp_persists_full_payload(fake_claude_json):
+    mcp_manager.set_generic_mcp(
+        name="gh",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"],
+        env={"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxx"},
+    )
+    data = json.loads(fake_claude_json.read_text())
+    server = data["mcpServers"]["gh"]
+    assert server["type"] == "stdio"
+    assert server["command"] == "npx"
+    assert server["args"] == ["-y", "@modelcontextprotocol/server-github"]
+    assert server["env"]["GITHUB_PERSONAL_ACCESS_TOKEN"] == "ghp_xxx"
+
+
+def test_set_generic_mcp_validates_name_and_command(fake_claude_json):
+    with pytest.raises(ValueError):
+        mcp_manager.set_generic_mcp("", "npx", ["x"])
+    with pytest.raises(ValueError):
+        mcp_manager.set_generic_mcp("name", "  ", ["x"])
+
+
+def test_get_mcp_returns_dict_or_none(fake_claude_json):
+    assert mcp_manager.get_mcp("doesnt-exist") is None
+    mcp_manager.set_generic_mcp("memory", "npx", ["-y", "@mcp/memory"])
+    got = mcp_manager.get_mcp("memory")
+    assert got is not None
+    assert got["command"] == "npx"
+    assert got["args"] == ["-y", "@mcp/memory"]
+
+
+def test_preset_by_id_lookup():
+    assert mcp_manager.preset_by_id("postgres") is not None
+    assert mcp_manager.preset_by_id("nope") is None
+
+
+def test_preset_postgres_has_url_placeholder():
+    p = mcp_manager.preset_by_id("postgres")
+    assert p is not None
+    names = {ph[0] for ph in p.placeholders}
+    assert names == {"url"}
+    # Confirma que o template realmente contém o placeholder
+    assert "{url}" in p.args_template
+
+
+def test_instantiate_preset_resolves_args(fake_claude_json):
+    preset = mcp_manager.preset_by_id("postgres")
+    assert preset is not None
+    args, env = mcp_manager.instantiate_preset(preset, {"url": "postgres://x@h/db"})
+    assert args == ["-y", mcp_manager.PG_PACKAGE, "postgres://x@h/db"]
+    assert env == {}
+
+
+def test_instantiate_preset_resolves_env(fake_claude_json):
+    preset = mcp_manager.preset_by_id("github")
+    assert preset is not None
+    args, env = mcp_manager.instantiate_preset(preset, {"token": "ghp_xyz"})
+    assert env == {"GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xyz"}
+    assert "@modelcontextprotocol/server-github" in args
+
+
+def test_instantiate_preset_raises_on_missing_value():
+    preset = mcp_manager.preset_by_id("brave-search")
+    assert preset is not None
+    with pytest.raises(KeyError):
+        mcp_manager.instantiate_preset(preset, {})
+
+
+def test_install_preset_end_to_end(fake_claude_json):
+    """Fluxo típico da UI: pega preset, resolve, salva."""
+    preset = mcp_manager.preset_by_id("filesystem")
+    assert preset is not None
+    args, env = mcp_manager.instantiate_preset(preset, {"path": "/home/user/notes"})
+    mcp_manager.set_generic_mcp(
+        name="notes-fs",
+        command=preset.command,
+        args=args,
+        env=env,
+    )
+    got = mcp_manager.get_mcp("notes-fs")
+    assert got is not None
+    assert "/home/user/notes" in got["args"]

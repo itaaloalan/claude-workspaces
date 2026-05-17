@@ -36,6 +36,26 @@ def fetch(folder: str) -> tuple[bool, str]:
     return _run(["git", "fetch", "--prune"], folder)
 
 
+def head_sha(folder: str) -> str:
+    """SHA do HEAD; vazio se algo falhar.
+
+    Não usa _run (tem timeout maior do que precisamos pra rev-parse) —
+    rev-parse responde em < 5ms e a UI bloqueia esperando."""
+    if not Path(folder).is_dir():
+        return ""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=folder,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
 def pull_ff_only(folder: str) -> tuple[bool, str]:
     return _run(["git", "pull", "--ff-only"], folder)
 

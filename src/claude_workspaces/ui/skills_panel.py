@@ -390,4 +390,13 @@ class SkillsPanel(QWidget):
         QGuiApplication.clipboard().setText(ci.invocation)
         original = item.text()
         item.setText(f"✓ copiado  {ci.invocation}")
-        QTimer.singleShot(1000, lambda i=item, t=original: i.setText(t))
+        # Lambda preservava ref ao QListWidgetItem — se a lista refrescasse
+        # antes do timer (1s), o item morria e o setText crashava.
+        # Guardar row + restaurar via lista é seguro: lista existe enquanto
+        # o painel vive, e setText valida o row antes de tocar.
+        row = self._list.row(item)
+        QTimer.singleShot(1000, lambda r=row, t=original: self._restore_item_text(r, t))
+
+    def _restore_item_text(self, row: int, text: str) -> None:
+        if 0 <= row < self._list.count():
+            self._list.item(row).setText(text)

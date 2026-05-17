@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import Workspace
+from .theme import AUTOSAVE_INTERVAL_MS
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class MemoryPanel(QWidget):
         # Auto-save debounced (3s) — opcional, só salva se dirty
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setSingleShot(True)
-        self._autosave_timer.setInterval(3000)
+        self._autosave_timer.setInterval(AUTOSAVE_INTERVAL_MS)
         self._autosave_timer.timeout.connect(self._autosave)
 
     def set_workspace(self, workspace: Workspace | None) -> None:

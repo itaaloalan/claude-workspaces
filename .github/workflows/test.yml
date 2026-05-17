@@ -17,6 +17,19 @@ jobs:
       - name: Ruff
         run: ruff check src/ tests/
 
+  mypy:
+    runs-on: ubuntu-latest
+    # mypy não bloqueia merge — relata regressões mas não falha o job.
+    # Pra tornar bloqueante: remover `|| true`.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: Mypy
+        run: mypy || true
+
   pytest:
     runs-on: ubuntu-latest
     strategy:
@@ -41,8 +54,15 @@ jobs:
           # importam Qt widgets (com QApplication offscreen) e o subsistema
           # de plugins parsea YAML.
           pip install -e ".[dev]"
-      - name: Run tests
-        run: pytest -v
+      - name: Run tests + coverage
+        run: pytest --cov --cov-report=term-missing --cov-report=xml -v
         env:
           PYTHONPATH: src
           QT_QPA_PLATFORM: offscreen
+      - name: Upload coverage artifact
+        if: matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore

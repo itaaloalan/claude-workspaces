@@ -40,6 +40,28 @@ WAITING_HOVER = "#e0892f"
 WAITING_BG = "#c9772d"      # bg do bell quando há inbox
 
 
+# ---------- Tempos (ms) ----------
+
+LAYOUT_SAVE_DEBOUNCE_MS = 600   # debounce pra persistir splitter/geometry
+SPINNER_INTERVAL_MS = 100       # tick do spinner ⠋⠙⠹…
+AUTOSAVE_INTERVAL_MS = 3000     # autosave de editor inline (CLAUDE.md)
+GIT_POLL_INTERVAL_MS = 30_000   # polling do painel git
+REMINDER_TICK_MS = 5_000        # tick do timer de re-lembrete da inbox
+
+
+# ---------- Dimensões (px) ----------
+
+SPLITTER_HANDLE_W = 8           # largura dos handles dos QSplitter
+SIDEBAR_DEFAULT_W = 260         # largura padrão da sidebar
+SIDEBAR_FALLBACK_W = 240
+RIGHT_DOCK_DEFAULT_W = 340
+RIGHT_DOCK_FALLBACK_W = 340
+RIGHT_SPLIT_TERMINAL_DEFAULT_H = 520
+RIGHT_SPLIT_CONTENT_DEFAULT_H = 380
+TERMINAL_HEADER_MIN_H = 28      # altura mínima do header do terminal minimizado
+TERMINAL_BTN_W = 28             # largura fixa dos botões min/max/restore
+
+
 # ---------- Helpers de QSS ----------
 
 def splitter_qss() -> str:

@@ -1,0 +1,18 @@
+[Unit]
+Description=Claude Workspaces (background)
+# Sobe depois que a sessão gráfica está pronta — precisamos do display X11/Wayland.
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Substituir CWPATH na instalação via install-systemd.sh
+ExecStart=%h/.local/bin/claude-workspaces
+Restart=on-failure
+RestartSec=5
+# Não derruba a sessão gráfica do usuário se o app falhar
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target

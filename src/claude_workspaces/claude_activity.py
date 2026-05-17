@@ -12,8 +12,11 @@ Heurística:
 - Fallback genérico (shell qualquer): output recente + sem prompt → working.
 """
 
+import logging
 import re
 from dataclasses import dataclass
+
+log = logging.getLogger(__name__)
 
 ANSI_CSI_RE = re.compile(r"\x1b\[[\d;?<>!]*[A-Za-z@`]")
 ANSI_OSC_RE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -136,6 +139,7 @@ def has_idle_marker(buffer_bytes: bytes) -> bool:
     try:
         text = buffer_bytes.decode("utf-8", errors="replace")
     except Exception:
+        log.exception("has_idle_marker: decode falhou (não deveria com errors=replace)")
         return False
     text = strip_ansi(text)
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
@@ -157,6 +161,7 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
     try:
         text = buffer_bytes.decode("utf-8", errors="replace")
     except Exception:
+        log.exception("parse_status: decode falhou (não deveria com errors=replace)")
         return Activity(status="", is_working=False)
     text = strip_ansi(text)
 

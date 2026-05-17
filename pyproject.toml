@@ -18,7 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7",
+    "pytest-cov>=4",
     "ruff>=0.6",
+    "mypy>=1.10",
 ]
 
 [project.scripts]
@@ -54,3 +56,36 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["F841"]  # variáveis não-usadas em testes (às vezes só pra setup)
+
+[tool.mypy]
+# Mypy roda em modo permissivo (não bloqueia merge) — pega regressões
+# óbvias mas não exige anotação completa. Aumentar `strict` aos poucos
+# conforme módulos forem migrando.
+python_version = "3.11"
+files = ["src/claude_workspaces"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+show_error_codes = true
+# Plugins / UI views são notoriamente dinâmicos; exclui pra evitar ruído.
+exclude = "src/claude_workspaces/plugins/.*"
+
+[tool.coverage.run]
+source = ["src/claude_workspaces"]
+branch = true
+omit = [
+    # UI/Qt sem testes ainda; coverage só do código puro.
+    "src/claude_workspaces/ui/static/*",
+    "src/claude_workspaces/__main__.py",
+    "src/claude_workspaces/app.py",
+]
+
+[tool.coverage.report]
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

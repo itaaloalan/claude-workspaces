@@ -1,16 +1,22 @@
 """Gerenciamento de MCPs (Model Context Protocol) do Claude Code.
 
-Lê e escreve ~/.claude.json preservando o resto do arquivo. Cobre só o
-caso comum hoje: MCP postgres via @modelcontextprotocol/server-postgres,
-configurado em user scope (mcpServers no top-level), com o nome do
-workspace casando o nome do MCP — então cada workspace pode ter o seu
-próprio MCP de banco isolado.
+Lê e escreve ~/.claude.json preservando o resto do arquivo. Há duas APIs:
+
+1. Helpers postgres (legado): set_postgres_mcp, get_postgres_url,
+   is_postgres_mcp, mask_password. Mantidos pra compat — o McpDialog
+   ainda usa essas funções.
+
+2. API genérica: set_generic_mcp(name, command, args, env) +
+   get_mcp(name). Suporta qualquer MCP server (filesystem, github,
+   brave-search, etc.) — basta passar o command e args corretos. Veja
+   MCP_PRESETS pra exemplos de configuração comuns.
 """
 
 import json
 import logging
 import shutil
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -21,6 +27,84 @@ def claude_config_file() -> Path:
 
 
 PG_PACKAGE = "@modelcontextprotocol/server-postgres"
+
+
+@dataclass(frozen=True)
+class McpPreset:
+    """Template pra um MCP server bem-conhecido.
+
+    `args_template` pode conter placeholders `{placeholder_name}` que o
+    UI preenche via prompt; `placeholders` lista (nome_placeholder,
+    label_user, sensitive) para a UI saber o que pedir e se deve mascarar
+    o input (tokens etc.).
+    """
+
+    id: str
+    label: str
+    description: str
+    command: str
+    args_template: list[str]
+    env_template: dict[str, str] = field(default_factory=dict)
+    # [(placeholder, label, sensitive)]
+    placeholders: list[tuple[str, str, bool]] = field(default_factory=list)
+
+
+# Presets de MCPs comuns. A UI pode renderizá-los como uma lista de
+# "Adicionar MCP" e perguntar só os placeholders.
+MCP_PRESETS: list[McpPreset] = [
+    McpPreset(
+        id="postgres",
+        label="PostgreSQL",
+        description="Query SQL read-only num banco PostgreSQL.",
+        command="npx",
+        args_template=["-y", PG_PACKAGE, "{url}"],
+        placeholders=[("url", "URL postgres (postgres://user:pass@host/db)", True)],
+    ),
+    McpPreset(
+        id="filesystem",
+        label="Filesystem",
+        description="Acesso de leitura/escrita a um diretório específico.",
+        command="npx",
+        args_template=["-y", "@modelcontextprotocol/server-filesystem", "{path}"],
+        placeholders=[("path", "Pasta a expor (absoluta)", False)],
+    ),
+    McpPreset(
+        id="github",
+        label="GitHub",
+        description="Issues/PRs/commits via API do GitHub (precisa PAT).",
+        command="npx",
+        args_template=["-y", "@modelcontextprotocol/server-github"],
+        env_template={"GITHUB_PERSONAL_ACCESS_TOKEN": "{token}"},
+        placeholders=[("token", "GitHub Personal Access Token", True)],
+    ),
+    McpPreset(
+        id="brave-search",
+        label="Brave Search",
+        description="Web search via Brave Search API.",
+        command="npx",
+        args_template=["-y", "@modelcontextprotocol/server-brave-search"],
+        env_template={"BRAVE_API_KEY": "{api_key}"},
+        placeholders=[("api_key", "Brave API key", True)],
+    ),
+    McpPreset(
+        id="sequential-thinking",
+        label="Sequential Thinking",
+        description="Estrutura raciocínio passo-a-passo em problemas complexos.",
+        command="npx",
+        args_template=["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    ),
+    McpPreset(
+        id="memory",
+        label="Memory",
+        description="Knowledge graph local persistente para o Claude.",
+        command="npx",
+        args_template=["-y", "@modelcontextprotocol/server-memory"],
+    ),
+]
+
+
+def preset_by_id(preset_id: str) -> McpPreset | None:
+    return next((p for p in MCP_PRESETS if p.id == preset_id), None)
 
 
 def _load() -> dict:
@@ -115,6 +199,60 @@ def delete_mcp(name: str) -> bool:
 
 def mcp_exists(name: str) -> bool:
     return name in _load().get("mcpServers", {})
+
+
+def set_generic_mcp(
+    name: str,
+    command: str,
+    args: list[str],
+    env: dict[str, str] | None = None,
+    mcp_type: str = "stdio",
+) -> None:
+    """Cria ou atualiza um MCP arbitrário em ~/.claude.json.
+
+    Use isso pra qualquer MCP que não seja postgres. Validação mínima:
+    name não-vazio, command não-vazio. A UI deve confirmar o que está
+    sendo enviado antes de chamar.
+    """
+    if not name.strip():
+        raise ValueError("Nome do MCP não pode ser vazio")
+    if not command.strip():
+        raise ValueError("Command do MCP não pode ser vazio")
+    data = _load()
+    data.setdefault("mcpServers", {})
+    entry: dict = {
+        "type": mcp_type,
+        "command": command,
+        "args": list(args),
+        "env": dict(env or {}),
+    }
+    data["mcpServers"][name] = entry
+    _save(data)
+
+
+def get_mcp(name: str) -> dict | None:
+    """Devolve a config raw do MCP `name` (command/args/env/type) ou
+    None se não existe."""
+    data = _load()
+    server = (data.get("mcpServers") or {}).get(name)
+    if not isinstance(server, dict):
+        return None
+    return dict(server)
+
+
+def instantiate_preset(
+    preset: McpPreset, values: dict[str, str]
+) -> tuple[list[str], dict[str, str]]:
+    """Resolve os placeholders do preset com `values` e devolve
+    (args_resolvidos, env_resolvido). Levanta KeyError se faltar
+    placeholder declarado."""
+    declared = {name for name, _label, _sens in preset.placeholders}
+    missing = declared - values.keys()
+    if missing:
+        raise KeyError(f"Faltam valores pros placeholders: {sorted(missing)}")
+    args = [a.format(**values) for a in preset.args_template]
+    env = {k: v.format(**values) for k, v in preset.env_template.items()}
+    return args, env
 
 
 def mask_password(url: str) -> str:
