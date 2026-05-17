@@ -37,11 +37,11 @@ def test_aggregate_empty(fake_home):
 
 
 def test_aggregate_single_session(fake_home):
-    proj_dir = fake_home / ".claude" / "projects" / "-home-italo-proj"
+    proj_dir = fake_home / ".claude" / "projects" / "-home-user-proj"
     proj_dir.mkdir()
     _write_assistant_msg(
         proj_dir / "s1.jsonl",
-        cwd="/home/italo/proj",
+        cwd="/home/user/proj",
         model="claude-opus-4-7",
         tokens={
             "input_tokens": 1000,
@@ -52,8 +52,8 @@ def test_aggregate_single_session(fake_home):
         ts="2026-05-15T10:00:00Z",
     )
     out = aggregate_usage_by_workspace()
-    assert "/home/italo/proj" in out
-    stats = out["/home/italo/proj"]
+    assert "/home/user/proj" in out
+    stats = out["/home/user/proj"]
     assert stats.input_tokens == 1000
     assert stats.output_tokens == 500
     assert stats.cache_creation_tokens == 100
@@ -64,19 +64,19 @@ def test_aggregate_single_session(fake_home):
 
 
 def test_aggregate_multiple_sessions_same_workspace(fake_home):
-    proj_dir = fake_home / ".claude" / "projects" / "-home-italo-proj"
+    proj_dir = fake_home / ".claude" / "projects" / "-home-user-proj"
     proj_dir.mkdir()
     for i, fname in enumerate(["s1.jsonl", "s2.jsonl"]):
         _write_assistant_msg(
             proj_dir / fname,
-            cwd="/home/italo/proj",
+            cwd="/home/user/proj",
             model="claude-sonnet-4-6",
             tokens={"input_tokens": 100, "output_tokens": 50},
             ts=f"2026-05-1{5+i}T10:00:00Z",
         )
     out = aggregate_usage_by_workspace()
-    assert out["/home/italo/proj"].sessions == 2
-    assert out["/home/italo/proj"].input_tokens == 200
+    assert out["/home/user/proj"].sessions == 2
+    assert out["/home/user/proj"].input_tokens == 200
 
 
 def test_aggregate_uses_cwd_not_dir_name(fake_home):

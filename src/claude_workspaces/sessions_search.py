@@ -38,7 +38,7 @@ class SearchHit:
 
 def _project_path_from_encoded(name: str) -> str:
     """Reverte o nome do diretório de projeto pra path absoluto.
-    Claude codifica '/' como '-', então /home/italo/foo vira -home-italo-foo."""
+    Claude codifica '/' como '-', então /home/user/foo vira -home-user-foo."""
     if name.startswith("-"):
         return "/" + name[1:].replace("-", "/")
     return name
