@@ -35,6 +35,7 @@ from ..launchers import (
 )
 from ..logging_utils import log_exceptions
 from ..models import Workspace
+from ..services.desktop_notifier import DesktopNotifier
 from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
 from ..session_persistence import (
@@ -142,6 +143,10 @@ class MainWindow(QMainWindow):
         # Notificações nativas (tray) + reminder config a partir das settings
         self._tray: QSystemTrayIcon | None = None
         self._init_tray()
+        # Notificador D-Bus com botões de ação (Abrir/Adiar/Já vi).
+        # Se indisponível, _on_inbox_alert cai pro tray.showMessage.
+        self._desktop_notifier: DesktopNotifier | None = None
+        self._init_desktop_notifier()
         self.terminals_coord.set_reminder_interval(
             self.settings.notify_reminder_seconds,
             enabled=self.settings.notify_reminder_enabled,
@@ -1086,14 +1091,25 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         self._focus_tab_from_inbox(info["workspace_id"], tab_id)
 
+    def _init_desktop_notifier(self) -> None:
+        notifier = DesktopNotifier(app_name="Claude Workspaces", parent=self)
+        if notifier.available and notifier.supports_actions:
+            self._desktop_notifier = notifier
+            log.info("Notificador D-Bus com ações ativo (caps=%s)", notifier.capabilities)
+        else:
+            self._desktop_notifier = None
+            log.info(
+                "Notificador D-Bus indisponível (available=%s actions=%s) — "
+                "caindo pro tray.showMessage",
+                notifier.available, notifier.supports_actions,
+            )
+
     def _on_inbox_alert(
         self, tab_id: int, info: dict, is_reminder: bool
     ) -> None:
         """Recebe alerta primário (working→idle) ou re-lembrete (timer).
-        Dispara toast nativo se ativado."""
+        Tenta D-Bus com botões; cai pro tray.showMessage se indisponível."""
         if not self.settings.notify_native_enabled:
-            return
-        if self._tray is None:
             return
         ws = self.workspaces_coord.find_by_id(info.get("workspace_id", ""))
         ws_name = ws.name if ws else "Workspace"
@@ -1109,12 +1125,50 @@ class MainWindow(QMainWindow):
             body_parts.append(status)
         body = "\n".join(body_parts) or "Console pronto pra próxima instrução."
         self._last_alert_tab_id = tab_id
+        workspace_id = info.get("workspace_id", "")
+
+        if self._desktop_notifier is not None:
+            actions = [
+                ("open", "Abrir console"),
+                ("snooze5", "Adiar 5 min"),
+                ("seen", "Já vi"),
+            ]
+            nid = self._desktop_notifier.notify(
+                title=title,
+                body=body,
+                actions=actions,
+                on_action=lambda key, _tid=tab_id, _wid=workspace_id:
+                    self._handle_notification_action(_tid, _wid, key),
+                timeout_ms=8000,
+            )
+            if nid is not None:
+                return
+            log.debug("D-Bus notify falhou — fallback pro tray.showMessage")
+
+        if self._tray is None:
+            return
         try:
             self._tray.showMessage(
                 title, body, QSystemTrayIcon.MessageIcon.Information, 6000
             )
         except Exception:
             log.debug("showMessage falhou", exc_info=True)
+
+    def _handle_notification_action(
+        self, tab_id: int, workspace_id: str, key: str
+    ) -> None:
+        """Disparado pelo botão clicado na notificação D-Bus."""
+        if key == "open":
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            self._focus_tab_from_inbox(workspace_id, tab_id)
+        elif key == "snooze5":
+            self.terminals_coord.snooze_inbox(tab_id, 5 * 60)
+        elif key == "seen":
+            self.terminals_coord.dismiss_inbox(tab_id)
+        else:
+            log.debug("Ação de notificação desconhecida: %s", key)
 
     def _on_plugin_notification(
         self, plugin_id: str, kind: str, payload: dict
