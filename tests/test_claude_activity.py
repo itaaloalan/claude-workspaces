@@ -65,6 +65,28 @@ def test_recent_output_marks_working_with_marker():
     assert a.is_working is True
 
 
+def test_working_marker_persists_during_output_gap():
+    """Pausa longa no streaming (extended thinking, tool run lenta,
+    latência de rede) não deve flipar pra idle se o marker '* Word…
+    tokens' continua visível e nenhum idle marker apareceu depois.
+
+    Regressão: antes, gap > 2.5s flipava is_working pra False mesmo com
+    o marker presente, disparando notificação '✅ Pronto' espúria que
+    sumia em seguida quando o próximo chunk reativava working."""
+    buf = b"Reading large file...\n* Stewing... (12s, 2.4k tokens, esc to interrupt)\n"
+    a = parse_status(buf, last_output_age=5.0)
+    assert a.is_working is True
+
+
+def test_working_marker_persists_with_very_long_gap():
+    """Mesmo com gap absurdo (30s), se o marker ainda está lá e nenhum
+    idle apareceu, é working. Claude pode estar bloqueado num tool run
+    lento mas continua ativo."""
+    buf = b"Running pytest...\n* Cooking... (45s, 5k tokens, esc to interrupt)\n"
+    a = parse_status(buf, last_output_age=30.0)
+    assert a.is_working is True
+
+
 def test_idle_marker_overrides_recent_output():
     """Cursor piscando no prompt mantém output recente, mas sem o
     indicador de working o estado tem que cair pra idle."""

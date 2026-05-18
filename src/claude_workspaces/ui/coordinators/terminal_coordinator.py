@@ -48,6 +48,11 @@ class TerminalCoordinator(QObject):
     tab_removed = Signal("qint64")
     inbox_changed = Signal(int)
     inbox_alert = Signal("qint64", dict, bool)  # tab_id, info, is_reminder
+    # Emitido sempre que um tab deixa o inbox (por qualquer motivo: voltou
+    # a trabalhar, terminou, foi removido, foco do usuário, dismiss). O
+    # MainWindow usa pra fechar a notificação D-Bus correspondente antes
+    # do timeout, evitando banner stale na tela.
+    inbox_entry_removed = Signal("qint64")  # tab_id
     spinner_tick = Signal(str)  # current spinner char
     terminal_area_created = Signal(str, object)  # workspace_id, TerminalArea
 
@@ -100,9 +105,12 @@ class TerminalCoordinator(QObject):
         # Defensive cleanup: garante que tree_items/activity/inbox de qualquer
         # tab desse workspace caiam fora — mesmo que `close_all` não tenha
         # disparado tab_removed por algum motivo (bug raro mas observado).
+        inbox_before = set(self.state.inbox.keys())
         released = self.state.release_workspace(workspace_id)
         for tab_id in released:
             self.tab_removed.emit(tab_id)
+            if tab_id in inbox_before:
+                self.inbox_entry_removed.emit(tab_id)
         if released:
             self.inbox_changed.emit(len(self.state.inbox))
         return area
@@ -150,11 +158,13 @@ class TerminalCoordinator(QObject):
         elif is_working and tab_id in self.state.inbox:
             self.state.remove_from_inbox(tab_id)
             self.inbox_changed.emit(len(self.state.inbox))
+            self.inbox_entry_removed.emit(tab_id)
             if not self.state.inbox and self._reminder_timer.isActive():
                 self._reminder_timer.stop()
         elif not is_running and tab_id in self.state.inbox:
             self.state.remove_from_inbox(tab_id)
             self.inbox_changed.emit(len(self.state.inbox))
+            self.inbox_entry_removed.emit(tab_id)
             if not self.state.inbox and self._reminder_timer.isActive():
                 self._reminder_timer.stop()
 
@@ -169,9 +179,12 @@ class TerminalCoordinator(QObject):
         )
 
     def _on_tab_removed(self, tab_id: int) -> None:
+        was_in_inbox = tab_id in self.state.inbox
         inbox_changed = self.state.release_tab(tab_id)
         if inbox_changed:
             self.inbox_changed.emit(len(self.state.inbox))
+        if was_in_inbox:
+            self.inbox_entry_removed.emit(tab_id)
         if not self.state.any_working():
             self._spinner_timer.stop()
         if not self.state.inbox and self._reminder_timer.isActive():
@@ -187,6 +200,7 @@ class TerminalCoordinator(QObject):
         tab_id = id(widget)
         if self.state.remove_from_inbox(tab_id):
             self.inbox_changed.emit(len(self.state.inbox))
+            self.inbox_entry_removed.emit(tab_id)
             if not self.state.inbox and self._reminder_timer.isActive():
                 self._reminder_timer.stop()
 
@@ -199,14 +213,18 @@ class TerminalCoordinator(QObject):
         return dict(self.state.inbox)
 
     def clear_inbox(self) -> None:
+        ids = list(self.state.inbox.keys())
         self.state.clear_inbox()
         self.inbox_changed.emit(0)
+        for tid in ids:
+            self.inbox_entry_removed.emit(tid)
         if self._reminder_timer.isActive():
             self._reminder_timer.stop()
 
     def remove_from_inbox(self, tab_id: int) -> None:
         if self.state.remove_from_inbox(tab_id):
             self.inbox_changed.emit(len(self.state.inbox))
+            self.inbox_entry_removed.emit(tab_id)
             if not self.state.inbox and self._reminder_timer.isActive():
                 self._reminder_timer.stop()
 

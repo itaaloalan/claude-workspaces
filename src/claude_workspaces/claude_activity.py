@@ -248,12 +248,20 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
 
     recent = last_output_age < 2.5
 
-    # Detecção positiva: só é "working" se virmos o indicador do Claude
-    # rodando E houve output recente. Quando idle marker aparece DEPOIS do
-    # working marker (Claude terminou e mostrou o footer), cai pra idle
-    # mesmo com working marker ainda no buffer.
+    # Detecção positiva: o marker "* Word… tokens · esc to interrupt" é
+    # evidência de Claude trabalhando. Enquanto ele estiver visível nas
+    # últimas linhas E nenhum idle marker mais recente tiver aparecido,
+    # mantemos is_working=True mesmo sem output novo.
+    #
+    # Why: usar `recent` como tiebreaker aqui flipava o estado pra idle no
+    # meio do trabalho (extended thinking, tool runs lentas, latência de
+    # rede facilmente passam dos 2.5s sem cuspir nada no TUI). Cada flip
+    # disparava inbox_alert → notificação "✅ Pronto" que aparecia e sumia
+    # quando o próximo chunk reativava working. Quando Claude termina de
+    # verdade, o footer idle aparece DEPOIS do working marker
+    # (idle_is_more_recent), e a transição é detectada normalmente.
     if has_working and not (tail_has_idle and idle_is_more_recent):
-        is_working = recent
+        is_working = True
     elif tail_has_idle or looks_prompt:
         is_working = False
     else:

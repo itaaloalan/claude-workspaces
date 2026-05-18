@@ -137,6 +137,9 @@ class MainWindow(QMainWindow):
         self.terminals_coord.spinner_tick.connect(self._on_spinner_tick)
         self.terminals_coord.terminal_area_created.connect(self._on_area_created)
         self.terminals_coord.inbox_alert.connect(self._on_inbox_alert)
+        self.terminals_coord.inbox_entry_removed.connect(
+            self._on_inbox_entry_removed
+        )
         self.launch_coord.sessions_refresh_requested.connect(
             self.details.refresh_sessions_soon
         )
@@ -147,6 +150,10 @@ class MainWindow(QMainWindow):
         # Notificador D-Bus com botões de ação (Abrir/Adiar/Já vi).
         # Se indisponível, _on_inbox_alert cai pro tray.showMessage.
         self._desktop_notifier: DesktopNotifier | None = None
+        # tab_id → note_id D-Bus ativo. Permite fechar a notificação
+        # proativamente quando o tab sai do inbox (voltou a trabalhar /
+        # terminou / usuário clicou na aba), evitando banner stale.
+        self._active_notifications: dict[int, int] = {}
         self._init_desktop_notifier()
         self.terminals_coord.set_reminder_interval(
             self.settings.notify_reminder_seconds,
@@ -1137,6 +1144,10 @@ class MainWindow(QMainWindow):
                 ("snooze5", "Adiar 5 min"),
                 ("seen", "Já vi"),
             ]
+            # Se já existe notificação ativa pra esse tab (re-lembrete),
+            # passa replaces_id pro servidor substituir no lugar em vez de
+            # empilhar um segundo banner.
+            prev_nid = self._active_notifications.get(tab_id, 0)
             nid = self._desktop_notifier.notify(
                 title=title,
                 body=body,
@@ -1144,8 +1155,10 @@ class MainWindow(QMainWindow):
                 on_action=lambda key, _tid=tab_id, _wid=workspace_id:
                     self._handle_notification_action(_tid, _wid, key),
                 timeout_ms=8000,
+                replaces_id=prev_nid,
             )
             if nid is not None:
+                self._active_notifications[tab_id] = nid
                 return
             log.debug("D-Bus notify falhou — fallback pro tray.showMessage")
 
@@ -1162,6 +1175,9 @@ class MainWindow(QMainWindow):
         self, tab_id: int, workspace_id: str, key: str
     ) -> None:
         """Disparado pelo botão clicado na notificação D-Bus."""
+        # O servidor fecha o banner ao invocar action, então o note_id já
+        # não é mais válido — descarta pra não tentar close() depois.
+        self._active_notifications.pop(tab_id, None)
         if key == "open":
             self.show()
             self.raise_()
@@ -1173,6 +1189,16 @@ class MainWindow(QMainWindow):
             self.terminals_coord.dismiss_inbox(tab_id)
         else:
             log.debug("Ação de notificação desconhecida: %s", key)
+
+    def _on_inbox_entry_removed(self, tab_id: int) -> None:
+        """Tab saiu do inbox (voltou a trabalhar, terminou, foi focado).
+        Fecha a notificação D-Bus correspondente se ainda estiver visível —
+        senão o banner "✅ Pronto" continua na tela enquanto o console
+        já está em outro estado."""
+        nid = self._active_notifications.pop(tab_id, None)
+        if nid is None or self._desktop_notifier is None:
+            return
+        self._desktop_notifier.close(nid)
 
     def _on_plugin_notification(
         self, plugin_id: str, kind: str, payload: dict

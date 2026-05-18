@@ -132,3 +132,68 @@ def test_current_spinner_char_rotates(coord):
     coord._tick_spinner()
     b = coord.current_spinner_char()
     assert a != b
+
+
+# ---------- inbox_entry_removed ----------
+
+
+def test_inbox_entry_removed_on_back_to_working(coord):
+    """Quando o tab volta pra working, emite inbox_entry_removed pra UI
+    poder fechar a notificação D-Bus correspondente."""
+    removed = []
+    coord.inbox_entry_removed.connect(lambda tid: removed.append(tid))
+    coord._on_tab_activity("ws1", 1, "x", "thinking", True, True)
+    coord._on_tab_activity("ws1", 1, "x", "idle", False, True)
+    coord._on_tab_activity("ws1", 1, "x", "thinking again", True, True)
+    assert removed == [1]
+
+
+def test_inbox_entry_removed_on_terminate(coord):
+    """is_running=False também deve fechar a notificação."""
+    removed = []
+    coord.inbox_entry_removed.connect(lambda tid: removed.append(tid))
+    coord._on_tab_activity("ws1", 2, "x", "thinking", True, True)
+    coord._on_tab_activity("ws1", 2, "x", "idle", False, True)
+    coord._on_tab_activity("ws1", 2, "x", "done", False, False)
+    assert removed == [2]
+
+
+def test_inbox_entry_removed_on_explicit_remove(coord):
+    """remove_from_inbox/clear_inbox/dismiss via API também emitem."""
+    removed = []
+    coord.inbox_entry_removed.connect(lambda tid: removed.append(tid))
+    coord._on_tab_activity("ws1", 3, "x", "thinking", True, True)
+    coord._on_tab_activity("ws1", 3, "x", "idle", False, True)
+    coord.remove_from_inbox(3)
+    assert removed == [3]
+
+
+def test_inbox_entry_removed_on_tab_focused(coord):
+    """Clicar na aba (foco) tira do inbox e fecha a notificação."""
+    from claude_workspaces.ui.terminal_area import TerminalArea
+    from PySide6.QtWidgets import QWidget
+
+    area = TerminalArea()
+    placeholder = QWidget()
+    area.tabs.addTab(placeholder, "stub")
+    tab_id = id(placeholder)
+    coord._on_tab_activity("ws1", tab_id, "x", "thinking", True, True)
+    coord._on_tab_activity("ws1", tab_id, "x", "idle", False, True)
+    assert coord.inbox_count() == 1
+
+    removed = []
+    coord.inbox_entry_removed.connect(lambda tid: removed.append(tid))
+    coord._on_tab_focused(area, 0)
+    assert removed == [tab_id]
+
+
+def test_inbox_entry_removed_on_clear_inbox(coord):
+    """clear_inbox emite um sinal por entrada removida."""
+    coord._on_tab_activity("ws1", 4, "a", "x", True, True)
+    coord._on_tab_activity("ws1", 4, "a", "idle", False, True)
+    coord._on_tab_activity("ws1", 5, "b", "x", True, True)
+    coord._on_tab_activity("ws1", 5, "b", "idle", False, True)
+    removed = []
+    coord.inbox_entry_removed.connect(lambda tid: removed.append(tid))
+    coord.clear_inbox()
+    assert sorted(removed) == [4, 5]
