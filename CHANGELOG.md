@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.14] — 2026-05-18
+
+### Corrigido
+- **Recalibração do limite 5h (de novo)**: `plan_usd_limit_5h` 375 → 700
+  com base em terceiro ponto real (claude.ai 8% com sidebar marcando 15%
+  → ratio 15/8 → $700). O quota interno da Anthropic parece pesar input
+  diferente de output, então o ratio drifta com o mix de mensagens da
+  sessão; calibrar via `settings.json` quando divergir.
+
 ## [0.7.13] — 2026-05-18
 
 ### Corrigido
