@@ -42,7 +42,6 @@ class DockCoordinator(QObject):
     def build(self) -> RightDock:
         """Constrói o RightDock e o devolve pronto pra MainWindow embutir."""
         dock = RightDock()
-        dock.setStyleSheet("background: #141414;")
         collapsed = self.settings.right_dock_collapsed or {}
 
         for spec in self.specs:
@@ -52,6 +51,7 @@ class DockCoordinator(QObject):
                 spec.title,
                 panel,
                 open_=not collapsed.get(spec.panel_id, not spec.default_open),
+                icon=spec.icon,
             )
             self._panels.append(panel)
             self._panels_by_id[spec.panel_id] = panel

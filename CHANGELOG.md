@@ -17,6 +17,21 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   - "▶ Continuar este console" em cima de uma aba de terminal Claude.
   - "▶ Continuar todos os consoles deste workspace" em cima do nome do workspace
     — manda `continue` em rajada pra todos os consoles vivos daquele workspace.
+- Botão **"esconder tudo"** (▸) no topo do strip do dock direito: fecha todos
+  os painéis abertos de uma vez (Git/Memória/Skills). Quando todos fechados,
+  o strip continua visível com os ícones pra reabrir.
+
+### Mudado
+- **Activity bar** (à esquerda) reestilizada: glyphs Unicode monocromáticos
+  (❒/☰/⚓/⌬/◆/▣/⚙) no lugar dos emojis coloridos; presentation selector
+  U+FE0E + font-stack `Symbola/DejaVu`/etc forçam renderização de "ícone
+  técnico" em vez de "emoji infantil". Hover/checked migrados pra paleta
+  do `theme.*`.
+- **Dock direito** com botões de painel mais limpos: ícones glyph (⎇ Git,
+  ❏ Memória, ✦ Skills) com tooltip no lugar do texto rotacionado, paleta
+  unificada via `theme.*`, strip um pouco mais largo (32→36px) pra acomodar
+  os glyphs com folga.
+- `DockPanelSpec` ganhou campo `icon` opcional pra o glyph exibido no strip.
 
 ## [0.5.0] — 2026-05-18
 

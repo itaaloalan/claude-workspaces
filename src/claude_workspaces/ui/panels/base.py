@@ -33,9 +33,14 @@ class DockPanelSpec:
     """Spec de um painel pro RightDock — desacopla MainWindow da
     instanciação dos panels. A factory recebe a MainWindow (pra
     poder pegar dependências como `details`, `settings`) e devolve
-    o panel pronto."""
+    o panel pronto.
+
+    `icon` é um glyph Unicode mostrado no strip vertical do dock. Se
+    vazio, o strip cai num fallback genérico.
+    """
 
     panel_id: str
     title: str
     factory: Callable[[object], DockPanel]
     default_open: bool = False
+    icon: str = ""

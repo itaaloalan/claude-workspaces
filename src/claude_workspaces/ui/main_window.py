@@ -669,18 +669,21 @@ class MainWindow(QMainWindow):
         DockPanelSpec(
             panel_id="git",
             title="Git",
+            icon="⎇",
             factory=lambda mw: mw.details.git_panel(),
             default_open=True,
         ),
         DockPanelSpec(
             panel_id="memory",
             title="Memória",
+            icon="❏",
             factory=lambda mw: MemoryPanel(),
             default_open=False,
         ),
         DockPanelSpec(
             panel_id="skills",
             title="Skills",
+            icon="✦",
             factory=lambda mw: SkillsPanel(settings=mw.settings),
             default_open=False,
         ),

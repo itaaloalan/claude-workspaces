@@ -9,6 +9,8 @@ console do Claude rodando num workspace, no estilo IntelliJ:
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from . import theme
+
 # Estados visíveis na UI
 STATE_WORKING = "working"
 STATE_AWAITING = "awaiting"  # Claude pediu decisão (permission prompt)
@@ -24,10 +26,10 @@ STATE_LABEL = {
 }
 
 STATE_COLOR = {
-    STATE_WORKING: "#e0b86a",  # amber
-    STATE_AWAITING: "#e09060", # orange — chama atenção, pede ação
-    STATE_IDLE: "#7a8a9a",     # azul-cinza neutro — só "no prompt"
-    STATE_DONE: "#5ac35a",     # green
+    STATE_WORKING: theme.WARNING,
+    STATE_AWAITING: theme.WAITING,
+    STATE_IDLE: "#7a8a9a",
+    STATE_DONE: theme.SUCCESS,
 }
 
 
@@ -37,30 +39,30 @@ class TerminalChildWidget(QWidget):
         self._title = title
         # Tamanho previsível pra não brigar com o QTreeWidget no resize
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(48)
-        self.setMaximumHeight(48)
+        self.setMinimumHeight(42)
+        self.setMaximumHeight(42)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(4, 3, 6, 3)
-        outer.setSpacing(6)
+        outer.setContentsMargins(2, 2, 4, 2)
+        outer.setSpacing(8)
 
         self._icon = QLabel("⠋")
-        self._icon.setFixedSize(QSize(16, 44))
+        self._icon.setFixedSize(QSize(14, 38))
         self._icon.setAlignment(
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
         )
         self._icon.setStyleSheet(
-            "color: #e0b86a; font-family: monospace; font-size: 13px;"
+            f"color: {theme.WARNING}; font-family: monospace; font-size: 12px;"
         )
         outer.addWidget(self._icon)
 
         vbox = QVBoxLayout()
         vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setSpacing(0)
+        vbox.setSpacing(1)
 
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet(
-            "color: #e6e6e6; font-weight: 600; font-size: 12px;"
+            f"color: {theme.TEXT_PRIMARY}; font-weight: 600; font-size: 12px;"
         )
         self._title_label.setTextFormat(Qt.TextFormat.PlainText)
         self._title_label.setWordWrap(False)
@@ -71,26 +73,44 @@ class TerminalChildWidget(QWidget):
         self._title_label.setMaximumHeight(16)
         vbox.addWidget(self._title_label)
 
+        sub_row = QHBoxLayout()
+        sub_row.setContentsMargins(0, 0, 0, 0)
+        sub_row.setSpacing(6)
+
         self._state_label = QLabel(STATE_LABEL[STATE_IDLE])
         self._state_label.setStyleSheet(
-            f"color: {STATE_COLOR[STATE_IDLE]}; font-size: 10px;"
+            f"color: {STATE_COLOR[STATE_IDLE]};"
+            f" font-size: 10px; font-weight: 600;"
+            f" letter-spacing: 0.3px;"
         )
         self._state_label.setWordWrap(False)
         self._state_label.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
         )
         self._state_label.setMaximumHeight(14)
-        vbox.addWidget(self._state_label)
+        sub_row.addWidget(self._state_label)
+
+        self._sep_dot = QLabel("·")
+        self._sep_dot.setStyleSheet(
+            f"color: {theme.TEXT_DISABLED}; font-size: 10px;"
+        )
+        self._sep_dot.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
+        )
+        sub_row.addWidget(self._sep_dot)
 
         self._action_label = QLabel("")
-        self._action_label.setStyleSheet("color: #b0b0b0; font-size: 10px;")
+        self._action_label.setStyleSheet(
+            f"color: {theme.TEXT_FADED}; font-size: 10px;"
+        )
         self._action_label.setWordWrap(False)
         self._action_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
         self._action_label.setMaximumHeight(14)
-        vbox.addWidget(self._action_label)
+        sub_row.addWidget(self._action_label, stretch=1)
 
+        vbox.addLayout(sub_row)
         outer.addLayout(vbox, stretch=1)
 
     def set_title(self, title: str, tooltip: str = "") -> None:
@@ -107,7 +127,6 @@ class TerminalChildWidget(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        # Reaplica elide com a largura real após o layout
         if self._title:
             self._title_label.setText(self._elide(self._title))
 
@@ -126,16 +145,19 @@ class TerminalChildWidget(QWidget):
         else:
             self._icon.setText("✓")
         self._icon.setStyleSheet(
-            f"color: {STATE_COLOR[state]}; font-family: monospace; font-size: 13px;"
+            f"color: {STATE_COLOR[state]}; font-family: monospace; font-size: 12px;"
         )
         self._state_label.setText(STATE_LABEL[state])
         self._state_label.setStyleSheet(
-            f"color: {STATE_COLOR[state]}; font-size: 11px;"
+            f"color: {STATE_COLOR[state]};"
+            f" font-size: 10px; font-weight: 600;"
+            f" letter-spacing: 0.3px;"
         )
         if last_action:
-            # Trunca pra não estourar largura da sidebar
             shown = last_action if len(last_action) <= 55 else last_action[:54] + "…"
             self._action_label.setText(shown)
             self._action_label.setVisible(True)
+            self._sep_dot.setVisible(True)
         else:
             self._action_label.setVisible(False)
+            self._sep_dot.setVisible(False)
