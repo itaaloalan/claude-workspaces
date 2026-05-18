@@ -11,6 +11,12 @@ Implementação híbrida:
 
 Fallback é responsabilidade do chamador: se `available` for False ou `notify()`
 devolver `None`, caia pro `QSystemTrayIcon.showMessage`.
+
+Nota sobre KDE Plasma: o Plasma 6 emite `NotificationClosed(reason=1)` assim que
+a notificação sai do popup e vai pra central de notificações, mas as actions
+continuam clicáveis lá. Por isso só descartamos o callback de uma entrada
+quando o reason indica fechamento explícito (2/3/4) ou logo após uma ação
+ter sido invocada.
 """
 from __future__ import annotations
 
@@ -41,6 +47,7 @@ _BUS_PATH = "/org/freedesktop/Notifications"
 _BUS_IFACE = "org.freedesktop.Notifications"
 
 _GDBUS_ID_RE = re.compile(r"uint32\s+(\d+)")
+_PENDING_MAX = 256
 
 
 class DesktopNotifier(QObject):
@@ -163,6 +170,11 @@ class DesktopNotifier(QObject):
             "on_action": on_action,
             "on_closed": on_closed,
         }
+        # Cap simples FIFO — entradas antigas que nunca chegaram a fechamento
+        # explícito (Plasma só emite reason=1) não devem ficar pendurando.
+        while len(self._pending) > _PENDING_MAX:
+            oldest = next(iter(self._pending))
+            self._pending.pop(oldest, None)
         return note_id
 
     def close(self, note_id: int) -> None:
@@ -185,11 +197,16 @@ class DesktopNotifier(QObject):
 
     @Slot("uint", str)
     def _on_action_invoked(self, note_id: int, action_key: str) -> None:
-        self.action_invoked.emit(int(note_id), str(action_key))
-        entry = self._pending.get(int(note_id))
+        nid = int(note_id)
+        key = str(action_key)
+        self.action_invoked.emit(nid, key)
+        # Após invocar uma action, a notificação está prestes a fechar (reason=2).
+        # Removemos pra evitar que cliques duplicados / re-entregas disparem
+        # o callback mais de uma vez.
+        entry = self._pending.pop(nid, None)
         if entry and entry.get("on_action"):
             try:
-                entry["on_action"](str(action_key))
+                entry["on_action"](key)
             except Exception:
                 log.debug("on_action callback falhou", exc_info=True)
 
@@ -197,7 +214,13 @@ class DesktopNotifier(QObject):
     def _on_notification_closed(self, note_id: int, reason: int) -> None:
         nid = int(note_id)
         self.notification_closed.emit(nid, int(reason))
-        entry = self._pending.pop(nid, None)
+        # reason=1 (expirou) no Plasma 6 acontece quando a notificação sai do
+        # popup mas continua na central de notificações com as actions vivas.
+        # Só descartamos o callback em fechamento explícito (>= 2).
+        if int(reason) >= 2:
+            entry = self._pending.pop(nid, None)
+        else:
+            entry = self._pending.get(nid)
         if entry and entry.get("on_closed"):
             try:
                 entry["on_closed"](int(reason))
