@@ -6,6 +6,25 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.8.1] — 2026-05-18
+
+### Adicionado
+- Botão **↻ Recarregar runners** no header da aba Runners. O prompt
+  do "Gerar com Claude" agora instrui o Claude a salvar o JSON em
+  `~/.config/claude-workspaces/runner-drafts/<workspace-id>.json`,
+  e o botão importa esse rascunho (merge por nome).
+
+### Mudado
+- **Gerar runner com Claude**: agora abre uma aba no terminal interno
+  (xterm.js embutido) do workspace atual em vez de spawnar um konsole
+  externo. O cwd continua sendo o repositório do claude-workspaces pra
+  o Claude conseguir ler `docs/runners-spec.md`.
+
+### Corrigido
+- Clicar em um terminal no sidebar enquanto a aba **Runners** estava
+  ativa não trocava pra aba **Terminal** — agora alterna corretamente
+  e foca o terminal selecionado.
+
 ## [0.8.0] — 2026-05-18
 
 ### Adicionado

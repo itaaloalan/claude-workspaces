@@ -1183,6 +1183,7 @@ class MainWindow(QMainWindow):
             if id(area.tabs.widget(i)) == tab_id:
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
+                self._bottom_tabs.setCurrentWidget(self.terminal_host)
                 break
 
     def _show_settings(self) -> None:
@@ -1260,7 +1261,7 @@ class MainWindow(QMainWindow):
             area.refresh()
 
     def _generate_runner_with_claude(self, workspace) -> None:
-        from ..launchers import launch_claude_for_runner_gen
+        from ..launchers import find_app_repo_root
         from ..services.runner_prompt import build_generate_prompt
 
         hint, ok = QInputDialog.getText(
@@ -1271,10 +1272,35 @@ class MainWindow(QMainWindow):
         if not ok:
             return
         prompt = build_generate_prompt(workspace, hint)
+
+        repo = find_app_repo_root()
+        if repo is None:
+            QMessageBox.warning(
+                self,
+                "Não foi possível abrir o Claude",
+                "Repositório do claude-workspaces não encontrado — gerador "
+                "precisa rodar no diretório do projeto pra ler docs/runners-spec.md",
+            )
+            return
+
+        argv = [self.settings.claude_command, *self.settings.claude_extra_args, prompt]
+        area = self.terminals_coord.get_or_create_area(workspace)
+        title = f"runner-gen #{area.count() + 1}"
+        terminal = area.add_terminal(title)
+        terminal.configure_claude(str(repo))
+        label = f"claude (runner-gen) — {workspace.name}"
         try:
-            launch_claude_for_runner_gen(workspace, self.settings, prompt)
-        except LauncherError as e:
+            terminal.start_shell_command(
+                argv,
+                str(repo),
+                label=label,
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
             QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+            return
+        self._bottom_tabs.setCurrentWidget(self.terminal_host)
+        self.terminal_host.setCurrentWidget(area)
 
     def _persist_workspace(self, workspace) -> None:
         self.workspaces_coord.replace(workspace)

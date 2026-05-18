@@ -74,6 +74,14 @@ class RunnerArea(QWidget):
         self._export_btn.clicked.connect(self._export_runners)
         h.addWidget(self._export_btn)
 
+        self._reload_btn = QPushButton("↻ Recarregar runners")
+        self._reload_btn.setToolTip(
+            "Importa runners gerados pelo Claude a partir do rascunho salvo "
+            "em ~/.config/claude-workspaces/runner-drafts/<workspace>.json"
+        )
+        self._reload_btn.clicked.connect(self._reload_from_draft)
+        h.addWidget(self._reload_btn)
+
         self._add_btn = QPushButton("+ Novo")
         self._add_btn.clicked.connect(self._open_add_menu)
         h.addWidget(self._add_btn)
@@ -257,6 +265,33 @@ class RunnerArea(QWidget):
             export_runners(self._ws, path)
         except OSError as e:
             QMessageBox.critical(self, "Erro ao exportar", str(e))
+
+    def _reload_from_draft(self) -> None:
+        from ..runners_io import import_runners
+        from ..services.runner_prompt import pending_runner_path
+
+        path = pending_runner_path(self._ws)
+        if not path.exists():
+            QMessageBox.information(
+                self,
+                "Sem rascunho",
+                f"Nenhum rascunho encontrado em:\n{path}\n\n"
+                "Use '+ Novo → Gerar com Claude' e aguarde o Claude "
+                "salvar o arquivo antes de recarregar.",
+            )
+            return
+        try:
+            added, replaced = import_runners(self._ws, path)
+        except (OSError, ValueError) as e:
+            QMessageBox.critical(self, "Erro ao importar rascunho", str(e))
+            return
+        self.runners_changed.emit()
+        self._refresh_from_workspace()
+        QMessageBox.information(
+            self,
+            "Rascunho importado",
+            f"Adicionados: {added}. Substituídos: {replaced}.",
+        )
 
     def _import_runners(self) -> None:
         from ..runners_io import import_runners
