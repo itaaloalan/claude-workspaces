@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.8.2] — 2026-05-18
+
+### Alterado
+- Prompt de "Gerar com Claude" para runners agora instrui o Claude a
+  **inspecionar arquivos de referência** antes de decidir os comandos
+  (`package.json`, `pom.xml`, `build.gradle`, `pyproject.toml`,
+  `Cargo.toml`, `go.mod`, `Makefile`, `.nvmrc`, etc.). Evita chute em
+  `npm run dev` quando o script não existe, e ajuda a casar versões de
+  runtime (Java/Node) com a pasta correta.
+
 ## [0.8.1] — 2026-05-18
 
 ### Adicionado
