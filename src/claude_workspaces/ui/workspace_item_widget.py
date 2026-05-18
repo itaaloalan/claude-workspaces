@@ -1,7 +1,7 @@
-"""Widget custom pros workspaces (top-level items da tree) — mostra um
-indicador de "rodando" (bolinha verde + badge de count) + nome + botões:
+"""Widget custom pros workspaces (top-level items da tree) — mostra o
+nome + indicador de "rodando" (bolinha verde + badge de count) + botões:
 
-    [●] [×N] [nome do workspace]          [＋] [▾]
+    [nome do workspace] [●] [×N]          [＋] [▾]
 
 - A bolinha verde aparece quando há ≥1 terminal Claude rodando no
   workspace; o badge `×N` aparece a partir de 2.
@@ -84,6 +84,15 @@ class WorkspaceItemWidget(QWidget):
         row.setContentsMargins(2, 2, 2, 2)
         row.setSpacing(4)
 
+        self._label = QLabel(name)
+        label_font = QFont(self._label.font())
+        label_font.setBold(True)
+        label_font.setPointSizeF(label_font.pointSizeF() + 1.5)
+        self._label.setFont(label_font)
+        self._label.setStyleSheet("color: #f2f2f2;")
+        self._label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self._dot = QLabel("")
         self._dot.setFixedSize(8, 8)
         self._dot.setStyleSheet(_DOT_QSS)
@@ -97,13 +106,7 @@ class WorkspaceItemWidget(QWidget):
         self._badge.hide()
         row.addWidget(self._badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._label = QLabel(name)
-        bold = QFont(self._label.font())
-        bold.setBold(True)
-        self._label.setFont(bold)
-        self._label.setStyleSheet(f"color: {theme.TEXT_PRIMARY};")
-        self._label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        row.addWidget(self._label, stretch=1)
+        row.addStretch(1)
 
         self._add_btn = QPushButton("＋")
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)

@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.18] — 2026-05-18
+
+### Mudado
+- **Sidebar de workspaces — visual menos poluído**: o nome do workspace
+  aparece primeiro, seguido da bolinha verde e do badge `×N` (antes vinham
+  antes do nome, brigando com a leitura). Fonte do nome um pouco maior
+  (+1.5pt) e cor mais clara (`#f2f2f2`, quase branco) pra dar mais peso
+  visual à informação principal.
+
 ## [0.7.17] — 2026-05-18
 
 ### Corrigido
