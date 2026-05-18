@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.10.0] — 2026-05-18
+
+### Adicionado
+- **Localizador de arquivos no painel do workspace**: caixa de busca
+  acima das sessões com lista de resultados e botões "Abrir"
+  (xdg-open no app padrão) e "Editar" (editor configurado). Usa `fd`
+  quando disponível (respeita `.gitignore` e ignora dotfiles); fallback
+  puro Python pula `.git`, `node_modules`, `.venv` etc. Double-click
+  abre direto no editor. Limitado a 200 resultados e a busca roda
+  só nas pastas do workspace selecionado.
+
 ## [0.9.2] — 2026-05-18
 
 ### Corrigido

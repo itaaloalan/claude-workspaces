@@ -24,6 +24,7 @@ from ..models import Workspace
 from ..session_marks import is_starred
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
+from .file_finder import FileFinder
 from .git_panel import GitPanel
 from .mcp_dialog import MCPDialog
 from .session_card import SessionCard
@@ -136,6 +137,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # puxa via accessor pra colocá-lo no dock.
         self._git_panel = GitPanel()
         self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
+
+        self._file_finder = FileFinder()
+        self._file_finder.open_file_requested.connect(self.open_file_requested.emit)
+        c.addWidget(self._file_finder)
 
         sessions = self._build_sessions_column()
         c.addWidget(sessions, stretch=1)
@@ -349,6 +354,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
             self._stacks.setVisible(False)
 
         self._rebuild_ide_buttons(stacks)
+        self._file_finder.set_folders(workspace.folders)
         self._refresh_sessions()
         self._refresh_mcp_status()
         self._refresh_usage()
