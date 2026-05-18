@@ -21,6 +21,7 @@ from ..claude_sessions import ClaudeSession, list_sessions_for_paths
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Workspace
+from ..session_marks import is_starred
 from ..settings import Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
 from .git_panel import GitPanel
@@ -271,6 +272,21 @@ class WorkspaceDetailsPanel(QStackedWidget):
         )
         self._sessions_filter.textChanged.connect(self._apply_sessions_filter)
         header.addWidget(self._sessions_filter, stretch=1)
+
+        self._only_starred_btn = QPushButton("★")
+        self._only_starred_btn.setCheckable(True)
+        self._only_starred_btn.setFixedWidth(28)
+        self._only_starred_btn.setToolTip("Mostrar apenas sessões favoritadas")
+        self._only_starred_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._only_starred_btn.setStyleSheet(
+            "QPushButton { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "border-radius: 4px; color: #888; font-size: 13px; padding: 2px; }"
+            "QPushButton:hover { border-color: #3d6ea8; }"
+            "QPushButton:checked { background: #3a2f10; border-color: #f0c040; color: #f0c040; }"
+        )
+        self._only_starred_btn.toggled.connect(self._apply_sessions_filter)
+        header.addWidget(self._only_starred_btn)
+
         refresh_btn = QPushButton("↻")
         refresh_btn.setFixedWidth(28)
         refresh_btn.setToolTip("Atualizar lista")
@@ -290,17 +306,21 @@ class WorkspaceDetailsPanel(QStackedWidget):
         layout.addWidget(self._sessions_list, stretch=1)
         return col
 
-    def _apply_sessions_filter(self, text: str) -> None:
-        needle = text.strip().lower()
+    def _apply_sessions_filter(self, *_args) -> None:
+        needle = self._sessions_filter.text().strip().lower()
+        only_starred = self._only_starred_btn.isChecked()
         for i in range(self._sessions_list.count()):
             item = self._sessions_list.item(i)
             session = item.data(Qt.ItemDataRole.UserRole)
             if isinstance(session, ClaudeSession):
                 hay = (session.preview or "").lower()
-                item.setHidden(bool(needle) and needle not in hay)
+                hide = (bool(needle) and needle not in hay) or (
+                    only_starred and not is_starred(session.id)
+                )
+                item.setHidden(hide)
             else:
                 # Placeholder "nenhuma sessão" — esconde quando filtrando
-                item.setHidden(bool(needle))
+                item.setHidden(bool(needle) or only_starred)
 
     # (git virou propriedade acessada via git_panel() pra reuso no dock direito)
 
@@ -429,15 +449,24 @@ class WorkspaceDetailsPanel(QStackedWidget):
             card.delete_requested.connect(self._on_delete_session)
             card.handoff_requested.connect(self._on_handoff_card)
             card.export_requested.connect(self.export_session_requested.emit)
+            card.star_toggled.connect(self._on_star_toggled)
             item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, s)
             item.setSizeHint(card.sizeHint())
             self._sessions_list.addItem(item)
             self._sessions_list.setItemWidget(item, card)
+        self._apply_sessions_filter()
 
     def _on_handoff_card(self, session: ClaudeSession) -> None:
         if not self.workspace:
             return
         self.handoff_requested.emit(self.workspace, session)
+
+    def _on_star_toggled(self, _session: ClaudeSession, _starred: bool) -> None:
+        # O filtro "só favoritas" precisa reagir quando uma sessão deixa de
+        # ser favorita (some) ou volta a ser (aparece). Reaplica o filtro
+        # — não precisa recarregar a lista do disco.
+        self._apply_sessions_filter()
 
     def refresh_sessions_soon(self) -> None:
         """Reescaneia a lista de sessões — chamada externamente quando um

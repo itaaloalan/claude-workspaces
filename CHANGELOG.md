@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.6.0] — 2026-05-18
+
+### Adicionado
+- **Favoritar sessão (★)** no card de cada sessão recente: clique na estrela
+  marca/desmarca a sessão como favorita. Persiste em
+  `~/.config/claude-workspaces/session_marks.json` (não mexe nos arquivos do
+  Claude Code em `~/.claude/projects/`).
+- **Filtro "só favoritas"** no header de Sessões recentes (botão ★ ao lado do
+  campo de busca). Combina com o filtro de texto.
+- Sessões favoritadas são **sempre carregadas**, mesmo que estejam fora das 20
+  mais recentes — fecha o caso "marquei pra achar depois e a sessão envelheceu".
+- Novo módulo `session_marks` com API `is_starred / set_starred / starred_ids`.
+  A estrutura do JSON já reserva campos `tags` e `note` pra evolução futura
+  (tags nomeadas, anotações livres) sem precisar migrar formato.
+
+### Corrigido
+- Filtro de texto da lista de Sessões recentes estava parcialmente quebrado:
+  o `QListWidgetItem` não armazenava o `ClaudeSession` em `UserRole`, então
+  digitar qualquer coisa escondia todos os cards em vez de buscar pelo preview.
+  Agora o `UserRole` é populado e a busca por texto realmente filtra.
+
 ## [0.5.1] — 2026-05-18
 
 ### Adicionado

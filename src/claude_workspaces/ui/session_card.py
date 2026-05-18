@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..claude_sessions import ClaudeSession
+from ..session_marks import is_starred, set_starred
 
 
 class SessionCard(QFrame):
@@ -20,6 +21,7 @@ class SessionCard(QFrame):
     delete_requested = Signal(ClaudeSession)
     handoff_requested = Signal(ClaudeSession)
     export_requested = Signal(ClaudeSession)
+    star_toggled = Signal(ClaudeSession, bool)
 
     _BTN_GHOST = (
         "QPushButton {"
@@ -55,6 +57,15 @@ class SessionCard(QFrame):
 
         header = QHBoxLayout()
         header.setSpacing(6)
+
+        self._starred = is_starred(session.id)
+        self._star_btn = QPushButton()
+        self._star_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._star_btn.setFixedWidth(22)
+        self._star_btn.setFlat(True)
+        self._star_btn.clicked.connect(self._on_toggle_star)
+        self._refresh_star_visual()
+        header.addWidget(self._star_btn)
 
         title = QLabel(self._title_text())
         title.setStyleSheet("font-weight: 600; color: #e6e6e6; font-size: 12px;")
@@ -122,6 +133,34 @@ class SessionCard(QFrame):
         outer.addLayout(actions)
 
         self.setToolTip(f"ID: {session.id}\nOrigem: {session.origin_cwd}")
+
+    def _refresh_star_visual(self) -> None:
+        if self._starred:
+            self._star_btn.setText("★")
+            self._star_btn.setToolTip("Favoritada — clique pra desmarcar")
+            self._star_btn.setStyleSheet(
+                "QPushButton {"
+                "  background: transparent; color: #f0c040;"
+                "  border: 0; font-size: 14px; padding: 0;"
+                "}"
+                "QPushButton:hover { color: #ffd860; }"
+            )
+        else:
+            self._star_btn.setText("☆")
+            self._star_btn.setToolTip("Favoritar essa sessão (acha ela depois com o filtro ★)")
+            self._star_btn.setStyleSheet(
+                "QPushButton {"
+                "  background: transparent; color: #6a6a6a;"
+                "  border: 0; font-size: 14px; padding: 0;"
+                "}"
+                "QPushButton:hover { color: #f0c040; }"
+            )
+
+    def _on_toggle_star(self) -> None:
+        self._starred = not self._starred
+        set_starred(self.session.id, self._starred, self.session.origin_cwd)
+        self._refresh_star_visual()
+        self.star_toggled.emit(self.session, self._starred)
 
     def _title_text(self) -> str:
         if self.session.preview:

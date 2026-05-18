@@ -151,7 +151,14 @@ def list_sessions_for_paths(paths: list[str], limit: int = 20) -> list[ClaudeSes
     ordenado por mtime descendente. Cada sessão preserva o origin_cwd
     pra que retomá-la use o cwd correto onde foi originalmente iniciada
     (importante quando workspace tem pastas-irmãs e o VSCode plugin
-    abriu sessões em uma das subpastas específicas)."""
+    abriu sessões em uma das subpastas específicas).
+
+    Sessões favoritadas (★) que pertençam a algum dos `paths` são sempre
+    incluídas, mesmo que estejam fora do `limit` mais recente — é o que
+    permite "fechar e achar depois" pelo filtro de favoritas."""
+    # Import local pra evitar ciclo (session_marks → storage → models)
+    from .session_marks import starred_ids
+
     seen_dirs: set[Path] = set()
     all_sessions: list[ClaudeSession] = []
     for p in paths:
@@ -161,4 +168,30 @@ def list_sessions_for_paths(paths: list[str], limit: int = 20) -> list[ClaudeSes
         seen_dirs.add(d)
         all_sessions.extend(list_sessions(p, limit=limit))
     all_sessions.sort(key=lambda s: s.mtime, reverse=True)
-    return all_sessions[:limit]
+    top = all_sessions[:limit]
+
+    # Acrescenta favoritas que ficaram de fora do top-N
+    starred = starred_ids()
+    if starred:
+        present_ids = {s.id for s in top}
+        for sid in starred - present_ids:
+            for p in paths:
+                f = project_sessions_dir(p) / f"{sid}.jsonl"
+                if not f.is_file():
+                    continue
+                try:
+                    mtime = f.stat().st_mtime
+                except OSError:
+                    break
+                top.append(
+                    ClaudeSession(
+                        id=sid,
+                        mtime=mtime,
+                        preview=_read_first_user_message(f),
+                        path=f,
+                        origin_cwd=p,
+                    )
+                )
+                break
+        top.sort(key=lambda s: s.mtime, reverse=True)
+    return top
