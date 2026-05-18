@@ -5,27 +5,32 @@ Visão geral do que cada parte da janela faz e como usar.
 ## Layout
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ ☰  Claude Workspaces  [busca…]                🔔  ⚙ Configurar│  ← topbar
-├──────────┬──────────────────────────────────────────┬────────┤
-│ WORK-    │  Workspace selecionado                    │ Git   │
-│ SPACES   │  ─ título, stack, pastas, MCP, uso (30d)  │ ····  │
-│          │  ─ ações (Abrir Claude / Terminal / IDEs) │       │
-│ ▼ ogpms  │  ─ Sessões recentes (cards)               │       │
-│  ⠋ Cons1 │                                            │ Mem.  │
-│  ❚❚ Cons2│                                            │       │
-│ ▼ map    │                                            │ Skills│
-│          ├──────────────────────────────────────────┬┤       │
-│          │ Terminal embutido (várias abas)          ││       │
-│          │  ─ ⬇ ▢ ❐  (minimizar/maximizar/restaurar)││       │
-└──────────┴──────────────────────────────────────────┴────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ ☰  Claude Workspaces  [busca…]                🔔  ⚙ Configurar    │  ← topbar
+├────┬──────────┬──────────────────────────────────────────┬───────┤
+│ 🗂 │ WORK-    │  Workspace selecionado                    │ Git   │
+│ 📚 │ SPACES   │  ─ título, stack, pastas, MCP, uso (30d)  │ ····  │
+│ 🪝 │          │  ─ ações (Abrir Claude / Terminal / IDEs) │       │
+│ 🔌 │ ▼ ogpms  │  ─ Sessões recentes (cards)               │ Mem.  │
+│ 🧩 │  ⠋ Cons1 │                                            │       │
+│ 🧰 │  ❚❚ Cons2│                                            │ Skills│
+│    │ ▼ map    │                                            │       │
+│ ⚙  │          ├──────────────────────────────────────────┬┤       │
+│    │          │ Terminal embutido (várias abas)          ││       │
+│    │          │  ─ ⬇ ▢ ❐  (minimizar/maximizar/restaurar)││       │
+└────┴──────────┴──────────────────────────────────────────┴───────┘
+  ↑
+  activity bar (views top-level)
 ```
 
+- **Activity bar**: coluna vertical de ícones à esquerda — troca entre views top-level (🗂 Workspaces, 📚 Catálogo, 🪝 Hooks, 🔌 MCP, 🧩 Plugins, 🧰 Apps) e ⚙ Configurações no rodapé. Atalhos `Ctrl+Shift+1..6`.
 - **Topbar**: toggle sidebar (☰), título, busca de workspaces, **bell** (consoles aguardando), Configurar.
 - **Sidebar**: lista de workspaces. Cada workspace pode expandir e mostrar os consoles ativos como filhos com status colorido.
 - **Centro/topo**: detalhes do workspace selecionado.
 - **Centro/baixo**: terminal embutido (xterm.js + pty), com tabs por sessão.
 - **Dock direito**: Git, Memória (CLAUDE.md), Skills — colapsáveis via tool strip vertical.
+
+As views Catálogo / Hooks / MCP / Plugins / Apps ocupam a área central inteira quando ativadas (substituem temporariamente o painel de workspace + terminal).
 
 ## Criando um workspace
 
@@ -69,11 +74,64 @@ Estados (cor + ícone):
 
 **Double-click** num filho foca a aba do terminal correspondente. Sessões antigas (do histórico) aparecem como children também — double-click retoma via `--resume` no terminal embutido.
 
-## Inbox global (bell 🔔)
+## Inbox global (bell 🔔) + notificações nativas
 
-Quando algum console transiciona de **Trabalhando → Aguardando**, ele entra no inbox global e o bell ficar laranja com contador. Click no bell → menu com lista; click num item pula pro workspace + aba correspondente e remove do inbox.
+Quando algum console transiciona de **Trabalhando → Aguardando**, ele entra no inbox global e o bell fica laranja com contador. Click no bell → menu com lista; click num item pula pro workspace + aba correspondente e remove do inbox.
 
 Inbox também limpa quando: você foca o tab manualmente, o tab é fechado, ou clica em "Limpar inbox".
+
+Em paralelo ao bell, o app:
+
+- **Tray icon nativo** (`QSystemTrayIcon`) no painel do sistema. O menu repete a inbox (workspace + título da sessão); clique num item foca a aba.
+- **Notificação D-Bus** com botões de ação (em ambientes que suportam — KDE, GNOME, Hyprland com mako/dunst):
+  - **Abrir** → traz o app pra frente e foca a aba.
+  - **Adiar** → some agora, volta a lembrar depois (re-lembretes a cada N minutos enquanto a sessão continuar idle).
+  - **Já vi** → marca como vista e remove da inbox sem precisar abrir.
+- **Snooze** também acessível pelo menu da tray.
+
+Onde não tem D-Bus disponível, cai pro `notify-send` simples (sem botões). Toda essa parte é ativada via **Configurações → Notificações** (instala o hook `Stop` em `~/.claude/settings.json`).
+
+## Catálogo (view top-level — 📚 / `Ctrl+Shift+2`)
+
+Split horizontal: lista filtrável de Skills/Agents/Comandos à esquerda + painel de detalhe à direita.
+
+- Filtros de tipo (Skills/Agents/Comandos), filtros de fonte (Projeto/Global/Plugin), busca por texto.
+- Selecionar um item mostra: frontmatter, body completo, contagem de uso por workspace, **lint** (avisos sobre frontmatter mal formado), e botões pra editar / abrir no editor externo.
+- **Playground**: testa o skill localmente passando args fictícios pra ver o que ele expandiria.
+
+A versão "estreita" do mesmo catálogo continua no dock direito do workspace (lista + click copia `/nome`).
+
+## Hooks (view top-level — 🪝 / `Ctrl+Shift+3`)
+
+Inspector dos hooks do Claude Code. Mostra todos os hooks instalados em `~/.claude/settings.json` (e nos `settings.local.json` de cada projeto), agrupados por evento (`Stop`, `PreToolUse`, `PostToolUse`, etc), com legenda de cores por fonte.
+
+## MCP servers (view top-level — 🔌 / `Ctrl+Shift+4`)
+
+Lista de todos os MCP servers configurados em `~/.claude.json` (não só o postgres que o app gerencia). Selecionar um mostra: comando, args, env vars, scope. Útil pra diagnosticar `claude mcp list` sem sair do app.
+
+Pra criar/editar o MCP postgres específico do workspace, continue usando os botões **Criar MCP / Editar MCP** no painel central — a view aqui é só leitura/inspeção.
+
+## Plugins (view top-level — 🧩 / `Ctrl+Shift+5`)
+
+Bundles que reagem a eventos do app e/ou expõem comandos pra paleta. Spec completa em `docs/PLUGIN_SPEC.md`.
+
+- **Lista** de plugins instalados em `~/.config/claude-workspaces/plugins/<plugin>/`. Toggle enable/disable persiste em `<install>/.state/enabled.flag`.
+- **Detalhe** do plugin selecionado: explicação amigável em PT-BR do que ele faz, manifest, permissões pedidas, último diretório de logs, configurações editáveis inline (auto-save).
+- **Toolbar**:
+  - **Exemplos**: instala bundles bundled do repo com um clique (`commit-coach`, `idle-rescue`, `focus-timer`, `workspace-snapshot`).
+  - **Instalar de pasta**: aponta pra uma pasta com `plugin.yaml` válido.
+  - **Solicitar criação**: abre dialog pra descrever um plugin novo; gera prompt e abre um Claude pra implementar.
+  - **Recarregar**: rescaneia o diretório de plugins.
+- **Paleta de comandos** (`Ctrl+P`): lista os comandos expostos pelos plugins ativos — invoca via teclado sem precisar abrir a view.
+
+## Apps auxiliares (view top-level — 🧰 / `Ctrl+Shift+6`)
+
+PWAs/sites embutidos via QtWebEngine — mantém ferramentas auxiliares (Taskis, ClickUp, Trello, Google Calendar, o que você quiser) dentro do app sem alt-tab.
+
+- Lista lateral de apps configurados + webview à direita.
+- Cada app tem **perfil isolado** em `~/.config/claude-workspaces/apps_profiles/<slug>/` — cookies/login persistem entre sessões e um app não enxerga cookie do outro.
+- **Adicionar app**: dialog com nome + URL + ícone opcional. Persiste em `settings.json` (`apps` list).
+- Vem com Taskis e ClickUp como defaults; você pode remover/substituir.
 
 ## Painel Git (dock direito)
 
@@ -91,6 +149,17 @@ Modelo IntelliJ Commit:
 - **Área de commit** no rodapé: texto livre + botão `Commit (N)`. O commit reseta o staging, stage apenas os marcados, e roda `git commit -m`.
 
 Auto-refresh via `QFileSystemWatcher` em `.git/index`, `.git/HEAD`, `.git/FETCH_HEAD` + poll de 30s.
+
+### Abrir PR
+
+Quando há commits ahead do remote, aparece o botão **Abrir PR** no painel Git. Ele usa o `gh` CLI:
+
+1. Faz `git push -u` se a branch ainda não tem upstream.
+2. Detecta se já existe PR aberto pra branch (`gh pr view`); se sim, oferece abrir no navegador em vez de criar duplicado.
+3. Senão, abre o `OpenPRDialog` com título + corpo pré-preenchidos a partir do diff e dos commits da branch.
+4. Cria o PR via `gh pr create` e copia a URL pra clipboard.
+
+Pré-requisito: `gh` no PATH e autenticado (`gh auth status`). Sem `gh`, o botão fica oculto.
 
 ## Painel Memória (dock direito)
 
@@ -160,6 +229,12 @@ Workspaces podem override os defaults de worktree/git individualmente (campo "Gi
 ## Persistência de layout
 
 Splitters, geometria da janela e estado dos painéis do dock (aberto/fechado) são salvos automaticamente após 600ms de inatividade. Arraste o handle, redimensione a janela, abra/feche painéis — tudo volta ao mesmo lugar na próxima sessão.
+
+## Restaura abas Claude entre sessões do app
+
+Ao fechar o app, ele salva em `~/.config/claude-workspaces/session_state.json` a lista de tabs Claude que estavam rodando (workspace + session_id + cwd) — só salva tabs cuja sessão JSONL já foi resolvida, pra garantir que o `--resume` no próximo startup vai casar com um arquivo real.
+
+No próximo startup, recria cada aba via `claude --resume <session_id>` no mesmo workspace. Shells puros e tabs ainda não claimadas não são restauradas.
 
 ## Comandos úteis
 

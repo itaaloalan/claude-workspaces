@@ -12,16 +12,21 @@ O Claude Code é poderoso mas trabalhar em vários projetos ao mesmo tempo vira 
 
 - **Workspaces**: cada projeto tem um nome, lista de pastas e configurações próprias. Abrir o Claude num workspace passa essas pastas como contexto isolado.
 - **Terminal embutido** (xterm.js + pty): múltiplas abas de Claude por workspace, sem janelas externas.
-- **Inbox global**: bell badge no topbar aviso quando algum console termina e está esperando você (✓ "Aguardando").
+- **Activity bar**: coluna vertical à esquerda com views top-level — Workspaces, Catálogo (skills/agents/commands), Hooks, MCP servers, Plugins, Apps. Atalhos `Ctrl+Shift+1..6`.
+- **Inbox global + notificações nativas**: bell no topbar (transição "Aguardando"), `QSystemTrayIcon` no painel do sistema com menu da inbox e re-lembretes a cada N minutos. Em sessões com D-Bus, a notificação ganha botões **Abrir / Adiar / Já vi**.
 - **Sidebar com árvore de atividade**: cada console rodando aparece sob seu workspace com estado em tempo real (Trabalhando · spinner / Aguardando ❚❚ / Concluído ✓) e o título da sessão.
+- **Restaura abas Claude**: ao fechar o app, salva as sessões Claude em curso e reabre tudo com `--resume` no próximo startup.
 - **Worktrees opcionais**: ao abrir Claude, escolha se quer isolar em git worktree numa nova branch (ou existente) — útil pra rodar múltiplos agentes no mesmo repo em paralelo.
 - **Painel Git estilo IntelliJ**: árvore de arquivos com checkboxes pra seletivamente staged + commit inline. Right-click pra Add/Unstage/Rollback/Delete.
+- **Abrir PR direto da UI**: depois de um commit, botão pra `gh pr create` com título/corpo gerados a partir do diff e dos commits da branch.
 - **Telemetria de tokens/custo** por workspace (lê os JSONLs do Claude).
-- **Skills/Agents/Comandos** listados com filtros, contadores de uso (% e quando), clique copia `/nome`.
+- **Skills/Agents/Comandos** listados com filtros, contadores de uso (% e quando), clique copia `/nome`. Editor + lint + playground integrados no Catálogo.
+- **Plugins** (manifest v2): bundles que podem reagir a eventos do app (`tab_idle`, `tab_started`, etc), expor comandos pra paleta e configurações editáveis inline. Botão "Exemplos" instala bundles do repo com um clique; botão "Solicitar criação" pede pro Claude desenhar um plugin novo. Detalhe em [docs/PLUGIN_SPEC.md](docs/PLUGIN_SPEC.md).
+- **Apps auxiliares**: PWAs/sites embutidos via QtWebEngine (Taskis, ClickUp, ou o que você adicionar) com perfil isolado por app — login persiste e um app não enxerga cookie do outro.
 - **Memória do workspace**: editor inline do CLAUDE.md da pasta primária.
 - **Busca em sessões** (Ctrl+Shift+F): texto livre em todas as sessões antigas com snippet.
-- **Handoff**: botão "→ Tarefa" passa contexto de uma sessão pra outra com briefing pré-preenchido.
-- **MCP postgres**: cria/edita config do MCP postgres do Claude por workspace.
+- **Handoff**: botão "→ Tarefa" passa contexto de uma sessão pra outra com briefing pré-preenchido (inclui branch, ahead/behind, arquivos modificados).
+- **MCP postgres**: cria/edita config do MCP postgres do Claude por workspace. View "MCP servers" mostra tudo que está configurado em `~/.claude.json`.
 - **Templates**: 4 bundled (Vazio, Java+Spring+PostgreSQL, Web Next.js, Python FastAPI) ou JSONs custom em `~/.config/claude-workspaces/templates/`.
 
 ## Instalação
@@ -72,13 +77,16 @@ qualquer lugar.
 |---|---|
 | `Ctrl+N` | Novo workspace |
 | `Ctrl+1` … `Ctrl+9` | Pular pro N-ésimo workspace |
+| `Ctrl+Shift+1` … `Ctrl+Shift+6` | Trocar de view (Workspaces / Catálogo / Hooks / MCP / Plugins / Apps) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Próximo / anterior workspace |
 | `Ctrl+F` | Focar busca (filtro do topbar) |
 | `Ctrl+Shift+F` | Buscar texto em todas as sessões antigas |
+| `Ctrl+Shift+R` | Retomar última sessão do workspace atual |
 | `Ctrl+Enter` | Abrir Claude no workspace atual |
 | `Ctrl+B` / `Ctrl+J` / `Ctrl+Shift+B` | Toggle sidebar / terminal / dock direito |
 | `Ctrl+T` / `Ctrl+Shift+W` / `Ctrl+K` | Nova aba shell / fechar aba / limpar terminal |
-| `Ctrl+P` | Quick open de arquivo do workspace |
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Aba anterior / próxima do terminal |
+| `Ctrl+P` | Paleta de comandos de plugins |
 | `Ctrl+O` | Abrir pasta primária no gerenciador de arquivos |
 | `Ctrl+Shift+C` | Copiar caminho da pasta primária |
 | `Ctrl+,` | Configurações |
@@ -91,6 +99,9 @@ qualquer lugar.
 | Workspaces | `~/.config/claude-workspaces/workspaces.json` |
 | Configurações | `~/.config/claude-workspaces/settings.json` |
 | Templates custom | `~/.config/claude-workspaces/templates/*.json` |
+| Estado das sessões Claude ativas | `~/.config/claude-workspaces/session_state.json` |
+| Plugins instalados | `~/.config/claude-workspaces/plugins/<plugin>/` |
+| Perfis isolados dos Apps | `~/.config/claude-workspaces/apps_profiles/<slug>/` |
 | Backups do MCP | `~/.claude.json.bak-<timestamp>` (3 mais recentes) |
 | Logs | `~/.local/state/claude-workspaces/app.log` |
 | Worktrees criados | `<repo-pai>/<repo>.claude/<branch>/` |
@@ -99,6 +110,8 @@ qualquer lugar.
 
 - [docs/USAGE.md](docs/USAGE.md) — manual do usuário
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — arquitetura, como estender, layout dos módulos
+- [docs/PLUGIN_SPEC.md](docs/PLUGIN_SPEC.md) — spec dos plugins (manifest v2, eventos, permissões)
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — plano de build/distribuição (Linux, macOS, Windows)
 - [docs/MAINTAINABILITY.md](docs/MAINTAINABILITY.md) — relatório de auditoria + tracking de débito técnico
 
 ## Status

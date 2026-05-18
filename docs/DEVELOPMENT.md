@@ -26,30 +26,61 @@ src/claude_workspaces/
 ├── app.py                  # entrypoint da QApplication (paleta + Fusion style)
 ├── __main__.py
 ├── models.py               # Workspace dataclass (overrides per-workspace)
-├── storage.py              # leitura/escrita de workspaces.json
-├── settings.py             # Settings dataclass + persistência
-├── stacks.py               # detecção Java/Web/Python/C#
-├── launchers.py            # launchers externos (Konsole, IDEs)
+├── storage.py               # leitura/escrita de workspaces.json
+├── settings.py              # Settings dataclass + persistência
+├── stacks.py                # detecção Java/Web/Python/C#
+├── launchers.py             # launchers externos (Konsole, IDEs)
 ├── logging_setup.py
-├── claude_activity.py      # parser puro do output do pty (status + working)
-├── claude_sessions.py      # leitura dos JSONLs em ~/.claude/projects/
-├── git_actions.py          # subprocess: stage, unstage, commit, checkout, discard
-├── git_status.py           # subprocess: branch, ahead/behind, porcelain
-├── git_worktree.py         # worktree add/remove + list_local_branches
-├── hook_manager.py         # instala/remove hook Stop em ~/.claude/settings.json
-├── mcp_manager.py          # CRUD do MCP postgres em ~/.claude.json (com backup)
-├── pty_session.py          # QObject que executa pty.fork e emite output_received
-├── sessions_search.py      # busca full-text nas sessões antigas
-├── skills_discovery.py     # varre skills/agents/commands (user+plugin+project)
-├── skills_telemetry.py     # agrega uso de Skills lendo tool_use dos JSONLs
-├── usage_telemetry.py      # agrega tokens/custo por workspace
-├── workspace_templates.py  # templates bundled + custom JSON
+├── logging_utils.py         # decorator @log_exceptions pra handlers Qt
+├── errors.py                # LaunchError + tipos de erro do domínio
+├── briefing_builder.py      # monta briefing de handoff (sem Qt)
+├── claude_activity.py       # parser puro do output do pty (status + working)
+├── claude_sessions.py       # leitura dos JSONLs em ~/.claude/projects/
+├── session_persistence.py   # save/restore das abas Claude ativas
+├── git_actions.py           # subprocess: stage, unstage, commit, checkout, discard
+├── git_status.py            # subprocess: branch, ahead/behind, porcelain
+├── git_worktree.py          # worktree add/remove + list_local_branches
+├── pr_actions.py            # gh push + gh pr create (subprocess)
+├── pr_draft.py              # gera título/corpo do PR a partir do diff
+├── pr_provider.py           # detecta o que está disponível (gh, branch, remote)
+├── hook_manager.py          # instala/remove hook Stop em ~/.claude/settings.json
+├── mcp_manager.py           # CRUD do MCP postgres em ~/.claude.json (com backup)
+├── pty_session.py           # QObject que executa pty.fork e emite output_received
+├── sessions_search.py       # busca full-text nas sessões antigas
+├── skills_discovery.py      # varre skills/agents/commands (user+plugin+project)
+├── skills_lint.py           # avisos sobre frontmatter mal formado
+├── skills_telemetry.py      # agrega uso de Skills lendo tool_use dos JSONLs
+├── usage_telemetry.py       # agrega tokens/custo por workspace
+├── workspace_templates.py   # templates bundled + custom JSON
+├── plugin_api.py            # API exposta aos plugins (run_in_terminal, notify, ...)
 │
-├── services/               # lógica de negócio extraída da UI (sem Qt)
-│   └── launch_planner.py   # plan_from_dialog, build_claude_argv
+├── plugins/                 # subsistema de plugins (manifest v2 — ver PLUGIN_SPEC.md)
+│   ├── manifest.py          # dataclass Manifest + ConfigField + Permission
+│   ├── manifest_loader.py   # parse de plugin.yaml + validações
+│   ├── bundle_validator.py  # rejeita bundle inválido antes de instalar
+│   ├── static_analyzer.py   # AST scan: import proibido, syscall, etc
+│   ├── registry.py          # CRUD de plugins instalados
+│   ├── storage.py           # paths em ~/.config/claude-workspaces/plugins/
+│   ├── config_store.py      # config per-plugin (auto-save)
+│   ├── runtime.py           # subprocess host (entrypoint + isolation)
+│   ├── events.py            # dispatch dos eventos do app pros plugins
+│   ├── semver.py            # versão compat checks
+│   └── errors.py            # RegistryError / ValidationError
+│
+├── services/               # lógica de negócio extraída da UI (sem Qt — ou só QObject leve)
+│   ├── launch_planner.py    # plan_from_dialog, build_claude_argv
+│   ├── desktop_notifier.py  # FDO Notifications via gdbus + QtDBus (sinais)
+│   ├── hooks_inspector.py   # agrega hooks de ~/.claude/settings.json + projects
+│   ├── mcp_inspector.py     # snapshot dos MCP servers configurados
+│   ├── plugin_host.py       # bridge UI ↔ plugins/runtime
+│   ├── quick_open.py        # `git ls-files` matcher (Ctrl+P, "em breve")
+│   ├── session_export.py    # dump da sessão JSONL pra md/json
+│   ├── skills_install.py    # download/instala skills de URL
+│   └── system_open.py       # xdg-open wrappers
 │
 └── ui/
-    ├── main_window.py            # QMainWindow + body_splitter + dock + sidebar
+    ├── main_window.py            # QMainWindow + activity bar + body_splitter + dock
+    ├── activity_bar.py           # coluna vertical de views top-level (VS Code-style)
     ├── theme.py                  # paleta + helpers de QSS (centralizado)
     ├── top_bar.py                # logo + busca + inbox bell + Configurar
     ├── right_dock.py             # tool strip vertical + QSplitter (panels)
@@ -64,21 +95,52 @@ src/claude_workspaces/
     ├── settings_panel.py
     ├── memory_panel.py           # editor de CLAUDE.md
     ├── skills_panel.py           # lista Skills/Agents/Commands com filtros
+    ├── skill_detail_dialog.py    # detalhe modal (uso no dock)
+    ├── skill_detail_view.py      # detalhe embedded (uso no Catálogo)
+    ├── skill_editor_dialog.py    # editor do frontmatter + body
+    ├── skill_playground_dialog.py
     ├── git_panel.py              # tree IntelliJ-style + commit area
+    ├── open_pr_dialog.py         # título/corpo do PR antes do gh pr create
     ├── mcp_dialog.py
+    ├── mcp_explorer_dialog.py    # (substituído pela MCP view, mas ainda usado)
+    ├── hooks_inspector_dialog.py # (substituído pela Hooks view, ainda usado)
+    ├── plugin_palette_dialog.py  # Ctrl+P → comandos dos plugins
+    ├── new_plugin_request_dialog.py
     ├── session_card.py
+    ├── session_export_dialog.py
     ├── sessions_search_dialog.py
     ├── shortcuts_dialog.py
+    │
+    ├── views/                    # views top-level (substituem o painel central)
+    │   ├── apps_view.py           # PWAs via QtWebEngine (perfil isolado)
+    │   ├── catalog_view.py        # skills + detalhe split
+    │   ├── hooks_view.py          # hooks inspector full-width
+    │   ├── mcp_view.py            # MCP servers full-width
+    │   └── plugins_view.py        # plugins instalados + detalhe
+    │
+    ├── coordinators/             # extraídos do MainWindow (sem widgets, só lógica)
+    │   ├── dock_coordinator.py
+    │   ├── launch_coordinator.py
+    │   ├── plugin_coordinator.py
+    │   ├── terminal_coordinator.py
+    │   └── workspace_coordinator.py
+    │
+    ├── builders/                 # construção de partes pesadas do MainWindow
+    │   ├── shortcuts_installer.py # install_shortcuts(mw)
+    │   ├── sidebar_builder.py
+    │   └── terminal_pane_builder.py
+    │
     ├── panels/
     │   └── base.py               # DockPanel Protocol + DockPanelSpec
+    │
     └── static/
         ├── terminal.html
         ├── terminal.js           # xterm.js wiring + fit aggressivo
         └── vendor/               # xterm.js + fit addon (vendoreado, sem CDN)
 
-tests/                      # pytest, 130+ testes
+tests/                      # pytest, 443 testes (lista atualizada via `ls tests/`)
 packaging/aur/              # PKGBUILD + .SRCINFO pro AUR
-docs/                       # USAGE, DEVELOPMENT, MAINTAINABILITY
+docs/                       # USAGE, DEVELOPMENT, MAINTAINABILITY, PLUGIN_SPEC, DISTRIBUTION
 ```
 
 ## Arquitetura
@@ -197,6 +259,38 @@ App-level dark palette + Fusion style são aplicados em `app.py` pra sobrescreve
 3. `launchers.py`: `IDE_LABEL["rustrover"] = "RustRover"`.
 4. `ui/settings_panel.py`: campo no form + save + refresh.
 
+## Como adicionar uma view top-level (activity bar)
+
+Padrão paralelo ao dock panels, mas a view ocupa a área central inteira:
+
+1. Crie o widget em `ui/views/<minha>_view.py` (siga o padrão das existentes — toolbar + corpo).
+2. Adicione constante em `ui/activity_bar.py`:
+   ```python
+   VIEW_MINHA = "minha"
+   ```
+3. Inclua a entrada no loop de botões do `ActivityBar.__init__` (ícone, id, tooltip).
+4. No `MainWindow`, registre o factory da view no stack que escuta `activity_bar.view_changed` (procure `VIEW_WORKSPACES` no `main_window.py`).
+5. Adicione o atalho em `ui/builders/shortcuts_installer.py`:
+   ```python
+   QShortcut(QKeySequence("Ctrl+Shift+7"), mw,
+             lambda: mw.activity_bar.activate(VIEW_MINHA))
+   ```
+6. Atualize `shortcuts_dialog.SHORTCUTS` na seção "Views".
+
+## Como adicionar um plugin
+
+Plugins são bundles externos — o app não muda. Veja `docs/PLUGIN_SPEC.md` pra spec do manifest v2 (eventos, permissões, ConfigField).
+
+Pra debug local:
+
+```bash
+.venv/bin/claude-workspaces  # abra a app
+# View 🧩 Plugins → "Instalar de pasta" → aponta pro bundle
+# Ver logs em ~/.config/claude-workspaces/plugins/<plugin>/.logs/
+```
+
+Exemplos prontos vivem em `examples/plugins/` no repo — o botão "Exemplos" dentro da view instala todos com um clique.
+
 ## Como adicionar um painel novo no dock
 
 1. Crie o widget seguindo o Protocol `DockPanel`:
@@ -242,29 +336,25 @@ Ou usuários podem dropar JSONs em `~/.config/claude-workspaces/templates/`:
 
 ## Testes
 
-```
-tests/
-├── test_claude_activity.py     # 12 — parser ANSI/status
-├── test_git_actions.py         # 12 — fixture repo tmp
-├── test_git_status.py          # 7
-├── test_git_worktree.py        # 10 — fixture repo tmp
-├── test_launch_planner.py      # 16 — worktree_creator + branch_checkout injetáveis
-├── test_mcp_manager.py         # 9 — fake ~/.claude.json
-├── test_models.py              # 11 — Workspace overrides incluídos
-├── test_sessions_search.py     # 10 — JSONL fixtures, since por mtime
-├── test_settings.py            # 4
-├── test_skills_discovery.py    # 9 — frontmatter + dedup project>user>plugin
-├── test_storage.py             # 4
-├── test_terminal_state.py      # 7 — release_tab + any_working
-├── test_usage_telemetry.py     # 8 — JSONL fixtures, cost por modelo
-└── test_workspace_templates.py # 7
-```
+**443 testes** distribuídos em ~30 arquivos de teste cobrindo:
+
+- domínio puro (activity parser, claude_sessions, sessions_search, briefing_builder, usage/skills telemetry, models, storage, settings, workspace_templates, semver dos plugins);
+- subprocess wrappers (git_actions, git_status, git_worktree, hook_manager, mcp_manager, pty_session, launchers);
+- services (launch_planner, mcp_inspector, hooks_inspector, skills_install, session_export);
+- PR pipeline (pr_actions, pr_draft, pr_provider);
+- plugins (manifest_loader, bundle_validator, static_analyzer, registry, runtime, events);
+- estado de UI sem Qt (terminal_state, terminal_coordinator);
+- dialogs com PySide6 instalado (skill_editor_dialog).
+
+Ver `tests/` pra lista atual — varia conforme features novas entram.
 
 Convenções:
 - Módulos puros são testáveis sem Qt (não importar PySide6 nos tests).
 - Pra testar paths em `~/.claude/`, use `monkeypatch.setattr(Path, "home", lambda: tmp_path)`.
 - Pra testar git_actions/git_worktree, use fixture `repo` que faz `git init` em tmp_path.
 - Pra testar `plan_from_dialog`, injete `worktree_creator` e `branch_checkout` fakes.
+- Pra testar `pr_actions`, monkeypatche `subprocess.run` (não chame `gh` de verdade).
+- Pra testar plugins, use fixtures de bundles válidos/inválidos em `tests/plugins/fixtures/`.
 
 ## CI (`.github/workflows/test.yml`)
 
