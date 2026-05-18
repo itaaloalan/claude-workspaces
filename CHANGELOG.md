@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.5] — 2026-05-18
+
+### Corrigido
+- **Runners do console não apareciam na sidebar após "Copiar do
+  workspace"**: `_install_console_runner_children` filtrava só pelo
+  `claimed_session_id` do terminal, mas a `RunnerArea` podia ter sido
+  criada com a chave pending e os runners stampados com ela enquanto o
+  session_id real ainda não tinha chegado. Agora também aceita o sid
+  da `RunnerArea` existente — qualquer match liga o runner ao
+  "Runners console" do item.
+
 ## [0.18.4] — 2026-05-18
 
 ### Alterado
