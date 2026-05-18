@@ -1305,16 +1305,15 @@ class MainWindow(QMainWindow):
                 term_item.removeChild(group_old)
                 self._console_runner_group_items.pop(gk, None)
             return
-        sid = term.claimed_session_id() or self._pending_console_key(term)
-        # Aceita também o sid da RunnerArea existente (pode divergir do
-        # `claimed_session_id` enquanto o session_id real não chegou — a
-        # area foi criada com a chave pending e os runners foram stampados
-        # com ela, mas o terminal já reportou a chave real).
-        sids = {sid}
+        # Fonte da verdade: se a RunnerArea do console já existe, usamos
+        # exatamente os runners que ela mostra (mesmo escopo aplicado lá).
+        # Senão, filtra por sid do terminal (claim/pending).
         existing_area = self._console_runner_areas.get(ws.id, {}).get(tab_id)
         if existing_area is not None:
-            sids.add(existing_area.console_session_id())
-        scoped = [r for r in ws.runners if (r.console_session_id or "") in sids]
+            scoped = existing_area.runners_in_scope()
+        else:
+            sid = term.claimed_session_id() or self._pending_console_key(term)
+            scoped = [r for r in ws.runners if (r.console_session_id or "") == sid]
         if not scoped:
             if group_old is not None:
                 term_item.removeChild(group_old)

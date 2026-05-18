@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.9] — 2026-05-18
+
+### Corrigido
+- **Sidebar lê os runners diretamente da RunnerArea do console**:
+  `_install_console_runner_children` parou de re-filtrar runners por
+  `console_session_id` (que diverge da `RunnerArea` quando o sid muda
+  durante a sessão) e agora pega exatamente o conjunto que a area já
+  exibe via `runners_in_scope()`. Garante paridade visual entre o
+  painel "Runners (console)" e o grupo "Runners console" da sidebar —
+  o que aparece num aparece no outro.
+
 ## [0.18.8] — 2026-05-18
 
 ### Corrigido
