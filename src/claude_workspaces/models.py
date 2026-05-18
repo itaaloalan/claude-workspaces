@@ -27,6 +27,13 @@ class RunnerConfig:
     # detectar. URL é aberta uma única vez por start.
     open_browser_on_ready: bool = False
     browser_url: str = ""               # override manual; vazio = autodetect
+    # Escopo do runner. Vazio = pertence ao workspace (comportamento
+    # antigo, aparece no painel inferior do workspace). Quando preenchido
+    # com o session_id de um console Claude, o runner pertence àquele
+    # console — só aparece dentro do painel embutido daquela aba, permite
+    # rodar várias instâncias do mesmo serviço com branch/porta diferentes
+    # em consoles paralelos.
+    console_session_id: str = ""
     id: str = field(default_factory=_new_id)
 
     def to_dict(self) -> dict:
@@ -46,6 +53,7 @@ class RunnerConfig:
             enabled=bool(data.get("enabled", True)),
             open_browser_on_ready=bool(data.get("open_browser_on_ready", False)),
             browser_url=str(data.get("browser_url", "")),
+            console_session_id=str(data.get("console_session_id", "")),
             id=str(data.get("id") or _new_id()),
         )
 

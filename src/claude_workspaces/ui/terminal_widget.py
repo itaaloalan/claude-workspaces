@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
@@ -65,6 +66,15 @@ class TerminalWidget(QWidget):
     running_changed = Signal(bool)
     # status_text, is_working, needs_decision
     activity_changed = Signal(str, bool, bool)
+    # Emitido quando o terminal resolve/reivindica um session_id de Claude.
+    # Permite ao painel embutido de runners atualizar seu filtro pra mostrar
+    # apenas runners daquele console.
+    claimed_session_id_changed = Signal(str)
+    # Solicita ao MainWindow criar/anexar o painel de runners embutido.
+    # MainWindow constrói a RunnerArea com o session_id atual e chama
+    # `set_runner_panel`. Sem essa indireção, o TerminalWidget precisaria
+    # conhecer Workspace/Settings, quebrando o nível de abstração.
+    runner_panel_toggle_requested = Signal()
 
     # IDs de sessões já reivindicadas por outros TerminalWidgets vivos.
     # Why: dois terminais no mesmo cwd disputam o mesmo dir de JSONLs e
@@ -165,6 +175,15 @@ class TerminalWidget(QWidget):
         )
         self._mode_btn.clicked.connect(self._open_mode_popup)
         toolbar.addWidget(self._mode_btn)
+        self._runners_btn = QPushButton("▤ Runners")
+        self._runners_btn.setCheckable(True)
+        self._runners_btn.setToolTip(
+            "Mostrar/ocultar painel de runners deste console. Runners criados "
+            "aqui pertencem só a esta aba — pode rodar várias instâncias "
+            "(branches/portas diferentes) sem conflito com outros consoles."
+        )
+        self._runners_btn.clicked.connect(self._on_runners_toggle)
+        toolbar.addWidget(self._runners_btn)
         self._stop_btn = QPushButton("Encerrar")
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.terminate)
@@ -191,7 +210,22 @@ class TerminalWidget(QWidget):
         html_path = STATIC_DIR / "terminal.html"
         self.view.setUrl(QUrl.fromLocalFile(str(html_path)))
 
-        outer.addWidget(self.view, stretch=1)
+        # Splitter vertical: topo = xterm; rodapé (opcional) = painel de
+        # runners do console. O painel é criado sob demanda (lazy) na
+        # primeira vez que o botão "▤ Runners" é clicado — assim consoles
+        # que nunca usam runners não pagam o custo de instanciar a área.
+        self._main_splitter = QSplitter(Qt.Orientation.Vertical, self)
+        self._main_splitter.addWidget(self.view)
+        self._runner_panel_host = QWidget()
+        self._runner_panel_host_layout = QVBoxLayout(self._runner_panel_host)
+        self._runner_panel_host_layout.setContentsMargins(0, 0, 0, 0)
+        self._runner_panel_host_layout.setSpacing(0)
+        self._runner_panel_host.setVisible(False)
+        self._main_splitter.addWidget(self._runner_panel_host)
+        self._main_splitter.setStretchFactor(0, 1)
+        self._main_splitter.setStretchFactor(1, 0)
+        self._runner_panel: QWidget | None = None
+        outer.addWidget(self._main_splitter, stretch=1)
 
         self._pending: tuple[list[str], str, str | None] | None = None
         self._bridge_ready = False
@@ -315,6 +349,10 @@ class TerminalWidget(QWidget):
             TerminalWidget._claimed_session_ids.discard(self._claimed_session_id)
         self._claimed_session_id = session_id
         TerminalWidget._claimed_session_ids.add(session_id)
+        # Informa o painel embutido (e MainWindow) que o session_id mudou —
+        # runners criados antes da resolução são re-stampados pra apontar
+        # pro id estável da sessão.
+        self.claimed_session_id_changed.emit(session_id)
 
     def release_session_claim(self) -> None:
         """Chamado quando o terminal é descartado — libera o ID claimed
@@ -625,6 +663,44 @@ class TerminalWidget(QWidget):
     def _emit_force_fit(self) -> None:
         if hasattr(self, "bridge") and self._bridge_ready:
             self.bridge.force_fit_requested.emit()
+
+    def _on_runners_toggle(self) -> None:
+        # Primeira vez: pede ao MainWindow pra construir e anexar o painel.
+        if self._runner_panel is None:
+            self.runner_panel_toggle_requested.emit()
+            # Se o slot anexou um painel, mostra-o; caso contrário desmarca.
+            visible = self._runner_panel is not None
+            self._runners_btn.setChecked(visible)
+            if visible:
+                self._show_runner_panel()
+            return
+        # Já existe: alterna visibilidade.
+        if self._runner_panel_host.isVisible():
+            self._runner_panel_host.setVisible(False)
+            self._runners_btn.setChecked(False)
+        else:
+            self._show_runner_panel()
+            self._runners_btn.setChecked(True)
+
+    def _show_runner_panel(self) -> None:
+        self._runner_panel_host.setVisible(True)
+        # Divide ~70/30 quando o painel é mostrado pela primeira vez.
+        total = max(self._main_splitter.height(), 400)
+        self._main_splitter.setSizes([int(total * 0.7), int(total * 0.3)])
+
+    def set_runner_panel(self, panel: QWidget | None) -> None:
+        """Anexa (ou desanexa) o painel de runners embutido neste terminal."""
+        # Remove o antigo, se houver — não destrói (o caller controla o ciclo).
+        if self._runner_panel is not None:
+            self._runner_panel_host_layout.removeWidget(self._runner_panel)
+            self._runner_panel.setParent(None)
+            self._runner_panel = None
+        if panel is not None:
+            self._runner_panel_host_layout.addWidget(panel)
+            self._runner_panel = panel
+
+    def runner_panel(self) -> QWidget | None:
+        return self._runner_panel
 
     def closeEvent(self, event) -> None:
         self.terminate()

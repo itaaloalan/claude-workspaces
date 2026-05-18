@@ -48,11 +48,16 @@ class RunnerArea(QWidget):
         workspace: Workspace,
         settings: Settings | None = None,
         parent: QWidget | None = None,
+        console_session_id: str = "",
     ) -> None:
         super().__init__(parent)
         self._ws = workspace
         self._settings = settings or Settings()
         self._running_count = 0
+        # "" → escopo workspace (mostra apenas runners sem console_session_id).
+        # Quando preenchido, é o session_id do console Claude dono deste painel
+        # e mostra apenas runners daquele console.
+        self._console_session_id = console_session_id
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -64,7 +69,8 @@ class RunnerArea(QWidget):
         h.setContentsMargins(8, 4, 8, 4)
         h.setSpacing(6)
 
-        h.addWidget(QLabel("Runners"))
+        label = "Runners (console)" if console_session_id else "Runners"
+        h.addWidget(QLabel(label))
         h.addStretch()
 
         self._run_all_btn = QPushButton("▶ Rodar todos")
@@ -136,6 +142,29 @@ class RunnerArea(QWidget):
     def workspace(self) -> Workspace:
         return self._ws
 
+    def console_session_id(self) -> str:
+        return self._console_session_id
+
+    def set_console_session_id(self, sid: str) -> None:
+        """Atualiza o session_id que este painel filtra. Usado pelo
+        TerminalWidget quando o session_id do Claude é resolvido tarde
+        (sessões novas só ganham id depois do primeiro flush do JSONL)."""
+        if sid == self._console_session_id:
+            return
+        # Migra runners pendentes (criados com sid antigo "") para o novo sid.
+        if self._console_session_id == "" and sid:
+            # Não migra automático — o painel embutido deve nascer já com sid
+            # ou esperar resolução. Apenas atualiza o filtro.
+            pass
+        self._console_session_id = sid
+        self._refresh_from_workspace()
+
+    def runners_in_scope(self) -> list[RunnerConfig]:
+        return [r for r in self._ws.runners if self._matches_scope(r)]
+
+    def _matches_scope(self, runner: RunnerConfig) -> bool:
+        return (runner.console_session_id or "") == self._console_session_id
+
     def running_count(self) -> int:
         return self._running_count
 
@@ -185,6 +214,8 @@ class RunnerArea(QWidget):
         primary = self._ws.primary_folder or ""
         seen_ids: set[str] = set()
         for runner in self._ws.runners:
+            if not self._matches_scope(runner):
+                continue
             seen_ids.add(runner.id)
             widget = existing.get(runner.id)
             if widget is None:
@@ -315,7 +346,12 @@ class RunnerArea(QWidget):
         if not path:
             return
         try:
-            export_runners(self._ws, path)
+            # Export sempre limita ao escopo deste painel — workspace
+            # exporta só workspace-scoped; painel de console exporta só
+            # daquele console (sem o session_id pra ser portável).
+            export_runners(
+                self._ws, path, console_session_id=self._console_session_id
+            )
         except OSError as e:
             QMessageBox.critical(self, "Erro ao exportar", str(e))
 
@@ -334,7 +370,9 @@ class RunnerArea(QWidget):
             )
             return
         try:
-            added, replaced = import_runners(self._ws, path)
+            added, replaced = import_runners(
+                self._ws, path, console_session_id=self._console_session_id
+            )
         except (OSError, ValueError) as e:
             QMessageBox.critical(self, "Erro ao importar rascunho", str(e))
             return
@@ -355,7 +393,9 @@ class RunnerArea(QWidget):
         if not path:
             return
         try:
-            added, replaced = import_runners(self._ws, path)
+            added, replaced = import_runners(
+                self._ws, path, console_session_id=self._console_session_id
+            )
         except (OSError, ValueError) as e:
             QMessageBox.critical(self, "Erro ao importar", str(e))
             return

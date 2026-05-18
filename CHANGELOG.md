@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.13.0] — 2026-05-18
+
+### Adicionado
+- **Runners por console**: cada aba Claude (console) ganha um painel
+  embutido de runners próprio, acessível pelo botão `▤ Runners` na
+  toolbar do terminal (splitter vertical: xterm em cima, painel embaixo).
+  Runners criados ali pertencem só àquele console — permite rodar
+  várias instâncias do mesmo serviço com branches/portas diferentes
+  em consoles paralelos, sem conflito com o painel inferior do
+  workspace. Persistência via `console_session_id` do `RunnerConfig`,
+  apontando pro `session_id` do Claude (resume re-vincula os runners
+  do console automaticamente). Runners sem `console_session_id`
+  continuam no painel inferior do workspace (default, antigo).
+  Import/export e merge por nome respeitam o escopo (workspace exporta
+  só workspace; console exporta só daquele console, sem persistir o
+  id da sessão pra ser portável).
+
 ## [0.12.0] — 2026-05-18
 
 ### Adicionado
