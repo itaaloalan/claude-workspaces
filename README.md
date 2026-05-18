@@ -2,6 +2,8 @@
 
 Gerenciador de workspaces e console multi-sessão pra Claude Code, com terminal embutido, dock de ferramentas e visibilidade do que cada agente está fazendo.
 
+Inspirado em [superset-sh/superset](https://github.com/superset-sh/superset).
+
 ![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-556-green)
 
 ## O problema
