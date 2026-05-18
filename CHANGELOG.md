@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.0] — 2026-05-18
+
+### Adicionado
+- **Diálogo de "Trocar branch" com filtro incremental**: no menu de
+  contexto do repo, "⎇ Trocar branch…" agora abre um picker com
+  campo de busca e lista navegável por setas/Enter. Antes era um
+  submenu plano que ficava impossível de operar em repos com muitas
+  branches (rolagem infinita, sem busca).
+
 ## [0.17.1] — 2026-05-18
 
 ### Alterado
