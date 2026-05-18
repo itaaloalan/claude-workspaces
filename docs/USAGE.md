@@ -69,14 +69,15 @@ Cada workspace que tem console aberto vira expansível. Cada filho mostra:
 
 Estados (cor + ícone):
 - **Trabalhando** (amarelo + spinner ⠋⠙⠹…): Claude está pensando ou rodando tool
-- **Aguardando** (laranja + ❚❚): Claude terminou turno, espera input
+- **Aguardando** (laranja + !): Claude exibiu um permission prompt — precisa que você escolha algo
+- **Ocioso** (azul-cinza + ❚❚): Claude terminou o turno e está no prompt principal sem nada pendente
 - **Concluído** (verde + ✓): processo do Claude encerrado
 
 **Double-click** num filho foca a aba do terminal correspondente. Sessões antigas (do histórico) aparecem como children também — double-click retoma via `--resume` no terminal embutido.
 
 ## Inbox global (bell 🔔) + notificações nativas
 
-Quando algum console transiciona de **Trabalhando → Aguardando**, ele entra no inbox global e o bell fica laranja com contador. Click no bell → menu com lista; click num item pula pro workspace + aba correspondente e remove do inbox.
+Quando algum console sai do estado **Trabalhando** (transição working → Ocioso ou Aguardando), ele entra no inbox global e o bell fica laranja com contador. Click no bell → menu com lista; click num item pula pro workspace + aba correspondente e remove do inbox.
 
 Inbox também limpa quando: você foca o tab manualmente, o tab é fechado, ou clica em "Limpar inbox".
 

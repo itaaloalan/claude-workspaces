@@ -11,19 +11,22 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWi
 
 # Estados visíveis na UI
 STATE_WORKING = "working"
-STATE_IDLE = "idle"
+STATE_AWAITING = "awaiting"  # Claude pediu decisão (permission prompt)
+STATE_IDLE = "idle"          # Claude terminou turno, no prompt principal
 STATE_DONE = "done"
 
 
 STATE_LABEL = {
     STATE_WORKING: "Trabalhando",
-    STATE_IDLE: "Aguardando",
+    STATE_AWAITING: "Aguardando",
+    STATE_IDLE: "Ocioso",
     STATE_DONE: "Concluído",
 }
 
 STATE_COLOR = {
     STATE_WORKING: "#e0b86a",  # amber
-    STATE_IDLE: "#e09060",     # orange
+    STATE_AWAITING: "#e09060", # orange — chama atenção, pede ação
+    STATE_IDLE: "#7a8a9a",     # azul-cinza neutro — só "no prompt"
     STATE_DONE: "#5ac35a",     # green
 }
 
@@ -116,6 +119,8 @@ class TerminalChildWidget(QWidget):
     ) -> None:
         if state == STATE_WORKING:
             self._icon.setText(spinner_char)
+        elif state == STATE_AWAITING:
+            self._icon.setText("!")
         elif state == STATE_IDLE:
             self._icon.setText("❚❚")
         else:

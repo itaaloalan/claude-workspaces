@@ -73,6 +73,7 @@ from .shortcuts_dialog import ShortcutsDialog
 from .skills_panel import SkillsPanel
 from .terminal_area import TerminalArea
 from .terminal_child_widget import (
+    STATE_AWAITING,
     STATE_DONE,
     STATE_IDLE,
     STATE_WORKING,
@@ -1005,21 +1006,24 @@ class MainWindow(QMainWindow):
         is_working: bool,
         is_running: bool,
         workspace_id: str,
+        needs_decision: bool = False,
     ) -> None:
         """Slot do TerminalCoordinator.tab_activity_changed.
         Atualiza o tree child. Inbox/spinner já foram tratados no coord."""
         self.plugin_coord.dispatch_session_event(
-            tab_id, workspace_id, title, is_working, is_running
+            tab_id, workspace_id, title, is_working, is_running, needs_decision
         )
 
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is None:
             return
         if tab_id in self.terminals_coord.state.tree_items:
-            self._update_terminal_child(tab_id, title, status, is_working, is_running)
+            self._update_terminal_child(
+                tab_id, title, status, is_working, is_running, needs_decision
+            )
         else:
             self._add_terminal_child(
-                ws_item, tab_id, title, status, is_working, is_running
+                ws_item, tab_id, title, status, is_working, is_running, needs_decision
             )
 
     def _handle_tab_removed(self, tab_id: int) -> None:
@@ -1291,11 +1295,15 @@ class MainWindow(QMainWindow):
                 self.terminal_host.setCurrentWidget(area)
                 break
 
-    def _resolve_state(self, is_working: bool, is_running: bool) -> str:
+    def _resolve_state(
+        self, is_working: bool, is_running: bool, needs_decision: bool = False
+    ) -> str:
         if not is_running:
             return STATE_DONE
         if is_working:
             return STATE_WORKING
+        if needs_decision:
+            return STATE_AWAITING
         return STATE_IDLE
 
     def _terminal_widget_for(self, tab_id: int) -> TerminalWidget | None:
@@ -1317,6 +1325,7 @@ class MainWindow(QMainWindow):
         status: str,
         is_working: bool,
         is_running: bool,
+        needs_decision: bool = False,
     ) -> None:
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, tab_id)
@@ -1328,7 +1337,7 @@ class MainWindow(QMainWindow):
             full_title = term.full_title() or title
         self._tab_base_titles[tab_id] = title
         widget.set_title(title, full_title)
-        state = self._resolve_state(is_working, is_running)
+        state = self._resolve_state(is_working, is_running, needs_decision)
         widget.update_state(
             state,
             status,
@@ -1352,6 +1361,7 @@ class MainWindow(QMainWindow):
         status: str,
         is_working: bool,
         is_running: bool,
+        needs_decision: bool = False,
     ) -> None:
         item = self.terminals_coord.state.tree_items.get(tab_id)
         if item is None:
@@ -1367,7 +1377,7 @@ class MainWindow(QMainWindow):
         self._tab_base_titles[tab_id] = title
         display = self._compute_disambiguated_title(item.parent(), tab_id, title)
         widget.set_title(display, full_title)
-        state = self._resolve_state(is_working, is_running)
+        state = self._resolve_state(is_working, is_running, needs_decision)
         widget.update_state(
             state,
             status,

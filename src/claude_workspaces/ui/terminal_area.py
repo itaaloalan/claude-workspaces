@@ -10,7 +10,8 @@ class TerminalArea(QWidget):
 
     running_count_changed = Signal(int)
     # tab_id é id() do widget — pode passar de 2^31, então usa qint64
-    tab_activity_changed = Signal("qint64", str, str, bool, bool)
+    # (tab_id, title, status, is_working, is_running, needs_decision)
+    tab_activity_changed = Signal("qint64", str, str, bool, bool, bool)
     tab_removed = Signal("qint64")
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -35,16 +36,20 @@ class TerminalArea(QWidget):
             lambda running, w=widget: self._mark_tab_state(w, running)
         )
         widget.running_changed.connect(
-            lambda running, w=widget: self._emit_activity(w, w._last_status, running)
+            lambda running, w=widget: self._emit_activity(
+                w, w._last_status, running, w._last_needs_decision
+            )
         )
         widget.activity_changed.connect(
-            lambda status, working, w=widget: self._emit_activity(w, status, working)
+            lambda status, working, needs_decision, w=widget: self._emit_activity(
+                w, status, working, needs_decision
+            )
         )
         idx = self.tabs.addTab(widget, title)
         self.tabs.setCurrentIndex(idx)
         widget.setProperty("_base_title", title)
         # Emite estado inicial
-        self.tab_activity_changed.emit(id(widget), title, "", False, False)
+        self.tab_activity_changed.emit(id(widget), title, "", False, False, False)
         return widget
 
     def _mark_tab_state(self, widget: TerminalWidget, running: bool) -> None:
@@ -58,7 +63,11 @@ class TerminalArea(QWidget):
             self.tabs.setTabText(idx, f"✓ {base}")
 
     def _emit_activity(
-        self, widget: TerminalWidget, status: str, is_working: bool
+        self,
+        widget: TerminalWidget,
+        status: str,
+        is_working: bool,
+        needs_decision: bool = False,
     ) -> None:
         if self.tabs.indexOf(widget) < 0:
             return
@@ -66,7 +75,12 @@ class TerminalArea(QWidget):
         # já tiver sido resolvido; fallback pro título base da aba
         title = widget.effective_title()
         self.tab_activity_changed.emit(
-            id(widget), title, status, is_working, widget.is_running()
+            id(widget),
+            title,
+            status,
+            is_working,
+            widget.is_running(),
+            needs_decision,
         )
 
     def count(self) -> int:

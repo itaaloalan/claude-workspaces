@@ -10,6 +10,10 @@ Heurística:
   Sem esse indicador, NÃO marca como working — mesmo que tenha tido
   output recente (footer/prompt repintando, cursor piscando etc.).
 - Fallback genérico (shell qualquer): output recente + sem prompt → working.
+- Detecção POSITIVA de awaiting-decision: procura padrões de prompt de
+  permissão do Claude ("Do you want to proceed?" + opções numeradas com
+  setas "❯"). Sem esse indicador, NÃO marca como awaiting — Claude no
+  prompt principal depois de terminar um turno é "ocioso", não "aguardando".
 """
 
 import logging
@@ -65,6 +69,16 @@ PROMPT_READY_MARKERS = (
 # Casa pelo prefixo "* <word>" + "tokens" na mesma linha.
 WORKING_RE = re.compile(r"\*\s+\w+.*?tokens", re.IGNORECASE)
 
+# Indicadores positivos de "Claude está pedindo decisão" (permission prompt,
+# escolha de tool, confirmação). Frases canônicas que o TUI usa:
+#   "Do you want to proceed?"
+#   "Do you want to make this edit to Foo.java?"
+#   "Do you want me to..."
+# Também casa quando aparece a seta de seleção "❯" seguida de "1." próximo
+# do fim — esse padrão é usado em todos os prompts de escolha numerada.
+DECISION_QUESTION_RE = re.compile(r"\bdo you want\b", re.IGNORECASE)
+DECISION_CHOICE_RE = re.compile(r"❯\s*\d+\.")
+
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
 
 PROMPT_TAILS = (">", "$", "%", "#")
@@ -74,6 +88,7 @@ PROMPT_TAILS = (">", "$", "%", "#")
 class Activity:
     status: str
     is_working: bool
+    needs_decision: bool = False
 
 
 def strip_ansi(text: str) -> str:
@@ -118,6 +133,16 @@ def _has_working_marker(lines: list[str]) -> bool:
         if WORKING_RE.search(line):
             return True
     return False
+
+
+def _has_decision_prompt(lines: list[str]) -> bool:
+    """True se as últimas linhas contêm um permission prompt do Claude.
+    Janela maior (12) porque o "Do you want to..." pode ficar algumas
+    linhas acima da seta "❯ 1." de escolha."""
+    tail = lines[-12:]
+    has_question = any(DECISION_QUESTION_RE.search(ln) for ln in tail)
+    has_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
+    return has_question and has_choice
 
 
 def _looks_like_prompt(line: str) -> bool:
@@ -218,4 +243,10 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
         # Fallback pra shells genéricos sem markers do Claude.
         is_working = recent and not looks_prompt
 
-    return Activity(status=display, is_working=is_working)
+    # Decisão pendente só vale quando Claude NÃO está trabalhando — durante
+    # working o buffer pode arrastar restos de prompt anterior.
+    needs_decision = (not is_working) and _has_decision_prompt(lines)
+
+    return Activity(
+        status=display, is_working=is_working, needs_decision=needs_decision
+    )

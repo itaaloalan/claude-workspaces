@@ -154,3 +154,67 @@ def test_has_idle_marker_falso_quando_idle_muito_antigo():
     pode ter trabalhado de novo desde então."""
     buf = b"auto mode on\n" + b"linha\n" * 10
     assert has_idle_marker(buf) is False
+
+
+# ---------- needs_decision (permission prompt) ----------
+
+
+def test_needs_decision_false_quando_idle_normal():
+    """Claude no prompt principal sem pedir nada — não é 'aguardando'."""
+    buf = (
+        b"Resposta finalizada.\n"
+        b"auto-mode on (shift+tab to cycle)\n"
+    )
+    a = parse_status(buf, last_output_age=5)
+    assert a.is_working is False
+    assert a.needs_decision is False
+
+
+def test_needs_decision_true_em_permission_prompt():
+    """'Do you want to...' + setas numeradas → awaiting."""
+    buf = (
+        b"Bash command\n"
+        b"  rm -rf /tmp/foo\n"
+        b"\n"
+        b"Do you want to proceed?\n"
+        b"\xe2\x9d\xaf 1. Yes\n"
+        b"  2. Yes, and don't ask again this session\n"
+        b"  3. No, and tell Claude what to do differently\n"
+    )
+    a = parse_status(buf, last_output_age=5)
+    assert a.is_working is False
+    assert a.needs_decision is True
+
+
+def test_needs_decision_true_com_make_edit():
+    """Variante: 'Do you want to make this edit?'"""
+    buf = (
+        b"Edit src/Foo.java\n"
+        b"Do you want to make this edit to Foo.java?\n"
+        b"\xe2\x9d\xaf 1. Yes\n"
+        b"  2. No\n"
+    )
+    a = parse_status(buf, last_output_age=5)
+    assert a.needs_decision is True
+
+
+def test_needs_decision_false_quando_working():
+    """Mesmo com 'Do you want to' velho no buffer, se Claude está
+    trabalhando agora não é 'aguardando' — working tem prioridade."""
+    buf = (
+        b"Do you want to proceed?\n"
+        b"\xe2\x9d\xaf 1. Yes\n"
+        b"User responded.\n"
+        b"* Stewing... (3s, 800 tokens, esc to interrupt)\n"
+    )
+    a = parse_status(buf, last_output_age=0.3)
+    assert a.is_working is True
+    assert a.needs_decision is False
+
+
+def test_needs_decision_false_sem_setas_de_escolha():
+    """'Do you want' em texto livre, sem setas numeradas, não conta
+    como permission prompt (evita falso positivo em conversa)."""
+    buf = b"User asked: do you want me to run the tests?\nClaude: sure.\n"
+    a = parse_status(buf, last_output_age=5)
+    assert a.needs_decision is False

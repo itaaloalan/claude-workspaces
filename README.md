@@ -13,8 +13,8 @@ O Claude Code é poderoso mas trabalhar em vários projetos ao mesmo tempo vira 
 - **Workspaces**: cada projeto tem um nome, lista de pastas e configurações próprias. Abrir o Claude num workspace passa essas pastas como contexto isolado.
 - **Terminal embutido** (xterm.js + pty): múltiplas abas de Claude por workspace, sem janelas externas.
 - **Activity bar**: coluna vertical à esquerda com views top-level — Workspaces, Catálogo (skills/agents/commands), Hooks, MCP servers, Plugins, Apps. Atalhos `Ctrl+Shift+1..6`.
-- **Inbox global + notificações nativas**: bell no topbar (transição "Aguardando"), `QSystemTrayIcon` no painel do sistema com menu da inbox e re-lembretes a cada N minutos. Em sessões com D-Bus, a notificação ganha botões **Abrir / Adiar / Já vi**.
-- **Sidebar com árvore de atividade**: cada console rodando aparece sob seu workspace com estado em tempo real (Trabalhando · spinner / Aguardando ❚❚ / Concluído ✓) e o título da sessão.
+- **Inbox global + notificações nativas**: bell no topbar (transição working → não-working), `QSystemTrayIcon` no painel do sistema com menu da inbox e re-lembretes a cada N minutos. Em sessões com D-Bus, a notificação ganha botões **Abrir / Adiar / Já vi**.
+- **Sidebar com árvore de atividade**: cada console rodando aparece sob seu workspace com estado em tempo real (Trabalhando · spinner / Aguardando ! / Ocioso ❚❚ / Concluído ✓) e o título da sessão. "Aguardando" só aparece quando Claude exibe um permission prompt — turnos terminados sem ação pendente ficam como "Ocioso".
 - **Restaura abas Claude**: ao fechar o app, salva as sessões Claude em curso e reabre tudo com `--resume` no próximo startup.
 - **Worktrees opcionais**: ao abrir Claude, escolha se quer isolar em git worktree numa nova branch (ou existente) — útil pra rodar múltiplos agentes no mesmo repo em paralelo.
 - **Painel Git estilo IntelliJ**: árvore de arquivos com checkboxes pra seletivamente staged + commit inline. Right-click pra Add/Unstage/Rollback/Delete.

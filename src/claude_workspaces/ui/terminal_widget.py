@@ -63,7 +63,8 @@ class TerminalBridge(QObject):
 
 class TerminalWidget(QWidget):
     running_changed = Signal(bool)
-    activity_changed = Signal(str, bool)  # status_text, is_working
+    # status_text, is_working, needs_decision
+    activity_changed = Signal(str, bool, bool)
 
     # IDs de sessões já reivindicadas por outros TerminalWidgets vivos.
     # Why: dois terminais no mesmo cwd disputam o mesmo dir de JSONLs e
@@ -81,6 +82,7 @@ class TerminalWidget(QWidget):
         self._activity_timer.timeout.connect(self._poll_activity)
         self._last_status = ""
         self._last_working = False
+        self._last_needs_decision = False
         self._activity_dirty = False
         # Context Claude (cwd + resume) pra descobrir o título da sessão
         # via scan do ~/.claude/projects/<cwd>/*.jsonl
@@ -167,7 +169,7 @@ class TerminalWidget(QWidget):
             else:
                 self._activity_timer.stop()
                 # Emite estado final "idle" pra UI limpar o spinner
-                self.activity_changed.emit("(encerrado)", False)
+                self.activity_changed.emit("(encerrado)", False, False)
 
     def is_running(self) -> bool:
         return self._is_running
@@ -310,10 +312,14 @@ class TerminalWidget(QWidget):
         if (
             activity.status != self._last_status
             or activity.is_working != self._last_working
+            or activity.needs_decision != self._last_needs_decision
         ):
             self._last_status = activity.status
             self._last_working = activity.is_working
-            self.activity_changed.emit(activity.status, activity.is_working)
+            self._last_needs_decision = activity.needs_decision
+            self.activity_changed.emit(
+                activity.status, activity.is_working, activity.needs_decision
+            )
 
     def when_claude_ready(
         self,

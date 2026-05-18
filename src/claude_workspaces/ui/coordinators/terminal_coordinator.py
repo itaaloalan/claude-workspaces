@@ -9,7 +9,7 @@ Centraliza:
 
 Emite signals pra UI consumir:
 - workspace_running_changed(workspace_id, count): badge na sidebar
-- tab_activity_changed(workspace_id, tab_id, title, status, working, running)
+- tab_activity_changed(tab_id, title, status, working, running, workspace_id, needs_decision)
 - tab_removed(tab_id)
 - inbox_changed(count): pra atualizar bell badge
 - inbox_alert(tab_id, info, is_reminder): notificação nativa — primeiro
@@ -43,8 +43,8 @@ REMINDER_TICK_MS = 5000  # checa a cada 5s — barato e responsivo
 
 class TerminalCoordinator(QObject):
     workspace_running_changed = Signal(str, int)
-    tab_activity_changed = Signal("qint64", str, str, bool, bool, str)
-    # tab_id, title, status, is_working, is_running, workspace_id
+    tab_activity_changed = Signal("qint64", str, str, bool, bool, str, bool)
+    # tab_id, title, status, is_working, is_running, workspace_id, needs_decision
     tab_removed = Signal("qint64")
     inbox_changed = Signal(int)
     inbox_alert = Signal("qint64", dict, bool)  # tab_id, info, is_reminder
@@ -77,9 +77,9 @@ class TerminalCoordinator(QObject):
                 lambda c, wid=ws_id: self._on_running_count_changed(wid, c)
             )
             area.tab_activity_changed.connect(
-                lambda tab_id, title, status, working, running, wid=ws_id:
+                lambda tab_id, title, status, working, running, needs_decision, wid=ws_id:
                     self._on_tab_activity(
-                        wid, tab_id, title, status, working, running
+                        wid, tab_id, title, status, working, running, needs_decision
                     )
             )
             area.tab_removed.connect(self._on_tab_removed)
@@ -121,6 +121,7 @@ class TerminalCoordinator(QObject):
         status: str,
         is_working: bool,
         is_running: bool,
+        needs_decision: bool = False,
     ) -> None:
         prev = self.state.activity.get(tab_id, ("", False, title))
         prev_working = prev[1]
@@ -164,7 +165,7 @@ class TerminalCoordinator(QObject):
             self._spinner_timer.stop()
 
         self.tab_activity_changed.emit(
-            tab_id, title, status, is_working, is_running, workspace_id
+            tab_id, title, status, is_working, is_running, workspace_id, needs_decision
         )
 
     def _on_tab_removed(self, tab_id: int) -> None:

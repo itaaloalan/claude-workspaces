@@ -161,6 +161,7 @@ class PluginCoordinator(QObject):
         title: str,
         is_working: bool,
         is_running: bool,
+        needs_decision: bool = False,
     ) -> None:
         """Mantém o cache de sessões e despacha session.* pro plugin bus.
 
@@ -170,7 +171,7 @@ class PluginCoordinator(QObject):
             return
         ws = self._workspace_lookup(workspace_id)
         ws_name = ws.name if ws else workspace_id
-        new_status = _plugin_session_status_for(is_working, is_running)
+        new_status = _plugin_session_status_for(is_working, is_running, needs_decision)
         cached = self._session_cache.get(tab_id)
         now = time.monotonic()
         if cached is None:
@@ -388,14 +389,21 @@ class PluginCoordinator(QObject):
             log.warning("Plugin %s ao recarregar: %s", plugin_id, e)
 
 
-def _plugin_session_status_for(is_working: bool, is_running: bool) -> str:
-    """Mapeia o estado interno (working/running) pros status da spec.
+def _plugin_session_status_for(
+    is_working: bool, is_running: bool, needs_decision: bool = False
+) -> str:
+    """Mapeia o estado interno (working/running/decision) pros status da spec.
 
     Tabela:
-    - running + working → 'running'
-    - running + idle    → 'awaiting-input'
-    - !running          → 'completed'
+    - !running                         → 'completed'
+    - running + working                → 'running'
+    - running + needs_decision         → 'awaiting-input' (permission prompt)
+    - running + !working + !decision   → 'idle' (no prompt, sem ação pendente)
     """
     if not is_running:
         return "completed"
-    return "running" if is_working else "awaiting-input"
+    if is_working:
+        return "running"
+    if needs_decision:
+        return "awaiting-input"
+    return "idle"
