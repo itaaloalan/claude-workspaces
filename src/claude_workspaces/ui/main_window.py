@@ -125,6 +125,8 @@ class MainWindow(QMainWindow):
         # RunnerArea lazy; índice 0 do runner_host é um placeholder.
         self._runner_areas: dict[str, RunnerArea] = {}
         self._runner_placeholder_idx: int = 0
+        # workspace_id → { runner_id → QTreeWidgetItem } (footer rows na sidebar)
+        self._runner_tree_items: dict[str, dict[str, "QTreeWidgetItem"]] = {}
         self._sidebar_last_size: int = SIDEBAR_DEFAULT_W
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
@@ -971,6 +973,7 @@ class MainWindow(QMainWindow):
 
         self.list_widget.clear()
         self.terminals_coord.state.tree_items.clear()
+        self._runner_tree_items.clear()
 
         from PySide6.QtGui import QFont
 
@@ -1011,6 +1014,13 @@ class MainWindow(QMainWindow):
                     self.terminals_coord.state.activity.get(tab_id, ("", False, base_title))[1],
                     widget.is_running(),
                 )
+
+        # Footer: runners por workspace, sempre ao final dos children.
+        for i in range(self.list_widget.topLevelItemCount()):
+            it = self.list_widget.topLevelItem(i)
+            ws_data = it.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(ws_data, Workspace):
+                self._install_runner_children(it, ws_data)
 
         if current_id:
             ws_item = self._find_workspace_item(current_id)
@@ -1115,6 +1125,80 @@ class MainWindow(QMainWindow):
         )
         self.list_widget.setItemWidget(item, 0, widget)
 
+    def _install_runner_children(
+        self, ws_item: "QTreeWidgetItem", ws: Workspace
+    ) -> None:
+        """Cria/atualiza as linhas de runner ("footer") embaixo do
+        workspace na sidebar. Cada runner vira um child com nome + dot
+        de estado + botão ▶/■. Double-click abre a aba Runners e foca
+        o runner correspondente."""
+        from .runner_child_widget import RunnerChildWidget
+
+        # Remove rows antigos
+        existing = self._runner_tree_items.get(ws.id, {})
+        for rid, item in list(existing.items()):
+            parent = item.parent()
+            if parent is not None:
+                parent.removeChild(item)
+        self._runner_tree_items[ws.id] = {}
+
+        if not ws.runners:
+            return
+
+        for runner in ws.runners:
+            child = QTreeWidgetItem()
+            child.setData(0, Qt.ItemDataRole.UserRole, ("runner", ws.id, runner.id))
+            child.setSizeHint(0, QSize(0, 24))
+            widget = RunnerChildWidget(
+                runner.name or "(runner)",
+                lambda rid=runner.id, wid=ws.id: self._toggle_runner_from_sidebar(wid, rid),
+            )
+            # Estado inicial reflete RunnerWidget se já existir
+            area = self._runner_areas.get(ws.id)
+            if area is not None:
+                rw = area.widget_for(runner.id)
+                if rw is not None:
+                    widget.set_state(rw.current_state())
+            ws_item.addChild(child)
+            self.list_widget.setItemWidget(child, 0, widget)
+            self._runner_tree_items[ws.id][runner.id] = child
+
+    def _toggle_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
+        """Inicia/para um runner pela sidebar. Cria a RunnerArea sob
+        demanda (lazy) — necessário pra workspaces nunca abertos."""
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is None:
+            return
+        area = self._get_or_create_runner_area(ws)
+        rw = area.widget_for(runner_id)
+        if rw is None:
+            return
+        if rw.is_running():
+            rw.stop()
+        else:
+            rw.start()
+
+    def _refresh_runner_children(self, workspace_id: str) -> None:
+        ws_item = self._find_workspace_item(workspace_id)
+        if ws_item is None:
+            return
+        ws = ws_item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(ws, Workspace):
+            return
+        self._install_runner_children(ws_item, ws)
+
+    def _on_runner_state_changed(
+        self, workspace_id: str, runner_id: str, state: str
+    ) -> None:
+        from .runner_child_widget import RunnerChildWidget
+
+        item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
+        if item is None:
+            return
+        widget = self.list_widget.itemWidget(item, 0)
+        if isinstance(widget, RunnerChildWidget):
+            widget.set_state(state)
+
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:
             self.terminals_coord.state.running_counts.pop(workspace_id, None)
@@ -1171,9 +1255,25 @@ class MainWindow(QMainWindow):
         pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(pdata, Workspace):
             return
+        # Linha de runner ("footer") → abre aba Runners + foca o runner
+        if (
+            isinstance(data, tuple)
+            and len(data) == 3
+            and data[0] == "runner"
+        ):
+            self._open_runner_from_sidebar(pdata, data[2])
+            return
         if not isinstance(data, int):  # tab_id
             return
         self._focus_terminal_tab(pdata, data)
+
+    def _open_runner_from_sidebar(self, workspace: Workspace, runner_id: str) -> None:
+        """Switch pro bottom tab "Runners", garante a RunnerArea do
+        workspace e foca a aba do runner."""
+        area = self._get_or_create_runner_area(workspace)
+        self.runner_host.setCurrentWidget(area)
+        self._bottom_tabs.setCurrentWidget(self.runner_host)
+        area.focus_runner(runner_id)
 
     def _focus_terminal_tab(self, workspace: Workspace, tab_id: int) -> None:
         area = self.terminals_coord._areas.get(workspace.id)
@@ -1232,8 +1332,14 @@ class MainWindow(QMainWindow):
             lambda w=ws: self._generate_runner_with_claude(w)
         )
         area.runners_changed.connect(lambda w=ws: self._persist_workspace(w))
+        area.runners_changed.connect(
+            lambda wid=ws.id: self._refresh_runner_children(wid)
+        )
         area.running_count_changed.connect(
             lambda count, wid=ws.id: self._on_runner_running(wid, count)
+        )
+        area.runner_state_changed.connect(
+            lambda rid, state, wid=ws.id: self._on_runner_state_changed(wid, rid, state)
         )
         return area
 
@@ -1739,7 +1845,16 @@ class MainWindow(QMainWindow):
             status,
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
-        ws_item.addChild(child)
+        # Insere antes do "footer" de runners (que mora no final do
+        # workspace) — garante que consoles ficam acima dos runners.
+        runner_count = len(self._runner_tree_items.get(
+            ws_item.data(0, Qt.ItemDataRole.UserRole).id
+            if isinstance(ws_item.data(0, Qt.ItemDataRole.UserRole), Workspace)
+            else "",
+            {},
+        ))
+        insert_at = ws_item.childCount() - runner_count
+        ws_item.insertChild(insert_at, child)
         self.list_widget.setItemWidget(child, 0, widget)
         # Conecta os botões inline (▶ ⚙) à TerminalWidget correspondente.
         # Visibilidade respeita o toggle do header WORKSPACES.

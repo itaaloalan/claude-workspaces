@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.9.0] — 2026-05-18
+
+### Adicionado
+- **Footer de runners por workspace na sidebar**: cada runner aparece
+  como uma linha compacta no fim do bloco do workspace, com nome, dot
+  de estado (verde rodando, vermelho erro, cinza parado/idle) e botão
+  ▶/■ pra iniciar/parar direto da sidebar — sem precisar abrir a aba
+  Runners. Double-click na linha abre a aba Runners e foca o runner
+  correspondente. RunnerArea é criada sob demanda quando o ▶ é
+  clicado, então workspaces nunca abertos não pagam o custo do
+  QWebEngineView até o usuário interagir.
+
 ## [0.8.4] — 2026-05-18
 
 ### Mudado

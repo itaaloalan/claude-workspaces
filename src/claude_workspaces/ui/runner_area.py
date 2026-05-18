@@ -41,6 +41,7 @@ class RunnerArea(QWidget):
 
     runners_changed = Signal()
     running_count_changed = Signal(int)
+    runner_state_changed = Signal(str, str)  # runner_id, state
 
     def __init__(
         self,
@@ -138,6 +139,23 @@ class RunnerArea(QWidget):
     def running_count(self) -> int:
         return self._running_count
 
+    def widget_for(self, runner_id: str) -> RunnerWidget | None:
+        """Retorna o RunnerWidget de um runner pelo id, ou None."""
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget) and w.runner_id() == runner_id:
+                return w
+        return None
+
+    def focus_runner(self, runner_id: str) -> bool:
+        """Foca a aba do runner pelo id. Retorna True se achou."""
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget) and w.runner_id() == runner_id:
+                self.tabs.setCurrentIndex(i)
+                return True
+        return False
+
     def close_all(self) -> None:
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
@@ -200,6 +218,7 @@ class RunnerArea(QWidget):
     def _on_runner_state(self, widget: RunnerWidget) -> None:
         self._recompute_running_count()
         self._update_tab_color(widget)
+        self.runner_state_changed.emit(widget.runner_id(), widget.current_state())
 
     def _update_tab_text(self, widget: RunnerWidget, name: str) -> None:
         idx = self.tabs.indexOf(widget)
