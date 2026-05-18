@@ -6,6 +6,14 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.13] — 2026-05-18
+
+### Corrigido
+- **Recalibração do limite 5h**: `plan_usd_limit_5h` 420 → 375 com base em
+  segundo ponto real (claude.ai 7% com `cost_usd` $26.24 → $375). Sidebar
+  agora bate mais perto do número do claude.ai. Ajuste fino via
+  `settings.json` se a divergência voltar.
+
 ## [0.7.12] — 2026-05-18
 
 ### Adicionado

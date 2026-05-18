@@ -74,11 +74,11 @@ class Settings:
     show_terminal_actions: bool = True
     # Limite (USD) por janela de 5h do plano Anthropic — usado pra calcular
     # o % exibido na sidebar ("Plan usage limits" do claude.ai). Anthropic
-    # não publica o número exato; default $420 foi calibrado contra um
-    # ponto real (claude.ai marcando 4% com nosso cost_usd em $16.91 →
-    # 100% ≈ $420) num plano Max 5x. Ajustar se a UI divergir do que
-    # claude.ai mostra.
-    plan_usd_limit_5h: float = 420.0
+    # não publica o número exato; default $375 foi calibrado contra dois
+    # pontos reais (claude.ai marcando 4% em $16.91 → $422 e 7% em $26.24 →
+    # $375) num plano Max 5x. Ajustar se a UI divergir do que claude.ai
+    # mostra.
+    plan_usd_limit_5h: float = 375.0
     # Limites semanais (USD) — replicam `Weekly limits` do claude.ai.
     # `all_models` = faixa "All models"; `sonnet` = faixa "Sonnet only".
     # Anthropic não publica em USD; defaults calibrados num ponto real
