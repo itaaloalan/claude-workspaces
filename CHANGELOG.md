@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.2] — 2026-05-18
+
+### Corrigido
+- **Chevron ▾/▸ do grupo de runners agora colapsa de verdade**: o
+  callback do botão recebia o `bool checked` emitido pelo `clicked`
+  do `QPushButton` no lugar do default keyword-arg `g=group`, então
+  `g` virava `False` e o `setExpanded` morria silenciosamente. Aceita
+  args extras agora.
+
 ## [0.18.1] — 2026-05-18
 
 ### Corrigido

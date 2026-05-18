@@ -1242,7 +1242,7 @@ class MainWindow(QMainWindow):
             group.setSizeHint(0, QSize(0, 24))
             ws_item.addChild(group)
 
-            def _toggle(g=group):
+            def _toggle(*_, g=group):
                 g.setExpanded(not g.isExpanded())
                 w = self.list_widget.itemWidget(g, 0)
                 if isinstance(w, RunnerGroupWidget):
@@ -1334,7 +1334,7 @@ class MainWindow(QMainWindow):
             def _gen(w=ws):
                 self._generate_runner_with_claude(w)
 
-            def _toggle(g=group):
+            def _toggle(*_, g=group):
                 g.setExpanded(not g.isExpanded())
                 w = self.list_widget.itemWidget(g, 0)
                 if isinstance(w, RunnerGroupWidget):
