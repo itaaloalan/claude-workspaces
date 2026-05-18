@@ -124,6 +124,10 @@ class MainWindow(QMainWindow):
         # Runners — paralelo a terminal_host. Cada workspace ganha uma
         # RunnerArea lazy; índice 0 do runner_host é um placeholder.
         self._runner_areas: dict[str, RunnerArea] = {}
+        # Áreas de runners embutidas dentro de cada console (Claude tab).
+        # workspace_id → { session_id → RunnerArea }. Console-scoped runners
+        # rodam fora do painel inferior do workspace.
+        self._console_runner_areas: dict[str, dict[str, RunnerArea]] = {}
         self._runner_placeholder_idx: int = 0
         # workspace_id → { runner_id → QTreeWidgetItem } (footer rows na sidebar)
         self._runner_tree_items: dict[str, dict[str, "QTreeWidgetItem"]] = {}
@@ -854,30 +858,41 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         if isinstance(data, int):
             term = self._terminal_widget_for(data)
-            if term is None or not term.is_running():
+            if term is None:
                 return
-            self._add_session_info_actions(menu, term)
-            continue_act = QAction("▶ Continuar este console", menu)
-            continue_act.setToolTip("Manda 'continue' + Enter pro Claude desta aba")
-            continue_act.triggered.connect(term.send_continue)
-            menu.addAction(continue_act)
-            menu.addSeparator()
-            cycle_act = QAction("↹ Ciclar modo (Plan / Auto / …)", menu)
-            cycle_act.setToolTip(
-                "Manda Shift+Tab pro Claude — cicla entre Plan, Auto-accept "
-                "e Default. Olha o indicador embaixo-direita do TUI pra ver "
-                "onde parou."
+            tab_id = data
+            if term.is_running():
+                self._add_session_info_actions(menu, term)
+                continue_act = QAction("▶ Continuar este console", menu)
+                continue_act.setToolTip("Manda 'continue' + Enter pro Claude desta aba")
+                continue_act.triggered.connect(term.send_continue)
+                menu.addAction(continue_act)
+                menu.addSeparator()
+                cycle_act = QAction("↹ Ciclar modo (Plan / Auto / …)", menu)
+                cycle_act.setToolTip(
+                    "Manda Shift+Tab pro Claude — cicla entre Plan, Auto-accept "
+                    "e Default. Olha o indicador embaixo-direita do TUI pra ver "
+                    "onde parou."
+                )
+                cycle_act.triggered.connect(term.send_cycle_mode)
+                menu.addAction(cycle_act)
+                effort_act = QAction("⏻ Trocar effort (/effort)", menu)
+                effort_act.setToolTip("Abre o slash command /effort no prompt do Claude")
+                effort_act.triggered.connect(term.send_open_effort)
+                menu.addAction(effort_act)
+                model_act = QAction("✦ Trocar modelo (/model)", menu)
+                model_act.setToolTip("Abre o slash command /model no prompt do Claude")
+                model_act.triggered.connect(term.send_open_model)
+                menu.addAction(model_act)
+                menu.addSeparator()
+            close_act = QAction("✖ Encerrar/remover console", menu)
+            close_act.setToolTip(
+                "Encerra o processo (se rodando) e remove esta aba do terminal"
             )
-            cycle_act.triggered.connect(term.send_cycle_mode)
-            menu.addAction(cycle_act)
-            effort_act = QAction("⏻ Trocar effort (/effort)", menu)
-            effort_act.setToolTip("Abre o slash command /effort no prompt do Claude")
-            effort_act.triggered.connect(term.send_open_effort)
-            menu.addAction(effort_act)
-            model_act = QAction("✦ Trocar modelo (/model)", menu)
-            model_act.setToolTip("Abre o slash command /model no prompt do Claude")
-            model_act.triggered.connect(term.send_open_model)
-            menu.addAction(model_act)
+            close_act.triggered.connect(
+                lambda _c=False, t=tab_id: self._close_terminal_by_tab_id(t)
+            )
+            menu.addAction(close_act)
         elif isinstance(data, Workspace):
             terms = self._running_terminals_for_workspace(data.id)
             if not terms:
@@ -1343,7 +1358,9 @@ class MainWindow(QMainWindow):
         )
         return area
 
-    def _open_runner_edit(self, workspace, runner) -> None:
+    def _open_runner_edit(
+        self, workspace, runner, console_session_id: str = ""
+    ) -> None:
         dlg = RunnerEditDialog(
             runner,
             on_generate_with_claude=lambda: self._generate_runner_with_claude(
@@ -1355,16 +1372,82 @@ class MainWindow(QMainWindow):
             return
         new_cfg = dlg.result_runner()
         if runner is None:
+            # Stampa o escopo do painel que originou o "+ Novo".
+            new_cfg.console_session_id = console_session_id
             workspace.runners.append(new_cfg)
         else:
             for i, r in enumerate(workspace.runners):
                 if r.id == new_cfg.id:
+                    # Preserva o escopo do runner existente — edição não muda.
+                    new_cfg.console_session_id = r.console_session_id
                     workspace.runners[i] = new_cfg
                     break
         self._persist_workspace(workspace)
+        # Refresh em todas as áreas que possam mostrar este runner.
         area = self._runner_areas.get(workspace.id)
         if area is not None:
             area.refresh()
+        for area in self._console_runner_areas.get(workspace.id, {}).values():
+            area.refresh()
+
+    def _pending_console_key(self, terminal) -> str:
+        """Chave temporária pro escopo de um console enquanto o session_id
+        do Claude ainda não foi resolvido. Permite criar runners de console
+        em sessões novas (que só ganham id depois do primeiro flush do
+        JSONL). Quando o id real chega, `_on_terminal_session_id_changed`
+        re-stampa todos os runners com essa chave."""
+        return f"pending:{id(terminal):x}"
+
+    def _wire_terminal_runner_panel(self, workspace: Workspace, terminal) -> None:
+        terminal.runner_panel_toggle_requested.connect(
+            lambda w=workspace, t=terminal:
+                self._ensure_terminal_runner_panel(w, t)
+        )
+        terminal.claimed_session_id_changed.connect(
+            lambda sid, w=workspace, t=terminal:
+                self._on_terminal_session_id_changed(w, t, sid)
+        )
+
+    def _ensure_terminal_runner_panel(self, workspace: Workspace, terminal) -> RunnerArea:
+        existing = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
+        if existing is not None:
+            return existing
+        sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
+        area = RunnerArea(workspace, settings=self.settings, console_session_id=sid)
+        area.set_edit_handler(
+            lambda runner, w=workspace, a=area:
+                self._open_runner_edit(w, runner, console_session_id=a.console_session_id())
+        )
+        area.set_generate_handler(
+            lambda w=workspace: self._generate_runner_with_claude(w)
+        )
+        area.runners_changed.connect(lambda w=workspace: self._persist_workspace(w))
+        self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
+        terminal.set_runner_panel(area)
+        return area
+
+    def _on_terminal_session_id_changed(
+        self, workspace: Workspace, terminal, sid: str
+    ) -> None:
+        areas = self._console_runner_areas.get(workspace.id, {})
+        area = areas.get(id(terminal))
+        if area is None:
+            return
+        old = area.console_session_id()
+        if old == sid or not sid:
+            return
+        # Re-stampa runners que estavam usando a chave temporária pra apontar
+        # pro session_id real. Sem isso, ao reiniciar o app os runners ficariam
+        # órfãos (chave temporária baseada em id(widget) muda a cada execução).
+        if old.startswith("pending:"):
+            changed = False
+            for r in workspace.runners:
+                if (r.console_session_id or "") == old:
+                    r.console_session_id = sid
+                    changed = True
+            if changed:
+                self._persist_workspace(workspace)
+        area.set_console_session_id(sid)
 
     def _generate_runner_with_claude(self, workspace) -> None:
         from ..launchers import find_app_repo_root
@@ -1473,6 +1556,11 @@ class MainWindow(QMainWindow):
         # Aba que saiu pode ter sido a única causa de colisão — re-disambigua
         if parent_item is not None:
             self._refresh_workspace_child_titles(parent_item)
+        # Limpa o RunnerArea embutido do console fechado, se houver. O
+        # widget já é destruído junto com o terminal; aqui só remove a
+        # entrada do registry pra não vazar referência.
+        for areas in self._console_runner_areas.values():
+            areas.pop(tab_id, None)
 
     def _on_spinner_tick(self, spinner_char: str) -> None:
         """Slot do TerminalCoordinator.spinner_tick — atualiza children
@@ -1784,6 +1872,16 @@ class MainWindow(QMainWindow):
                 if id(w) == tab_id and isinstance(w, TerminalWidget):
                     return w
         return None
+
+    def _close_terminal_by_tab_id(self, tab_id: int) -> None:
+        """Encerra e remove a aba de terminal correspondente ao tab_id. Usado
+        pelo item 'Encerrar/remover console' do menu de contexto da sidebar."""
+        for area in self.terminals_coord._areas.values():
+            for i in range(area.tabs.count()):
+                w = area.tabs.widget(i)
+                if id(w) == tab_id:
+                    area._close_tab(i)
+                    return
 
     # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
     _CHILD_HEIGHT = 58
@@ -2167,6 +2265,7 @@ class MainWindow(QMainWindow):
                 # interrompida. Sessões criadas "no app vivo" (botão Novo
                 # Workspace, Retomar de session card, etc) não setam.
                 terminal.mark_restored_on_startup()
+            self._wire_terminal_runner_panel(workspace, terminal)
             area = self.terminals_coord.area_for(workspace.id)
             if area is not None:
                 self.terminal_host.setCurrentWidget(area)
@@ -2196,6 +2295,9 @@ class MainWindow(QMainWindow):
             runner_area.deleteLater()
             if self.runner_host.count() == 1:
                 self.runner_host.setCurrentIndex(self._runner_placeholder_idx)
+        # RunnerAreas embutidas em consoles desse workspace já são destruídas
+        # com seus terminais; só limpa o registry pra não reter o dict.
+        self._console_runner_areas.pop(workspace_id, None)
 
     # ---------- tarefas ----------
 

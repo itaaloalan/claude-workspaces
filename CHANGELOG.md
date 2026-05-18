@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.12.0] — 2026-05-18
+
+### Adicionado
+- **Encerrar/remover console pelo menu de contexto da sidebar**: no item
+  de um console terminal, o menu de contexto ganha "✖ Encerrar/remover
+  console", que encerra o processo (se rodando) e remove a aba do
+  terminal. Para consoles ainda rodando aparece após as ações de Claude;
+  para consoles já parados é a única ação disponível (antes o menu nem
+  aparecia para esses).
+
 ## [0.11.0] — 2026-05-18
 
 ### Adicionado
