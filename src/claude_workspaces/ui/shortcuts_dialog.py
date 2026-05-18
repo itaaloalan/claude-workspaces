@@ -13,6 +13,8 @@ SHORTCUTS = [
         ("Ctrl+Shift+2", "📚  Catálogo (skills/agents/commands)"),
         ("Ctrl+Shift+3", "🪝  Hooks"),
         ("Ctrl+Shift+4", "🔌  MCP servers"),
+        ("Ctrl+Shift+5", "🧩  Plugins"),
+        ("Ctrl+Shift+6", "🧰  Apps auxiliares"),
     ]),
     ("Workspaces", [
         ("Ctrl+N", "Criar novo workspace"),
@@ -36,9 +38,12 @@ SHORTCUTS = [
         ("Ctrl+Alt+←  /  Ctrl+Alt+→", "Aba anterior / próxima"),
     ]),
     ("Arquivos", [
-        ("Ctrl+P", "Quick open: arquivos do workspace (em breve)"),
+        ("Ctrl+P", "Quick open: arquivos do workspace"),
         ("Ctrl+O", "Abrir pasta primária no gerenciador de arquivos"),
         ("Ctrl+Shift+C", "Copiar caminho da pasta primária"),
+    ]),
+    ("Plugins", [
+        ("Ctrl+Shift+P", "Paleta de comandos dos plugins"),
     ]),
     ("Ajuda", [
         ("Ctrl+/", "Mostrar este diálogo"),

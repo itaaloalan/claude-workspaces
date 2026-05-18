@@ -60,12 +60,12 @@ class ActivityBar(QWidget):
         self._buttons: dict[str, QPushButton] = {}
 
         for icon, view_id, tooltip in (
-            ("🗂", VIEW_WORKSPACES, "Workspaces (Ctrl+1)"),
-            ("📚", VIEW_CATALOG, "Catálogo de skills/agents/commands (Ctrl+2)"),
-            ("🪝", VIEW_HOOKS, "Hooks (Ctrl+3)"),
-            ("🔌", VIEW_MCP, "MCP servers (Ctrl+4)"),
-            ("🧩", VIEW_PLUGINS, "Plugins (Ctrl+5)"),
-            ("🧰", VIEW_APPS, "Apps auxiliares (Ctrl+6)"),
+            ("🗂", VIEW_WORKSPACES, "Workspaces (Ctrl+Shift+1)"),
+            ("📚", VIEW_CATALOG, "Catálogo de skills/agents/commands (Ctrl+Shift+2)"),
+            ("🪝", VIEW_HOOKS, "Hooks (Ctrl+Shift+3)"),
+            ("🔌", VIEW_MCP, "MCP servers (Ctrl+Shift+4)"),
+            ("🧩", VIEW_PLUGINS, "Plugins (Ctrl+Shift+5)"),
+            ("🧰", VIEW_APPS, "Apps auxiliares (Ctrl+Shift+6)"),
         ):
             btn = self._make_button(icon, view_id, tooltip)
             layout.addWidget(btn)

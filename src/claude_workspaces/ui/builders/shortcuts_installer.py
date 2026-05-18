@@ -79,8 +79,9 @@ def install_shortcuts(mw) -> None:
         QKeySequence("Ctrl+Shift+6"), mw,
         lambda: mw.activity_bar.activate(VIEW_APPS),
     )
-    # Paleta de comandos de plugins
-    QShortcut(QKeySequence("Ctrl+P"), mw, mw._open_plugin_palette)
+    # Paleta de comandos de plugins (analog do Ctrl+Shift+P do VS Code;
+    # Ctrl+P já é Quick Open de arquivo, linha 50)
+    QShortcut(QKeySequence("Ctrl+Shift+P"), mw, mw._open_plugin_palette)
     # Help
     QShortcut(QKeySequence("Ctrl+/"), mw, mw._show_shortcuts)
     QShortcut(QKeySequence("F1"), mw, mw._show_shortcuts)

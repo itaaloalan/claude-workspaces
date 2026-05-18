@@ -2,7 +2,7 @@
 
 Gerenciador de workspaces e console multi-sessão pra Claude Code, com terminal embutido, dock de ferramentas e visibilidade do que cada agente está fazendo.
 
-![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-443-green)
+![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-549-green)
 
 ## O problema
 
@@ -86,7 +86,8 @@ qualquer lugar.
 | `Ctrl+B` / `Ctrl+J` / `Ctrl+Shift+B` | Toggle sidebar / terminal / dock direito |
 | `Ctrl+T` / `Ctrl+Shift+W` / `Ctrl+K` | Nova aba shell / fechar aba / limpar terminal |
 | `Ctrl+Alt+←` / `Ctrl+Alt+→` | Aba anterior / próxima do terminal |
-| `Ctrl+P` | Paleta de comandos de plugins |
+| `Ctrl+P` | Quick open de arquivo do workspace |
+| `Ctrl+Shift+P` | Paleta de comandos de plugins |
 | `Ctrl+O` | Abrir pasta primária no gerenciador de arquivos |
 | `Ctrl+Shift+C` | Copiar caminho da pasta primária |
 | `Ctrl+,` | Configurações |
@@ -116,4 +117,4 @@ qualquer lugar.
 
 ## Status
 
-Funcional e em uso diário. 443 testes, CI rodando lint + pytest + mypy (não-bloqueante) + coverage. Veja [docs/MAINTAINABILITY.md](docs/MAINTAINABILITY.md) pro tracking de débito técnico — todos os itens da auditoria 2026-05-15 foram resolvidos.
+Funcional e em uso diário. 549 testes, CI rodando lint + pytest + mypy (não-bloqueante) + coverage. Veja [docs/MAINTAINABILITY.md](docs/MAINTAINABILITY.md) pro tracking de débito técnico — todos os itens da auditoria 2026-05-15 foram resolvidos.
