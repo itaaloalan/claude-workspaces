@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.19.1] — 2026-05-18
+
+### Adicionado
+- **Botão "📝 Editar script" no diálogo de edição do runner**: abre o
+  arquivo de script referenciado pelo `start_cmd` no editor padrão do
+  sistema. Detecta heuristicamente: `npm`/`yarn`/`pnpm`/`bun`/`npx` →
+  `<cwd>/package.json`; `bash`/`sh`/`python`/`node`/etc + arquivo → o
+  arquivo resolvido contra o cwd; caminho direto (ex.: `./run.sh`) →
+  o próprio token. Quando nada é detectado, mostra mensagem explicando
+  os formatos suportados. (O código já havia entrado em 0.19.0 junto
+  com "Remover todos" mas ficou sem entrada no changelog.)
+
 ## [0.19.0] — 2026-05-18
 
 ### Adicionado
