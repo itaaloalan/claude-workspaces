@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import shlex
+from pathlib import Path
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -15,6 +22,50 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import RunnerConfig
+
+
+_NPM_LIKE = {"npm", "yarn", "pnpm", "bun", "npx"}
+
+
+def _detect_script_file(start_cmd: str, cwd: str) -> Path | None:
+    """Heurística pra achar o arquivo do script invocado pelo start_cmd.
+
+    - `npm start`, `yarn dev`, `pnpm run X` → `<cwd>/package.json`
+    - `bash foo.sh`, `sh foo.sh`, `python foo.py`, `node foo.js` → o arquivo
+    - `./foo.sh`, `bin/foo` → o próprio token
+    Devolve None se nada plausível for encontrado.
+    """
+    cmd = (start_cmd or "").strip()
+    if not cmd:
+        return None
+    base = Path(cwd).expanduser() if cwd else Path.cwd()
+
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError:
+        tokens = cmd.split()
+    if not tokens:
+        return None
+
+    first = Path(tokens[0]).name
+    if first in _NPM_LIKE:
+        pkg = base / "package.json"
+        return pkg if pkg.exists() else None
+
+    interpreters = {"bash", "sh", "zsh", "fish", "python", "python3", "node", "deno", "ruby", "perl"}
+    if first in interpreters:
+        for tok in tokens[1:]:
+            if tok.startswith("-"):
+                continue
+            cand = (base / tok).expanduser()
+            if cand.exists() and cand.is_file():
+                return cand
+            return None
+
+    cand = (base / tokens[0]).expanduser()
+    if cand.exists() and cand.is_file():
+        return cand
+    return None
 
 
 class RunnerEditDialog(QDialog):
@@ -52,7 +103,24 @@ class RunnerEditDialog(QDialog):
         self._start = QPlainTextEdit(base.start_cmd)
         self._start.setPlaceholderText("ex: npm run dev")
         self._start.setFixedHeight(70)
-        form.addRow("Start:", self._start)
+        start_wrap = QWidget()
+        start_layout = QVBoxLayout(start_wrap)
+        start_layout.setContentsMargins(0, 0, 0, 0)
+        start_layout.setSpacing(4)
+        start_layout.addWidget(self._start)
+        edit_row = QHBoxLayout()
+        edit_row.setContentsMargins(0, 0, 0, 0)
+        edit_row.addStretch(1)
+        self._edit_script_btn = QPushButton("📝 Editar script")
+        self._edit_script_btn.setToolTip(
+            "Abre o arquivo de script referenciado pelo start_cmd no editor "
+            "padrão do sistema (package.json para npm/yarn/pnpm; arquivo "
+            "direto para bash/python/node etc)."
+        )
+        self._edit_script_btn.clicked.connect(self._on_edit_script)
+        edit_row.addWidget(self._edit_script_btn)
+        start_layout.addLayout(edit_row)
+        form.addRow("Start:", start_wrap)
 
         self._stop = QPlainTextEdit(base.stop_cmd)
         self._stop.setPlaceholderText("(opcional — vazio = SIGHUP no processo)")
@@ -100,6 +168,23 @@ class RunnerEditDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _on_edit_script(self) -> None:
+        start_cmd = self._start.toPlainText().strip()
+        cwd = self._cwd.text().strip()
+        target = _detect_script_file(start_cmd, cwd)
+        if target is None:
+            QMessageBox.information(
+                self,
+                "Editar script",
+                "Não consegui detectar o arquivo do script a partir do "
+                "comando.\n\nSuportado: npm/yarn/pnpm/bun (abre package.json), "
+                "bash/sh/python/node + arquivo, ou caminho direto pra um "
+                "script (ex.: ./run.sh).\n\nVerifique também se o cwd está "
+                "preenchido corretamente.",
+            )
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def result_runner(self) -> RunnerConfig:
         """Devolve o RunnerConfig final. Preserva o id quando editando."""

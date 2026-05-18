@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.19.0] — 2026-05-18
+
+### Adicionado
+- **Botão "🗑 Remover todos" no header de runners**: remove de uma vez
+  todos os runners do escopo atual (workspace ou console), com
+  confirmação e contagem. Runners em execução são parados antes da
+  remoção. Antes era preciso remover um por um pelo ícone de lixeira
+  de cada aba.
+
 ## [0.18.11] — 2026-05-18
 
 ### Corrigido

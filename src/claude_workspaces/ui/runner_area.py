@@ -81,6 +81,14 @@ class RunnerArea(QWidget):
         self._stop_all_btn.clicked.connect(self._stop_all)
         h.addWidget(self._stop_all_btn)
 
+        self._remove_all_btn = QPushButton("🗑 Remover todos")
+        self._remove_all_btn.setToolTip(
+            "Remove todos os runners deste escopo (workspace ou console). "
+            "Runners em execução são parados antes."
+        )
+        self._remove_all_btn.clicked.connect(self._remove_all)
+        h.addWidget(self._remove_all_btn)
+
         self._import_btn = QPushButton("Importar")
         self._import_btn.clicked.connect(self._import_runners)
         h.addWidget(self._import_btn)
@@ -338,6 +346,36 @@ class RunnerArea(QWidget):
             w = self.tabs.widget(i)
             if isinstance(w, RunnerWidget) and w.is_running():
                 w.stop()
+
+    def _remove_all(self) -> None:
+        in_scope = [r for r in self._ws.runners if self._matches_scope(r)]
+        if not in_scope:
+            QMessageBox.information(
+                self,
+                "Sem runners",
+                "Não há runners para remover neste escopo.",
+            )
+            return
+        scope_label = "deste console" if self._console_session_id else "do workspace"
+        if (
+            QMessageBox.question(
+                self,
+                "Remover todos os runners",
+                f"Remover todos os {len(in_scope)} runners {scope_label}? "
+                "Runners em execução serão parados.",
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+        # Para tudo que estiver rodando antes de remover.
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget) and w.is_running():
+                w.stop()
+        ids_to_remove = {r.id for r in in_scope}
+        self._ws.runners = [r for r in self._ws.runners if r.id not in ids_to_remove]
+        self.runners_changed.emit()
+        self._refresh_from_workspace()
 
     def _open_add_menu(self) -> None:
         menu = QMenu(self)
