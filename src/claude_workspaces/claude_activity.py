@@ -70,14 +70,20 @@ PROMPT_READY_MARKERS = (
 WORKING_RE = re.compile(r"\*\s+\w+.*?tokens", re.IGNORECASE)
 
 # Indicadores positivos de "Claude está pedindo decisão" (permission prompt,
-# escolha de tool, confirmação). Frases canônicas que o TUI usa:
-#   "Do you want to proceed?"
-#   "Do you want to make this edit to Foo.java?"
-#   "Do you want me to..."
-# Também casa quando aparece a seta de seleção "❯" seguida de "1." próximo
-# do fim — esse padrão é usado em todos os prompts de escolha numerada.
+# escolha de tool, confirmação). Cobertura:
+#   1. Permission tool-prompt clássico:
+#        "Do you want to proceed?"
+#        "Do you want to make this edit to Foo.java?"
+#        "❯ 1. Yes / 2. No / ..."
+#      → casa quando "Do you want" aparece junto com "❯ N." no tail.
+#   2. Picker interativo (skill picker, plan mode, /commands, escolhas
+#      customizadas tipo "Qual direção?"). O footer canônico é
+#        "Enter to select · ↑/↓ to navigate · Esc to cancel"
+#      Esse footer só aparece quando o picker está aberto bloqueando input,
+#      então sozinho já basta como sinal de awaiting-decision.
 DECISION_QUESTION_RE = re.compile(r"\bdo you want\b", re.IGNORECASE)
 DECISION_CHOICE_RE = re.compile(r"❯\s*\d+\.")
+INTERACTIVE_FOOTER_RE = re.compile(r"enter to select", re.IGNORECASE)
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
 
@@ -136,10 +142,16 @@ def _has_working_marker(lines: list[str]) -> bool:
 
 
 def _has_decision_prompt(lines: list[str]) -> bool:
-    """True se as últimas linhas contêm um permission prompt do Claude.
+    """True se as últimas linhas contêm um permission prompt ou picker
+    interativo do Claude.
+
     Janela maior (12) porque o "Do you want to..." pode ficar algumas
-    linhas acima da seta "❯ 1." de escolha."""
+    linhas acima da seta "❯ 1." de escolha. O footer de picker
+    ("Enter to select…") sozinho já basta — ele só aparece com input
+    bloqueado."""
     tail = lines[-12:]
+    if any(INTERACTIVE_FOOTER_RE.search(ln) for ln in tail):
+        return True
     has_question = any(DECISION_QUESTION_RE.search(ln) for ln in tail)
     has_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
     return has_question and has_choice
@@ -198,6 +210,7 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
     last = lines[-1]
     last_is_idle = _is_idle_marker(last)
     looks_prompt = _looks_like_prompt(last)
+    last_is_picker_footer = bool(INTERACTIVE_FOOTER_RE.search(last))
 
     # Posição da última ocorrência de cada marker. Quem aparece DEPOIS no
     # buffer ganha — assim Claude trabalhando seguido do footer cai pra
@@ -210,14 +223,18 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
     idle_is_more_recent = idle_idx > working_idx
 
     # Pra mostrar como "última ação": prefere a última linha que NÃO
-    # seja footer/auto-mode/prompt. Sem isso, o status mostraria sempre
-    # 'auto mode on (shift+tab to cycle) · ...' depois que Claude termina.
+    # seja footer/auto-mode/prompt/footer-de-picker. Sem isso, o status
+    # mostraria sempre 'auto mode on (shift+tab to cycle) · ...' depois
+    # que Claude termina, ou 'Enter to select · ↑/↓ to navigate' quando
+    # um picker está aberto.
     display_line = last
-    if last_is_idle or looks_prompt:
+    if last_is_idle or looks_prompt or last_is_picker_footer:
         for line in reversed(lines[:-1]):
             if _is_idle_marker(line):
                 continue
             if _looks_like_prompt(line):
+                continue
+            if INTERACTIVE_FOOTER_RE.search(line):
                 continue
             display_line = line
             break

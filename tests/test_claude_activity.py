@@ -218,3 +218,34 @@ def test_needs_decision_false_sem_setas_de_escolha():
     buf = b"User asked: do you want me to run the tests?\nClaude: sure.\n"
     a = parse_status(buf, last_output_age=5)
     assert a.needs_decision is False
+
+
+def test_needs_decision_true_em_picker_interativo():
+    """Picker do Claude (skill picker, plan mode, choice customizado)
+    fecha com footer 'Enter to select · ↑/↓ to navigate · Esc to cancel'.
+    Esse footer sozinho já é prova de awaiting decision."""
+    buf = (
+        "Direção\n"
+        "Achei 4 direções viáveis pra hoje. Qual te chama mais?\n"
+        "> 1. Faxina de UX rápida\n"
+        "  2. Cobertura de testes\n"
+        "  3. Distribuição Linux\n"
+        "Enter to select · ↑/↓ to navigate · Esc to cancel\n"
+    ).encode()
+    a = parse_status(buf, last_output_age=5)
+    assert a.is_working is False
+    assert a.needs_decision is True
+
+
+def test_picker_footer_nao_vira_status_display():
+    """O footer 'Enter to select…' não deve virar o display da última
+    ação — preferimos a linha real (título/pergunta do picker)."""
+    buf = (
+        "Direção\n"
+        "Qual te chama mais?\n"
+        "> 1. Faxina de UX rápida\n"
+        "Enter to select · ↑/↓ to navigate · Esc to cancel\n"
+    ).encode()
+    a = parse_status(buf, last_output_age=5)
+    assert "Enter to select" not in a.status
+    assert a.status
