@@ -733,7 +733,61 @@ class MainWindow(QMainWindow):
         self.list_widget = builder.list_widget
         self.self_dev_btn = builder.self_dev_btn
         self.version_label = builder.version_label
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self._on_sidebar_context_menu)
         return builder.wrapper
+
+    def _on_sidebar_context_menu(self, pos) -> None:
+        """Menu de contexto da sidebar — atalhos pra retomar trabalho do
+        Claude sem precisar focar a aba e digitar 'continue' manualmente.
+        Aparece em (a) item de console terminal e (b) item de workspace."""
+        item = self.list_widget.itemAt(pos)
+        if item is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        menu = QMenu(self)
+        if isinstance(data, int):
+            term = self._terminal_widget_for(data)
+            if term is None or not term.is_running():
+                return
+            continue_act = QAction("▶ Continuar este console", menu)
+            continue_act.setToolTip("Manda 'continue' + Enter pro Claude desta aba")
+            continue_act.triggered.connect(term.send_continue)
+            menu.addAction(continue_act)
+        elif isinstance(data, Workspace):
+            terms = self._running_terminals_for_workspace(data.id)
+            if not terms:
+                return
+            count = len(terms)
+            label = (
+                "▶ Continuar todos os consoles deste workspace"
+                if count > 1
+                else "▶ Continuar o console deste workspace"
+            )
+            continue_all_act = QAction(label, menu)
+            continue_all_act.setToolTip(
+                f"Manda 'continue' pra {count} console(s) Claude rodando neste workspace"
+            )
+            continue_all_act.triggered.connect(
+                lambda _c=False, ts=terms: [t.send_continue() for t in ts]
+            )
+            menu.addAction(continue_all_act)
+        else:
+            return
+        if menu.isEmpty():
+            return
+        menu.exec_(self.list_widget.viewport().mapToGlobal(pos))
+
+    def _running_terminals_for_workspace(self, workspace_id: str) -> list[TerminalWidget]:
+        area = self.terminals_coord.area_for(workspace_id)
+        if area is None:
+            return []
+        out: list[TerminalWidget] = []
+        for i in range(area.tabs.count()):
+            w = area.tabs.widget(i)
+            if isinstance(w, TerminalWidget) and w.is_running():
+                out.append(w)
+        return out
 
     def _show_release_notes(self) -> None:
         from .release_notes_dialog import ReleaseNotesDialog
@@ -1361,7 +1415,7 @@ class MainWindow(QMainWindow):
         return None
 
     # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
-    _CHILD_HEIGHT = 48
+    _CHILD_HEIGHT = 42
 
     def _add_terminal_child(
         self,

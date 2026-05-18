@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.5.1] — 2026-05-18
+
+### Adicionado
+- Botão **"▶ Continuar"** na toolbar de cada terminal: manda `continue` + Enter
+  pro Claude com um clique. Resolve o caso de reabrir o app com várias sessões
+  retomadas e ter que digitar manualmente em cada uma pra elas voltarem a
+  trabalhar.
+- **Menu de contexto na sidebar** (botão direito) com:
+  - "▶ Continuar este console" em cima de uma aba de terminal Claude.
+  - "▶ Continuar todos os consoles deste workspace" em cima do nome do workspace
+    — manda `continue` em rajada pra todos os consoles vivos daquele workspace.
+
 ## [0.5.0] — 2026-05-18
 
 ### Adicionado
@@ -39,6 +51,13 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
 - Tooltips do activity bar corrigidos pra refletir `Ctrl+Shift+1..6`.
 - Documentação (README/USAGE/DEVELOPMENT) atualizada cobrindo plugins, apps, notif
   nativas e session restore.
+- **Sidebar de workspaces** repaginada: cabeçalho "WORKSPACES" com caps/letter-spacing
+  e borda inferior sutil; seleção mais suave (tint azul + borda lateral em vez de
+  bloco saturado); hover discreto; nomes de workspace em negrito pra hierarquia
+  clara; linha "↻ última sessão" em itálico/menor/muted; botão "+ Novo Workspace"
+  reestilizado como ação primária neutra; "🔧 Hack este app" agora é ação ghost.
+- Linhas de console na sidebar mais compactas (48px → 42px) com estado e última
+  ação na mesma sublinha separadas por ponto, paleta unificada via `theme.*`.
 
 ### Corrigido
 - Consoles vivos somem da sidebar quando workspace tem child "↻ histórica".

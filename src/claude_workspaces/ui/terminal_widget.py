@@ -115,6 +115,14 @@ class TerminalWidget(QWidget):
         self._status.setStyleSheet("color: #b0b0b0;")
         toolbar.addWidget(self._status)
         toolbar.addStretch()
+        self._continue_btn = QPushButton("▶ Continuar")
+        self._continue_btn.setEnabled(False)
+        self._continue_btn.setToolTip(
+            "Manda 'continue' para o Claude — útil quando ele parou no meio "
+            "de uma tarefa (ex: ao reabrir uma sessão com --resume)"
+        )
+        self._continue_btn.clicked.connect(self.send_continue)
+        toolbar.addWidget(self._continue_btn)
         self._stop_btn = QPushButton("Encerrar")
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.terminate)
@@ -368,7 +376,26 @@ class TerminalWidget(QWidget):
     def _on_session_finished(self) -> None:
         self._status.setText("(processo encerrado)")
         self._stop_btn.setEnabled(False)
+        self._continue_btn.setEnabled(False)
         self._set_running(False)
+
+    def send_text(self, text: str, submit: bool = True) -> None:
+        """Envia texto direto pro PTY como se o usuário tivesse digitado.
+        Com submit=True (default), adiciona '\\r' no fim — equivalente a
+        apertar Enter, fazendo Claude (ou qualquer TUI) submeter a linha.
+
+        Why: ao reabrir o app, sessões Claude com --resume ficam paradas
+        no prompt esperando input mesmo quando estavam no meio de uma
+        tarefa. Mandar 'continue' destrava sem ter que focar a aba e
+        digitar manualmente em cada console."""
+        if not self.session.is_running():
+            return
+        data = text + ("\r" if submit else "")
+        self.session.write(data.encode("utf-8"))
+
+    def send_continue(self) -> None:
+        """Atalho — manda 'continue' + Enter pra retomar trabalho do Claude."""
+        self.send_text("continue")
 
     def start_command(self, argv: list[str], cwd: str, label: str | None = None) -> None:
         if not self._bridge_ready:
@@ -389,6 +416,7 @@ class TerminalWidget(QWidget):
             return
         self._status.setText(label or " ".join(argv))
         self._stop_btn.setEnabled(True)
+        self._continue_btn.setEnabled(True)
         self._set_running(True)
 
     def start_shell_command(
@@ -414,6 +442,7 @@ class TerminalWidget(QWidget):
         if self.session.is_running():
             self.session.terminate()
         self._stop_btn.setEnabled(False)
+        self._continue_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
         self._set_running(False)
 
