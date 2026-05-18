@@ -6,6 +6,24 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.5] — 2026-05-18
+
+### Adicionado
+- **Toolbar de ações em todo terminal**: os atalhos que antes só
+  apareciam no menu de contexto da sidebar (Continuar / Ciclar modo /
+  Trocar effort / Trocar modelo) agora ficam visíveis como botões no
+  topo de cada console Claude. Substitui o antigo botão único `⚙ Modo`
+  que abria um popup — clique direto faz a ação sem intermediário.
+- **Toggle global "⌃ Ações"** na top bar (logo após "Claude Workspaces")
+  pra ocultar/mostrar essa toolbar em todos os terminais de uma vez. O
+  estado é persistido em `show_terminal_actions` nas settings. Mesmo com
+  a toolbar oculta, as ações continuam acessíveis pelo menu de contexto
+  da sidebar (clique direito no item do console).
+- **Botões inline em cada workspace na sidebar**: ＋ (abre um Claude
+  novo no workspace, mesma ação de "Abrir Claude") e ▾/▸ (recolhe ou
+  expande os filhos do workspace na tree). O ícone do botão de
+  colapsar sincroniza com o disclosure triangle nativo da árvore.
+
 ## [0.7.4] — 2026-05-18
 
 ### Adicionado

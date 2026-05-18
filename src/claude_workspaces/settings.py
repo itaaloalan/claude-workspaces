@@ -67,6 +67,11 @@ class Settings:
     # — evita flicker "Trabalhando ↔ Ocioso". Mínimo 0 (sem debounce),
     # máximo 120s.
     idle_debounce_seconds: int = 20
+    # Mostra a barra de ações (Continuar / Ciclar modo / Effort / Modelo /
+    # Encerrar) no topo de cada terminal. Toggle global controlado pelo
+    # botão na top bar. Mesmo desligada, as ações continuam acessíveis
+    # via menu de contexto na sidebar.
+    show_terminal_actions: bool = True
 
     @classmethod
     def load(cls) -> "Settings":

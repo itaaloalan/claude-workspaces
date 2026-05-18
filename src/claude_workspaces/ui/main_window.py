@@ -191,6 +191,12 @@ class MainWindow(QMainWindow):
         self.top_bar.home_clicked.connect(self._show_workspaces)
         self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
         self.top_bar.inbox_clicked.connect(self._show_inbox)
+        self.top_bar.toggle_terminal_actions_clicked.connect(
+            self._toggle_terminal_actions
+        )
+        # Aplica estado persistido da toolbar de ações dos terminais (default=True)
+        TerminalWidget.set_actions_visible(self.settings.show_terminal_actions)
+        self.top_bar.set_terminal_actions_visible(self.settings.show_terminal_actions)
         outer.addWidget(self.top_bar)
 
         splitter_css = (
@@ -401,6 +407,19 @@ class MainWindow(QMainWindow):
             target = self._sidebar_last_size or SIDEBAR_DEFAULT_W
             self.body_splitter.setSizes([target, max(sum(sizes) - target, 200)])
         self._schedule_layout_save()
+
+    def _toggle_terminal_actions(self) -> None:
+        """Inverte a visibilidade global da toolbar de ações nos terminais.
+        Propaga pra todos os TerminalWidgets vivos e persiste em settings.
+        As ações continuam acessíveis via menu de contexto na sidebar."""
+        new_visible = not self.settings.show_terminal_actions
+        self.settings.show_terminal_actions = new_visible
+        TerminalWidget.set_actions_visible(new_visible)
+        self.top_bar.set_terminal_actions_visible(new_visible)
+        try:
+            self.settings.save()
+        except OSError:
+            log.exception("falha ao salvar show_terminal_actions")
 
     def _terminal_header_height(self) -> int:
         """Altura do header do terminal — usado como 'min height' quando
@@ -739,7 +758,26 @@ class MainWindow(QMainWindow):
         self.version_label = builder.version_label
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self._on_sidebar_context_menu)
+        # Mantém o ícone do botão ▾/▸ sincronizado quando o usuário usa
+        # o disclosure triangle nativo da QTreeWidget.
+        self.list_widget.itemExpanded.connect(self._on_workspace_expanded)
+        self.list_widget.itemCollapsed.connect(self._on_workspace_collapsed)
         return builder.wrapper
+
+    def _on_workspace_expanded(self, item: "QTreeWidgetItem") -> None:
+        self._update_workspace_collapsed_icon(item, collapsed=False)
+
+    def _on_workspace_collapsed(self, item: "QTreeWidgetItem") -> None:
+        self._update_workspace_collapsed_icon(item, collapsed=True)
+
+    def _update_workspace_collapsed_icon(
+        self, item: "QTreeWidgetItem", collapsed: bool
+    ) -> None:
+        from .workspace_item_widget import WorkspaceItemWidget
+
+        widget = self.list_widget.itemWidget(item, 0)
+        if isinstance(widget, WorkspaceItemWidget):
+            widget.set_collapsed(collapsed)
 
     def _on_sidebar_context_menu(self, pos) -> None:
         """Menu de contexto da sidebar — atalhos pra retomar trabalho do
@@ -878,7 +916,7 @@ class MainWindow(QMainWindow):
         ws_font.setBold(True)
 
         for ws in self.workspaces:
-            item = QTreeWidgetItem([self._item_label(ws)])
+            item = QTreeWidgetItem([""])
             item.setData(0, Qt.ItemDataRole.UserRole, ws)
             item.setFont(0, ws_font)
             tip = ws.description or ""
@@ -888,6 +926,7 @@ class MainWindow(QMainWindow):
                 item.setToolTip(0, tip)
             self.list_widget.addTopLevelItem(item)
             item.setExpanded(True)
+            self._install_workspace_item_widget(item, ws)
 
         self._apply_filter(
             self.top_bar.search.text() if hasattr(self, "top_bar") else ""
@@ -993,8 +1032,34 @@ class MainWindow(QMainWindow):
         if item is None:
             return
         ws = item.data(0, Qt.ItemDataRole.UserRole)
-        if isinstance(ws, Workspace):
+        if not isinstance(ws, Workspace):
+            return
+        widget = self.list_widget.itemWidget(item, 0)
+        from .workspace_item_widget import WorkspaceItemWidget
+        if isinstance(widget, WorkspaceItemWidget):
+            widget.set_label(self._item_label(ws))
+        else:
             item.setText(0, self._item_label(ws))
+
+    def _install_workspace_item_widget(
+        self, item: "QTreeWidgetItem", ws: Workspace
+    ) -> None:
+        """Coloca um WorkspaceItemWidget no item do workspace, com os
+        botões + (abrir Claude) e ▾/▸ (colapsar/expandir)."""
+        from .workspace_item_widget import WorkspaceItemWidget
+
+        def on_add() -> None:
+            self._launch_claude_for(ws, "", "")
+
+        def on_toggle() -> None:
+            item.setExpanded(not item.isExpanded())
+            widget = self.list_widget.itemWidget(item, 0)
+            if isinstance(widget, WorkspaceItemWidget):
+                widget.set_collapsed(not item.isExpanded())
+
+        widget = WorkspaceItemWidget(self._item_label(ws), on_add, on_toggle)
+        widget.set_collapsed(not item.isExpanded())
+        self.list_widget.setItemWidget(item, 0, widget)
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:
