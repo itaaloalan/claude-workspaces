@@ -258,14 +258,20 @@ class TerminalChildWidget(QWidget):
     ) -> None:
         if state == STATE_WORKING:
             self._icon.setText(spinner_char)
+            icon_size = 12
         elif state == STATE_AWAITING:
             self._icon.setText("!")
+            icon_size = 12
         elif state == STATE_IDLE:
-            self._icon.setText("❚❚")
+            # `❚❚` é bem encorpado — reduz a fonte pra não dominar a row
+            self._icon.setText("‖")
+            icon_size = 11
         else:
             self._icon.setText("✓")
+            icon_size = 12
         self._icon.setStyleSheet(
-            f"color: {STATE_COLOR[state]}; font-family: monospace; font-size: 12px;"
+            f"color: {STATE_COLOR[state]}; font-family: monospace;"
+            f" font-size: {icon_size}px;"
         )
         self._state_label.setText(STATE_LABEL[state])
         self._state_label.setStyleSheet(

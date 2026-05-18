@@ -6,6 +6,13 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.8.4] — 2026-05-18
+
+### Mudado
+- **Ícone de "Ocioso" na sidebar mais discreto**: trocado `❚❚` (duas
+  barras encorpadas, dominavam a row) por `‖` em fonte 11px. O glifo
+  fino combina melhor com a hierarquia visual do title/sub-row.
+
 ## [0.8.3] — 2026-05-18
 
 ### Adicionado
