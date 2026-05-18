@@ -79,6 +79,15 @@ class Settings:
     # 100% ≈ $420) num plano Max 5x. Ajustar se a UI divergir do que
     # claude.ai mostra.
     plan_usd_limit_5h: float = 420.0
+    # Limites semanais (USD) — replicam `Weekly limits` do claude.ai.
+    # `all_models` = faixa "All models"; `sonnet` = faixa "Sonnet only".
+    # Anthropic não publica em USD; defaults calibrados num ponto real
+    # (claude.ai marcando 2% all-models com `cost_usd` semanal em $4730
+    # → 100% ≈ $236k num plano Max 5x — número alto porque o quota
+    # interno deles parece ter peso bem menor que custo-equivalente em
+    # API pública). Ajustar via settings.json se necessário.
+    plan_weekly_usd_limit_all: float = 236_000.0
+    plan_weekly_usd_limit_sonnet: float = 118_000.0
 
     @classmethod
     def load(cls) -> "Settings":

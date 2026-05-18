@@ -238,6 +238,75 @@ def format_tokens(n: int) -> str:
 
 
 @dataclass
+class WeeklyPlanUsage:
+    """Uso agregado da janela semanal (replica `Weekly limits` do claude.ai).
+    Anthropic mostra duas faixas: `All models` (tudo somado) e `Sonnet only`
+    (só sonnet). Aqui devolvemos custos separados pra cada uma. Reset é
+    fixo num horário semanal (não calculamos aqui — UI deriva)."""
+    all_cost_usd: float = 0.0
+    sonnet_cost_usd: float = 0.0
+    total_tokens: int = 0
+
+
+def weekly_plan_usage(window_days: int = 7) -> WeeklyPlanUsage:
+    """Soma custos de assistant messages nos últimos `window_days` dias,
+    separando Sonnet do total. Reaproveita o mesmo varrer de JSONLs do
+    plan_usage 5h, mas em janela maior."""
+    out = WeeklyPlanUsage()
+    base = Path.home() / ".claude" / "projects"
+    if not base.is_dir():
+        return out
+    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff_epoch = cutoff.timestamp()
+    try:
+        projects = list(base.iterdir())
+    except OSError:
+        return out
+    for proj in projects:
+        if not proj.is_dir():
+            continue
+        for jsonl in proj.glob("*.jsonl"):
+            try:
+                if jsonl.stat().st_mtime < cutoff_epoch:
+                    continue
+            except OSError:
+                continue
+            try:
+                with jsonl.open(encoding="utf-8") as fp:
+                    for line in fp:
+                        try:
+                            msg = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if msg.get("type") != "assistant":
+                            continue
+                        ts = _parse_timestamp(msg.get("timestamp", ""))
+                        if ts is None or ts < cutoff:
+                            continue
+                        inner = msg.get("message") or {}
+                        if not isinstance(inner, dict):
+                            continue
+                        usage = inner.get("usage") or {}
+                        if not isinstance(usage, dict):
+                            continue
+                        model = inner.get("model") or "?"
+                        i = int(usage.get("input_tokens") or 0)
+                        o = int(usage.get("output_tokens") or 0)
+                        cc = int(usage.get("cache_creation_input_tokens") or 0)
+                        cr = int(usage.get("cache_read_input_tokens") or 0)
+                        if i + o + cc + cr <= 0:
+                            continue
+                        cost = _model_cost(model, usage)
+                        out.all_cost_usd += cost
+                        out.total_tokens += i + o + cc + cr
+                        if "sonnet" in model.lower():
+                            out.sonnet_cost_usd += cost
+            except OSError:
+                continue
+    return out
+
+
+@dataclass
 class PlanUsageWindow:
     """Uso agregado da janela rolante de 5h (replica `Plan usage limits →
     Current session` do claude.ai). Anthropic limita por uma janela de 5h

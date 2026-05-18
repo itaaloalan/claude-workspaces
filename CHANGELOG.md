@@ -6,6 +6,25 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.12] — 2026-05-18
+
+### Adicionado
+- **Limites semanais na sidebar** (replica `Weekly limits` do claude.ai):
+  o bloco acima do "Novo Workspace" agora tem 3 linhas:
+  `Sessão 5h: X% · reset Hh MMm` / `Semana (todos): X% · reset seg HH:MM`
+  / `Semana (Sonnet): X%`. Reset semanal calculado como próxima segunda
+  07:00 local. Limites configuráveis via `plan_weekly_usd_limit_all` e
+  `plan_weekly_usd_limit_sonnet` em settings.json (defaults calibrados
+  num ponto real: claude.ai 2% all-models com `cost_usd` semanal de
+  $4730 → 100% ≈ $236k).
+- Função `weekly_plan_usage(window_days=7)` em `usage_telemetry.py`
+  separando custo total e custo só de Sonnet.
+
+### Alterado
+- **Removido `$X/$Y` do display** do uso 5h. Max 5x é assinatura, não
+  pay-per-use; o cifrão era ruído. Valores absolutos permanecem no
+  tooltip.
+
 ## [0.7.11] — 2026-05-18
 
 ### Corrigido

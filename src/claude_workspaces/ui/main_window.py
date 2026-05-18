@@ -1830,63 +1830,114 @@ class MainWindow(QMainWindow):
         self._refresh_plan_usage_status()
 
     def _refresh_plan_usage_status(self) -> None:
-        """Atualiza o label de uso do plano na sidebar. Soma cost_usd das
-        mensagens assistant de TODAS as sessões nos últimos 5h e divide
-        pelo limite configurado (settings.plan_usd_limit_5h). Mostra o %,
-        o cost em USD e quanto falta pro reset. Some quando não houve
-        uso na janela."""
+        """Atualiza o label de uso do plano na sidebar com 3 linhas
+        (replica `Plan usage limits` do claude.ai):
+          - Sessão 5h: % · reset NhNNm
+          - Semana (todos): % · reset seg 07:00
+          - Semana (Sonnet): %
+        Sem cifrão na UI — Max 5x é assinatura, não pay-per-use. Valores
+        absolutos ficam no tooltip."""
         from datetime import datetime, timedelta, timezone
 
-        from ..usage_telemetry import recent_plan_usage
+        from ..usage_telemetry import recent_plan_usage, weekly_plan_usage
 
         label = getattr(self, "_context_status_label", None)
         if label is None:
             return
         try:
             usage = recent_plan_usage(5 * 3600)
+            weekly = weekly_plan_usage(7)
         except Exception:  # noqa: BLE001
             log.debug("falha ao agregar uso do plano", exc_info=True)
             label.setVisible(False)
             return
-        if usage.first_ts is None or usage.cost_usd <= 0:
+        # Sem nada nas duas janelas → some completamente.
+        if (usage.first_ts is None or usage.cost_usd <= 0) and weekly.all_cost_usd <= 0:
             label.setVisible(False)
             return
-        limit_usd = max(self.settings.plan_usd_limit_5h, 0.01)
-        pct = min(usage.cost_usd / limit_usd * 100.0, 999.0)
-        if pct < 50:
-            color = theme.SUCCESS
-        elif pct < 80:
-            color = theme.WARNING
-        else:
-            color = theme.DANGER
-        # Reset = first_ts + 5h. Se já passou (raro, próximo do limite),
-        # mostra 0m.
-        reset_at = usage.first_ts + timedelta(hours=5)
-        delta = reset_at - datetime.now(timezone.utc)
-        mins_left = max(int(delta.total_seconds() // 60), 0)
-        if mins_left >= 60:
-            reset_str = f"{mins_left // 60}h{mins_left % 60:02d}m"
-        else:
-            reset_str = f"{mins_left}m"
-        label.setText(
-            f"<span style='color: {theme.TEXT_FAINT};'>Sessão 5h:</span> "
-            f"<span style='color: {color}; font-weight: 600;'>{pct:.0f}%</span> "
-            f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
-            f"<span style='color: {theme.TEXT_FADED};'>"
-            f"${usage.cost_usd:.2f}/${limit_usd:.0f}</span> "
-            f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
-            f"<span style='color: {theme.TEXT_FAINT};'>reset {reset_str}</span>"
+
+        def _color(p: float) -> str:
+            if p < 50:
+                return theme.SUCCESS
+            if p < 80:
+                return theme.WARNING
+            return theme.DANGER
+
+        lines: list[str] = []
+
+        # --- Linha 1: sessão 5h ---
+        reset_5h_str = ""
+        reset_5h_wall = ""
+        sess_pct = 0.0
+        if usage.first_ts is not None and usage.cost_usd > 0:
+            limit_5h = max(self.settings.plan_usd_limit_5h, 0.01)
+            sess_pct = min(usage.cost_usd / limit_5h * 100.0, 999.0)
+            reset_at = usage.first_ts + timedelta(hours=5)
+            delta = reset_at - datetime.now(timezone.utc)
+            mins_left = max(int(delta.total_seconds() // 60), 0)
+            reset_5h_str = (
+                f"{mins_left // 60}h{mins_left % 60:02d}m"
+                if mins_left >= 60
+                else f"{mins_left}m"
+            )
+            reset_5h_wall = reset_at.astimezone().strftime("%H:%M")
+            lines.append(
+                f"<span style='color: {theme.TEXT_FAINT};'>Sessão 5h:</span> "
+                f"<span style='color: {_color(sess_pct)}; font-weight: 600;'>"
+                f"{sess_pct:.0f}%</span> "
+                f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
+                f"<span style='color: {theme.TEXT_FAINT};'>reset {reset_5h_str}</span>"
+            )
+
+        # --- Linhas 2 e 3: limites semanais ---
+        # Reset semanal: próxima segunda 07:00 local.
+        now_local = datetime.now().astimezone()
+        days_until_monday = (7 - now_local.weekday()) % 7
+        next_monday = (now_local + timedelta(days=days_until_monday)).replace(
+            hour=7, minute=0, second=0, microsecond=0
         )
-        reset_wall = reset_at.astimezone().strftime("%H:%M")
+        if next_monday <= now_local:
+            next_monday += timedelta(days=7)
+        weekly_reset_str = next_monday.strftime("%a %H:%M").lower()
+
+        limit_all = max(self.settings.plan_weekly_usd_limit_all, 0.01)
+        all_pct = min(weekly.all_cost_usd / limit_all * 100.0, 999.0)
+        lines.append(
+            f"<span style='color: {theme.TEXT_FAINT};'>Semana (todos):</span> "
+            f"<span style='color: {_color(all_pct)}; font-weight: 600;'>"
+            f"{all_pct:.0f}%</span> "
+            f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
+            f"<span style='color: {theme.TEXT_FAINT};'>reset {weekly_reset_str}</span>"
+        )
+
+        limit_sonnet = max(self.settings.plan_weekly_usd_limit_sonnet, 0.01)
+        sonnet_pct = min(weekly.sonnet_cost_usd / limit_sonnet * 100.0, 999.0)
+        lines.append(
+            f"<span style='color: {theme.TEXT_FAINT};'>Semana (Sonnet):</span> "
+            f"<span style='color: {_color(sonnet_pct)}; font-weight: 600;'>"
+            f"{sonnet_pct:.0f}%</span>"
+        )
+
+        label.setText("<br>".join(lines))
         label.setToolTip(
-            "Plan usage limits → Current session (janela de 5h)\n"
-            f"Custo aproximado: ${usage.cost_usd:.2f}  ·  "
-            f"Limite (settings): ${limit_usd:.2f}\n"
-            f"Tokens (input+output+cache): {usage.total_tokens:,}\n"
-            f"Sessão começou: {usage.first_ts.astimezone().strftime('%H:%M')}"
-            f"  ·  Reseta às {reset_wall} ({reset_str})\n"
-            "Ajuste `plan_usd_limit_5h` em settings.json pra calibrar com"
-            " o % que claude.ai mostra."
+            "Plan usage limits (replica claude.ai)\n"
+            f"Sessão 5h: ${usage.cost_usd:.2f} / ${self.settings.plan_usd_limit_5h:.0f}"
+            f"  →  {sess_pct:.0f}%"
+            + (
+                f"\n  Sessão começou: "
+                f"{usage.first_ts.astimezone().strftime('%H:%M')}"
+                f"  ·  Reseta às {reset_5h_wall} ({reset_5h_str})"
+                if usage.first_ts
+                else ""
+            )
+            + f"\nSemana (todos): ${weekly.all_cost_usd:.2f} / "
+            f"${self.settings.plan_weekly_usd_limit_all:.0f}  →  {all_pct:.0f}%"
+            f"\nSemana (Sonnet): ${weekly.sonnet_cost_usd:.2f} / "
+            f"${self.settings.plan_weekly_usd_limit_sonnet:.0f}  →  {sonnet_pct:.0f}%"
+            f"\nReset semanal: {next_monday.strftime('%a %d/%m %H:%M')}\n"
+            "Ajuste os limites `plan_usd_limit_5h`, "
+            "`plan_weekly_usd_limit_all` e `plan_weekly_usd_limit_sonnet` "
+            "em settings.json pra calibrar com claude.ai."
         )
         label.setVisible(True)
 
