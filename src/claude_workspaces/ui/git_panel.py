@@ -540,10 +540,15 @@ class GitPanel(QWidget):
     # ---------- context menu ----------
 
     def _on_context_menu(self, pos: QPoint) -> None:
-        items = self._tree.selectedItems()
         clicked = self._tree.itemAt(pos)
-        if not items and clicked is not None:
+        selected = self._tree.selectedItems()
+        if clicked is not None and clicked not in selected:
+            # Right-click em item não-selecionado: usa só o clicado
+            # (Qt não muda seleção em right-click por padrão; sem isso o menu
+            # cairia no item antigo da seleção em vez do que o usuário clicou.)
             items = [clicked]
+        else:
+            items = selected or ([clicked] if clicked else [])
         if not items:
             return
 

@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.16] — 2026-05-18
+
+### Corrigido
+- **Right-click no painel git**: agora usa o item clicado (e não a seleção
+  antiga) quando se clica com botão direito em um arquivo não-selecionado.
+  Antes, se o usuário tinha um repo/grupo selecionado e clicava com botão
+  direito num arquivo, o menu mostrava as ações do repo/grupo — sem `Add` ou
+  `Delete`.
+
 ## [0.7.15] — 2026-05-18
 
 ### Alterado
