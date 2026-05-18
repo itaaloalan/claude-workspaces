@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.17] — 2026-05-18
+
+### Corrigido
+- **Menu de contexto do git não abria**: os `QAction` criados em `_action()`
+  não tinham parent — o Python coletava antes do `QMenu.exec_()` rodar, então
+  o menu ficava só com os separadores e o Qt nem chegava a mostrá-lo. Agora
+  parenta no `GitPanel`. Quebrou em 0.7.15 quando o menu de contexto ganhou
+  esse helper. (Diagnosticado via log em `/tmp/claude-workspaces-debug.log`,
+  já removido.)
+
 ## [0.7.16] — 2026-05-18
 
 ### Corrigido

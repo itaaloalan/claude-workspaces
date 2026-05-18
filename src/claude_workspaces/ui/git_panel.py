@@ -690,9 +690,10 @@ class GitPanel(QWidget):
         except LaunchError as e:
             QMessageBox.warning(self, "Falha ao abrir pasta", str(e))
 
-    @staticmethod
-    def _action(text: str, slot) -> QAction:
-        a = QAction(text)
+    def _action(self, text: str, slot) -> QAction:
+        # Parent obrigatório: sem isso o QAction é coletado pelo GC antes do
+        # QMenu abrir (Qt.addAction(QAction) não toma posse).
+        a = QAction(text, self)
         a.triggered.connect(slot)
         return a
 
