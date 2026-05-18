@@ -100,6 +100,16 @@ class TerminalWidget(QWidget):
         # cada poll — assim mudanças em Settings afetam todos os terminais
         # vivos sem reinicialização).
         self._pending_idle_since: float | None = None
+        # Marco de quando o terminal entrou em estado running (PTY ativa).
+        # Nos primeiros segundos depois do start, o parser oscila por
+        # causa do output inicial do TUI (boot, render, resume). Durante
+        # essa janela de graça (`_STARTUP_GRACE_S`), o debounce é
+        # ignorado — se o parser diz "Ocioso", a UI mostra "Ocioso"
+        # direto. Without this, reabrir o app deixa todas as sessões
+        # presas em "Trabalhando" por `idle_debounce_seconds` mesmo
+        # quando o Claude já está no prompt principal.
+        self._running_since: float = 0.0
+        self._STARTUP_GRACE_S = 3.0
         # Context Claude (cwd + resume) pra descobrir o título da sessão
         # via scan do ~/.claude/projects/<cwd>/*.jsonl
         self._claude_cwd: str | None = None
@@ -196,6 +206,7 @@ class TerminalWidget(QWidget):
             self._is_running = running
             self.running_changed.emit(running)
             if running:
+                self._running_since = time.monotonic()
                 self._activity_timer.start()
             else:
                 self._activity_timer.stop()
@@ -360,10 +371,20 @@ class TerminalWidget(QWidget):
         # direto: o usuário precisa de feedback imediato quando o Claude
         # pede uma decisão. Quando o debounce é 0, vira idle imediatamente
         # (modo antigo, sem debounce).
+        # Janela de graça pós-startup: nos primeiros _STARTUP_GRACE_S após
+        # o PTY entrar em running, o debounce é ignorado. Isso permite
+        # que reabrir o app com sessões já no prompt mostre "Ocioso"
+        # imediatamente em vez de ficar 20s em "Trabalhando" por causa
+        # do flicker inicial do parser durante o render do TUI.
         now = time.monotonic()
         debounce_s = type(self)._idle_debounce_s
+        in_startup_grace = (
+            self._running_since > 0
+            and (now - self._running_since) < self._STARTUP_GRACE_S
+        )
         if (
             debounce_s > 0
+            and not in_startup_grace
             and self._last_working
             and not activity.is_working
             and not activity.needs_decision

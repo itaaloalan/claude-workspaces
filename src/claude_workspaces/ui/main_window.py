@@ -985,16 +985,16 @@ class MainWindow(QMainWindow):
         rows = self._visible_rows()
         if not rows:
             return
-        self.list_widget.setCurrentRow(rows[0])
+        self.list_widget.setCurrentItem(self.list_widget.topLevelItem(rows[0]))
         self.list_widget.setFocus()
 
     def _refresh_item_label(self, workspace_id: str) -> None:
-        for i in range(self.list_widget.count()):
-            item = self.list_widget.item(i)
-            ws = item.data(Qt.ItemDataRole.UserRole)
-            if ws.id == workspace_id:
-                item.setText(self._item_label(ws))
-                break
+        item = self._find_workspace_item(workspace_id)
+        if item is None:
+            return
+        ws = item.data(0, Qt.ItemDataRole.UserRole)
+        if isinstance(ws, Workspace):
+            item.setText(0, self._item_label(ws))
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:

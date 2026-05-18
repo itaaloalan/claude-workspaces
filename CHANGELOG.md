@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.3] — 2026-05-18
+
+### Corrigido
+- **Crash ao terminal mudar de estado running** (`AttributeError:
+  'QTreeWidget' object has no attribute 'count'`): `_refresh_item_label`
+  e `_search_submit` ainda usavam a API antiga de `QListWidget`
+  (`count()`, `item(i)`, `setCurrentRow()`) depois da migração da
+  sidebar pra `QTreeWidget`. Agora reusam `_find_workspace_item` e
+  `topLevelItem(...)` corretamente, evitando a exceção a cada
+  notificação de `running/idle` vinda do PTY.
+
 ## [0.7.2] — 2026-05-18
 
 ### Corrigido
@@ -24,6 +35,12 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   imediatamente após salvar (via class-attr em `TerminalWidget`,
   sem precisar reiniciar). 0 desliga o debounce (volta ao
   comportamento antigo, com flicker).
+- **Janela de graça pós-startup (3s)** no `TerminalWidget`: nos
+  primeiros 3 segundos depois do PTY entrar em running, o debounce
+  working→idle é ignorado. Fecha o caso "reabri o app com sessões
+  já no prompt principal e fiquei 20s vendo 'Trabalhando' até virar
+  'Ocioso'" — agora vira "Ocioso" assim que o parser confirma o
+  marker idle, sem esperar o debounce.
 
 ## [0.7.0] — 2026-05-18
 
