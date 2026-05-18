@@ -1234,13 +1234,14 @@ class MainWindow(QMainWindow):
                 self._runner_group_items.pop(ws.id, None)
             return
 
-        # Garante o header "Runners workspace" como filho do ws_item.
+        # Garante o header "Runners workspace" como filho do ws_item,
+        # sempre no topo — antes da lista de consoles.
         group = self._runner_group_items.get(ws.id)
         if group is None:
             group = QTreeWidgetItem()
             group.setData(0, Qt.ItemDataRole.UserRole, ("runner_group", ws.id, ""))
             group.setSizeHint(0, QSize(0, 24))
-            ws_item.addChild(group)
+            ws_item.insertChild(0, group)
 
             def _toggle(*_, g=group):
                 g.setExpanded(not g.isExpanded())
@@ -2273,17 +2274,10 @@ class MainWindow(QMainWindow):
             status,
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
-        # Insere antes do "footer" de runners workspace-scope (que mora
-        # no final do workspace) — garante que consoles ficam acima.
-        ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
-        ws_id_for_count = ws_data.id if isinstance(ws_data, Workspace) else ""
-        runner_count = sum(
-            1
-            for it in self._runner_tree_items.get(ws_id_for_count, {}).values()
-            if it.parent() is ws_item
-        )
-        insert_at = ws_item.childCount() - runner_count
-        ws_item.insertChild(insert_at, child)
+        # Layout do workspace na sidebar: "Runners workspace" no topo,
+        # depois a lista de consoles. O group de runners (quando existe)
+        # é inserido em index 0; consoles vão sempre ao final.
+        ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
         # Conecta os botões inline (▶ ⚙) à TerminalWidget correspondente.
         # Visibilidade respeita o toggle do header WORKSPACES.

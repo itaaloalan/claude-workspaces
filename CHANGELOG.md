@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.11] — 2026-05-18
+
+### Corrigido
+- **"Runners workspace" volta para o topo do workspace na sidebar**:
+  o group de runners workspace-scope agora é inserido em `index 0`
+  do `ws_item` e os consoles entram via `addChild` no fim — ordem
+  resultante: `Runners workspace → console1 → console2 → ...`.
+  Antes (0.18.10) o group acabava no rodapé porque `_install_runner_children`
+  usava `addChild` e o `_add_terminal_child` não compensava mais a posição.
+
 ## [0.18.10] — 2026-05-18
 
 ### Corrigido
