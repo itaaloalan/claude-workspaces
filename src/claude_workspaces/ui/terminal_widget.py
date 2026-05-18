@@ -84,6 +84,13 @@ class TerminalWidget(QWidget):
         self._last_working = False
         self._last_needs_decision = False
         self._activity_dirty = False
+        # Debounce working→idle: o parser oscila entre is_working True/False
+        # durante o mesmo turno (tool calls intercalando com texto). Aguarda
+        # 5s estável em "não-working" antes de propagar pra UI pra evitar
+        # o flicker de "Trabalhando ↔ Ocioso" enquanto o Claude ainda
+        # está respondendo.
+        self._pending_idle_since: float | None = None
+        self._IDLE_DEBOUNCE_S = 5.0
         # Context Claude (cwd + resume) pra descobrir o título da sessão
         # via scan do ~/.claude/projects/<cwd>/*.jsonl
         self._claude_cwd: str | None = None
@@ -123,6 +130,13 @@ class TerminalWidget(QWidget):
         )
         self._continue_btn.clicked.connect(self.send_continue)
         toolbar.addWidget(self._continue_btn)
+        self._mode_btn = QPushButton("⚙ Modo")
+        self._mode_btn.setEnabled(False)
+        self._mode_btn.setToolTip(
+            "Trocar modo (plan/auto/…), effort ou modelo desta sessão"
+        )
+        self._mode_btn.clicked.connect(self._open_mode_popup)
+        toolbar.addWidget(self._mode_btn)
         self._stop_btn = QPushButton("Encerrar")
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.terminate)
@@ -291,6 +305,17 @@ class TerminalWidget(QWidget):
         diretório do JSONL no ~/.claude/projects/."""
         return self._claude_cwd
 
+    def claimed_session_path(self) -> Path | None:
+        """Caminho absoluto do JSONL da sessão atualmente vinculada, ou
+        None se ainda não foi resolvida. Usado pra computar usage stats
+        no menu de contexto."""
+        sid = self.claimed_session_id()
+        if not sid or not self._claude_cwd:
+            return None
+        from ..claude_sessions import project_sessions_dir
+        p = project_sessions_dir(self._claude_cwd) / f"{sid}.jsonl"
+        return p if p.exists() else None
+
     def _record_output(self, data: bytes) -> None:
         self._output_buffer.extend(data)
         if len(self._output_buffer) > 8192:
@@ -314,9 +339,37 @@ class TerminalWidget(QWidget):
         ):
             self._fire_ready_callback(True)
         if not self._activity_dirty and self._last_working and age <= 2.5:
-            return
+            # Importante: não retorna se há debounce idle pendente — precisamos
+            # continuar parsando pra detectar se o Claude voltou a trabalhar
+            # ou se os 5s estabilizaram.
+            if self._pending_idle_since is None:
+                return
         self._activity_dirty = False
         activity = parse_status(bytes(self._output_buffer), age)
+
+        # Debounce working→idle. Working→awaiting (needs_decision) passa
+        # direto: o usuário precisa de feedback imediato quando o Claude
+        # pede uma decisão.
+        now = time.monotonic()
+        if (
+            self._last_working
+            and not activity.is_working
+            and not activity.needs_decision
+        ):
+            if self._pending_idle_since is None:
+                self._pending_idle_since = now
+            if now - self._pending_idle_since < self._IDLE_DEBOUNCE_S:
+                # Suprime emit — UI continua mostrando "Trabalhando".
+                # Se status mudar (ex: nova ação), também não emite, pra
+                # não atualizar a sub-linha enquanto a transição flutua.
+                return
+            # 5s estável sem voltar a working: pode realmente virar idle.
+            self._pending_idle_since = None
+        else:
+            # Voltou a working, ou já estava idle, ou virou awaiting:
+            # cancela qualquer debounce pendente.
+            self._pending_idle_since = None
+
         if (
             activity.status != self._last_status
             or activity.is_working != self._last_working
@@ -377,6 +430,7 @@ class TerminalWidget(QWidget):
         self._status.setText("(processo encerrado)")
         self._stop_btn.setEnabled(False)
         self._continue_btn.setEnabled(False)
+        self._mode_btn.setEnabled(False)
         self._set_running(False)
 
     def send_text(self, text: str, submit: bool = True) -> None:
@@ -396,6 +450,42 @@ class TerminalWidget(QWidget):
     def send_continue(self) -> None:
         """Atalho — manda 'continue' + Enter pra retomar trabalho do Claude."""
         self.send_text("continue")
+
+    def send_cycle_mode(self) -> None:
+        """Manda Shift+Tab (CSI Z) — cicla entre os modos do Claude Code
+        (default → auto-accept → plan)."""
+        if not self.session.is_running():
+            return
+        self.session.write(b"\x1b[Z")
+
+    def send_open_model(self) -> None:
+        """Abre o picker `/model` no prompt do Claude (com Enter)."""
+        self.send_text("/model")
+
+    def send_open_effort(self) -> None:
+        """Abre o picker `/effort` no prompt do Claude (com Enter)."""
+        self.send_text("/effort")
+
+    def _open_mode_popup(self) -> None:
+        """Mostra o ModePopup ancorado abaixo do botão ⚙ Modo."""
+        from .mode_popup import ModePopup
+
+        if not self.session.is_running():
+            return
+        popup = ModePopup(
+            on_cycle=self.send_cycle_mode,
+            on_effort=self.send_open_effort,
+            on_model=self.send_open_model,
+            parent=self,
+        )
+        # Ancorar abaixo-direita do botão (estilo dropdown)
+        anchor = self._mode_btn.mapToGlobal(
+            self._mode_btn.rect().bottomRight()
+        )
+        # Desloca pra que a direita do popup alinhe com a direita do botão
+        anchor.setX(anchor.x() - popup.sizeHint().width())
+        anchor.setY(anchor.y() + 4)
+        popup.show_at(anchor)
 
     def start_command(self, argv: list[str], cwd: str, label: str | None = None) -> None:
         if not self._bridge_ready:
@@ -417,6 +507,7 @@ class TerminalWidget(QWidget):
         self._status.setText(label or " ".join(argv))
         self._stop_btn.setEnabled(True)
         self._continue_btn.setEnabled(True)
+        self._mode_btn.setEnabled(True)
         self._set_running(True)
 
     def start_shell_command(
@@ -443,6 +534,7 @@ class TerminalWidget(QWidget):
             self.session.terminate()
         self._stop_btn.setEnabled(False)
         self._continue_btn.setEnabled(False)
+        self._mode_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
         self._set_running(False)
 

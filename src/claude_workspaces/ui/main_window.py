@@ -753,10 +753,28 @@ class MainWindow(QMainWindow):
             term = self._terminal_widget_for(data)
             if term is None or not term.is_running():
                 return
+            self._add_session_info_actions(menu, term)
             continue_act = QAction("▶ Continuar este console", menu)
             continue_act.setToolTip("Manda 'continue' + Enter pro Claude desta aba")
             continue_act.triggered.connect(term.send_continue)
             menu.addAction(continue_act)
+            menu.addSeparator()
+            cycle_act = QAction("↹ Ciclar modo (Plan / Auto / …)", menu)
+            cycle_act.setToolTip(
+                "Manda Shift+Tab pro Claude — cicla entre Plan, Auto-accept "
+                "e Default. Olha o indicador embaixo-direita do TUI pra ver "
+                "onde parou."
+            )
+            cycle_act.triggered.connect(term.send_cycle_mode)
+            menu.addAction(cycle_act)
+            effort_act = QAction("⏻ Trocar effort (/effort)", menu)
+            effort_act.setToolTip("Abre o slash command /effort no prompt do Claude")
+            effort_act.triggered.connect(term.send_open_effort)
+            menu.addAction(effort_act)
+            model_act = QAction("✦ Trocar modelo (/model)", menu)
+            model_act.setToolTip("Abre o slash command /model no prompt do Claude")
+            model_act.triggered.connect(term.send_open_model)
+            menu.addAction(model_act)
         elif isinstance(data, Workspace):
             terms = self._running_terminals_for_workspace(data.id)
             if not terms:
@@ -780,6 +798,44 @@ class MainWindow(QMainWindow):
         if menu.isEmpty():
             return
         menu.exec_(self.list_widget.viewport().mapToGlobal(pos))
+
+    def _add_session_info_actions(self, menu: QMenu, term: "TerminalWidget") -> None:
+        """Prefixa o menu de contexto do console com infos da sessão Claude:
+        modelo da última mensagem assistant + tokens acumulados + custo
+        aproximado. Lê o JSONL claimed; se sessão ainda não resolveu,
+        mostra placeholder informativo."""
+        from ..usage_telemetry import format_tokens, usage_for_session
+
+        path = term.claimed_session_path()
+        if path is None:
+            placeholder = QAction("(sessão ainda não resolvida)", menu)
+            placeholder.setEnabled(False)
+            menu.addAction(placeholder)
+            menu.addSeparator()
+            return
+        try:
+            stats = usage_for_session(path)
+        except Exception:  # noqa: BLE001
+            log.debug("falha ao agregar usage da sessão %s", path, exc_info=True)
+            return
+        model_label = stats.last_model or "(modelo desconhecido)"
+        model_act = QAction(f"✦ Modelo: {model_label}", menu)
+        model_act.setEnabled(False)
+        menu.addAction(model_act)
+        if stats.total_tokens > 0:
+            tokens_label = (
+                f"⌬ Tokens: {format_tokens(stats.input_tokens)} in · "
+                f"{format_tokens(stats.output_tokens)} out · "
+                f"{format_tokens(stats.cache_creation_tokens + stats.cache_read_tokens)} cache"
+            )
+            tokens_act = QAction(tokens_label, menu)
+            tokens_act.setEnabled(False)
+            menu.addAction(tokens_act)
+        if stats.cost_usd > 0:
+            cost_act = QAction(f"$ Custo aprox.: ~${stats.cost_usd:.2f}", menu)
+            cost_act.setEnabled(False)
+            menu.addAction(cost_act)
+        menu.addSeparator()
 
     def _running_terminals_for_workspace(self, workspace_id: str) -> list[TerminalWidget]:
         area = self.terminals_coord.area_for(workspace_id)

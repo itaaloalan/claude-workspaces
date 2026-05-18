@@ -6,6 +6,46 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.1] — 2026-05-18
+
+### Corrigido
+- **Flicker de "Ocioso" durante o turno do Claude**: o parser de
+  `claude_activity` oscila entre `is_working=True/False` enquanto o
+  Claude alterna entre tool calls e geração de texto, fazendo o status
+  na sidebar piscar "Trabalhando ↔ Ocioso". Agora a transição
+  working→idle é debounced em 5s — só vira "Ocioso" se ficar 5s
+  estável sem voltar a working. Working→awaiting (`needs_decision`)
+  continua imediato, pra não atrasar o feedback de permission prompts.
+
+## [0.7.0] — 2026-05-18
+
+### Adicionado
+- **Botão "⚙ Modo"** na toolbar de cada terminal Claude, ao lado de
+  ▶ Continuar / Encerrar. Abre um popup estilo VS Code com:
+  - Os 5 modos do Claude Code (Ask before edits / Edit automatically /
+    Plan / Auto / Bypass permissions) descritos um por um. Clique em
+    qualquer linha = manda `Shift+Tab` no PTY (cicla pro próximo modo).
+  - "Trocar effort" — abre `/effort` no prompt.
+  - "Trocar modelo" — abre `/model` no prompt.
+- **Infos da sessão no menu de contexto da sidebar**: clique direito num
+  console mostra modelo da última mensagem assistant, total de tokens
+  (in/out/cache) e custo aproximado em USD — lidos do JSONL claimed em
+  `~/.claude/projects/`. Embaixo das infos, mesmos atalhos do popup:
+  Continuar / Ciclar modo / Trocar effort / Trocar modelo.
+- **Probe de versão do Claude Code no startup** (`claude_probe.py`):
+  roda `claude --version`, parseia e loga se está fora do range testado
+  (`TESTED_CLAUDE_RANGE` — hoje `2.1.0`–`2.1.999`). Não bloqueia. Útil
+  pra explicar regressões depois de auto-updates do Claude Code que
+  mudem schema dos JSONLs, copy do TUI ou slash commands.
+
+### Mudado
+- `usage_telemetry.UsageStats` ganhou campo `last_model` — reflete o
+  modelo da última mensagem assistant (acompanha `/model` mid-session).
+- `usage_telemetry.usage_for_session(jsonl_path)` novo helper —
+  agrega tokens/custo de **uma** sessão sem varrer todos os projetos.
+- `TerminalWidget.claimed_session_path()` exposto pro menu de contexto
+  conseguir ler o JSONL da sessão claimed.
+
 ## [0.6.0] — 2026-05-18
 
 ### Adicionado

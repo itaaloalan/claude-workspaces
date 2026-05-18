@@ -51,6 +51,7 @@ class UsageStats:
     sessions: int = 0
     last_used: datetime | None = None
     by_model: dict[str, int] = field(default_factory=dict)  # model → total tokens
+    last_model: str = ""  # modelo da última mensagem assistant — reflete /model dentro da sessão
 
     @property
     def total_tokens(self) -> int:
@@ -160,6 +161,54 @@ def aggregate_usage_by_workspace(
     for cwd, files in seen_sessions_by_cwd.items():
         out[cwd].sessions = len(files)
     return out
+
+
+def usage_for_session(jsonl_path: Path) -> UsageStats:
+    """Lê um único JSONL e devolve UsageStats agregado dessa sessão.
+    `last_model` reflete o modelo da mensagem assistant mais recente —
+    útil quando o usuário usa /model no meio da sessão pra trocar."""
+    stats = UsageStats()
+    if not jsonl_path.is_file():
+        return stats
+    try:
+        with jsonl_path.open(encoding="utf-8") as fp:
+            for line in fp:
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if msg.get("type") != "assistant":
+                    continue
+                ts = _parse_timestamp(msg.get("timestamp", ""))
+                inner = msg.get("message") or {}
+                if not isinstance(inner, dict):
+                    continue
+                usage = inner.get("usage") or {}
+                if not isinstance(usage, dict):
+                    continue
+                model = inner.get("model") or "?"
+                i = int(usage.get("input_tokens") or 0)
+                o = int(usage.get("output_tokens") or 0)
+                cc = int(usage.get("cache_creation_input_tokens") or 0)
+                cr = int(usage.get("cache_read_input_tokens") or 0)
+                if i + o + cc + cr <= 0 and model == "?":
+                    continue
+                stats.input_tokens += i
+                stats.output_tokens += o
+                stats.cache_creation_tokens += cc
+                stats.cache_read_tokens += cr
+                stats.cost_usd += _model_cost(model, usage)
+                stats.by_model[model] = (
+                    stats.by_model.get(model, 0) + (i + o + cc + cr)
+                )
+                if model and model != "?":
+                    stats.last_model = model
+                if ts and (stats.last_used is None or ts > stats.last_used):
+                    stats.last_used = ts
+        stats.sessions = 1
+    except OSError:
+        log.debug("falha ao ler %s", jsonl_path, exc_info=True)
+    return stats
 
 
 def format_tokens(n: int) -> str:

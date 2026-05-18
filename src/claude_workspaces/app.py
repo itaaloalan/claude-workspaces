@@ -51,6 +51,9 @@ def main() -> int:
     log = logging.getLogger(__name__)
     log.info("Iniciando Claude Workspaces")
 
+    from .claude_probe import run_probe
+    run_probe()
+
     app = QApplication(sys.argv)
     app.setApplicationName("Claude Workspaces")
     app.setApplicationDisplayName("Claude Workspaces")
