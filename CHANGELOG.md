@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.15.0] — 2026-05-18
+
+### Alterado
+- **Runners de console viraram top tab no painel inferior**: a antiga
+  aba "Runners" foi renomeada pra "Runners workspace" e ganhou uma
+  nova vizinha — "Runners (console)" — que mostra o painel de runners
+  do console (terminal) atualmente focado. O painel deixa de ser
+  embutido dentro do TerminalWidget (splitter vertical xterm+runners)
+  e passa a viver no `_bottom_tabs` ao lado do Terminal. O botão
+  `▤ Runners` na toolbar do console foca a aba; trocar de console
+  (terminal_host ou tabs.currentChanged) sincroniza automaticamente
+  qual painel aparece. Fecha o terminal → o painel correspondente é
+  removido do stack e destruído. Mais espaço vertical pro xterm e
+  comportamento de descoberta consistente com os runners do workspace.
+
 ## [0.14.0] — 2026-05-18
 
 ### Alterado

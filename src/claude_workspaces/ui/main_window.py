@@ -754,6 +754,9 @@ class MainWindow(QMainWindow):
         self.terminal_host.currentChanged.connect(
             lambda _i: self._refresh_plan_usage_status()
         )
+        self.terminal_host.currentChanged.connect(
+            lambda _i: self._sync_console_runner_host()
+        )
 
         # Embute o host num QTabWidget com aba "Terminal" + "Runners".
         pane = builder.pane
@@ -773,7 +776,25 @@ class MainWindow(QMainWindow):
             "background: #0e0e0e; color: #555; padding: 28px;"
         )
         self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
-        self._bottom_tabs.addTab(self.runner_host, "Runners")
+        self._bottom_tabs.addTab(self.runner_host, "Runners workspace")
+
+        # Terceira aba — runners de console (cada aba Claude tem seu próprio
+        # painel; aqui aparece o painel do console ativo).
+        self.console_runner_host = QStackedWidget()
+        self.console_runner_host.setMinimumHeight(0)
+        crh_empty = QLabel(
+            "Abra um console (Claude) e clique em ▤ Runners pra criar runners "
+            "específicos dele."
+        )
+        crh_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        crh_empty.setWordWrap(True)
+        crh_empty.setStyleSheet(
+            "background: #0e0e0e; color: #555; padding: 28px;"
+        )
+        self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
+            crh_empty
+        )
+        self._bottom_tabs.addTab(self.console_runner_host, "Runners (console)")
 
         layout.addWidget(self._bottom_tabs, stretch=1)
         return pane
@@ -1405,6 +1426,32 @@ class MainWindow(QMainWindow):
         # de o usuário abrir a aba "Runners".
         runner_area = self._get_or_create_runner_area(workspace)
         self.runner_host.setCurrentWidget(runner_area)
+        self._sync_console_runner_host()
+
+    def _sync_console_runner_host(self) -> None:
+        """Mostra na aba 'Runners (console)' o painel do console ativo
+        (terminal atualmente focado). Cai pro placeholder se nenhum
+        console tiver painel ainda criado."""
+        area = self._active_terminal_area()
+        target = None
+        if area is not None:
+            term = area.tabs.currentWidget()
+            if term is not None:
+                ws_id = None
+                for wid, a in self.terminals_coord._areas.items():
+                    if a is area:
+                        ws_id = wid
+                        break
+                if ws_id is not None:
+                    target = self._console_runner_areas.get(ws_id, {}).get(
+                        id(term)
+                    )
+        if target is not None:
+            self.console_runner_host.setCurrentWidget(target)
+        else:
+            self.console_runner_host.setCurrentIndex(
+                self._console_runner_placeholder_idx
+            )
 
     def _get_or_create_runner_area(self, workspace: Workspace) -> RunnerArea:
         area = self._runner_areas.get(workspace.id)
@@ -1485,6 +1532,9 @@ class MainWindow(QMainWindow):
     def _ensure_terminal_runner_panel(self, workspace: Workspace, terminal) -> RunnerArea:
         existing = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
         if existing is not None:
+            # Já existe — só foca a aba "Runners (console)" no painel certo.
+            self.console_runner_host.setCurrentWidget(existing)
+            self._bottom_tabs.setCurrentWidget(self.console_runner_host)
             return existing
         sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
         area = RunnerArea(workspace, settings=self.settings, console_session_id=sid)
@@ -1504,7 +1554,11 @@ class MainWindow(QMainWindow):
                 self._on_runner_state_changed(wid, rid, state)
         )
         self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
-        terminal.set_runner_panel(area)
+        # Painel mora no top tab "Runners (console)" — não embute mais no
+        # próprio terminal. O toolbar `▤ Runners` do terminal só foca a aba.
+        self.console_runner_host.addWidget(area)
+        self.console_runner_host.setCurrentWidget(area)
+        self._bottom_tabs.setCurrentWidget(self.console_runner_host)
         return area
 
     def _on_terminal_session_id_changed(
@@ -1601,6 +1655,9 @@ class MainWindow(QMainWindow):
         area.tabs.currentChanged.connect(
             lambda _i: self._refresh_plan_usage_status()
         )
+        area.tabs.currentChanged.connect(
+            lambda _i: self._sync_console_runner_host()
+        )
 
     def _handle_tab_activity(
         self,
@@ -1649,11 +1706,15 @@ class MainWindow(QMainWindow):
         # Aba que saiu pode ter sido a única causa de colisão — re-disambigua
         if parent_item is not None:
             self._refresh_workspace_child_titles(parent_item)
-        # Limpa o RunnerArea embutido do console fechado, se houver. O
-        # widget já é destruído junto com o terminal; aqui só remove a
-        # entrada do registry pra não vazar referência.
+        # Limpa o RunnerArea do console fechado: agora o painel mora no
+        # top tab "Runners (console)" (não mais embutido no terminal),
+        # então é responsabilidade nossa remover do QStackedWidget.
         for areas in self._console_runner_areas.values():
-            areas.pop(tab_id, None)
+            stale = areas.pop(tab_id, None)
+            if stale is not None:
+                self.console_runner_host.removeWidget(stale)
+                stale.deleteLater()
+        self._sync_console_runner_host()
 
     def _on_spinner_tick(self, spinner_char: str) -> None:
         """Slot do TerminalCoordinator.spinner_tick — atualiza children
@@ -2392,9 +2453,13 @@ class MainWindow(QMainWindow):
             runner_area.deleteLater()
             if self.runner_host.count() == 1:
                 self.runner_host.setCurrentIndex(self._runner_placeholder_idx)
-        # RunnerAreas embutidas em consoles desse workspace já são destruídas
-        # com seus terminais; só limpa o registry pra não reter o dict.
-        self._console_runner_areas.pop(workspace_id, None)
+        # RunnerAreas dos consoles desse workspace moram no top tab
+        # "Runners (console)" — remove cada uma do QStackedWidget antes
+        # de soltar o registry.
+        for stale in (self._console_runner_areas.pop(workspace_id, {}) or {}).values():
+            self.console_runner_host.removeWidget(stale)
+            stale.deleteLater()
+        self._sync_console_runner_host()
 
     # ---------- tarefas ----------
 
