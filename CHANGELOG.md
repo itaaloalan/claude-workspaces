@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.8] — 2026-05-18
+
+### Corrigido
+- **"Runners console" finalmente aparece na sidebar após restaurar**:
+  `_ensure_terminal_runner_panel` agora dispara um
+  `_install_console_runner_children` no fim, usando o `term_item` do
+  console correspondente. Cobre a corrida em que `_add_terminal_child`
+  rodou antes do `_claude_resume_id` propagar e marcou o grupo com
+  pending key — agora, assim que a RunnerArea é criada (auto no
+  restore ou manual via ▤ Runners), o grupo é re-instalado e os
+  runners viram children visíveis do item do console.
+
 ## [0.18.7] — 2026-05-18
 
 ### Corrigido

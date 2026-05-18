@@ -1719,6 +1719,15 @@ class MainWindow(QMainWindow):
         self.console_runner_host.addWidget(area)
         self.console_runner_host.setCurrentWidget(area)
         self._bottom_tabs.setCurrentWidget(self.console_runner_host)
+        # Atualiza o grupo "Runners console" da sidebar — agora que a
+        # area existe, o lookup pelo `_console_runner_areas` casa o sid
+        # com os runners persistidos (chave pending criada no boot
+        # antes de o session_id ter sido reportado).
+        term_item = self.terminals_coord.state.tree_items.get(id(terminal))
+        if term_item is not None:
+            self._install_console_runner_children(
+                term_item, workspace, id(terminal)
+            )
         return area
 
     def _on_terminal_session_id_changed(
