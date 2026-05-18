@@ -97,6 +97,15 @@ class SettingsPanel(QWidget):
         self._rider_cmd.setPlaceholderText("rider")
         form.addRow("Rider:", self._rider_cmd)
 
+        self._browser_cmd = QLineEdit()
+        self._browser_cmd.setPlaceholderText("(vazio = xdg-open / browser do sistema)")
+        self._browser_cmd.setToolTip(
+            "Comando usado pelo 'Abrir browser ao carregar' dos runners. "
+            "Vazio = QDesktopServices.openUrl (xdg-open no Linux). Aceita "
+            "binário no PATH ('chromium', 'firefox') ou caminho absoluto."
+        )
+        form.addRow("Browser:", self._browser_cmd)
+
         outer.addLayout(form)
 
         outer.addWidget(self._build_worktree_section())
@@ -140,6 +149,7 @@ class SettingsPanel(QWidget):
         self._webstorm_cmd.setText(self.settings.webstorm_command)
         self._pycharm_cmd.setText(self.settings.pycharm_command)
         self._rider_cmd.setText(self.settings.rider_command)
+        self._browser_cmd.setText(self.settings.browser_command)
         self._default_isolate_chk.setChecked(self.settings.default_isolate_worktree)
         self._default_new_branch_chk.setChecked(self.settings.default_create_new_branch)
         self._branch_prefix.setText(self.settings.branch_prefix)
@@ -167,6 +177,7 @@ class SettingsPanel(QWidget):
         self.settings.webstorm_command = self._webstorm_cmd.text().strip() or "webstorm"
         self.settings.pycharm_command = self._pycharm_cmd.text().strip() or "pycharm"
         self.settings.rider_command = self._rider_cmd.text().strip() or "rider"
+        self.settings.browser_command = self._browser_cmd.text().strip()
         self.settings.default_isolate_worktree = self._default_isolate_chk.isChecked()
         self.settings.default_create_new_branch = self._default_new_branch_chk.isChecked()
         self.settings.branch_prefix = (

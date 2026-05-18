@@ -68,6 +68,21 @@ class RunnerEditDialog(QDialog):
         self._enabled.setChecked(base.enabled)
         form.addRow("", self._enabled)
 
+        self._open_browser = QCheckBox("Abrir browser ao carregar")
+        self._open_browser.setToolTip(
+            "Detecta a URL/porta na saída do start_cmd e abre no browser "
+            "padrão (ou no comando configurado em Configurações). Abre "
+            "uma vez por start."
+        )
+        self._open_browser.setChecked(base.open_browser_on_ready)
+        form.addRow("", self._open_browser)
+
+        self._browser_url = QLineEdit(base.browser_url)
+        self._browser_url.setPlaceholderText(
+            "(opcional — vazio = detectar a URL na saída do processo)"
+        )
+        form.addRow("URL do browser:", self._browser_url)
+
         layout.addLayout(form)
 
         if on_generate_with_claude is not None:
@@ -97,5 +112,7 @@ class RunnerEditDialog(QDialog):
             stop_cmd=self._stop.toPlainText().strip(),
             restart_cmd=self._restart.toPlainText().strip(),
             enabled=self._enabled.isChecked(),
+            open_browser_on_ready=self._open_browser.isChecked(),
+            browser_url=self._browser_url.text().strip(),
             env=(base.env if base else {}),
         )

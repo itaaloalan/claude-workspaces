@@ -1221,7 +1221,7 @@ class MainWindow(QMainWindow):
         area = self._runner_areas.get(workspace.id)
         if area is not None:
             return area
-        area = RunnerArea(workspace)
+        area = RunnerArea(workspace, settings=self.settings)
         self._runner_areas[workspace.id] = area
         self.runner_host.addWidget(area)
         ws = workspace

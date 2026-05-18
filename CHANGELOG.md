@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.8.3] — 2026-05-18
+
+### Adicionado
+- **Runner — "Abrir browser ao carregar"**: novo checkbox no dialog de
+  edição do runner. Quando ligado, a app observa a saída do `start_cmd`,
+  detecta a URL (`http://localhost:3000`, `Listening on 8080`, etc.) e
+  abre no browser do sistema uma vez por start. Campo "URL do browser"
+  opcional permite forçar uma URL específica em vez de detectar.
+- **Configurações → Browser**: campo global pra escolher o binário do
+  browser (vazio = `xdg-open` / `QDesktopServices`). Aceita nome no
+  PATH (`chromium`, `firefox`) ou caminho absoluto.
+- **Aba do runner fica verde quando rodando** (vermelho em erro,
+  default quando parado/idle/exited).
+
 ## [0.8.2] — 2026-05-18
 
 ### Alterado

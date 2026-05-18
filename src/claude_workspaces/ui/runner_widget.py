@@ -8,10 +8,13 @@ ao vivo no xterm.js (mesmo HTML/JS da aba Terminal).
 from __future__ import annotations
 
 import logging
+import shlex
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Signal
+from PySide6.QtCore import QTimer, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -25,6 +28,8 @@ from PySide6.QtWidgets import (
 
 from ..models import RunnerConfig
 from ..pty_session import PtySession
+from ..services.runner_url_detect import detect_url
+from ..settings import Settings
 from .terminal_widget import STATIC_DIR, TerminalBridge
 
 log = logging.getLogger(__name__)
@@ -43,13 +48,19 @@ class RunnerWidget(QWidget):
         self,
         runner: RunnerConfig,
         default_cwd: str,
+        settings: Settings | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._runner = runner
         self._default_cwd = default_cwd
+        self._settings = settings or Settings()
         self._intent: str = "start"   # último comando solicitado
         self._state: str = "idle"
+        # Buffer recente da saída pra detecção de URL. Limitado pra não
+        # crescer indefinidamente em runners de log alto.
+        self._output_buf: str = ""
+        self._browser_opened_this_start: bool = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -92,6 +103,7 @@ class RunnerWidget(QWidget):
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)
+        self.session.output_received.connect(self._on_pty_output)
 
         self.bridge = TerminalBridge(self.session)
         self.bridge.ready.connect(self._on_bridge_ready)
@@ -181,6 +193,11 @@ class RunnerWidget(QWidget):
             return
         cwd = self._runner.cwd or self._default_cwd
         argv = ["bash", "-lc", cmd]
+        # Reset do estado de detecção a cada start/restart pra reabrir
+        # o browser numa nova execução.
+        if intent in ("start", "restart"):
+            self._output_buf = ""
+            self._browser_opened_this_start = False
         try:
             self.session.start(argv, cwd, env=self._runner.env or None)
         except OSError as e:
@@ -198,6 +215,46 @@ class RunnerWidget(QWidget):
             cmd, intent = self._pending_cmd
             self._pending_cmd = None
             self._spawn(cmd, intent)
+
+    def _on_pty_output(self, data: bytes) -> None:
+        if not self._runner.open_browser_on_ready:
+            return
+        if self._browser_opened_this_start:
+            return
+        if self._intent != "start" and self._intent != "restart":
+            return
+        try:
+            chunk = data.decode("utf-8", errors="replace")
+        except Exception:
+            return
+        # Mantém só os últimos ~16KB pra detecção (URLs aparecem cedo
+        # no startup, mas alguns servers logam warnings antes).
+        self._output_buf = (self._output_buf + chunk)[-16384:]
+
+        url = self._runner.browser_url.strip() or detect_url(self._output_buf)
+        if not url:
+            return
+        self._browser_opened_this_start = True
+        # Pequeno delay pra dar tempo do server aceitar conexões antes
+        # do browser bater na porta.
+        QTimer.singleShot(400, lambda u=url: self._open_browser(u))
+
+    def _open_browser(self, url: str) -> None:
+        cmd = (self._settings.browser_command or "").strip()
+        log.info("Abrindo browser para runner %s: %s", self._runner.name, url)
+        if cmd:
+            try:
+                argv = shlex.split(cmd) + [url]
+                subprocess.Popen(  # noqa: S603
+                    argv,
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return
+            except (OSError, ValueError) as e:
+                log.warning("browser_command falhou (%s), caindo em xdg-open", e)
+        QDesktopServices.openUrl(QUrl(url))
 
     def _on_session_finished(self) -> None:
         # Quando o processo termina, o estado depende do que estava rodando:

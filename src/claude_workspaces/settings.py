@@ -22,6 +22,10 @@ class Settings:
     webstorm_command: str = "webstorm"
     pycharm_command: str = "pycharm"
     rider_command: str = "rider"
+    # Comando do browser pra "Abrir browser ao carregar" dos runners.
+    # Vazio = usa QDesktopServices.openUrl (xdg-open no Linux). Pode ser
+    # um caminho absoluto ("/usr/bin/firefox") ou nome no PATH ("chromium").
+    browser_command: str = ""
     # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
     body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, middle, right_dock]
     right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]

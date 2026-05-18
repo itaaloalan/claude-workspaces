@@ -21,6 +21,12 @@ class RunnerConfig:
     cwd: str = ""                       # vazio → primeira pasta do workspace
     env: dict[str, str] = field(default_factory=dict)
     enabled: bool = True                # incluído no "Rodar todos"
+    # Abre o browser do sistema na URL detectada na stdout (ex:
+    # "Local: http://localhost:3000", "Listening on port 8080"). Quando
+    # `browser_url` está preenchido, usa o valor direto em vez de
+    # detectar. URL é aberta uma única vez por start.
+    open_browser_on_ready: bool = False
+    browser_url: str = ""               # override manual; vazio = autodetect
     id: str = field(default_factory=_new_id)
 
     def to_dict(self) -> dict:
@@ -38,6 +44,8 @@ class RunnerConfig:
             cwd=str(data.get("cwd", "")),
             env=env,
             enabled=bool(data.get("enabled", True)),
+            open_browser_on_ready=bool(data.get("open_browser_on_ready", False)),
+            browser_url=str(data.get("browser_url", "")),
             id=str(data.get("id") or _new_id()),
         )
 

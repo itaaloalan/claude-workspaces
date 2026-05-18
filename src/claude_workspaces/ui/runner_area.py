@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import RunnerConfig, Workspace
+from ..settings import Settings
 from .runner_widget import RunnerWidget
 
 
@@ -40,9 +42,15 @@ class RunnerArea(QWidget):
     runners_changed = Signal()
     running_count_changed = Signal(int)
 
-    def __init__(self, workspace: Workspace, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        workspace: Workspace,
+        settings: Settings | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._ws = workspace
+        self._settings = settings or Settings()
         self._running_count = 0
 
         outer = QVBoxLayout(self)
@@ -162,11 +170,12 @@ class RunnerArea(QWidget):
             seen_ids.add(runner.id)
             widget = existing.get(runner.id)
             if widget is None:
-                widget = RunnerWidget(runner, primary)
+                widget = RunnerWidget(runner, primary, settings=self._settings)
                 self._wire(widget)
             else:
                 widget.update_config(runner)
             self.tabs.addTab(widget, runner.name or "(runner)")
+            self._update_tab_color(widget)
 
         # Remove widgets de runners deletados.
         for rid, widget in existing.items():
@@ -179,17 +188,42 @@ class RunnerArea(QWidget):
         self._recompute_running_count()
 
     def _wire(self, widget: RunnerWidget) -> None:
-        widget.state_changed.connect(lambda _s: self._recompute_running_count())
+        widget.state_changed.connect(
+            lambda _s, w=widget: self._on_runner_state(w)
+        )
         widget.config_label_changed.connect(
             lambda name, w=widget: self._update_tab_text(w, name)
         )
         widget.edit_requested.connect(self._on_edit_request)
         widget.remove_requested.connect(self._on_remove_request)
 
+    def _on_runner_state(self, widget: RunnerWidget) -> None:
+        self._recompute_running_count()
+        self._update_tab_color(widget)
+
     def _update_tab_text(self, widget: RunnerWidget, name: str) -> None:
         idx = self.tabs.indexOf(widget)
         if idx >= 0:
             self.tabs.setTabText(idx, name)
+            self._update_tab_color(widget)
+
+    def _update_tab_color(self, widget: RunnerWidget) -> None:
+        idx = self.tabs.indexOf(widget)
+        if idx < 0:
+            return
+        # Verde quando rodando, vermelho discreto quando saiu com
+        # erro/exited inesperado; senão herda do tema (None).
+        state = widget.current_state()
+        color = None
+        if state == "running":
+            color = QColor("#4ade80")  # verde-claro
+        elif state == "error":
+            color = QColor("#f87171")
+        bar = self.tabs.tabBar()
+        if color is None:
+            bar.setTabTextColor(idx, QColor())  # reset
+        else:
+            bar.setTabTextColor(idx, color)
 
     def _recompute_running_count(self) -> None:
         count = 0
