@@ -54,15 +54,15 @@ _TREE_QSS = (
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:hover {{"
-    f"  background: rgba(255, 255, 255, 0.04);"
+    f"  background: rgba(255, 255, 255, 0.03);"
     f"}}"
     f"QTreeWidget::item:selected {{"
-    f"  background: rgba(106, 169, 224, 0.14);"
+    f"  background: rgba(255, 255, 255, 0.06);"
     f"  border-left: 2px solid {theme.TEXT_LINK};"
-    f"  color: {theme.TEXT_BRIGHT};"
+    f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:selected:hover {{"
-    f"  background: rgba(106, 169, 224, 0.20);"
+    f"  background: rgba(255, 255, 255, 0.08);"
     f"}}"
     f"QTreeWidget::branch {{ background: transparent; }}"
 )
@@ -165,7 +165,10 @@ class SidebarBuilder:
         pal = self.list_widget.palette()
         for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
             pal.setColor(grp, QPalette.ColorRole.Text, QColor(theme.TEXT_PRIMARY))
-            pal.setColor(grp, QPalette.ColorRole.HighlightedText, QColor(theme.TEXT_BRIGHT))
+            # HighlightedText = Text: seleção não muda a cor do texto (evita
+            # aparência de "trecho copiado"). O destaque vem da borda lateral
+            # + fundo neutro definidos no QSS.
+            pal.setColor(grp, QPalette.ColorRole.HighlightedText, QColor(theme.TEXT_PRIMARY))
             pal.setColor(grp, QPalette.ColorRole.Highlight, QColor(0, 0, 0, 0))
         self.list_widget.setPalette(pal)
         layout.addWidget(self.list_widget, stretch=1)
