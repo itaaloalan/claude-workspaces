@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.10] — 2026-05-18
+
+### Corrigido
+- **Label acima do "Novo Workspace" agora mostra uso do plano (5h)**:
+  na 0.7.8 o `Contexto: 45%` exibia o tamanho da janela de contexto da
+  última mensagem assistant — métrica distinta do que claude.ai mostra
+  em `Plan usage limits → Current session`. Substituído por
+  `Sessão 5h: 99% · $198/$200 · reset 2h07m`, agregando o `cost_usd`
+  de **todas** as sessões JSONL nos últimos 5h e dividindo pelo limite
+  configurado em `plan_usd_limit_5h` (settings).
+
+### Adicionado
+- **% de contexto por sessão na linha do console**: cada row de console
+  na sidebar agora mostra `opus-4-7 · 38% ctx · 75K in · 200K out · 8M
+  cache`. O `38% ctx` é o tamanho da janela de contexto da última
+  mensagem assistant relativo ao limite do modelo (200K, ou 1M se
+  `[1m]`), com cor (verde <50% / âmbar 50-80% / vermelho ≥80%). Tooltip
+  expande pra valores absolutos.
+- **Setting `plan_usd_limit_5h`** (default `200.0` USD ≈ Max 5x) que
+  controla o denominador do % global. Anthropic não publica o limite
+  exato em tokens/USD; ajustar manualmente caso o número não bata com
+  o que claude.ai mostra.
+
 ## [0.7.9] — 2026-05-18
 
 ### Alterado

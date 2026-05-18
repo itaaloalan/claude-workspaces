@@ -369,11 +369,15 @@ class TerminalChildWidget(QWidget):
         input_tokens: int,
         output_tokens: int,
         cache_tokens: int,
+        context_tokens: int = 0,
+        context_window: int = 0,
     ) -> None:
-        """Atualiza a 3a linha com modelo + tokens da sessão claimed.
-        Modelo é encurtado (claude-opus-4-7 → opus-4-7). Tokens vão como
-        `Nin · Mout · Kcache` se houver volume; senão omite. Custo não
-        entra aqui de propósito — fica no menu de contexto."""
+        """Atualiza a 3a linha com modelo + % de contexto + tokens da sessão.
+        Modelo é encurtado (claude-opus-4-7 → opus-4-7). `context_tokens`
+        é o tamanho da janela na última mensagem assistant (input + cache
+        read + cache create); `context_window` é o limite (200K ou 1M).
+        Tokens absolutos vão como `Nin · Mout · Kcache` se houver volume.
+        Custo continua no menu de contexto."""
         if not model and input_tokens == 0 and output_tokens == 0:
             self._session_label.setVisible(False)
             self._session_label.setText("")
@@ -382,6 +386,19 @@ class TerminalChildWidget(QWidget):
         parts = [
             f"<span style='color: {theme.TEXT_LINK};'>{model_short}</span>"
         ]
+        if context_tokens > 0 and context_window > 0:
+            pct = min(context_tokens / context_window * 100.0, 999.0)
+            if pct < 50:
+                ctx_color = theme.SUCCESS
+            elif pct < 80:
+                ctx_color = theme.WARNING
+            else:
+                ctx_color = theme.DANGER
+            parts.append(
+                f"<span style='color: {ctx_color}; font-weight: 600;'>"
+                f"{pct:.0f}%</span>"
+                f"<span style='color: {theme.TEXT_FAINT};'> ctx</span>"
+            )
         if input_tokens or output_tokens or cache_tokens:
             tk = (
                 f"<span style='color: {theme.TEXT_FAINT};'>"
@@ -394,10 +411,21 @@ class TerminalChildWidget(QWidget):
         self._session_label.setText(
             f"<span style='color: {theme.TEXT_DISABLED};'> · </span>".join(parts)
         )
-        self._session_label.setToolTip(
-            f"Modelo: {model or '?'} — "
-            f"{input_tokens:,} in · {output_tokens:,} out · {cache_tokens:,} cache"
+        tip = (
+            f"Modelo: {model or '?'}\n"
+            f"Tokens acumulados: {input_tokens:,} in · {output_tokens:,} out · "
+            f"{cache_tokens:,} cache"
         )
+        if context_tokens > 0 and context_window > 0:
+            ctx_pct = context_tokens / context_window * 100.0
+            tip = (
+                f"Modelo: {model or '?'}\n"
+                f"Contexto atual: {context_tokens:,}/{context_window:,} "
+                f"({ctx_pct:.1f}%) — última mensagem assistant\n"
+                f"Tokens acumulados: {input_tokens:,} in · {output_tokens:,} out · "
+                f"{cache_tokens:,} cache"
+            )
+        self._session_label.setToolTip(tip)
         self._session_label.setVisible(True)
 
 

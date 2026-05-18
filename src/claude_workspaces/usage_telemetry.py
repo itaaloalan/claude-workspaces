@@ -9,7 +9,7 @@ mudar preços.
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -235,3 +235,74 @@ def format_tokens(n: int) -> str:
     if n >= 1_000:
         return f"{n / 1_000:.1f}K"
     return str(n)
+
+
+@dataclass
+class PlanUsageWindow:
+    """Uso agregado da janela rolante de 5h (replica `Plan usage limits →
+    Current session` do claude.ai). Anthropic limita por uma janela de 5h
+    desde a primeira mensagem da "sessão"; aqui aproximamos como janela
+    rolante (close enough pra mostrar o %)."""
+    cost_usd: float = 0.0
+    total_tokens: int = 0
+    first_ts: datetime | None = None  # 1a msg dentro da janela (proxy de "session start")
+    latest_ts: datetime | None = None  # msg mais recente dentro da janela
+
+
+def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
+    """Soma cost_usd + tokens em todas as sessões JSONL com timestamp nos
+    últimos `window_seconds`. Filtra arquivos pelo mtime pra evitar reler
+    JSONLs antigos. Chamada a cada 5s no refresh da sidebar — manter leve."""
+    out = PlanUsageWindow()
+    base = Path.home() / ".claude" / "projects"
+    if not base.is_dir():
+        return out
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+    cutoff_epoch = cutoff.timestamp()
+    try:
+        projects = list(base.iterdir())
+    except OSError:
+        return out
+    for proj in projects:
+        if not proj.is_dir():
+            continue
+        for jsonl in proj.glob("*.jsonl"):
+            try:
+                if jsonl.stat().st_mtime < cutoff_epoch:
+                    continue
+            except OSError:
+                continue
+            try:
+                with jsonl.open(encoding="utf-8") as fp:
+                    for line in fp:
+                        try:
+                            msg = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if msg.get("type") != "assistant":
+                            continue
+                        ts = _parse_timestamp(msg.get("timestamp", ""))
+                        if ts is None or ts < cutoff:
+                            continue
+                        inner = msg.get("message") or {}
+                        if not isinstance(inner, dict):
+                            continue
+                        usage = inner.get("usage") or {}
+                        if not isinstance(usage, dict):
+                            continue
+                        model = inner.get("model") or "?"
+                        i = int(usage.get("input_tokens") or 0)
+                        o = int(usage.get("output_tokens") or 0)
+                        cc = int(usage.get("cache_creation_input_tokens") or 0)
+                        cr = int(usage.get("cache_read_input_tokens") or 0)
+                        if i + o + cc + cr <= 0:
+                            continue
+                        out.cost_usd += _model_cost(model, usage)
+                        out.total_tokens += i + o + cc + cr
+                        if out.first_ts is None or ts < out.first_ts:
+                            out.first_ts = ts
+                        if out.latest_ts is None or ts > out.latest_ts:
+                            out.latest_ts = ts
+            except OSError:
+                continue
+    return out

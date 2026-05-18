@@ -72,6 +72,11 @@ class Settings:
     # botão na top bar. Mesmo desligada, as ações continuam acessíveis
     # via menu de contexto na sidebar.
     show_terminal_actions: bool = True
+    # Limite (USD) por janela de 5h do plano Anthropic — usado pra calcular
+    # o % exibido na sidebar ("Plan usage limits" do claude.ai). O número
+    # exato não é publicado; padrão aproxima Max 5x (~$200/5h). Ajustar
+    # caso o % na sidebar não bata com o que claude.ai mostra.
+    plan_usd_limit_5h: float = 200.0
 
     @classmethod
     def load(cls) -> "Settings":

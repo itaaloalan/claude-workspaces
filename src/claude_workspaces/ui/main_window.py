@@ -740,7 +740,7 @@ class MainWindow(QMainWindow):
         self._terminal_placeholder_idx = builder.placeholder_idx
         # Trocar a área visível (workspace) reflete imediato no % de contexto.
         self.terminal_host.currentChanged.connect(
-            lambda _i: self._refresh_active_context_status()
+            lambda _i: self._refresh_plan_usage_status()
         )
         return builder.pane
 
@@ -1243,7 +1243,7 @@ class MainWindow(QMainWindow):
         # Trocar a aba ativa do workspace deve refletir imediato no % de
         # contexto da sidebar (cada aba é uma sessão Claude distinta).
         area.tabs.currentChanged.connect(
-            lambda _i: self._refresh_active_context_status()
+            lambda _i: self._refresh_plan_usage_status()
         )
 
     def _handle_tab_activity(
@@ -1789,7 +1789,7 @@ class MainWindow(QMainWindow):
         modelo/tokens da sessão. Status do git cai em `_on_repo_status_ready`
         quando prontos; modelo/tokens é setado direto (leitura síncrona
         rápida do JSONL claimed)."""
-        from ..usage_telemetry import usage_for_session
+        from ..usage_telemetry import context_window_for_model, usage_for_session
 
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
             if item is None or item.isHidden():
@@ -1815,82 +1815,77 @@ class MainWindow(QMainWindow):
                 log.debug("falha ao agregar usage %s", session_path, exc_info=True)
                 continue
             cache = stats.cache_creation_tokens + stats.cache_read_tokens
+            ctx_window = context_window_for_model(stats.last_model or "")
             widget.update_session_info(
                 stats.last_model or "",
                 stats.input_tokens,
                 stats.output_tokens,
                 cache,
+                context_tokens=stats.last_context_tokens,
+                context_window=ctx_window,
             )
-        # Status do contexto da sessão ativa (label acima do "Novo Workspace").
-        self._refresh_active_context_status()
+        # Status do uso do plano (janela de 5h) — label acima do "Novo
+        # Workspace". Replica o `Plan usage limits → Current session` do
+        # claude.ai.
+        self._refresh_plan_usage_status()
 
-    def _refresh_active_context_status(self) -> None:
-        """Atualiza o label de % de contexto na sidebar. Lê o JSONL da
-        sessão claimed do terminal ativo, calcula `last_context_tokens /
-        context_window` e exibe `45% · 90K/200K · opus-4-7`. Some quando
-        não há terminal ativo ou a sessão ainda não resolveu."""
-        from ..usage_telemetry import (
-            context_window_for_model,
-            format_tokens,
-            usage_for_session,
-        )
+    def _refresh_plan_usage_status(self) -> None:
+        """Atualiza o label de uso do plano na sidebar. Soma cost_usd das
+        mensagens assistant de TODAS as sessões nos últimos 5h e divide
+        pelo limite configurado (settings.plan_usd_limit_5h). Mostra o %,
+        o cost em USD e quanto falta pro reset. Some quando não houve
+        uso na janela."""
+        from datetime import datetime, timedelta, timezone
+
+        from ..usage_telemetry import recent_plan_usage
 
         label = getattr(self, "_context_status_label", None)
         if label is None:
             return
-
-        term: TerminalWidget | None = None
-        area = self._active_terminal_area()
-        if area is not None and area.count() > 0:
-            cur = area.tabs.currentWidget()
-            if isinstance(cur, TerminalWidget):
-                term = cur
-
-        if term is None:
-            label.setVisible(False)
-            return
-        session_path = term.claimed_session_path()
-        if session_path is None:
-            label.setVisible(False)
-            return
         try:
-            stats = usage_for_session(session_path)
+            usage = recent_plan_usage(5 * 3600)
         except Exception:  # noqa: BLE001
-            log.debug("falha ao agregar usage do contexto %s", session_path, exc_info=True)
+            log.debug("falha ao agregar uso do plano", exc_info=True)
             label.setVisible(False)
             return
-        used = stats.last_context_tokens
-        if used <= 0:
+        if usage.first_ts is None or usage.cost_usd <= 0:
             label.setVisible(False)
             return
-        model = stats.last_model or ""
-        limit = context_window_for_model(model)
-        pct = min(used / limit * 100.0, 999.0)
+        limit_usd = max(self.settings.plan_usd_limit_5h, 0.01)
+        pct = min(usage.cost_usd / limit_usd * 100.0, 999.0)
         if pct < 50:
             color = theme.SUCCESS
         elif pct < 80:
             color = theme.WARNING
         else:
             color = theme.DANGER
-        model_short = model[len("claude-"):] if model.startswith("claude-") else model
+        # Reset = first_ts + 5h. Se já passou (raro, próximo do limite),
+        # mostra 0m.
+        reset_at = usage.first_ts + timedelta(hours=5)
+        delta = reset_at - datetime.now(timezone.utc)
+        mins_left = max(int(delta.total_seconds() // 60), 0)
+        if mins_left >= 60:
+            reset_str = f"{mins_left // 60}h{mins_left % 60:02d}m"
+        else:
+            reset_str = f"{mins_left}m"
         label.setText(
-            f"<span style='color: {theme.TEXT_FAINT};'>Contexto:</span> "
+            f"<span style='color: {theme.TEXT_FAINT};'>Sessão 5h:</span> "
             f"<span style='color: {color}; font-weight: 600;'>{pct:.0f}%</span> "
             f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
             f"<span style='color: {theme.TEXT_FADED};'>"
-            f"{format_tokens(used)}/{format_tokens(limit)}</span>"
-            + (
-                f" <span style='color: {theme.TEXT_DISABLED};'>·</span>"
-                f" <span style='color: {theme.TEXT_FAINT};'>{model_short}</span>"
-                if model_short
-                else ""
-            )
+            f"${usage.cost_usd:.2f}/${limit_usd:.0f}</span> "
+            f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
+            f"<span style='color: {theme.TEXT_FAINT};'>reset {reset_str}</span>"
         )
         label.setToolTip(
-            f"Janela de contexto da sessão ativa\n"
-            f"Modelo: {model or '?'}  ·  Limite: {limit:,} tokens\n"
-            f"Em contexto agora: {used:,} ({pct:.1f}%)\n"
-            f"(input + cache read + cache create da última mensagem assistant)"
+            "Uso do plano Anthropic na janela rolante de 5h\n"
+            f"Custo aproximado: ${usage.cost_usd:.2f}  ·  "
+            f"Limite (settings): ${limit_usd:.2f}\n"
+            f"Tokens (input+output+cache): {usage.total_tokens:,}\n"
+            f"Janela começou: {usage.first_ts.astimezone().strftime('%H:%M')}  "
+            f"·  Reset em: {reset_str}\n"
+            "Ajuste `plan_usd_limit_5h` em settings.json pra calibrar com"
+            " o % que claude.ai mostra."
         )
         label.setVisible(True)
 
