@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.19.2] — 2026-05-18
+
+### Corrigido
+- **Altura desproporcional do botão "Remover todos"**: o emoji 🗑
+  forçava o QPushButton a crescer em altura por causa da métrica do
+  glifo. Troca para `✕` (mesmo padrão dos outros botões como `■`/`▶`)
+  pra manter a altura alinhada com o resto do header.
+- **"Remover todos" agora lista os runners afetados e deixa explícito
+  o escopo**: o diálogo de confirmação mostra os nomes que serão
+  removidos e reforça que runners de outros escopos não são tocados.
+  O laço de stop também passa a filtrar pelos ids in-scope, eliminando
+  qualquer risco de parar runners fora do escopo.
+
 ## [0.19.1] — 2026-05-18
 
 ### Adicionado

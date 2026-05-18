@@ -81,7 +81,7 @@ class RunnerArea(QWidget):
         self._stop_all_btn.clicked.connect(self._stop_all)
         h.addWidget(self._stop_all_btn)
 
-        self._remove_all_btn = QPushButton("🗑 Remover todos")
+        self._remove_all_btn = QPushButton("✕ Remover todos")
         self._remove_all_btn.setToolTip(
             "Remove todos os runners deste escopo (workspace ou console). "
             "Runners em execução são parados antes."
@@ -357,22 +357,30 @@ class RunnerArea(QWidget):
             )
             return
         scope_label = "deste console" if self._console_session_id else "do workspace"
+        names = "\n".join(f"  • {r.name or '(sem nome)'}" for r in in_scope)
         if (
             QMessageBox.question(
                 self,
-                "Remover todos os runners",
-                f"Remover todos os {len(in_scope)} runners {scope_label}? "
-                "Runners em execução serão parados.",
+                f"Remover todos os runners {scope_label}",
+                f"Remover os {len(in_scope)} runners {scope_label}?\n\n"
+                f"{names}\n\n"
+                "Runners em execução serão parados. Runners de outros "
+                "escopos NÃO são afetados.",
             )
             != QMessageBox.StandardButton.Yes
         ):
             return
-        # Para tudo que estiver rodando antes de remover.
+        # Para apenas os runners que vão ser removidos (in_scope), nunca
+        # toca em runners de outros escopos nem em terminais/consoles.
+        ids_to_remove = {r.id for r in in_scope}
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
-            if isinstance(w, RunnerWidget) and w.is_running():
+            if (
+                isinstance(w, RunnerWidget)
+                and w.runner_id() in ids_to_remove
+                and w.is_running()
+            ):
                 w.stop()
-        ids_to_remove = {r.id for r in in_scope}
         self._ws.runners = [r for r in self._ws.runners if r.id not in ids_to_remove]
         self.runners_changed.emit()
         self._refresh_from_workspace()
