@@ -6,6 +6,28 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.7] — 2026-05-18
+
+### Adicionado
+- **Ações inline em cada console da sidebar**: `▶ Continuar` (manda
+  'continue' direto) e `⚙ Modo` (abre o popup com Plan/Auto/Default,
+  `/effort` e `/model`) à direita do título de cada row de console. O
+  popup foi mantido porque permite escolher o modo antes de mandar —
+  versão com botão `↹ Ciclar` direto perdia esse passo.
+- **Toggle no header `WORKSPACES`** (botão `⌃`/`⌄` à direita do título
+  da seção) que oculta/mostra esses botões em todos os consoles de uma
+  vez. Estado persistido em `show_terminal_actions`. Menu de contexto
+  (clique direito no console) continua exibindo as mesmas ações com a
+  toolbar oculta.
+
+### Alterado
+- Revertido o toolbar expandido do console central (0.7.5) — volta pra
+  `▶ Continuar / ⚙ Modo / Encerrar` original. As ações de ciclar modo /
+  trocar effort / trocar modelo continuam atrás do popup `⚙ Modo`.
+- Removido o toggle global de ações da TopBar (0.7.5); agora vive no
+  header `WORKSPACES` da sidebar, junto da lista de consoles que ele
+  controla.
+
 ## [0.7.6] — 2026-05-18
 
 ### Adicionado

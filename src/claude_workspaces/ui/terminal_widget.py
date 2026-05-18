@@ -75,25 +75,10 @@ class TerminalWidget(QWidget):
     # `set_idle_debounce_seconds` quando o usuário muda em Settings;
     # todos os terminais vivos passam a usar o novo valor no próximo poll.
     _idle_debounce_s: float = 20.0
-    # Visibilidade global da toolbar de ações (Continuar / Ciclar / Effort /
-    # Modelo / Encerrar). Toggle no top bar. Cada terminal vivo lê via
-    # `_apply_actions_visibility` quando o valor muda.
-    _actions_visible: bool = True
-    _live_terminals: "list[TerminalWidget]" = []
 
     @classmethod
     def set_idle_debounce_seconds(cls, seconds: float) -> None:
         cls._idle_debounce_s = max(0.0, min(120.0, float(seconds)))
-
-    @classmethod
-    def set_actions_visible(cls, visible: bool) -> None:
-        cls._actions_visible = bool(visible)
-        for term in list(cls._live_terminals):
-            try:
-                term._apply_actions_visibility()
-            except RuntimeError:
-                # widget já destruído pelo Qt — limpa do registry
-                cls._live_terminals.remove(term)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -150,10 +135,7 @@ class TerminalWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Toolbar como QWidget separado pra permitir ocultá-la inteira
-        # via setVisible (toggle no top bar). Layout filho fica dentro.
-        self._toolbar_widget = QWidget(self)
-        toolbar = QHBoxLayout(self._toolbar_widget)
+        toolbar = QHBoxLayout()
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(terminal vazio)")
         self._status.setStyleSheet("color: #b0b0b0;")
@@ -167,35 +149,18 @@ class TerminalWidget(QWidget):
         )
         self._continue_btn.clicked.connect(self.send_continue)
         toolbar.addWidget(self._continue_btn)
-        self._cycle_btn = QPushButton("↹ Ciclar modo")
-        self._cycle_btn.setEnabled(False)
-        self._cycle_btn.setToolTip(
-            "Manda Shift+Tab — cicla entre Plan, Auto-accept e Default. "
-            "Olha o indicador no canto do TUI pra ver onde parou."
+        self._mode_btn = QPushButton("⚙ Modo")
+        self._mode_btn.setEnabled(False)
+        self._mode_btn.setToolTip(
+            "Trocar modo (plan/auto/…), effort ou modelo desta sessão"
         )
-        self._cycle_btn.clicked.connect(self.send_cycle_mode)
-        toolbar.addWidget(self._cycle_btn)
-        self._effort_btn = QPushButton("⏻ Effort")
-        self._effort_btn.setEnabled(False)
-        self._effort_btn.setToolTip("Abre o slash command /effort no prompt do Claude")
-        self._effort_btn.clicked.connect(self.send_open_effort)
-        toolbar.addWidget(self._effort_btn)
-        self._model_btn = QPushButton("✦ Modelo")
-        self._model_btn.setEnabled(False)
-        self._model_btn.setToolTip("Abre o slash command /model no prompt do Claude")
-        self._model_btn.clicked.connect(self.send_open_model)
-        toolbar.addWidget(self._model_btn)
-        # Mantido como atributo `_mode_btn` pra ancorar o popup quando
-        # chamado por outros caminhos (atalho de teclado, etc.).
-        self._mode_btn = self._cycle_btn
+        self._mode_btn.clicked.connect(self._open_mode_popup)
+        toolbar.addWidget(self._mode_btn)
         self._stop_btn = QPushButton("Encerrar")
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.terminate)
         toolbar.addWidget(self._stop_btn)
-        outer.addWidget(self._toolbar_widget)
-        # Registra o terminal pra receber updates do toggle global de visibilidade.
-        type(self)._live_terminals.append(self)
-        self._apply_actions_visibility()
+        outer.addLayout(toolbar)
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)
@@ -495,23 +460,11 @@ class TerminalWidget(QWidget):
             except Exception:
                 log.exception("Falha no callback de when_claude_ready")
 
-    def _apply_actions_visibility(self) -> None:
-        """Liga/desliga a toolbar inteira conforme o toggle global."""
-        self._toolbar_widget.setVisible(type(self)._actions_visible)
-
-    def _set_action_buttons_enabled(self, enabled: bool) -> None:
-        for btn in (
-            self._continue_btn,
-            self._cycle_btn,
-            self._effort_btn,
-            self._model_btn,
-        ):
-            btn.setEnabled(enabled)
-
     def _on_session_finished(self) -> None:
         self._status.setText("(processo encerrado)")
         self._stop_btn.setEnabled(False)
-        self._set_action_buttons_enabled(False)
+        self._continue_btn.setEnabled(False)
+        self._mode_btn.setEnabled(False)
         self._set_running(False)
 
     def send_text(self, text: str, submit: bool = True) -> None:
@@ -587,7 +540,8 @@ class TerminalWidget(QWidget):
             return
         self._status.setText(label or " ".join(argv))
         self._stop_btn.setEnabled(True)
-        self._set_action_buttons_enabled(True)
+        self._continue_btn.setEnabled(True)
+        self._mode_btn.setEnabled(True)
         self._set_running(True)
 
     def start_shell_command(
@@ -613,7 +567,8 @@ class TerminalWidget(QWidget):
         if self.session.is_running():
             self.session.terminate()
         self._stop_btn.setEnabled(False)
-        self._set_action_buttons_enabled(False)
+        self._continue_btn.setEnabled(False)
+        self._mode_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
         self._set_running(False)
 
@@ -635,8 +590,4 @@ class TerminalWidget(QWidget):
 
     def closeEvent(self, event) -> None:
         self.terminate()
-        try:
-            type(self)._live_terminals.remove(self)
-        except ValueError:
-            pass
         super().closeEvent(event)

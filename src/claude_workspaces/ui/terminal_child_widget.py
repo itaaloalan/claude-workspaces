@@ -1,13 +1,21 @@
 """Widget custom pros children da sidebar tree — mostra o estado de um
 console do Claude rodando num workspace, no estilo IntelliJ:
 
-    [icon]  Console #N — claude
-            Trabalhando            ← colorido por estado
-            Lendo arquivo Foo.java ← última ação do Claude
+    [icon]  Console #N — claude       [▶] [⚙]   ← ações inline (toggle via header)
+            Trabalhando · última ação do Claude
 """
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from . import theme
 
@@ -32,6 +40,24 @@ STATE_COLOR = {
     STATE_DONE: theme.SUCCESS,
 }
 
+_INLINE_BTN_QSS = (
+    f"QPushButton {{"
+    f"  background: transparent;"
+    f"  color: {theme.TEXT_FAINT};"
+    f"  border: 0;"
+    f"  border-radius: 4px;"
+    f"  padding: 0px 4px;"
+    f"  font-size: 12px;"
+    f"}}"
+    f"QPushButton:hover {{"
+    f"  background: {theme.BG_SURFACE};"
+    f"  color: {theme.TEXT_LINK};"
+    f"}}"
+    f"QPushButton:disabled {{"
+    f"  color: {theme.TEXT_DISABLED};"
+    f"}}"
+)
+
 
 class TerminalChildWidget(QWidget):
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
@@ -39,8 +65,11 @@ class TerminalChildWidget(QWidget):
         self._title = title
         # Tamanho previsível pra não brigar com o QTreeWidget no resize
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(42)
-        self.setMaximumHeight(42)
+        # Altura aumentada pra caber a 3a linha de modelo + tokens. Quem
+        # define a altura efetiva do row no QTreeWidget é o setSizeHint
+        # no `_CHILD_HEIGHT` lá no main_window — manter sincronizado.
+        self.setMinimumHeight(58)
+        self.setMaximumHeight(58)
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(2, 2, 4, 2)
@@ -60,6 +89,13 @@ class TerminalChildWidget(QWidget):
         vbox.setContentsMargins(0, 0, 0, 0)
         vbox.setSpacing(1)
 
+        # Title row: título + ações inline (▶ Continuar, ⚙ Modo).
+        # Ações ficam à direita; visibilidade controlada pelo toggle no
+        # header WORKSPACES (set_actions_visible). Callbacks são injetadas
+        # pelo MainWindow via set_action_callbacks.
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(4)
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet(
             f"color: {theme.TEXT_PRIMARY}; font-weight: 600; font-size: 12px;"
@@ -71,7 +107,36 @@ class TerminalChildWidget(QWidget):
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
         self._title_label.setMaximumHeight(16)
-        vbox.addWidget(self._title_label)
+        title_row.addWidget(self._title_label, stretch=1)
+
+        self._actions_widget = QWidget()
+        actions_layout = QHBoxLayout(self._actions_widget)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(2)
+
+        self._continue_btn = QPushButton("▶")
+        self._continue_btn.setFixedSize(20, 18)
+        self._continue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._continue_btn.setStyleSheet(_INLINE_BTN_QSS)
+        self._continue_btn.setToolTip(
+            "Continuar este console — manda 'continue' + Enter pro Claude"
+        )
+        self._continue_btn.setEnabled(False)
+        actions_layout.addWidget(self._continue_btn)
+
+        self._mode_btn = QPushButton("⚙")
+        self._mode_btn.setFixedSize(20, 18)
+        self._mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mode_btn.setStyleSheet(_INLINE_BTN_QSS)
+        self._mode_btn.setToolTip(
+            "Modo / effort / modelo — abre popup com Plan/Auto/Default,"
+            " /effort e /model"
+        )
+        self._mode_btn.setEnabled(False)
+        actions_layout.addWidget(self._mode_btn)
+
+        title_row.addWidget(self._actions_widget)
+        vbox.addLayout(title_row)
 
         sub_row = QHBoxLayout()
         sub_row.setContentsMargins(0, 0, 0, 0)
@@ -177,6 +242,37 @@ class TerminalChildWidget(QWidget):
         else:
             self._action_label.setVisible(False)
             self._sep_dot.setVisible(False)
+
+    def set_action_callbacks(
+        self,
+        on_continue: Callable[[], None],
+        on_open_mode_popup: Callable[[QWidget], None],
+    ) -> None:
+        """Conecta os cliques dos botões inline (▶ ⚙). `on_open_mode_popup`
+        recebe o próprio botão como anchor pra posicionar o ModePopup."""
+        # Desconecta primeiro pra evitar duplicar handlers ao reconectar
+        try:
+            self._continue_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        try:
+            self._mode_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self._continue_btn.clicked.connect(lambda _=False: on_continue())
+        self._mode_btn.clicked.connect(
+            lambda _=False, b=self._mode_btn: on_open_mode_popup(b)
+        )
+
+    def set_actions_visible(self, visible: bool) -> None:
+        """Mostra/esconde o bloco de ações inline (▶ ⚙). Quando oculto,
+        o espaço é colapsado mas a altura total da row continua 42px."""
+        self._actions_widget.setVisible(visible)
+
+    def set_actions_enabled(self, enabled: bool) -> None:
+        """Habilita/desabilita os botões conforme o terminal está rodando."""
+        self._continue_btn.setEnabled(enabled)
+        self._mode_btn.setEnabled(enabled)
 
     def update_git_info(self, branch: str, modified: int) -> None:
         """Atualiza o label do lado direito com branch e contagem de

@@ -17,7 +17,6 @@ class TopBar(QWidget):
     home_clicked = Signal()
     toggle_sidebar_clicked = Signal()
     inbox_clicked = Signal()
-    toggle_terminal_actions_clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -51,26 +50,6 @@ class TopBar(QWidget):
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
-
-        # Toggle global da toolbar de ações dos terminais (Continuar /
-        # Ciclar / Effort / Modelo / Encerrar). Posicionado logo após
-        # "Claude Workspaces" pra ficar discoverable. Texto/ícone do
-        # botão é refrescado por set_terminal_actions_visible.
-        self._terminal_actions_btn = QPushButton()
-        self._terminal_actions_btn.setFlat(True)
-        self._terminal_actions_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._terminal_actions_btn.setStyleSheet(
-            "QPushButton { color: #c8c8c8; font-size: 12px; padding: 4px 8px;"
-            " border: 1px solid #2c2c2c; border-radius: 6px; background: #1f1f1f; }"
-            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
-        )
-        self._terminal_actions_btn.clicked.connect(
-            self.toggle_terminal_actions_clicked.emit
-        )
-        # Estado inicial = visível (settings default). MainWindow chama
-        # `set_terminal_actions_visible` no boot pra refletir o que tá salvo.
-        self.set_terminal_actions_visible(True)
-        row.addWidget(self._terminal_actions_btn)
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Filtrar por nome, pasta ou sessão… (Ctrl+F)")
@@ -146,20 +125,3 @@ class TopBar(QWidget):
     def set_search_text(self, text: str) -> None:
         if self.search.text() != text:
             self.search.setText(text)
-
-    def set_terminal_actions_visible(self, visible: bool) -> None:
-        """Atualiza rótulo/tooltip do botão de toggle pra refletir o estado
-        atual da toolbar de ações dos terminais."""
-        if visible:
-            self._terminal_actions_btn.setText("⌃ Ações")
-            self._terminal_actions_btn.setToolTip(
-                "Ocultar a barra de ações (Continuar / Ciclar modo / Effort /"
-                " Modelo / Encerrar) em todos os terminais. As mesmas ações"
-                " continuam disponíveis no menu de contexto da sidebar."
-            )
-        else:
-            self._terminal_actions_btn.setText("⌄ Ações")
-            self._terminal_actions_btn.setToolTip(
-                "Mostrar a barra de ações (Continuar / Ciclar modo / Effort /"
-                " Modelo / Encerrar) em todos os terminais."
-            )

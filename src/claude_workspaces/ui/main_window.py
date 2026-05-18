@@ -205,12 +205,6 @@ class MainWindow(QMainWindow):
         self.top_bar.home_clicked.connect(self._show_workspaces)
         self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
         self.top_bar.inbox_clicked.connect(self._show_inbox)
-        self.top_bar.toggle_terminal_actions_clicked.connect(
-            self._toggle_terminal_actions
-        )
-        # Aplica estado persistido da toolbar de ações dos terminais (default=True)
-        TerminalWidget.set_actions_visible(self.settings.show_terminal_actions)
-        self.top_bar.set_terminal_actions_visible(self.settings.show_terminal_actions)
         outer.addWidget(self.top_bar)
 
         splitter_css = (
@@ -421,19 +415,6 @@ class MainWindow(QMainWindow):
             target = self._sidebar_last_size or SIDEBAR_DEFAULT_W
             self.body_splitter.setSizes([target, max(sum(sizes) - target, 200)])
         self._schedule_layout_save()
-
-    def _toggle_terminal_actions(self) -> None:
-        """Inverte a visibilidade global da toolbar de ações nos terminais.
-        Propaga pra todos os TerminalWidgets vivos e persiste em settings.
-        As ações continuam acessíveis via menu de contexto na sidebar."""
-        new_visible = not self.settings.show_terminal_actions
-        self.settings.show_terminal_actions = new_visible
-        TerminalWidget.set_actions_visible(new_visible)
-        self.top_bar.set_terminal_actions_visible(new_visible)
-        try:
-            self.settings.save()
-        except OSError:
-            log.exception("falha ao salvar show_terminal_actions")
 
     def _terminal_header_height(self) -> int:
         """Altura do header do terminal — usado como 'min height' quando
@@ -770,6 +751,9 @@ class MainWindow(QMainWindow):
         self.list_widget = builder.list_widget
         self.self_dev_btn = builder.self_dev_btn
         self.version_label = builder.version_label
+        self._actions_toggle_btn = builder.actions_toggle_btn
+        self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
+        self._refresh_actions_toggle_btn()
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self._on_sidebar_context_menu)
         # Mantém o ícone do botão ▾/▸ sincronizado quando o usuário usa
@@ -777,6 +761,36 @@ class MainWindow(QMainWindow):
         self.list_widget.itemExpanded.connect(self._on_workspace_expanded)
         self.list_widget.itemCollapsed.connect(self._on_workspace_collapsed)
         return builder.wrapper
+
+    def _refresh_actions_toggle_btn(self) -> None:
+        visible = self.settings.show_terminal_actions
+        self._actions_toggle_btn.setText("⌃" if visible else "⌄")
+        self._actions_toggle_btn.setToolTip(
+            ("Ocultar" if visible else "Mostrar")
+            + " os botões ▶ Continuar / ⚙ Modo em cada console da sidebar."
+            " As ações continuam acessíveis pelo menu de contexto (clique"
+            " direito no console)."
+        )
+
+    def _toggle_child_actions(self) -> None:
+        """Inverte a visibilidade global dos botões inline nos rows de
+        console (▶ Continuar / ⚙ Modo). Persiste em settings e propaga
+        pra todos os TerminalChildWidget existentes."""
+        new_visible = not self.settings.show_terminal_actions
+        self.settings.show_terminal_actions = new_visible
+        try:
+            self.settings.save()
+        except OSError:
+            log.exception("falha ao salvar show_terminal_actions")
+        self._refresh_actions_toggle_btn()
+        from .terminal_child_widget import TerminalChildWidget
+        for i in range(self.list_widget.topLevelItemCount()):
+            ws_item = self.list_widget.topLevelItem(i)
+            for j in range(ws_item.childCount()):
+                child = ws_item.child(j)
+                widget = self.list_widget.itemWidget(child, 0)
+                if isinstance(widget, TerminalChildWidget):
+                    widget.set_actions_visible(new_visible)
 
     def _on_workspace_expanded(self, item: "QTreeWidgetItem") -> None:
         self._update_workspace_collapsed_icon(item, collapsed=False)
@@ -1576,6 +1590,37 @@ class MainWindow(QMainWindow):
     # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
     _CHILD_HEIGHT = 42
 
+    def _wire_child_actions(
+        self, widget: "TerminalChildWidget", tab_id: int
+    ) -> None:
+        """Conecta ▶ Continuar e ⚙ Modo do row da sidebar ao TerminalWidget
+        correspondente. O popup de modo é o mesmo já usado no console
+        central, ancorado abaixo-direita do botão clicado."""
+        def on_continue() -> None:
+            term = self._terminal_widget_for(tab_id)
+            if term is not None and term.is_running():
+                term.send_continue()
+
+        def on_open_mode_popup(anchor_btn) -> None:
+            term = self._terminal_widget_for(tab_id)
+            if term is None or not term.is_running():
+                return
+            from .mode_popup import ModePopup
+            popup = ModePopup(
+                on_cycle=term.send_cycle_mode,
+                on_effort=term.send_open_effort,
+                on_model=term.send_open_model,
+                parent=anchor_btn,
+            )
+            global_pos = anchor_btn.mapToGlobal(
+                anchor_btn.rect().bottomRight()
+            )
+            global_pos.setX(global_pos.x() - popup.sizeHint().width())
+            global_pos.setY(global_pos.y() + 4)
+            popup.show_at(global_pos)
+
+        widget.set_action_callbacks(on_continue, on_open_mode_popup)
+
     def _add_terminal_child(
         self,
         ws_item: QTreeWidgetItem,
@@ -1604,6 +1649,11 @@ class MainWindow(QMainWindow):
         )
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
+        # Conecta os botões inline (▶ ⚙) à TerminalWidget correspondente.
+        # Visibilidade respeita o toggle do header WORKSPACES.
+        self._wire_child_actions(widget, tab_id)
+        widget.set_actions_visible(self.settings.show_terminal_actions)
+        widget.set_actions_enabled(is_running)
         # Tarefas concluídas (processo finalizado) ficam ocultas na sidebar —
         # ainda acessíveis via "↻ última sessão" do workspace.
         child.setHidden(state == STATE_DONE)
@@ -1614,8 +1664,9 @@ class MainWindow(QMainWindow):
         self._refresh_workspace_child_titles(ws_item)
         # Já dispara um request de git status pra esse cwd — assim o
         # label aparece logo na primeira pintura, sem esperar o tick.
-        if term is not None and term.claude_cwd:
-            self._repo_poller.request(term.claude_cwd)
+        cwd = term.claude_cwd() if term is not None else None
+        if cwd:
+            self._repo_poller.request(cwd)
 
     def _update_terminal_child(
         self,
@@ -1646,6 +1697,7 @@ class MainWindow(QMainWindow):
             status,
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
+        widget.set_actions_enabled(is_running)
         # Esconde na sidebar quando a tarefa termina; reaparece se o processo
         # voltar a rodar (raro, mas mantém consistência).
         item.setHidden(state == STATE_DONE)
@@ -1711,8 +1763,12 @@ class MainWindow(QMainWindow):
     # ---------- git info na sidebar ----------
 
     def _refresh_terminal_git_info(self) -> None:
-        """Itera os children visíveis e pede status do repo. Resultados
-        caem em `_on_repo_status_ready` quando prontos."""
+        """Itera os children visíveis e pede status do repo + atualiza
+        modelo/tokens da sessão. Status do git cai em `_on_repo_status_ready`
+        quando prontos; modelo/tokens é setado direto (leitura síncrona
+        rápida do JSONL claimed)."""
+        from ..usage_telemetry import usage_for_session
+
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
             if item is None or item.isHidden():
                 continue
@@ -1720,10 +1776,29 @@ class MainWindow(QMainWindow):
             if not isinstance(widget, TerminalChildWidget):
                 continue
             term = self._terminal_widget_for(tab_id)
-            cwd = term.claude_cwd if term is not None else None
-            if not cwd:
+            if term is None:
                 continue
-            self._repo_poller.request(cwd)
+            cwd = term.claude_cwd()
+            if cwd:
+                self._repo_poller.request(cwd)
+            # Modelo + tokens da sessão claimed. usage_for_session é leve
+            # (lê apenas a usage de cada linha do JSONL).
+            session_path = term.claimed_session_path()
+            if session_path is None:
+                widget.update_session_info("", 0, 0, 0)
+                continue
+            try:
+                stats = usage_for_session(session_path)
+            except Exception:
+                log.debug("falha ao agregar usage %s", session_path, exc_info=True)
+                continue
+            cache = stats.cache_creation_tokens + stats.cache_read_tokens
+            widget.update_session_info(
+                stats.last_model or "",
+                stats.input_tokens,
+                stats.output_tokens,
+                cache,
+            )
 
     def _on_repo_status_ready(
         self, folder: str, branch: str, modified: int
@@ -1738,7 +1813,7 @@ class MainWindow(QMainWindow):
             if not isinstance(widget, TerminalChildWidget):
                 continue
             term = self._terminal_widget_for(tab_id)
-            if term is None or term.claude_cwd != folder:
+            if term is None or term.claude_cwd() != folder:
                 continue
             widget.update_git_info(branch, modified)
 

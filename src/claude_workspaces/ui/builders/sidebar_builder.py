@@ -10,6 +10,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPalette
 from PySide6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QTreeWidget,
@@ -37,7 +38,27 @@ _SECTION_HEADER_QSS = (
     f"  font-weight: 700;"
     f"  letter-spacing: 1.4px;"
     f"  padding: 2px 4px 6px 4px;"
+    f"}}"
+)
+
+_SECTION_HEADER_ROW_QSS = (
+    f"QWidget#WorkspacesHeaderRow {{"
     f"  border-bottom: 1px solid {theme.BORDER_SOFT};"
+    f"}}"
+)
+
+_HEADER_TOGGLE_QSS = (
+    f"QPushButton {{"
+    f"  background: transparent;"
+    f"  color: {theme.TEXT_FAINT};"
+    f"  border: 0;"
+    f"  border-radius: 4px;"
+    f"  padding: 0px 6px;"
+    f"  font-size: 11px;"
+    f"}}"
+    f"QPushButton:hover {{"
+    f"  background: {theme.BG_SURFACE};"
+    f"  color: {theme.TEXT_LINK};"
     f"}}"
 )
 
@@ -151,9 +172,28 @@ class SidebarBuilder:
         layout.setContentsMargins(8, 10, 8, 8)
         layout.setSpacing(6)
 
+        # Header "WORKSPACES" + toggle das ações inline nos consoles
+        # (▶ Continuar / ⚙ Modo). Texto/tooltip do botão é refrescado
+        # pela MainWindow via `set_child_actions_visible`.
+        header_row = QWidget()
+        header_row.setObjectName("WorkspacesHeaderRow")
+        header_row.setStyleSheet(_SECTION_HEADER_ROW_QSS)
+        header_layout = QHBoxLayout(header_row)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(0)
         header = QLabel("WORKSPACES")
         header.setStyleSheet(_SECTION_HEADER_QSS)
-        layout.addWidget(header)
+        header_layout.addWidget(header, stretch=1)
+        self.actions_toggle_btn = QPushButton("⌃")
+        self.actions_toggle_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.actions_toggle_btn.setStyleSheet(_HEADER_TOGGLE_QSS)
+        self.actions_toggle_btn.setFixedHeight(18)
+        self.actions_toggle_btn.setToolTip(
+            "Ocultar/mostrar os botões ▶ Continuar / ⚙ Modo em cada"
+            " console. As ações continuam acessíveis no menu de contexto."
+        )
+        header_layout.addWidget(self.actions_toggle_btn, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(header_row)
 
         self.list_widget = QTreeWidget()
         self.list_widget.setHeaderHidden(True)
