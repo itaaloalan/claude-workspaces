@@ -108,7 +108,20 @@ class TerminalChildWidget(QWidget):
         )
         self._title_label.setMaximumHeight(16)
         title_row.addWidget(self._title_label, stretch=1)
+        vbox.addLayout(title_row)
 
+        # Estado atual + elegibilidade pro ▶ continuar. O continue só faz
+        # sentido em sessões restauradas no startup (--resume) que estão
+        # ociosas — caso típico: app fechou no meio de uma tarefa e o
+        # Claude voltou parado no prompt. Em todo outro estado o botão é
+        # ruído visual (ou está rodando, ou aguardando decisão, ou é uma
+        # sessão fresca que não tem nada pra continuar).
+        self._current_state: str = STATE_IDLE
+        self._continue_eligible: bool = False
+        self._actions_user_visible: bool = True
+
+        # Bloco de ações vai à direita da row, vertical-center alinhado
+        # com a branch — mais coerente do que ficar grudado no título.
         self._actions_widget = QWidget()
         actions_layout = QHBoxLayout(self._actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -122,6 +135,7 @@ class TerminalChildWidget(QWidget):
             "Continuar este console — manda 'continue' + Enter pro Claude"
         )
         self._continue_btn.setEnabled(False)
+        self._continue_btn.setVisible(False)
         actions_layout.addWidget(self._continue_btn)
 
         self._mode_btn = QPushButton("⚙")
@@ -134,9 +148,6 @@ class TerminalChildWidget(QWidget):
         )
         self._mode_btn.setEnabled(False)
         actions_layout.addWidget(self._mode_btn)
-
-        title_row.addWidget(self._actions_widget)
-        vbox.addLayout(title_row)
 
         sub_row = QHBoxLayout()
         sub_row.setContentsMargins(0, 0, 0, 0)
@@ -195,6 +206,16 @@ class TerminalChildWidget(QWidget):
         vbox.addWidget(self._session_label)
 
         outer.addLayout(vbox, stretch=1)
+
+        # Ações inline (▶ ⚙) vão na faixa direita, vertical-center —
+        # alinhadas com a branch. Antes ficavam coladas no título e
+        # parecia que pertenciam à 1a linha; agora têm o mesmo eixo
+        # visual da info do repo, separando "estado da sessão" (esquerda)
+        # de "controles + repo" (direita).
+        outer.addWidget(
+            self._actions_widget,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
 
         # Lado direito: branch + contagem de arquivos modificados do repo.
         # Atualizado em segundo plano pelo RepoStatusPoller (main_window).
@@ -260,6 +281,10 @@ class TerminalChildWidget(QWidget):
         else:
             self._action_label.setVisible(False)
             self._sep_dot.setVisible(False)
+        # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
+        # em sessão restaurada+ociosa.
+        self._current_state = state
+        self._refresh_continue_visibility()
 
     def set_action_callbacks(
         self,
@@ -283,14 +308,35 @@ class TerminalChildWidget(QWidget):
         )
 
     def set_actions_visible(self, visible: bool) -> None:
-        """Mostra/esconde o bloco de ações inline (▶ ⚙). Quando oculto,
-        o espaço é colapsado mas a altura total da row continua 42px."""
+        """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do
+        header WORKSPACES. Quando oculto, o espaço é colapsado mas a
+        altura total da row continua intacta."""
+        self._actions_user_visible = visible
         self._actions_widget.setVisible(visible)
 
     def set_actions_enabled(self, enabled: bool) -> None:
         """Habilita/desabilita os botões conforme o terminal está rodando."""
         self._continue_btn.setEnabled(enabled)
         self._mode_btn.setEnabled(enabled)
+        self._refresh_continue_visibility()
+
+    def set_continue_eligible(self, eligible: bool) -> None:
+        """Marca se este console pode exibir o ▶ continuar — verdadeiro
+        só pra sessões restauradas no startup (`--resume`). Sessões
+        novas/iniciadas no app não têm o que continuar, então o botão
+        não aparece e o usuário não fica confuso clicando à toa."""
+        self._continue_eligible = eligible
+        self._refresh_continue_visibility()
+
+    def _refresh_continue_visibility(self) -> None:
+        """Esconde o ▶ a menos que a sessão seja restaurada+ociosa. ⚙
+        segue o toggle do header (set_actions_visible) — não filtramos
+        ele por estado."""
+        should_show = (
+            self._continue_eligible
+            and self._current_state == STATE_IDLE
+        )
+        self._continue_btn.setVisible(should_show)
 
     def update_git_info(self, branch: str, modified: int) -> None:
         """Atualiza o label do lado direito com branch e contagem de

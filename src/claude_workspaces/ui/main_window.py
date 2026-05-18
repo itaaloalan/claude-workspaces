@@ -1665,6 +1665,11 @@ class MainWindow(QMainWindow):
         self._wire_child_actions(widget, tab_id)
         widget.set_actions_visible(self.settings.show_terminal_actions)
         widget.set_actions_enabled(is_running)
+        # ▶ só faz sentido em sessões restauradas via --resume após o app
+        # reabrir; em sessão fresca ele fica oculto.
+        widget.set_continue_eligible(
+            term is not None and term.was_restored_on_startup()
+        )
         # Tarefas concluídas (processo finalizado) ficam ocultas na sidebar —
         # ainda acessíveis via "↻ última sessão" do workspace.
         child.setHidden(state == STATE_DONE)
@@ -1709,6 +1714,12 @@ class MainWindow(QMainWindow):
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
         widget.set_actions_enabled(is_running)
+        # Reflete a flag de "restaurado no startup" — durante a vida do
+        # tab ela só vira True (uma vez), mas updates posteriores (state,
+        # título) chegam aqui também e precisam manter o sinal coerente.
+        widget.set_continue_eligible(
+            term is not None and term.was_restored_on_startup()
+        )
         # Esconde na sidebar quando a tarefa termina; reaparece se o processo
         # voltar a rodar (raro, mas mantém consistência).
         item.setHidden(state == STATE_DONE)
@@ -1901,12 +1912,22 @@ class MainWindow(QMainWindow):
             widget.update_git_info(branch, modified)
 
     def _launch_claude_for(
-        self, workspace: Workspace, resume_session_id: str, cwd_override: str
+        self,
+        workspace: Workspace,
+        resume_session_id: str,
+        cwd_override: str,
+        restored_on_startup: bool = False,
     ) -> None:
         terminal = self.launch_coord.launch_claude(
             workspace, resume_session_id, cwd_override
         )
         if terminal is not None:
+            if restored_on_startup:
+                # Habilita o ▶ continuar nessa aba — só sessões reabertas
+                # via _restore_sessions têm tarefa potencialmente
+                # interrompida. Sessões criadas "no app vivo" (botão Novo
+                # Workspace, Retomar de session card, etc) não setam.
+                terminal.mark_restored_on_startup()
             area = self.terminals_coord.area_for(workspace.id)
             if area is not None:
                 self.terminal_host.setCurrentWidget(area)
@@ -2074,7 +2095,9 @@ class MainWindow(QMainWindow):
                 )
                 continue
             try:
-                self._launch_claude_for(ws, entry.session_id, entry.cwd)
+                self._launch_claude_for(
+                    ws, entry.session_id, entry.cwd, restored_on_startup=True
+                )
                 restored += 1
             except Exception:
                 log.exception("Falha ao restaurar sessão %s", entry.session_id)

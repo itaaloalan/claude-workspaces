@@ -123,6 +123,11 @@ class TerminalWidget(QWidget):
         # ID que reivindicamos pro registry global; usado pra liberar quando
         # o terminal é destruído
         self._claimed_session_id: str | None = None
+        # Sinaliza que esta sessão foi reaberta no startup (--resume após
+        # fechar/abrir o app). Usado pra decidir se o botão ▶ continuar
+        # faz sentido — em sessão nova/fresh não há nada pra continuar e
+        # o botão vira ruído. Set por main_window._restore_sessions.
+        self._restored_on_startup: bool = False
         # Debounce do refit do xterm.js — durante drag de splitter / resize
         # de janela, evita disparar fits em rajada (cada um dispara 6 fits
         # com timeouts internos no JS → CPU thrash)
@@ -143,6 +148,10 @@ class TerminalWidget(QWidget):
         toolbar.addStretch()
         self._continue_btn = QPushButton("▶ Continuar")
         self._continue_btn.setEnabled(False)
+        # Começa oculto — só vira visível quando a sessão foi restaurada
+        # no startup (--resume) e está em estado "Ocioso". Em sessão nova
+        # iniciada no app, "continue" não tem o que continuar.
+        self._continue_btn.setVisible(False)
         self._continue_btn.setToolTip(
             "Manda 'continue' para o Claude — útil quando ele parou no meio "
             "de uma tarefa (ex: ao reabrir uma sessão com --resume)"
@@ -415,6 +424,7 @@ class TerminalWidget(QWidget):
             self.activity_changed.emit(
                 activity.status, activity.is_working, activity.needs_decision
             )
+            self._refresh_continue_visibility()
 
     def when_claude_ready(
         self,
@@ -464,6 +474,7 @@ class TerminalWidget(QWidget):
         self._status.setText("(processo encerrado)")
         self._stop_btn.setEnabled(False)
         self._continue_btn.setEnabled(False)
+        self._continue_btn.setVisible(False)
         self._mode_btn.setEnabled(False)
         self._set_running(False)
 
@@ -484,6 +495,28 @@ class TerminalWidget(QWidget):
     def send_continue(self) -> None:
         """Atalho — manda 'continue' + Enter pra retomar trabalho do Claude."""
         self.send_text("continue")
+
+    def mark_restored_on_startup(self) -> None:
+        """Marca esta sessão como restaurada no startup (--resume após
+        reabrir o app). Habilita o botão ▶ continuar quando o estado for
+        ocioso — em sessão nova/iniciada no app o botão permanece oculto
+        porque não há tarefa interrompida pra retomar."""
+        self._restored_on_startup = True
+        self._refresh_continue_visibility()
+
+    def was_restored_on_startup(self) -> bool:
+        return self._restored_on_startup
+
+    def _refresh_continue_visibility(self) -> None:
+        """Mostra o ▶ Continuar só em sessão restaurada+ociosa. Sem
+        restaurada, fica oculto pra sempre. Sem ocioso, oculto até o
+        Claude voltar ao prompt."""
+        idle = (
+            self._is_running
+            and not self._last_working
+            and not self._last_needs_decision
+        )
+        self._continue_btn.setVisible(self._restored_on_startup and idle)
 
     def send_cycle_mode(self) -> None:
         """Manda Shift+Tab (CSI Z) — cicla entre os modos do Claude Code
@@ -543,6 +576,10 @@ class TerminalWidget(QWidget):
         self._continue_btn.setEnabled(True)
         self._mode_btn.setEnabled(True)
         self._set_running(True)
+        # Avalia visibilidade do ▶ — depende de restored_on_startup +
+        # estado idle. Quem chama esse método é o launch flow; restore
+        # marca o flag logo em seguida via mark_restored_on_startup.
+        self._refresh_continue_visibility()
 
     def start_shell_command(
         self,
@@ -568,6 +605,7 @@ class TerminalWidget(QWidget):
             self.session.terminate()
         self._stop_btn.setEnabled(False)
         self._continue_btn.setEnabled(False)
+        self._continue_btn.setVisible(False)
         self._mode_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
         self._set_running(False)

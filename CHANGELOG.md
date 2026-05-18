@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.9] — 2026-05-18
+
+### Alterado
+- **▶ Continuar agora aparece só quando faz sentido**: o botão só fica
+  visível em sessões restauradas no startup (`--resume` após reabrir o
+  app) e que estão em estado **Ocioso** — cenário típico em que o
+  Claude voltou parado no prompt no meio de uma tarefa. Em sessão
+  fresca, trabalhando, aguardando ou já encerrada, o botão some.
+  Encerrar permanece sempre visível na toolbar principal. Aplica-se
+  aos dois locais (toolbar do console central e linhas da sidebar).
+- **Botões ▶ ⚙ da sidebar alinhados à direita**, na mesma faixa da
+  branch — antes ficavam grudados no título e pareciam pertencer à
+  primeira linha. Agora estão centralizados verticalmente, junto da
+  info de repo, separando "estado da sessão" (esquerda) de "controles
+  + repo" (direita).
+
 ## [0.7.8] — 2026-05-18
 
 ### Adicionado
