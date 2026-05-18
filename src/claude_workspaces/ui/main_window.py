@@ -728,10 +728,18 @@ class MainWindow(QMainWindow):
             on_item_activated=self._on_tree_item_activated,
             on_add_clicked=self.add_workspace,
             on_self_dev_clicked=self._launch_self_dev,
+            on_version_clicked=self._show_release_notes,
         ).build()
         self.list_widget = builder.list_widget
         self.self_dev_btn = builder.self_dev_btn
+        self.version_label = builder.version_label
         return builder.wrapper
+
+    def _show_release_notes(self) -> None:
+        from .release_notes_dialog import ReleaseNotesDialog
+
+        dlg = ReleaseNotesDialog(parent=self)
+        dlg.exec()
 
     # ---------- listagem / filtro / badge ----------
 
@@ -750,9 +758,15 @@ class MainWindow(QMainWindow):
         self.list_widget.clear()
         self.terminals_coord.state.tree_items.clear()
 
+        from PySide6.QtGui import QFont
+
+        ws_font = QFont(self.list_widget.font())
+        ws_font.setBold(True)
+
         for ws in self.workspaces:
             item = QTreeWidgetItem([self._item_label(ws)])
             item.setData(0, Qt.ItemDataRole.UserRole, ws)
+            item.setFont(0, ws_font)
             tip = ws.description or ""
             if ws.folders:
                 tip = (tip + "\n\n" if tip else "") + "\n".join(ws.folders)
@@ -961,13 +975,19 @@ class MainWindow(QMainWindow):
     def _add_last_session_child(
         self, ws_item: QTreeWidgetItem, session: ClaudeSession
     ) -> None:
-        label = "↻ " + session.label(max_preview=40)
+        from PySide6.QtGui import QFont
+
+        label = session.label(max_preview=40)
         child = QTreeWidgetItem([label])
         child.setData(0, Qt.ItemDataRole.UserRole, session)
         child.setToolTip(
             0, f"Última sessão — duplo-clique pra retomar ({session.id})"
         )
-        child.setForeground(0, QBrush(QColor("#9aa3b3")))
+        child.setForeground(0, QBrush(QColor("#7a8290")))
+        font = QFont(self.list_widget.font())
+        font.setItalic(True)
+        font.setPointSizeF(max(font.pointSizeF() - 1, 8.0))
+        child.setFont(0, font)
         ws_item.addChild(child)
         ws_item.setExpanded(True)
 

@@ -138,7 +138,7 @@ src/claude_workspaces/
         ├── terminal.js           # xterm.js wiring + fit aggressivo
         └── vendor/               # xterm.js + fit addon (vendoreado, sem CDN)
 
-tests/                      # pytest, 549 testes (lista atualizada via `ls tests/`)
+tests/                      # pytest, 556 testes (lista atualizada via `ls tests/`)
 packaging/aur/              # PKGBUILD + .SRCINFO pro AUR
 docs/                       # USAGE, DEVELOPMENT, MAINTAINABILITY, PLUGIN_SPEC, DISTRIBUTION
 ```
@@ -336,7 +336,7 @@ Ou usuários podem dropar JSONs em `~/.config/claude-workspaces/templates/`:
 
 ## Testes
 
-**549 testes** distribuídos em ~30 arquivos de teste cobrindo:
+**556 testes** distribuídos em ~30 arquivos de teste cobrindo:
 
 - domínio puro (activity parser, claude_sessions, sessions_search, briefing_builder, usage/skills telemetry, models, storage, settings, workspace_templates, semver dos plugins);
 - subprocess wrappers (git_actions, git_status, git_worktree, hook_manager, mcp_manager, pty_session, launchers);

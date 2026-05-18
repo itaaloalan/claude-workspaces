@@ -2,7 +2,7 @@
 
 Gerenciador de workspaces e console multi-sessão pra Claude Code, com terminal embutido, dock de ferramentas e visibilidade do que cada agente está fazendo.
 
-![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-549-green)
+![status](https://img.shields.io/badge/status-active-success) ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![tests](https://img.shields.io/badge/tests-556-green)
 
 ## O problema
 
@@ -117,4 +117,4 @@ qualquer lugar.
 
 ## Status
 
-Funcional e em uso diário. 549 testes, CI rodando lint + pytest + mypy (não-bloqueante) + coverage. Veja [docs/MAINTAINABILITY.md](docs/MAINTAINABILITY.md) pro tracking de débito técnico — todos os itens da auditoria 2026-05-15 foram resolvidos.
+Funcional e em uso diário. 556 testes, CI rodando lint + pytest + mypy (não-bloqueante) + coverage. Veja [docs/MAINTAINABILITY.md](docs/MAINTAINABILITY.md) pro tracking de débito técnico — todos os itens da auditoria 2026-05-15 foram resolvidos.
