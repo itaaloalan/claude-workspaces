@@ -250,25 +250,39 @@ class PlanUsageWindow:
 
 
 def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
-    """Soma cost_usd + tokens em todas as sessões JSONL com timestamp nos
-    últimos `window_seconds`. Filtra arquivos pelo mtime pra evitar reler
-    JSONLs antigos. Chamada a cada 5s no refresh da sidebar — manter leve."""
+    """Replica `Plan usage limits → Current session` do claude.ai.
+
+    Anthropic abre uma "sessão" de 5h na 1a mensagem após um gap >=5h e
+    fecha quando passa 5h do início. O que conta é o uso DESSA sessão
+    atual — não uma janela rolante. Algoritmo:
+      1. Coleta todas as mensagens dos JSONL recentes (mtime na última
+         janela 2x pra cobrir borda).
+      2. Ordena por ts e detecta o `session_start` corrente: 1a mensagem
+         tal que `session_start + window` > now.
+      3. Soma só do `session_start` em diante.
+    `first_ts` no retorno é o session_start (não o cutoff da janela),
+    então `first_ts + 5h` = reset real exibido pela UI.
+    """
     out = PlanUsageWindow()
     base = Path.home() / ".claude" / "projects"
     if not base.is_dir():
         return out
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
-    cutoff_epoch = cutoff.timestamp()
+    now = datetime.now(timezone.utc)
+    # Pré-filtra arquivos modificados na última 2*janela — cobre o caso
+    # de a sessão atual ter começado pouco antes do cutoff rolante.
+    mtime_cutoff = (now - timedelta(seconds=window_seconds * 2)).timestamp()
     try:
         projects = list(base.iterdir())
     except OSError:
         return out
+
+    msgs: list[tuple[datetime, str, dict]] = []  # (ts, model, usage)
     for proj in projects:
         if not proj.is_dir():
             continue
         for jsonl in proj.glob("*.jsonl"):
             try:
-                if jsonl.stat().st_mtime < cutoff_epoch:
+                if jsonl.stat().st_mtime < mtime_cutoff:
                     continue
             except OSError:
                 continue
@@ -282,7 +296,7 @@ def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
                         if msg.get("type") != "assistant":
                             continue
                         ts = _parse_timestamp(msg.get("timestamp", ""))
-                        if ts is None or ts < cutoff:
+                        if ts is None:
                             continue
                         inner = msg.get("message") or {}
                         if not isinstance(inner, dict):
@@ -290,19 +304,39 @@ def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
                         usage = inner.get("usage") or {}
                         if not isinstance(usage, dict):
                             continue
-                        model = inner.get("model") or "?"
                         i = int(usage.get("input_tokens") or 0)
                         o = int(usage.get("output_tokens") or 0)
                         cc = int(usage.get("cache_creation_input_tokens") or 0)
                         cr = int(usage.get("cache_read_input_tokens") or 0)
                         if i + o + cc + cr <= 0:
                             continue
-                        out.cost_usd += _model_cost(model, usage)
-                        out.total_tokens += i + o + cc + cr
-                        if out.first_ts is None or ts < out.first_ts:
-                            out.first_ts = ts
-                        if out.latest_ts is None or ts > out.latest_ts:
-                            out.latest_ts = ts
+                        msgs.append((ts, inner.get("model") or "?", usage))
             except OSError:
                 continue
+
+    if not msgs:
+        return out
+    msgs.sort(key=lambda x: x[0])
+    window = timedelta(seconds=window_seconds)
+    # Walk: cada vez que aparece uma msg fora da janela do session_start
+    # atual, ela vira o novo session_start.
+    session_start: datetime | None = None
+    for ts, _m, _u in msgs:
+        if session_start is None or ts >= session_start + window:
+            session_start = ts
+    if session_start is None or session_start + window <= now:
+        return out  # sessão expirou — nada a mostrar
+
+    for ts, model, usage in msgs:
+        if ts < session_start:
+            continue
+        i = int(usage.get("input_tokens") or 0)
+        o = int(usage.get("output_tokens") or 0)
+        cc = int(usage.get("cache_creation_input_tokens") or 0)
+        cr = int(usage.get("cache_read_input_tokens") or 0)
+        out.cost_usd += _model_cost(model, usage)
+        out.total_tokens += i + o + cc + cr
+        if out.latest_ts is None or ts > out.latest_ts:
+            out.latest_ts = ts
+    out.first_ts = session_start
     return out

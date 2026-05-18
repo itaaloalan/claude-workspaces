@@ -73,10 +73,12 @@ class Settings:
     # via menu de contexto na sidebar.
     show_terminal_actions: bool = True
     # Limite (USD) por janela de 5h do plano Anthropic — usado pra calcular
-    # o % exibido na sidebar ("Plan usage limits" do claude.ai). O número
-    # exato não é publicado; padrão aproxima Max 5x (~$200/5h). Ajustar
-    # caso o % na sidebar não bata com o que claude.ai mostra.
-    plan_usd_limit_5h: float = 200.0
+    # o % exibido na sidebar ("Plan usage limits" do claude.ai). Anthropic
+    # não publica o número exato; default $420 foi calibrado contra um
+    # ponto real (claude.ai marcando 4% com nosso cost_usd em $16.91 →
+    # 100% ≈ $420) num plano Max 5x. Ajustar se a UI divergir do que
+    # claude.ai mostra.
+    plan_usd_limit_5h: float = 420.0
 
     @classmethod
     def load(cls) -> "Settings":

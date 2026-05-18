@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.11] — 2026-05-18
+
+### Corrigido
+- **Sessão 5h: % e reset agora batem com claude.ai**: na 0.7.10 o
+  `first_ts` era a mensagem mais antiga numa janela rolante de 5h —
+  como a janela é fixa em "agora - 5h", o reset sempre dava ~0m e o
+  cost somava várias sessões consecutivas (o exemplo do usuário marcou
+  `128% · reset 0m` enquanto claude.ai mostrava `4% · resets in 4h 35m`).
+  Agora `recent_plan_usage` detecta o início real da sessão atual
+  (varre mensagens em ordem temporal e abre uma nova sessão sempre
+  que aparece um gap ≥5h), soma apenas dessa sessão em diante, e o
+  tooltip mostra a hora local do reset (`Reseta às 18:39 (4h43m)`).
+- **Calibração do `plan_usd_limit_5h`**: default ajustado de
+  `$200` → `$420` baseado em ponto real (claude.ai 4% com nosso
+  `cost_usd` em $16.91 → 100% ≈ $420 num plano Max 5x). Continua
+  configurável via `settings.json`.
+
 ## [0.7.10] — 2026-05-18
 
 ### Corrigido

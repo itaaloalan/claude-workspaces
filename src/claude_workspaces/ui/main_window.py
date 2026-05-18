@@ -1877,13 +1877,14 @@ class MainWindow(QMainWindow):
             f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
             f"<span style='color: {theme.TEXT_FAINT};'>reset {reset_str}</span>"
         )
+        reset_wall = reset_at.astimezone().strftime("%H:%M")
         label.setToolTip(
-            "Uso do plano Anthropic na janela rolante de 5h\n"
+            "Plan usage limits → Current session (janela de 5h)\n"
             f"Custo aproximado: ${usage.cost_usd:.2f}  ·  "
             f"Limite (settings): ${limit_usd:.2f}\n"
             f"Tokens (input+output+cache): {usage.total_tokens:,}\n"
-            f"Janela começou: {usage.first_ts.astimezone().strftime('%H:%M')}  "
-            f"·  Reset em: {reset_str}\n"
+            f"Sessão começou: {usage.first_ts.astimezone().strftime('%H:%M')}"
+            f"  ·  Reseta às {reset_wall} ({reset_str})\n"
             "Ajuste `plan_usd_limit_5h` em settings.json pra calibrar com"
             " o % que claude.ai mostra."
         )
