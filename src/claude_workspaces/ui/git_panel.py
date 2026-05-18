@@ -603,7 +603,7 @@ class GitPanel(QWidget):
 
         if any_untracked or any_unstaged:
             menu.addAction(
-                self._action(f"+ Add (stage){suffix}", lambda: self._stage_items(items))
+                self._action(f"+ Add{suffix}", lambda: self._stage_items(items))
             )
         if any_staged:
             menu.addAction(
@@ -621,7 +621,7 @@ class GitPanel(QWidget):
         if any_untracked:
             menu.addAction(
                 self._action(
-                    f"✕ Deletar arquivo{suffix}",
+                    f"✕ Delete{suffix}",
                     lambda: self._delete_items(items),
                 )
             )

@@ -6,6 +6,12 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.15] — 2026-05-18
+
+### Alterado
+- **Menu de contexto do git**: rótulos simplificados pra `Add` e `Delete`
+  (antes: `Add (stage)` e `Deletar arquivo`). Ícones (`+`, `✕`) mantidos.
+
 ## [0.7.14] — 2026-05-18
 
 ### Corrigido
