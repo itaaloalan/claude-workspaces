@@ -15,6 +15,15 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   `Cargo.toml`, `go.mod`, `Makefile`, `.nvmrc`, etc.). Evita chute em
   `npm run dev` quando o script não existe, e ajuda a casar versões de
   runtime (Java/Node) com a pasta correta.
+- Prompt reescrito em 5 passos (listar raiz → ler manifests → **verificar
+  toolchain instalado** (`node -v`, `java -version`, `dotnet --version`,
+  app servers em `/opt/*`) → extrair comando real → derivar cwd/stop/
+  restart), com regras específicas por stack (Node detecta pnpm/yarn/
+  bun/npm pelo lockfile; Maven identifica spring-boot/tomcat7/jetty/
+  cargo plugin; Python diferencia Django/FastAPI/Flask; Go/Rust/Ruby/
+  PHP/.NET/Docker). Se a ferramenta não estiver instalada, runner é
+  gerado com `enabled: false` e sufixo `(faltando: <tool>)`. Pede ao
+  Claude reportar quais arquivos leu e o que extraiu, pra ficar auditável.
 
 ## [0.8.1] — 2026-05-18
 
