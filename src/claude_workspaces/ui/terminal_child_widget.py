@@ -113,6 +113,22 @@ class TerminalChildWidget(QWidget):
         vbox.addLayout(sub_row)
         outer.addLayout(vbox, stretch=1)
 
+        # Lado direito: branch + contagem de arquivos modificados do repo.
+        # Atualizado em segundo plano pelo RepoStatusPoller (main_window).
+        self._git_label = QLabel("")
+        self._git_label.setTextFormat(Qt.TextFormat.RichText)
+        self._git_label.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+        )
+        self._git_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._git_label.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred
+        )
+        self._git_label.setVisible(False)
+        outer.addWidget(self._git_label)
+
     def set_title(self, title: str, tooltip: str = "") -> None:
         if title:
             self._title = title
@@ -161,3 +177,28 @@ class TerminalChildWidget(QWidget):
         else:
             self._action_label.setVisible(False)
             self._sep_dot.setVisible(False)
+
+    def update_git_info(self, branch: str, modified: int) -> None:
+        """Atualiza o label do lado direito com branch e contagem de
+        arquivos modificados (working tree + staged + untracked).
+        `branch` vazio = pasta não é repo git → esconde o label.
+        """
+        if not branch:
+            self._git_label.setVisible(False)
+            self._git_label.setText("")
+            return
+        # Encurta nomes longos pra não roubar espaço do action_label
+        b = branch if len(branch) <= 18 else branch[:17] + "…"
+        if modified > 0:
+            self._git_label.setText(
+                f"<span style='color: {theme.TEXT_FAINT};'>⎇ {b}</span>"
+                f"  <span style='color: {theme.WARNING};'>●{modified}</span>"
+            )
+            tip = f"Branch: {branch} — {modified} arquivo(s) modificado(s)"
+        else:
+            self._git_label.setText(
+                f"<span style='color: {theme.TEXT_FAINT};'>⎇ {b}</span>"
+            )
+            tip = f"Branch: {branch} — working tree limpo"
+        self._git_label.setToolTip(tip)
+        self._git_label.setVisible(True)

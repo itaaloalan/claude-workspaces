@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.6] — 2026-05-18
+
+### Adicionado
+- **Branch + arquivos modificados na sidebar**: cada console agora mostra
+  no canto direito a branch atual (`⎇ nome`) e um contador `●N` em amber
+  quando há arquivos modificados/staged/untracked no repo do workspace.
+  Atualiza a cada 5s em segundo plano via `RepoStatusPoller` (QThreadPool
+  + cache TTL de 4s), então não trava a UI mesmo em repos lentos. Tooltip
+  no label expande pra texto completo (`Branch: foo — N arquivo(s)
+  modificado(s)`).
+
 ## [0.7.5] — 2026-05-18
 
 ### Adicionado
@@ -23,6 +34,10 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   novo no workspace, mesma ação de "Abrir Claude") e ▾/▸ (recolhe ou
   expande os filhos do workspace na tree). O ícone do botão de
   colapsar sincroniza com o disclosure triangle nativo da árvore.
+- **Indicador visual de "rodando" na sidebar**: substitui o texto
+  `●×2` (que renderizava na mesma cor do nome do workspace e parecia
+  bullet point) por uma bolinha verde dedicada + badge `×N` em pill
+  verde-translúcida quando há mais de um Claude rodando no workspace.
 
 ## [0.7.4] — 2026-05-18
 

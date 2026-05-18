@@ -35,6 +35,7 @@ from ..launchers import (
 )
 from ..logging_utils import log_exceptions
 from ..models import Workspace
+from ..repo_status_poller import RepoStatusPoller
 from ..services.desktop_notifier import DesktopNotifier
 from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
@@ -161,6 +162,16 @@ class MainWindow(QMainWindow):
         )
         TerminalWidget.set_idle_debounce_seconds(self.settings.idle_debounce_seconds)
 
+        # Poller assíncrono pra branch+contagem de modificados ao lado de
+        # cada console na sidebar. Criado antes de qualquer refresh pra
+        # _add_terminal_child poder pedir status no primeiro paint.
+        self._repo_poller = RepoStatusPoller(ttl_seconds=4.0, parent=self)
+        self._repo_poller.status_ready.connect(self._on_repo_status_ready)
+        self._repo_poll_timer = QTimer(self)
+        self._repo_poll_timer.setInterval(5_000)
+        self._repo_poll_timer.timeout.connect(self._refresh_terminal_git_info)
+        self._repo_poll_timer.start()
+
         self._restore_geometry()
         self.refresh_list()
         # Plugin host depende do PluginsView e do GitPanel (ambos só existem
@@ -171,6 +182,9 @@ class MainWindow(QMainWindow):
         # Restaura sessões Claude da execução anterior — defer pra deixar
         # a janela pintar primeiro, evitando flicker do dialog de launch.
         QTimer.singleShot(0, self._restore_sessions)
+        # Primeiro refresh um pouco depois pra dar tempo de o restore criar
+        # os children e o claude_cwd estar disponível.
+        QTimer.singleShot(800, self._refresh_terminal_git_info)
 
     @property
     def workspaces(self) -> list[Workspace]:
@@ -984,10 +998,8 @@ class MainWindow(QMainWindow):
         return None
 
     def _item_label(self, ws: Workspace) -> str:
-        count = self.terminals_coord.state.running_counts.get(ws.id, 0)
-        if count > 0:
-            dot = "●" if count == 1 else f"●×{count}"
-            return f"{dot} {ws.name}"
+        # O indicador de "rodando" (bolinha verde + badge) é renderizado
+        # pelo WorkspaceItemWidget — aqui só o nome.
         return ws.name
 
     def _apply_filter(self, text: str) -> None:
@@ -1036,8 +1048,10 @@ class MainWindow(QMainWindow):
             return
         widget = self.list_widget.itemWidget(item, 0)
         from .workspace_item_widget import WorkspaceItemWidget
+        count = self.terminals_coord.state.running_counts.get(ws.id, 0)
         if isinstance(widget, WorkspaceItemWidget):
-            widget.set_label(self._item_label(ws))
+            widget.set_label(ws.name)
+            widget.set_running_count(count)
         else:
             item.setText(0, self._item_label(ws))
 
@@ -1057,8 +1071,11 @@ class MainWindow(QMainWindow):
             if isinstance(widget, WorkspaceItemWidget):
                 widget.set_collapsed(not item.isExpanded())
 
-        widget = WorkspaceItemWidget(self._item_label(ws), on_add, on_toggle)
+        widget = WorkspaceItemWidget(ws.name, on_add, on_toggle)
         widget.set_collapsed(not item.isExpanded())
+        widget.set_running_count(
+            self.terminals_coord.state.running_counts.get(ws.id, 0)
+        )
         self.list_widget.setItemWidget(item, 0, widget)
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
@@ -1595,6 +1612,10 @@ class MainWindow(QMainWindow):
         # Reaplica sufixos de desambiguação no workspace inteiro (cobre o
         # caso de a nova aba colidir com outra que já estava sem sufixo).
         self._refresh_workspace_child_titles(ws_item)
+        # Já dispara um request de git status pra esse cwd — assim o
+        # label aparece logo na primeira pintura, sem esperar o tick.
+        if term is not None and term.claude_cwd:
+            self._repo_poller.request(term.claude_cwd)
 
     def _update_terminal_child(
         self,
@@ -1686,6 +1707,40 @@ class MainWindow(QMainWindow):
                 full = term.full_title() or base
             display = self._compute_disambiguated_title(ws_item, sib_id, base)
             sib_widget.set_title(display, full)
+
+    # ---------- git info na sidebar ----------
+
+    def _refresh_terminal_git_info(self) -> None:
+        """Itera os children visíveis e pede status do repo. Resultados
+        caem em `_on_repo_status_ready` quando prontos."""
+        for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
+            if item is None or item.isHidden():
+                continue
+            widget = self.list_widget.itemWidget(item, 0)
+            if not isinstance(widget, TerminalChildWidget):
+                continue
+            term = self._terminal_widget_for(tab_id)
+            cwd = term.claude_cwd if term is not None else None
+            if not cwd:
+                continue
+            self._repo_poller.request(cwd)
+
+    def _on_repo_status_ready(
+        self, folder: str, branch: str, modified: int
+    ) -> None:
+        """Aplica branch+contagem em todos os children cuja claude_cwd
+        bate com `folder`. Um mesmo folder pode aparecer em vários
+        consoles do mesmo (ou de outro) workspace."""
+        for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
+            if item is None:
+                continue
+            widget = self.list_widget.itemWidget(item, 0)
+            if not isinstance(widget, TerminalChildWidget):
+                continue
+            term = self._terminal_widget_for(tab_id)
+            if term is None or term.claude_cwd != folder:
+                continue
+            widget.update_git_info(branch, modified)
 
     def _launch_claude_for(
         self, workspace: Workspace, resume_session_id: str, cwd_override: str

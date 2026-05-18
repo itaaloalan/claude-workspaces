@@ -1,8 +1,10 @@
-"""Widget custom pros workspaces (top-level items da tree) — mostra o
-nome do workspace + dois botões à direita:
+"""Widget custom pros workspaces (top-level items da tree) — mostra um
+indicador de "rodando" (bolinha verde + badge de count) + nome + botões:
 
-    [nome do workspace]          [＋] [▾]
+    [●] [×N] [nome do workspace]          [＋] [▾]
 
+- A bolinha verde aparece quando há ≥1 terminal Claude rodando no
+  workspace; o badge `×N` aparece a partir de 2.
 - `＋` abre um Claude novo no workspace (mesma ação de "Abrir Claude" /
   do botão "Abrir Claude" no detalhe / atalho).
 - `▾`/`▸` colapsa/expande os filhos do workspace (consoles em execução
@@ -41,13 +43,35 @@ _BTN_QSS = (
     f"}}"
 )
 
+# Bolinha verde: QLabel vazia com border-radius (mais limpa que o
+# caractere "●", que herda cor/tamanho da fonte e renderiza desalinhado).
+_DOT_QSS = (
+    f"QLabel {{"
+    f"  background-color: {theme.SUCCESS};"
+    f"  border-radius: 4px;"
+    f"}}"
+)
+
+# Pill com count quando há >1 terminal rodando — fundo verde transparente
+# pra combinar com a bolinha sem competir com o nome do workspace.
+_BADGE_QSS = (
+    f"QLabel {{"
+    f"  background: rgba(90, 195, 90, 38);"
+    f"  color: {theme.SUCCESS};"
+    f"  font-size: 9px;"
+    f"  font-weight: 700;"
+    f"  padding: 1px 5px;"
+    f"  border-radius: 7px;"
+    f"}}"
+)
+
 
 class WorkspaceItemWidget(QWidget):
     """Widget linha pra cada workspace top-level com botões inline."""
 
     def __init__(
         self,
-        label: str,
+        name: str,
         on_add_claude: Callable[[], None],
         on_toggle_collapse: Callable[[], None],
         parent: QWidget | None = None,
@@ -60,7 +84,20 @@ class WorkspaceItemWidget(QWidget):
         row.setContentsMargins(2, 2, 2, 2)
         row.setSpacing(4)
 
-        self._label = QLabel(label)
+        self._dot = QLabel("")
+        self._dot.setFixedSize(8, 8)
+        self._dot.setStyleSheet(_DOT_QSS)
+        self._dot.setToolTip("Há Claude rodando neste workspace")
+        self._dot.hide()
+        row.addWidget(self._dot, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self._badge = QLabel("")
+        self._badge.setStyleSheet(_BADGE_QSS)
+        self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._badge.hide()
+        row.addWidget(self._badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self._label = QLabel(name)
         bold = QFont(self._label.font())
         bold.setBold(True)
         self._label.setFont(bold)
@@ -89,6 +126,20 @@ class WorkspaceItemWidget(QWidget):
 
     def set_label(self, label: str) -> None:
         self._label.setText(label)
+
+    def set_running_count(self, count: int) -> None:
+        """Atualiza o indicador de "rodando" — bolinha verde (count≥1)
+        + badge ×N (count>1). Esconde tudo quando count == 0."""
+        if count <= 0:
+            self._dot.hide()
+            self._badge.hide()
+            return
+        self._dot.show()
+        if count > 1:
+            self._badge.setText(f"×{count}")
+            self._badge.show()
+        else:
+            self._badge.hide()
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do botão de colapsar pra refletir o estado
