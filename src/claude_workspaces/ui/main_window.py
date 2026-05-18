@@ -159,6 +159,7 @@ class MainWindow(QMainWindow):
             self.settings.notify_reminder_seconds,
             enabled=self.settings.notify_reminder_enabled,
         )
+        TerminalWidget.set_idle_debounce_seconds(self.settings.idle_debounce_seconds)
 
         self._restore_geometry()
         self.refresh_list()
@@ -1192,6 +1193,7 @@ class MainWindow(QMainWindow):
             self.settings.notify_reminder_seconds,
             enabled=self.settings.notify_reminder_enabled,
         )
+        TerminalWidget.set_idle_debounce_seconds(self.settings.idle_debounce_seconds)
         if self.settings.notify_native_enabled and self._tray is None:
             self._init_tray()
         elif not self.settings.notify_native_enabled and self._tray is not None:

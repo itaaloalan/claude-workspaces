@@ -42,6 +42,13 @@ class Settings:
     # Liga notificações nativas do sistema (QSystemTrayIcon.showMessage).
     # Quando False, a inbox/badge ainda funcionam, mas sem toast.
     notify_native_enabled: bool = True
+    # Debounce da transição working→idle no status da sidebar. Why: o parser
+    # de status oscila entre is_working True/False enquanto o Claude alterna
+    # tool calls e geração de texto dentro do mesmo turno. O app só mostra
+    # "Ocioso" se ficar `idle_debounce_seconds` estável sem voltar a working
+    # — evita flicker "Trabalhando ↔ Ocioso". Mínimo 0 (sem debounce),
+    # máximo 120s.
+    idle_debounce_seconds: int = 20
 
     @classmethod
     def load(cls) -> "Settings":

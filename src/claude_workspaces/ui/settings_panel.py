@@ -101,6 +101,7 @@ class SettingsPanel(QWidget):
 
         outer.addWidget(self._build_worktree_section())
         outer.addWidget(self._build_notifications_section())
+        outer.addWidget(self._build_status_detection_section())
         outer.addWidget(self._build_inspectors_section())
 
         actions = QHBoxLayout()
@@ -145,6 +146,7 @@ class SettingsPanel(QWidget):
         self._notify_native_chk.setChecked(self.settings.notify_native_enabled)
         self._notify_reminder_chk.setChecked(self.settings.notify_reminder_enabled)
         self._notify_reminder_secs.setValue(self.settings.notify_reminder_seconds)
+        self._idle_debounce_secs.setValue(self.settings.idle_debounce_seconds)
 
     def _on_save(self) -> None:
         self.settings.claude_command = self._claude_cmd.text().strip() or "claude"
@@ -168,6 +170,7 @@ class SettingsPanel(QWidget):
         self.settings.notify_native_enabled = self._notify_native_chk.isChecked()
         self.settings.notify_reminder_enabled = self._notify_reminder_chk.isChecked()
         self.settings.notify_reminder_seconds = int(self._notify_reminder_secs.value())
+        self.settings.idle_debounce_seconds = int(self._idle_debounce_secs.value())
 
         try:
             self.settings.save()
@@ -283,6 +286,36 @@ class SettingsPanel(QWidget):
         layout.addLayout(re_form)
 
         self._refresh_hook_status()
+        return box
+
+    def _build_status_detection_section(self) -> QWidget:
+        box = QGroupBox("Detecção de status")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "Enquanto o Claude responde, o parser de status oscila entre "
+            "<b>Trabalhando</b> e <b>Ocioso</b> (cada tool call ou pausa "
+            "entre tokens parece ociosidade momentânea). O app só vira "
+            '"Ocioso" depois de N segundos estáveis sem voltar a trabalhar, '
+            "pra evitar flicker na sidebar. <i>0 desliga o debounce</i> "
+            "(comportamento antigo, com flicker)."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        self._idle_debounce_secs = QSpinBox()
+        self._idle_debounce_secs.setRange(0, 120)
+        self._idle_debounce_secs.setSingleStep(1)
+        self._idle_debounce_secs.setSuffix(" s")
+        self._idle_debounce_secs.setToolTip(
+            "Quanto tempo esperar antes de marcar o terminal como 'Ocioso' "
+            "depois que o parser detecta fim de turno. 0–120s. Padrão: 20s."
+        )
+        form.addRow("Esperar antes de mostrar 'Ocioso':", self._idle_debounce_secs)
+        layout.addLayout(form)
+
         return box
 
     def _build_inspectors_section(self) -> QWidget:

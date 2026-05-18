@@ -71,6 +71,14 @@ class TerminalWidget(QWidget):
     # o critério "mtime mais recente" devolve a sessão da aba mais ativa
     # — bug em que a aba 2 mostrava o título da aba 1.
     _claimed_session_ids: set[str] = set()
+    # Debounce global da transição working→idle. Atualizado por
+    # `set_idle_debounce_seconds` quando o usuário muda em Settings;
+    # todos os terminais vivos passam a usar o novo valor no próximo poll.
+    _idle_debounce_s: float = 20.0
+
+    @classmethod
+    def set_idle_debounce_seconds(cls, seconds: float) -> None:
+        cls._idle_debounce_s = max(0.0, min(120.0, float(seconds)))
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -86,11 +94,12 @@ class TerminalWidget(QWidget):
         self._activity_dirty = False
         # Debounce working→idle: o parser oscila entre is_working True/False
         # durante o mesmo turno (tool calls intercalando com texto). Aguarda
-        # 5s estável em "não-working" antes de propagar pra UI pra evitar
-        # o flicker de "Trabalhando ↔ Ocioso" enquanto o Claude ainda
-        # está respondendo.
+        # N segundos estáveis em "não-working" antes de propagar pra UI, pra
+        # evitar flicker de "Trabalhando ↔ Ocioso". O valor vem do setting
+        # `idle_debounce_seconds` (class attr `_idle_debounce_s`, lido a
+        # cada poll — assim mudanças em Settings afetam todos os terminais
+        # vivos sem reinicialização).
         self._pending_idle_since: float | None = None
-        self._IDLE_DEBOUNCE_S = 5.0
         # Context Claude (cwd + resume) pra descobrir o título da sessão
         # via scan do ~/.claude/projects/<cwd>/*.jsonl
         self._claude_cwd: str | None = None
@@ -349,25 +358,29 @@ class TerminalWidget(QWidget):
 
         # Debounce working→idle. Working→awaiting (needs_decision) passa
         # direto: o usuário precisa de feedback imediato quando o Claude
-        # pede uma decisão.
+        # pede uma decisão. Quando o debounce é 0, vira idle imediatamente
+        # (modo antigo, sem debounce).
         now = time.monotonic()
+        debounce_s = type(self)._idle_debounce_s
         if (
-            self._last_working
+            debounce_s > 0
+            and self._last_working
             and not activity.is_working
             and not activity.needs_decision
         ):
             if self._pending_idle_since is None:
                 self._pending_idle_since = now
-            if now - self._pending_idle_since < self._IDLE_DEBOUNCE_S:
+            if now - self._pending_idle_since < debounce_s:
                 # Suprime emit — UI continua mostrando "Trabalhando".
                 # Se status mudar (ex: nova ação), também não emite, pra
                 # não atualizar a sub-linha enquanto a transição flutua.
                 return
-            # 5s estável sem voltar a working: pode realmente virar idle.
+            # N segundos estáveis sem voltar a working: pode realmente
+            # virar idle.
             self._pending_idle_since = None
         else:
-            # Voltou a working, ou já estava idle, ou virou awaiting:
-            # cancela qualquer debounce pendente.
+            # Voltou a working, ou já estava idle, ou virou awaiting, ou
+            # debounce desligado: cancela qualquer debounce pendente.
             self._pending_idle_since = None
 
         if (

@@ -6,16 +6,24 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
-## [0.7.1] — 2026-05-18
+## [0.7.2] — 2026-05-18
 
 ### Corrigido
 - **Flicker de "Ocioso" durante o turno do Claude**: o parser de
   `claude_activity` oscila entre `is_working=True/False` enquanto o
   Claude alterna entre tool calls e geração de texto, fazendo o status
   na sidebar piscar "Trabalhando ↔ Ocioso". Agora a transição
-  working→idle é debounced em 5s — só vira "Ocioso" se ficar 5s
+  working→idle é debounced — só vira "Ocioso" se ficar N segundos
   estável sem voltar a working. Working→awaiting (`needs_decision`)
   continua imediato, pra não atrasar o feedback de permission prompts.
+
+### Adicionado
+- **Setting global `idle_debounce_seconds`** (default **20s**, range
+  0–120s) na seção "Detecção de status" da tela de Configurações.
+  Controla o debounce acima. Aplicado a todos os terminais vivos
+  imediatamente após salvar (via class-attr em `TerminalWidget`,
+  sem precisar reiniciar). 0 desliga o debounce (volta ao
+  comportamento antigo, com flicker).
 
 ## [0.7.0] — 2026-05-18
 
