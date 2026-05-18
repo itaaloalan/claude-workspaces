@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.4] — 2026-05-18
+
+### Alterado
+- **Clique simples no runner abre o log**: clicar uma vez num
+  runner-child da sidebar agora já abre o painel "Runners" no console
+  do runner (antes era só double-click/Enter). Resolve o escopo
+  automaticamente — workspace-scope vai pra "Runners workspace",
+  console-scope vai pra "Runners (console)" do console dono (cria a
+  RunnerArea sob demanda se ainda não existia).
+
 ## [0.18.3] — 2026-05-18
 
 ### Adicionado

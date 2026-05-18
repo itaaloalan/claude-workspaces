@@ -1466,6 +1466,12 @@ class MainWindow(QMainWindow):
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
+        # Clique num runner-child → abre o console/log daquele runner.
+        if isinstance(data, tuple) and len(data) == 3 and data[0] == "runner":
+            ws = self.workspaces_coord.find_by_id(data[1])
+            if ws is not None:
+                self._open_runner_from_sidebar(ws, data[2])
+            return
         if not isinstance(data, int):  # só tab_id de aba viva
             return
         pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
@@ -1494,8 +1500,33 @@ class MainWindow(QMainWindow):
         self._focus_terminal_tab(pdata, data)
 
     def _open_runner_from_sidebar(self, workspace: Workspace, runner_id: str) -> None:
-        """Switch pro bottom tab "Runners", garante a RunnerArea do
-        workspace e foca a aba do runner."""
+        """Switch pro bottom tab "Runners" e foca a aba do runner.
+
+        Resolve o escopo automaticamente: runners workspace-scope abrem
+        no painel "Runners workspace"; runners de console abrem no painel
+        "Runners (console)" do console dono."""
+        # Identifica o escopo procurando o runner no workspace.
+        runner = next((r for r in workspace.runners if r.id == runner_id), None)
+        sid = (runner.console_session_id or "") if runner is not None else ""
+        if sid:
+            # Console-scope: localiza a RunnerArea do console dono.
+            for area in self._console_runner_areas.get(workspace.id, {}).values():
+                if area.console_session_id() == sid:
+                    self.console_runner_host.setCurrentWidget(area)
+                    self._bottom_tabs.setCurrentWidget(self.console_runner_host)
+                    area.focus_runner(runner_id)
+                    return
+            # Área ainda não criada → garante criando via terminal dono.
+            for tab_id, term_item in self.terminals_coord.state.tree_items.items():
+                term = self._terminal_widget_for(tab_id)
+                if term is None:
+                    continue
+                term_sid = term.claimed_session_id() or self._pending_console_key(term)
+                if term_sid == sid:
+                    area = self._ensure_terminal_runner_panel(workspace, term)
+                    area.focus_runner(runner_id)
+                    return
+            # Não achou console dono (foi encerrado?) — fallback pro workspace.
         area = self._get_or_create_runner_area(workspace)
         self.runner_host.setCurrentWidget(area)
         self._bottom_tabs.setCurrentWidget(self.runner_host)
