@@ -138,9 +138,13 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._git_panel = GitPanel()
         self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
 
+        # Localizar arquivo moveu pra sidebar (esquerda) e abre num modal —
+        # ver `MainWindow._open_file_finder_dialog`. Mantemos só uma
+        # instância "shadow" pra preservar atributo/API antiga sem ocupar
+        # espaço no painel de detalhes.
         self._file_finder = FileFinder()
         self._file_finder.open_file_requested.connect(self.open_file_requested.emit)
-        c.addWidget(self._file_finder)
+        self._file_finder.setVisible(False)
 
         sessions = self._build_sessions_column()
         c.addWidget(sessions, stretch=1)

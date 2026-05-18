@@ -11,6 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -169,6 +170,42 @@ class FileFinder(QWidget):
         path = self._selected_path()
         if path:
             QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+
+class FileFinderDialog(QDialog):
+    """Modal que envolve `FileFinder` — invocado pela sidebar quando o
+    user dá Enter no input "Localizar arquivo". Dá mais espaço pra lista
+    de resultados que o widget inline e fecha ao abrir o arquivo."""
+
+    open_file_requested = Signal(str)
+
+    def __init__(
+        self,
+        folders: list[str],
+        initial_query: str = "",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Localizar arquivo")
+        self.resize(720, 480)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        self._finder = FileFinder(self)
+        # No modal a lista usa todo o espaço disponível; remove o cap baixo
+        # que faz sentido no widget inline.
+        self._finder._list.setMaximumHeight(16777215)
+        self._finder.set_folders(folders)
+        if initial_query:
+            self._finder._input.setText(initial_query)
+            self._finder._run_search()
+        self._finder.open_file_requested.connect(self._on_open)
+        self._finder._input.setFocus()
+        layout.addWidget(self._finder)
+
+    def _on_open(self, path: str) -> None:
+        self.open_file_requested.emit(path)
+        self.accept()
 
 
 def _search(folders: list[str], query: str, limit: int) -> list[tuple[str, str]]:

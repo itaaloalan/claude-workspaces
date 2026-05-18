@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.16.0] — 2026-05-18
+
+### Alterado
+- **Localizar arquivo movido pra sidebar + modal**: o input "Localizar
+  arquivo" sai do painel de detalhes do workspace (direita) e vira
+  uma caixa compacta na sidebar (esquerda), logo acima do botão
+  "＋ Novo Workspace". Enter dispara um modal `FileFinderDialog`
+  (720×480) com a lista de resultados em tela cheia, usando as
+  pastas do workspace atualmente selecionado. Double-click / Editar
+  abre no editor configurado e fecha o modal. Mais espaço pros
+  resultados e acesso global (não depende da view atual).
+
 ## [0.15.0] — 2026-05-18
 
 ### Alterado

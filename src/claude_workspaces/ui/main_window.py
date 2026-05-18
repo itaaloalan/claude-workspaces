@@ -799,6 +799,30 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._bottom_tabs, stretch=1)
         return pane
 
+    def _open_file_finder_dialog(self, initial_query: str = "") -> None:
+        """Abre o modal de localizar arquivo usando as pastas do workspace
+        atualmente selecionado. Pré-preenche com `initial_query` (o que o
+        user já digitou no input da sidebar) e dispara a busca."""
+        from .file_finder import FileFinderDialog
+
+        ws = self._current_workspace()
+        folders = list(ws.folders) if ws is not None else []
+        if not folders:
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.information(
+                self,
+                "Localizar arquivo",
+                "Selecione um workspace com pastas configuradas pra buscar arquivos.",
+            )
+            return
+        dlg = FileFinderDialog(folders, initial_query=initial_query, parent=self)
+        dlg.open_file_requested.connect(self._open_file_in_editor)
+        dlg.exec()
+        # Limpa o input da sidebar pra próxima busca começar fresca.
+        if hasattr(self, "_find_file_input"):
+            self._find_file_input.clear()
+
     def _build_sidebar(self) -> QWidget:
         builder = SidebarBuilder(
             on_current_changed=self._on_selection_changed,
@@ -807,7 +831,9 @@ class MainWindow(QMainWindow):
             on_add_clicked=self.add_workspace,
             on_self_dev_clicked=self._launch_self_dev,
             on_version_clicked=self._show_release_notes,
+            on_find_file=self._open_file_finder_dialog,
         ).build()
+        self._find_file_input = builder.find_file_input
         self.list_widget = builder.list_widget
         self.self_dev_btn = builder.self_dev_btn
         self.version_label = builder.version_label

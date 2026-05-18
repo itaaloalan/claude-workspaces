@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPalette
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTreeWidget,
     QVBoxLayout,
@@ -166,6 +167,7 @@ class SidebarBuilder:
         on_add_clicked: Callable[[], None],
         on_self_dev_clicked: Callable[[], None],
         on_version_clicked: Callable[[], None] | None = None,
+        on_find_file: Callable[[str], None] | None = None,
     ) -> None:
         self._on_current_changed = on_current_changed
         self._on_item_clicked = on_item_clicked
@@ -173,6 +175,7 @@ class SidebarBuilder:
         self._on_add_clicked = on_add_clicked
         self._on_self_dev_clicked = on_self_dev_clicked
         self._on_version_clicked = on_version_clicked
+        self._on_find_file = on_find_file
 
     def build(self) -> SidebarBuilder:
         self.wrapper = QWidget()
@@ -235,6 +238,23 @@ class SidebarBuilder:
         self.context_status_label.setVisible(False)
         self.context_status_label.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(self.context_status_label)
+
+        # Localizar arquivo — input compacto que abre um modal de busca
+        # com os resultados do workspace ativo. Mora aqui na sidebar
+        # (esquerda) pra ficar acessível independente da view atual.
+        self.find_file_input = QLineEdit()
+        self.find_file_input.setPlaceholderText("🔍  Localizar arquivo…")
+        self.find_file_input.setClearButtonEnabled(True)
+        self.find_file_input.setStyleSheet(
+            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "border-radius: 4px; padding: 5px 8px; color: #e6e6e6; font-size: 11px; }"
+            "QLineEdit:focus { border-color: #3d6ea8; }"
+        )
+        if self._on_find_file is not None:
+            self.find_file_input.returnPressed.connect(
+                lambda: self._on_find_file(self.find_file_input.text())
+            )
+        layout.addWidget(self.find_file_input)
 
         self.add_btn = QPushButton("＋  Novo Workspace")
         self.add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
