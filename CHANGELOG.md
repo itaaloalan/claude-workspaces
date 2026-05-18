@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.1] — 2026-05-18
+
+### Corrigido
+- **"Abrir Claude" agora foca a aba "Terminal"**: ao lançar um console
+  pelo botão "Abrir Claude" (ou "Abrir Terminal") com a bottom tab
+  ativa sendo "Runners workspace" ou "Runners (console)", o app já
+  troca pra "Terminal" pra mostrar o terminal recém-criado. Antes
+  o terminal era criado mas ficava invisível atrás da tab errada.
+
+### Alterado
+- **Placeholder de "Runners (console)" mais claro**: o texto agora
+  diz onde fica o botão ▤ Runners (na barra do terminal) em vez de
+  só citar o ícone.
+
 ## [0.18.0] — 2026-05-18
 
 ### Adicionado

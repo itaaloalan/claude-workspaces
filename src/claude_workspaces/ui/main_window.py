@@ -789,8 +789,8 @@ class MainWindow(QMainWindow):
         self.console_runner_host = QStackedWidget()
         self.console_runner_host.setMinimumHeight(0)
         crh_empty = QLabel(
-            "Abra um console (Claude) e clique em ▤ Runners pra criar runners "
-            "específicos dele."
+            "Abra um console Claude e, na barra do terminal, clique em "
+            "▤ Runners para criar runners específicos desse console."
         )
         crh_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         crh_empty.setWordWrap(True)
@@ -2551,6 +2551,7 @@ class MainWindow(QMainWindow):
             area = self.terminals_coord.area_for(workspace.id)
             if area is not None:
                 self.terminal_host.setCurrentWidget(area)
+                self._bottom_tabs.setCurrentWidget(self.terminal_host)
 
     def _handoff_session(self, workspace: Workspace, session) -> None:
         self.launch_coord.handoff_session(workspace, session)
@@ -2561,6 +2562,7 @@ class MainWindow(QMainWindow):
             area = self.terminals_coord.area_for(workspace.id)
             if area is not None:
                 self.terminal_host.setCurrentWidget(area)
+                self._bottom_tabs.setCurrentWidget(self.terminal_host)
 
     def _cleanup_terminal_for(self, workspace_id: str) -> None:
         self.plugin_coord.dispatch_workspace_closed(workspace_id)
