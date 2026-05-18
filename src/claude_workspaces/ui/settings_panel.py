@@ -146,6 +146,11 @@ class SettingsPanel(QWidget):
         self._notify_native_chk.setChecked(self.settings.notify_native_enabled)
         self._notify_reminder_chk.setChecked(self.settings.notify_reminder_enabled)
         self._notify_reminder_secs.setValue(self.settings.notify_reminder_seconds)
+        self._notify_app_name.setText(self.settings.notify_app_name)
+        self._notify_ready_prefix.setText(self.settings.notify_ready_prefix)
+        self._notify_reminder_prefix.setText(self.settings.notify_reminder_prefix)
+        self._notify_hook_title_fmt.setText(self.settings.notify_hook_title_format)
+        self._notify_hook_default_body.setText(self.settings.notify_hook_default_body)
         self._idle_debounce_secs.setValue(self.settings.idle_debounce_seconds)
 
     def _on_save(self) -> None:
@@ -170,6 +175,17 @@ class SettingsPanel(QWidget):
         self.settings.notify_native_enabled = self._notify_native_chk.isChecked()
         self.settings.notify_reminder_enabled = self._notify_reminder_chk.isChecked()
         self.settings.notify_reminder_seconds = int(self._notify_reminder_secs.value())
+        self.settings.notify_app_name = (
+            self._notify_app_name.text().strip() or "Claude Workspaces"
+        )
+        self.settings.notify_ready_prefix = self._notify_ready_prefix.text()
+        self.settings.notify_reminder_prefix = self._notify_reminder_prefix.text()
+        self.settings.notify_hook_title_format = (
+            self._notify_hook_title_fmt.text().strip() or "Claude — {project}"
+        )
+        self.settings.notify_hook_default_body = (
+            self._notify_hook_default_body.text().strip() or "(turno encerrado)"
+        )
         self.settings.idle_debounce_seconds = int(self._idle_debounce_secs.value())
 
         try:
@@ -284,6 +300,57 @@ class SettingsPanel(QWidget):
         )
         re_form.addRow("Reavisar a cada:", self._notify_reminder_secs)
         layout.addLayout(re_form)
+
+        layout.addSpacing(8)
+        layout.addWidget(QLabel("<b>Textos das notificações</b>"))
+
+        texts_intro = QLabel(
+            "Personalize o rótulo do app e os títulos/corpo das notificações. "
+            "Use string vazia nos prefixos pra esconder. No template do hook, "
+            "<code>{project}</code> é substituído pelo basename do cwd."
+        )
+        texts_intro.setWordWrap(True)
+        texts_intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(texts_intro)
+
+        texts_form = QFormLayout()
+
+        self._notify_app_name = QLineEdit()
+        self._notify_app_name.setPlaceholderText("Claude Workspaces")
+        self._notify_app_name.setToolTip(
+            "Rótulo do app no banner (D-Bus app_name / tray tooltip / notify-send -a)."
+        )
+        texts_form.addRow("Nome do app:", self._notify_app_name)
+
+        self._notify_ready_prefix = QLineEdit()
+        self._notify_ready_prefix.setPlaceholderText("✅ Pronto")
+        self._notify_ready_prefix.setToolTip(
+            "Prefixo do título quando uma tarefa termina (formato: '<prefixo> — <workspace>')."
+        )
+        texts_form.addRow("Prefixo 'pronto':", self._notify_ready_prefix)
+
+        self._notify_reminder_prefix = QLineEdit()
+        self._notify_reminder_prefix.setPlaceholderText("🔁 Ainda aguardando")
+        self._notify_reminder_prefix.setToolTip(
+            "Prefixo do título nos re-lembretes (formato: '<prefixo> — <workspace>')."
+        )
+        texts_form.addRow("Prefixo re-lembrete:", self._notify_reminder_prefix)
+
+        self._notify_hook_title_fmt = QLineEdit()
+        self._notify_hook_title_fmt.setPlaceholderText("Claude — {project}")
+        self._notify_hook_title_fmt.setToolTip(
+            "Template do título do hook Stop. {project} = basename do cwd."
+        )
+        texts_form.addRow("Título do hook:", self._notify_hook_title_fmt)
+
+        self._notify_hook_default_body = QLineEdit()
+        self._notify_hook_default_body.setPlaceholderText("(turno encerrado)")
+        self._notify_hook_default_body.setToolTip(
+            "Body do hook quando não dá pra ler a última mensagem do usuário do transcript."
+        )
+        texts_form.addRow("Body padrão do hook:", self._notify_hook_default_body)
+
+        layout.addLayout(texts_form)
 
         self._refresh_hook_status()
         return box

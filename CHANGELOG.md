@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.4] — 2026-05-18
+
+### Adicionado
+- **Textos das notificações configuráveis** em Configurações → Notificações.
+  Antes os títulos vinham fixos (`✅ Pronto`, `🔁 Ainda aguardando`,
+  `Claude Workspaces` como app_name, `Claude — {project}` no hook Stop),
+  o que deixava banners genéricos no centro de notificações — um popup
+  só com "Claude Code" no topo não dizia qual workspace tinha terminado.
+  Cinco campos novos:
+  - **Nome do app**: usado no app_name do D-Bus, tooltip do tray e flag
+    `-a` do `notify-send` do hook. Aparece como cabeçalho do popup.
+  - **Prefixo 'pronto'** / **Prefixo re-lembrete**: vão antes do nome do
+    workspace nos toasts emitidos pelo app. String vazia esconde o
+    prefixo.
+  - **Título do hook** (template, aceita `{project}`) e **body padrão
+    do hook**: usados pelo `notify-hook.py` quando o Stop event dispara.
+    Como o hook roda como subprocess separado do Claude Code, ele relê
+    as settings de `~/.config/claude-workspaces/settings.json` a cada
+    turno.
+  Salvar Configurações recria o `DesktopNotifier` no ato pra que o
+  `app_name` novo já valha pra próxima notificação (não dá pra mudar
+  esse campo num notifier vivo via D-Bus).
+
 ## [0.7.3] — 2026-05-18
 
 ### Corrigido

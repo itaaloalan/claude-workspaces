@@ -42,6 +42,24 @@ class Settings:
     # Liga notificações nativas do sistema (QSystemTrayIcon.showMessage).
     # Quando False, a inbox/badge ainda funcionam, mas sem toast.
     notify_native_enabled: bool = True
+    # Textos das notificações. Configuráveis pra que cada notificação
+    # identifique claramente o app + qual workspace concluiu — em vez de
+    # banners genéricos tipo "Claude Code / Tarefa concluída".
+    # `notify_app_name`: rótulo do app no banner (D-Bus app_name / tray tooltip
+    #     / `notify-send -a`). Aparece como cabeçalho da notificação.
+    # `notify_ready_prefix` / `notify_reminder_prefix`: prefixo do título nas
+    #     notificações de "pronto" e "ainda aguardando" (formato: "<prefixo> —
+    #     <workspace>"). Use string vazia pra esconder o prefixo.
+    # `notify_hook_title_format`: template do título do hook Stop disparado
+    #     pelo Claude Code via packaging/notify-hook.py. `{project}` é
+    #     substituído pelo basename do cwd.
+    # `notify_hook_default_body`: body do hook quando não dá pra ler a última
+    #     mensagem do usuário do transcript.
+    notify_app_name: str = "Claude Workspaces"
+    notify_ready_prefix: str = "✅ Pronto"
+    notify_reminder_prefix: str = "🔁 Ainda aguardando"
+    notify_hook_title_format: str = "Claude — {project}"
+    notify_hook_default_body: str = "(turno encerrado)"
     # Debounce da transição working→idle no status da sidebar. Why: o parser
     # de status oscila entre is_working True/False enquanto o Claude alterna
     # tool calls e geração de texto dentro do mesmo turno. O app só mostra

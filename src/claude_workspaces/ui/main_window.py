@@ -1200,6 +1200,16 @@ class MainWindow(QMainWindow):
             self._tray.hide()
             self._tray.deleteLater()
             self._tray = None
+        elif self._tray is not None:
+            self._tray.setToolTip(
+                self.settings.notify_app_name or "Claude Workspaces"
+            )
+        # app_name é fixado no construtor do DesktopNotifier — recria pra
+        # que a próxima notificação use o nome novo.
+        if self._desktop_notifier is not None:
+            self._desktop_notifier.deleteLater()
+            self._desktop_notifier = None
+        self._init_desktop_notifier()
 
     def _init_tray(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -1209,7 +1219,7 @@ class MainWindow(QMainWindow):
         if icon.isNull():
             icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation)
         self._tray = QSystemTrayIcon(icon, self)
-        self._tray.setToolTip("Claude Workspaces")
+        self._tray.setToolTip(self.settings.notify_app_name or "Claude Workspaces")
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.messageClicked.connect(self._on_tray_message_clicked)
         self._tray.show()
@@ -1238,7 +1248,10 @@ class MainWindow(QMainWindow):
         self._focus_tab_from_inbox(info["workspace_id"], tab_id)
 
     def _init_desktop_notifier(self) -> None:
-        notifier = DesktopNotifier(app_name="Claude Workspaces", parent=self)
+        notifier = DesktopNotifier(
+            app_name=self.settings.notify_app_name or "Claude Workspaces",
+            parent=self,
+        )
         if notifier.available and notifier.supports_actions:
             self._desktop_notifier = notifier
             log.info("Notificador D-Bus com ações ativo (caps=%s)", notifier.capabilities)
@@ -1259,8 +1272,11 @@ class MainWindow(QMainWindow):
             return
         ws = self.workspaces_coord.find_by_id(info.get("workspace_id", ""))
         ws_name = ws.name if ws else "Workspace"
-        title_prefix = "🔁 Ainda aguardando" if is_reminder else "✅ Pronto"
-        title = f"{title_prefix} — {ws_name}"
+        if is_reminder:
+            title_prefix = self.settings.notify_reminder_prefix
+        else:
+            title_prefix = self.settings.notify_ready_prefix
+        title = f"{title_prefix} — {ws_name}" if title_prefix else ws_name
         body_parts: list[str] = []
         if info.get("title"):
             body_parts.append(str(info["title"]))
