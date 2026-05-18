@@ -137,6 +137,14 @@ _VERSION_LABEL_QSS = (
     f"}}"
 )
 
+_CONTEXT_STATUS_QSS = (
+    f"QLabel {{"
+    f"  color: {theme.TEXT_FADED};"
+    f"  font-size: 11px;"
+    f"  padding: 2px 4px 4px 4px;"
+    f"}}"
+)
+
 
 class SidebarBuilder:
     """Constrói a sidebar com lista de workspaces + botões.
@@ -144,6 +152,7 @@ class SidebarBuilder:
     Exporta:
     - `wrapper`: widget pra inserir no splitter
     - `list_widget`: o QTreeWidget (workspaces como roots, sessions/tabs como filhos)
+    - `context_status_label`: label do % de contexto da sessão ativa (oculto se sem sessão)
     - `add_btn`: botão "+ Novo Workspace"
     - `self_dev_btn`: botão "🔧 Hack este app"
     - `version_label`: label clicável com a versão atual (abre release notes)
@@ -216,6 +225,16 @@ class SidebarBuilder:
             pal.setColor(grp, QPalette.ColorRole.Highlight, QColor(0, 0, 0, 0))
         self.list_widget.setPalette(pal)
         layout.addWidget(self.list_widget, stretch=1)
+
+        # Status do contexto da sessão Claude ativa (apenas % da janela
+        # de contexto + tokens absolutos). Atualizado pela MainWindow no
+        # mesmo poll que atualiza git/tokens (5s). Fica oculto enquanto
+        # não há sessão ativa pra evitar ruído visual.
+        self.context_status_label = QLabel("")
+        self.context_status_label.setStyleSheet(_CONTEXT_STATUS_QSS)
+        self.context_status_label.setVisible(False)
+        self.context_status_label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(self.context_status_label)
 
         self.add_btn = QPushButton("＋  Novo Workspace")
         self.add_btn.setToolTip("Criar novo workspace (Ctrl+N)")

@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.8] — 2026-05-18
+
+### Adicionado
+- **% de contexto da sessão ativa na sidebar**: novo label logo acima do
+  botão `＋ Novo Workspace` mostra `Contexto: 45% · 90K/200K · opus-4-7`
+  derivado da última mensagem assistant da sessão claimed do terminal
+  em foco. Cor do % muda conforme uso: verde <50%, âmbar 50-80%, vermelho
+  ≥80%. Limite usa 1M quando o modelo tem sufixo `[1m]`, 200K caso
+  contrário. Some quando não há sessão ativa. Atualiza no mesmo poll de
+  5s do git e imediato ao trocar de workspace/aba.
+
 ## [0.7.7] — 2026-05-18
 
 ### Adicionado

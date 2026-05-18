@@ -52,6 +52,10 @@ class UsageStats:
     last_used: datetime | None = None
     by_model: dict[str, int] = field(default_factory=dict)  # model → total tokens
     last_model: str = ""  # modelo da última mensagem assistant — reflete /model dentro da sessão
+    # Tokens "em contexto" da última mensagem assistant (input + cache create +
+    # cache read). Representa o tamanho real da janela de contexto na última
+    # virada — é isso que o /context do Claude Code mostra como percentual.
+    last_context_tokens: int = 0
 
     @property
     def total_tokens(self) -> int:
@@ -61,6 +65,16 @@ class UsageStats:
             + self.cache_creation_tokens
             + self.cache_read_tokens
         )
+
+
+def context_window_for_model(model: str) -> int:
+    """Limite da janela de contexto em tokens. Modelos com sufixo `[1m]`
+    têm 1M; o resto da família Claude 4.x usa 200K."""
+    if not model:
+        return 200_000
+    if "[1m]" in model:
+        return 1_000_000
+    return 200_000
 
 
 def _parse_timestamp(value: str) -> datetime | None:
@@ -203,6 +217,10 @@ def usage_for_session(jsonl_path: Path) -> UsageStats:
                 )
                 if model and model != "?":
                     stats.last_model = model
+                # Tokens "em contexto" desta virada: input + cache (lido +
+                # criado). Sobrescreve a cada iteração — fica com o valor
+                # da última mensagem assistant do JSONL.
+                stats.last_context_tokens = i + cc + cr
                 if ts and (stats.last_used is None or ts > stats.last_used):
                     stats.last_used = ts
         stats.sessions = 1

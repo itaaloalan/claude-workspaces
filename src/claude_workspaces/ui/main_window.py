@@ -81,6 +81,7 @@ from .terminal_child_widget import (
     TerminalChildWidget,
 )
 from .terminal_widget import TerminalWidget
+from . import theme
 from .theme import (
     LAYOUT_SAVE_DEBOUNCE_MS,
     SIDEBAR_DEFAULT_W,
@@ -737,6 +738,10 @@ class MainWindow(QMainWindow):
         self.terminal_host = builder.host
         self._empty_terminal = builder.empty_label
         self._terminal_placeholder_idx = builder.placeholder_idx
+        # Trocar a área visível (workspace) reflete imediato no % de contexto.
+        self.terminal_host.currentChanged.connect(
+            lambda _i: self._refresh_active_context_status()
+        )
         return builder.pane
 
     def _build_sidebar(self) -> QWidget:
@@ -751,6 +756,7 @@ class MainWindow(QMainWindow):
         self.list_widget = builder.list_widget
         self.self_dev_btn = builder.self_dev_btn
         self.version_label = builder.version_label
+        self._context_status_label = builder.context_status_label
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -1234,6 +1240,11 @@ class MainWindow(QMainWindow):
     def _on_area_created(self, workspace_id: str, area: TerminalArea) -> None:
         """TerminalCoordinator criou uma nova area — adiciona no host."""
         self.terminal_host.addWidget(area)
+        # Trocar a aba ativa do workspace deve refletir imediato no % de
+        # contexto da sidebar (cada aba é uma sessão Claude distinta).
+        area.tabs.currentChanged.connect(
+            lambda _i: self._refresh_active_context_status()
+        )
 
     def _handle_tab_activity(
         self,
@@ -1799,6 +1810,78 @@ class MainWindow(QMainWindow):
                 stats.output_tokens,
                 cache,
             )
+        # Status do contexto da sessão ativa (label acima do "Novo Workspace").
+        self._refresh_active_context_status()
+
+    def _refresh_active_context_status(self) -> None:
+        """Atualiza o label de % de contexto na sidebar. Lê o JSONL da
+        sessão claimed do terminal ativo, calcula `last_context_tokens /
+        context_window` e exibe `45% · 90K/200K · opus-4-7`. Some quando
+        não há terminal ativo ou a sessão ainda não resolveu."""
+        from ..usage_telemetry import (
+            context_window_for_model,
+            format_tokens,
+            usage_for_session,
+        )
+
+        label = getattr(self, "_context_status_label", None)
+        if label is None:
+            return
+
+        term: TerminalWidget | None = None
+        area = self._active_terminal_area()
+        if area is not None and area.count() > 0:
+            cur = area.tabs.currentWidget()
+            if isinstance(cur, TerminalWidget):
+                term = cur
+
+        if term is None:
+            label.setVisible(False)
+            return
+        session_path = term.claimed_session_path()
+        if session_path is None:
+            label.setVisible(False)
+            return
+        try:
+            stats = usage_for_session(session_path)
+        except Exception:  # noqa: BLE001
+            log.debug("falha ao agregar usage do contexto %s", session_path, exc_info=True)
+            label.setVisible(False)
+            return
+        used = stats.last_context_tokens
+        if used <= 0:
+            label.setVisible(False)
+            return
+        model = stats.last_model or ""
+        limit = context_window_for_model(model)
+        pct = min(used / limit * 100.0, 999.0)
+        if pct < 50:
+            color = theme.SUCCESS
+        elif pct < 80:
+            color = theme.WARNING
+        else:
+            color = theme.DANGER
+        model_short = model[len("claude-"):] if model.startswith("claude-") else model
+        label.setText(
+            f"<span style='color: {theme.TEXT_FAINT};'>Contexto:</span> "
+            f"<span style='color: {color}; font-weight: 600;'>{pct:.0f}%</span> "
+            f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
+            f"<span style='color: {theme.TEXT_FADED};'>"
+            f"{format_tokens(used)}/{format_tokens(limit)}</span>"
+            + (
+                f" <span style='color: {theme.TEXT_DISABLED};'>·</span>"
+                f" <span style='color: {theme.TEXT_FAINT};'>{model_short}</span>"
+                if model_short
+                else ""
+            )
+        )
+        label.setToolTip(
+            f"Janela de contexto da sessão ativa\n"
+            f"Modelo: {model or '?'}  ·  Limite: {limit:,} tokens\n"
+            f"Em contexto agora: {used:,} ({pct:.1f}%)\n"
+            f"(input + cache read + cache create da última mensagem assistant)"
+        )
+        label.setVisible(True)
 
     def _on_repo_status_ready(
         self, folder: str, branch: str, modified: int
