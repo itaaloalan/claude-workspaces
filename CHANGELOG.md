@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.3] — 2026-05-18
+
+### Adicionado
+- **"↗ Copiar do workspace" no painel de runners do console**: novo
+  botão no header da `RunnerArea` quando ela está em escopo de console
+  — abre um menu listando os runners workspace-scoped e permite copiar
+  um (ou "Copiar todos") pro escopo do console (id novo,
+  `console_session_id` stampado). Colisão por nome dentro do escopo
+  substitui o existente, igual ao merge do `import_runners`. Antes,
+  pra reaproveitar um runner do workspace num console era preciso
+  exportar/importar JSON.
+
 ## [0.18.2] — 2026-05-18
 
 ### Corrigido

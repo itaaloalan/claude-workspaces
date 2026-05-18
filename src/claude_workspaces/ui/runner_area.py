@@ -89,6 +89,18 @@ class RunnerArea(QWidget):
         self._export_btn.clicked.connect(self._export_runners)
         h.addWidget(self._export_btn)
 
+        # Só faz sentido em painel de console — copia runners workspace-scoped
+        # pro escopo deste console (novo id, console_session_id stampado).
+        self._copy_ws_btn = QPushButton("↗ Copiar do workspace")
+        self._copy_ws_btn.setToolTip(
+            "Copia um runner do workspace para este console (id novo, "
+            "console_session_id deste console). Se já existir um com o "
+            "mesmo nome neste console, ele é substituído."
+        )
+        self._copy_ws_btn.clicked.connect(self._open_copy_from_workspace_menu)
+        self._copy_ws_btn.setVisible(bool(console_session_id))
+        h.addWidget(self._copy_ws_btn)
+
         self._reload_btn = QPushButton("↻ Recarregar runners")
         self._reload_btn.setToolTip(
             "Importa runners gerados pelo Claude a partir do rascunho salvo "
@@ -381,6 +393,65 @@ class RunnerArea(QWidget):
         QMessageBox.information(
             self,
             "Rascunho importado",
+            f"Adicionados: {added}. Substituídos: {replaced}.",
+        )
+
+    def _open_copy_from_workspace_menu(self) -> None:
+        """Lista runners workspace-scoped num menu; clique copia pro console."""
+        ws_runners = [
+            r for r in self._ws.runners if not (r.console_session_id or "")
+        ]
+        menu = QMenu(self)
+        if not ws_runners:
+            act = menu.addAction("(nenhum runner no workspace)")
+            act.setEnabled(False)
+        else:
+            all_act = menu.addAction("Copiar todos")
+            all_act.triggered.connect(
+                lambda: self._copy_runners_to_console(ws_runners)
+            )
+            menu.addSeparator()
+            for r in ws_runners:
+                label = r.name or "(sem nome)"
+                act = menu.addAction(label)
+                act.triggered.connect(
+                    lambda _checked=False, src=r: self._copy_runners_to_console([src])
+                )
+        menu.exec(
+            self._copy_ws_btn.mapToGlobal(self._copy_ws_btn.rect().bottomLeft())
+        )
+
+    def _copy_runners_to_console(self, sources: list[RunnerConfig]) -> None:
+        if not sources or not self._console_session_id:
+            return
+        added = 0
+        replaced = 0
+        for src in sources:
+            data = src.to_dict()
+            data.pop("id", None)
+            data["console_session_id"] = self._console_session_id
+            clone = RunnerConfig.from_dict(data)
+            # Substitui por nome dentro do mesmo escopo (consistente com
+            # o merge do import_runners).
+            existing_idx = next(
+                (
+                    i for i, r in enumerate(self._ws.runners)
+                    if (r.console_session_id or "") == self._console_session_id
+                    and r.name == clone.name
+                ),
+                -1,
+            )
+            if existing_idx >= 0:
+                self._ws.runners[existing_idx] = clone
+                replaced += 1
+            else:
+                self._ws.runners.append(clone)
+                added += 1
+        self.runners_changed.emit()
+        self._refresh_from_workspace()
+        QMessageBox.information(
+            self,
+            "Cópia concluída",
             f"Adicionados: {added}. Substituídos: {replaced}.",
         )
 
