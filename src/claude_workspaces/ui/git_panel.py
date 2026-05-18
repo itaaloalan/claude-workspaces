@@ -22,9 +22,11 @@ from ..git_actions import (
     commit as git_commit,
 )
 from ..git_actions import (
+    checkout_branch,
     delete_untracked,
     discard_unstaged,
     head_sha,
+    list_branches,
     pull_ff_only,
     stage_all,
     stage_file,
@@ -677,6 +679,7 @@ class GitPanel(QWidget):
         menu.addAction(
             self._action("⇡⇣ Fetch", lambda: self._do_fetch_one(folder))
         )
+        self._add_switch_branch_menu(menu, folder)
         menu.addSeparator()
         menu.addAction(
             self._action("+ Stage tudo", lambda: stage_all(folder) and self.refresh())
@@ -693,6 +696,49 @@ class GitPanel(QWidget):
                 lambda f=folder: self._open_folder(f),
             )
         )
+
+    def _add_switch_branch_menu(self, menu: QMenu, folder: str) -> None:
+        # Submenu populado lazy via aboutToShow — abrir só o repo-menu
+        # não deve disparar `git branch` se o usuário não pediu.
+        sub = menu.addMenu("⎇ Trocar branch")
+        placeholder = QAction("Carregando…", sub)
+        placeholder.setEnabled(False)
+        sub.addAction(placeholder)
+        loaded = {"done": False}
+
+        def _populate() -> None:
+            if loaded["done"]:
+                return
+            loaded["done"] = True
+            sub.clear()
+            branches, current = list_branches(folder)
+            if not branches:
+                a = QAction("(sem branches)", sub)
+                a.setEnabled(False)
+                sub.addAction(a)
+                return
+            for b in branches:
+                label = f"● {b}" if b == current else f"   {b}"
+                a = QAction(label, sub)
+                if b == current:
+                    a.setEnabled(False)
+                else:
+                    a.triggered.connect(
+                        lambda _checked=False, br=b: self._do_checkout_branch(folder, br)
+                    )
+                sub.addAction(a)
+
+        sub.aboutToShow.connect(_populate)
+
+    def _do_checkout_branch(self, folder: str, branch: str) -> None:
+        ok, out = checkout_branch(folder, branch)
+        if not ok:
+            QMessageBox.warning(
+                self,
+                "Checkout falhou",
+                f"{Path(folder).name} → {branch}\n\n{out[:2000]}",
+            )
+        self.refresh()
 
     def _open_folder(self, folder: str) -> None:
         from ..errors import LaunchError

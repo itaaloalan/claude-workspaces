@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.11.0] — 2026-05-18
+
+### Adicionado
+- **Trocar branch pelo menu de contexto do repo**: no painel Git, clique
+  direito num repo abre submenu "⎇ Trocar branch" com a lista de
+  branches locais (lazy load via `git branch`). A branch atual aparece
+  marcada com `●` e desabilitada; selecionar outra dispara
+  `git checkout <branch>` e refresca o painel. Erros do checkout
+  (working tree sujo com conflito, branch inexistente etc.) abrem
+  QMessageBox com o stderr do git.
+
 ## [0.10.0] — 2026-05-18
 
 ### Adicionado

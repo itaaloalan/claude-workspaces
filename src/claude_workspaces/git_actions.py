@@ -118,6 +118,43 @@ def delete_untracked(folder: str, file_path: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def list_branches(folder: str) -> tuple[list[str], str]:
+    """Lista branches locais; retorna (branches, current). Vazio em erro."""
+    if not Path(folder).is_dir():
+        return [], ""
+    try:
+        r = subprocess.run(
+            ["git", "branch", "--format=%(refname:short)"],
+            cwd=folder,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+        )
+        c = subprocess.run(
+            ["git", "symbolic-ref", "--short", "HEAD"],
+            cwd=folder,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return [], ""
+    if r.returncode != 0:
+        return [], ""
+    branches = [b.strip() for b in r.stdout.splitlines() if b.strip()]
+    current = c.stdout.strip() if c.returncode == 0 else ""
+    return branches, current
+
+
+def checkout_branch(folder: str, branch: str) -> tuple[bool, str]:
+    """`git checkout <branch>` — troca pra branch existente."""
+    if not branch.strip():
+        return False, "branch inválida (vazia)"
+    return _run(["git", "checkout", branch], folder)
+
+
 def checkout_new_branch(
     folder: str, branch: str, base: str | None = None
 ) -> tuple[bool, str]:
