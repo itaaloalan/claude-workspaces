@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.14.0] — 2026-05-18
+
+### Alterado
+- **Runners aninhados sob o console na sidebar**: runners com escopo
+  de console (`console_session_id` setado) deixam de aparecer flat
+  embaixo do workspace e passam a ser filhos do item do console
+  correspondente — o nó do console fica colapsável (seta expand/recolhe)
+  e começa recolhido por default. Runners workspace-scope continuam
+  como filhos diretos do workspace (footer). Elimina o efeito de
+  "lista duplicada" quando vários consoles compartilham o workspace
+  e deixa claro a qual console cada runner pertence. Toggle pela
+  sidebar (▶/■) procura o runner tanto na RunnerArea do workspace
+  quanto nas RunnerAreas embutidas dos consoles.
+
 ## [0.13.0] — 2026-05-18
 
 ### Adicionado
