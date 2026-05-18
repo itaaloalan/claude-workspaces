@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.6] — 2026-05-18
+
+### Corrigido
+- **"Runners console" agora aparece ao selecionar o workspace**:
+  `_sync_terminal_for` ganha um `_refresh_runner_children` no fim, que
+  re-instala os runner-children de cada console sempre que o user
+  carrega o workspace. Cobre o cenário em que o `claimed_session_id`
+  do terminal só foi resolvido depois do primeiro install (sessão
+  fresca cujo JSONL apareceu tarde), deixando o grupo "Runners
+  console" sem children até esse refresh.
+
 ## [0.18.5] — 2026-05-18
 
 ### Corrigido

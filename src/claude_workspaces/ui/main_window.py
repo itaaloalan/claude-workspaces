@@ -1582,6 +1582,11 @@ class MainWindow(QMainWindow):
         runner_area = self._get_or_create_runner_area(workspace)
         self.runner_host.setCurrentWidget(runner_area)
         self._sync_console_runner_host()
+        # Re-instala os runner-children dos consoles desse workspace —
+        # cobre o caso de o `claimed_session_id` do terminal ter sido
+        # resolvido depois da primeira instalação (signal não chegou ou
+        # o JSONL só apareceu mais tarde).
+        self._refresh_runner_children(workspace.id)
 
     def _sync_console_runner_host(self) -> None:
         """Mostra na aba 'Runners (console)' o painel do console ativo
