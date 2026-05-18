@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.17.0] — 2026-05-18
+
+### Alterado
+- **Runners agrupados na sidebar sob header colapsável**: os runners
+  agora aparecem aninhados sob um header dedicado — "Runners workspace"
+  como filho do item do workspace e "Runners console" como filho de
+  cada item de console. O header só é criado quando existe ao menos um
+  runner naquele escopo (sem runners → sem header, sem ruído). Cada
+  header tem um botão `＋` que abre o menu "Em branco / Gerar com
+  Claude" no escopo correto — pra criar runner de console agora basta
+  expandir o console na sidebar e clicar no `＋` ao lado de "Runners
+  console" (antes só dava pelo `▤ Runners` na toolbar do terminal).
+
 ## [0.16.0] — 2026-05-18
 
 ### Alterado

@@ -131,6 +131,12 @@ class MainWindow(QMainWindow):
         self._runner_placeholder_idx: int = 0
         # workspace_id → { runner_id → QTreeWidgetItem } (footer rows na sidebar)
         self._runner_tree_items: dict[str, dict[str, "QTreeWidgetItem"]] = {}
+        # workspace_id → QTreeWidgetItem (header "Runners workspace")
+        self._runner_group_items: dict[str, "QTreeWidgetItem"] = {}
+        # (workspace_id, tab_id) → QTreeWidgetItem (header "Runners console")
+        self._console_runner_group_items: dict[
+            tuple[str, int], "QTreeWidgetItem"
+        ] = {}
         self._sidebar_last_size: int = SIDEBAR_DEFAULT_W
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
@@ -1036,6 +1042,8 @@ class MainWindow(QMainWindow):
         self.list_widget.clear()
         self.terminals_coord.state.tree_items.clear()
         self._runner_tree_items.clear()
+        self._runner_group_items.clear()
+        self._console_runner_group_items.clear()
 
         from PySide6.QtGui import QFont
 
@@ -1199,24 +1207,48 @@ class MainWindow(QMainWindow):
         self, ws_item: "QTreeWidgetItem", ws: Workspace
     ) -> None:
         """Cria/atualiza as linhas de runner ("footer") embaixo do
-        workspace na sidebar. Cobre apenas runners de escopo workspace
+        workspace na sidebar, agrupadas sob um header colapsável
+        "Runners workspace". Cobre apenas runners de escopo workspace
         (sem console_session_id). Os de console ficam como filhos do
         próprio item do console — ver `_install_console_runner_children`.
         """
         from .runner_child_widget import RunnerChildWidget
+        from .runner_group_widget import RunnerGroupWidget
 
-        # Remove rows antigos de runners workspace-scope (apenas os filhos
-        # diretos do ws_item — os de console moram em outros parents).
+        # Remove rows antigos de runners workspace-scope (estavam sob o
+        # group item antigo, se existia; ou direto sob ws_item em versões
+        # anteriores). Limpa nos dois lugares pra ser idempotente.
         existing = self._runner_tree_items.get(ws.id, {})
+        group_old = self._runner_group_items.get(ws.id)
         for rid, item in list(existing.items()):
             parent = item.parent()
-            if parent is ws_item:
-                ws_item.removeChild(item)
+            if parent is ws_item or (group_old is not None and parent is group_old):
+                parent.removeChild(item)
                 self._runner_tree_items[ws.id].pop(rid, None)
 
         scoped = [r for r in ws.runners if not (r.console_session_id or "")]
         if not scoped:
+            # Sem runners workspace-scope → remove o header se existia.
+            if group_old is not None:
+                ws_item.removeChild(group_old)
+                self._runner_group_items.pop(ws.id, None)
             return
+
+        # Garante o header "Runners workspace" como filho do ws_item.
+        group = self._runner_group_items.get(ws.id)
+        if group is None:
+            group = QTreeWidgetItem()
+            group.setData(0, Qt.ItemDataRole.UserRole, ("runner_group", ws.id, ""))
+            group.setSizeHint(0, QSize(0, 24))
+            ws_item.addChild(group)
+            header = RunnerGroupWidget(
+                "Runners workspace",
+                on_add_blank=lambda w=ws: self._open_runner_edit(w, None),
+                on_generate=lambda w=ws: self._generate_runner_with_claude(w),
+            )
+            self.list_widget.setItemWidget(group, 0, header)
+            group.setExpanded(True)
+            self._runner_group_items[ws.id] = group
 
         self._runner_tree_items.setdefault(ws.id, {})
         for runner in scoped:
@@ -1232,35 +1264,75 @@ class MainWindow(QMainWindow):
                 rw = area.widget_for(runner.id)
                 if rw is not None:
                     widget.set_state(rw.current_state())
-            ws_item.addChild(child)
+            group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
 
     def _install_console_runner_children(
         self, term_item: "QTreeWidgetItem", ws: Workspace, tab_id: int
     ) -> None:
-        """Cria/atualiza os runner-children como filhos do item do console.
-        Filtra pelo `console_session_id` resolvido do terminal (ou pela
-        chave pendente quando o session_id ainda não chegou)."""
+        """Cria/atualiza os runner-children como filhos do item do console,
+        agrupados sob um header colapsável "Runners console". Filtra pelo
+        `console_session_id` resolvido do terminal (ou pela chave pendente
+        quando o session_id ainda não chegou)."""
         from .runner_child_widget import RunnerChildWidget
+        from .runner_group_widget import RunnerGroupWidget
 
-        # Remove rows antigos vinculados a esse console (limpa só itens
-        # cujo parent é o term_item — preserva os de outros consoles e
-        # os workspace-scope).
+        gk = (ws.id, tab_id)
+        group_old = self._console_runner_group_items.get(gk)
+
+        # Remove rows antigos vinculados a esse console (sob term_item ou
+        # sob o group_old). Preserva os de outros consoles e workspace-scope.
         existing = self._runner_tree_items.get(ws.id, {})
         for rid, item in list(existing.items()):
             parent = item.parent()
-            if parent is term_item:
-                term_item.removeChild(item)
+            if parent is term_item or (group_old is not None and parent is group_old):
+                parent.removeChild(item)
                 self._runner_tree_items[ws.id].pop(rid, None)
 
         term = self._terminal_widget_for(tab_id)
         if term is None:
+            if group_old is not None:
+                term_item.removeChild(group_old)
+                self._console_runner_group_items.pop(gk, None)
             return
         sid = term.claimed_session_id() or self._pending_console_key(term)
         scoped = [r for r in ws.runners if (r.console_session_id or "") == sid]
         if not scoped:
+            if group_old is not None:
+                term_item.removeChild(group_old)
+                self._console_runner_group_items.pop(gk, None)
             return
+
+        # Header "Runners console" como filho do term_item.
+        group = self._console_runner_group_items.get(gk)
+        if group is None:
+            group = QTreeWidgetItem()
+            group.setData(
+                0,
+                Qt.ItemDataRole.UserRole,
+                ("runner_group", ws.id, f"console:{tab_id}"),
+            )
+            group.setSizeHint(0, QSize(0, 24))
+            term_item.addChild(group)
+
+            def _add_blank(w=ws, t=term):
+                area = self._ensure_terminal_runner_panel(w, t)
+                self._open_runner_edit(
+                    w, None, console_session_id=area.console_session_id()
+                )
+
+            def _gen(w=ws):
+                self._generate_runner_with_claude(w)
+
+            header = RunnerGroupWidget(
+                "Runners console",
+                on_add_blank=_add_blank,
+                on_generate=_gen,
+            )
+            self.list_widget.setItemWidget(group, 0, header)
+            group.setExpanded(True)
+            self._console_runner_group_items[gk] = group
 
         self._runner_tree_items.setdefault(ws.id, {})
         for runner in scoped:
@@ -1277,11 +1349,12 @@ class MainWindow(QMainWindow):
                 if rw is not None:
                     widget.set_state(rw.current_state())
                     break
-            term_item.addChild(child)
+            group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
-        # Default: agrupamento dos runners do console começa recolhido —
-        # o user expande clicando na seta quando precisar.
+        # Default: o item do console fica recolhido — o user expande
+        # clicando na seta quando precisar. O grupo de runners dentro
+        # dele começa expandido (já decidimos acima).
         term_item.setExpanded(False)
 
     def _toggle_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
@@ -1722,11 +1795,19 @@ class MainWindow(QMainWindow):
         if item is not None and parent_item is not None:
             # Limpa as entradas de runner-children pendentes nesse console
             # do tracking dict (os QTreeWidgetItem são destruídos junto com
-            # o parent removido, mas o dict ficaria com refs órfãs).
+            # o parent removido, mas o dict ficaria com refs órfãs). Os
+            # runners ficam sob o group "Runners console" → testamos parent
+            # direto E avô.
             for ws_map in self._runner_tree_items.values():
                 for rid, tree_item in list(ws_map.items()):
-                    if tree_item.parent() is item:
+                    p = tree_item.parent()
+                    if p is item or (p is not None and p.parent() is item):
                         ws_map.pop(rid, None)
+            # Limpa o registry do group "Runners console" desse console.
+            for gk in [
+                k for k in self._console_runner_group_items.keys() if k[1] == tab_id
+            ]:
+                self._console_runner_group_items.pop(gk, None)
             parent_item.removeChild(item)
         self._tab_base_titles.pop(tab_id, None)
         # Aba que saiu pode ter sido a única causa de colisão — re-disambigua
