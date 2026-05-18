@@ -1393,10 +1393,14 @@ class MainWindow(QMainWindow):
         for i in range(ws_item.childCount()):
             sib = ws_item.child(i)
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
+            # Children "↻ última sessão" carregam um ClaudeSession (não hashable)
+            # em UserRole — ignoramos, só desambiguamos entre tabs vivas.
+            if not isinstance(sib_id, int):
+                continue
             if sib_id == tab_id:
                 continue
             if self._tab_base_titles.get(sib_id, "") == base_title:
-                siblings_same.append(int(sib_id))
+                siblings_same.append(sib_id)
         if not siblings_same:
             return base_title
         all_ids = sorted(siblings_same + [int(tab_id)])
@@ -1415,6 +1419,9 @@ class MainWindow(QMainWindow):
         for i in range(ws_item.childCount()):
             sib = ws_item.child(i)
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
+            # Ignora siblings históricos (UserRole = ClaudeSession, não int)
+            if not isinstance(sib_id, int):
+                continue
             sib_widget = self.list_widget.itemWidget(sib, 0)
             if not isinstance(sib_widget, TerminalChildWidget):
                 continue
@@ -1422,10 +1429,10 @@ class MainWindow(QMainWindow):
             if not base:
                 continue
             full = base
-            term = self._terminal_widget_for(int(sib_id))
+            term = self._terminal_widget_for(sib_id)
             if term is not None:
                 full = term.full_title() or base
-            display = self._compute_disambiguated_title(ws_item, int(sib_id), base)
+            display = self._compute_disambiguated_title(ws_item, sib_id, base)
             sib_widget.set_title(display, full)
 
     def _launch_claude_for(
