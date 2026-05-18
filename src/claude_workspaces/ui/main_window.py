@@ -4,14 +4,13 @@ from pathlib import Path
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
-    QBrush,
     QCloseEvent,
-    QColor,
     QGuiApplication,
 )
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
+    QLabel,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -21,12 +20,13 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QStyle,
     QSystemTrayIcon,
+    QTabWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from ..claude_sessions import ClaudeSession, list_sessions_for_paths
+from ..claude_sessions import list_sessions_for_paths
 from ..errors import LaunchError
 from ..launchers import (
     LauncherError,
@@ -72,6 +72,8 @@ from .session_export_dialog import open_session_export_dialog
 from .settings_panel import SettingsPanel
 from .shortcuts_dialog import ShortcutsDialog
 from .skills_panel import SkillsPanel
+from .runner_area import RunnerArea
+from .runner_edit_dialog import RunnerEditDialog
 from .terminal_area import TerminalArea
 from .terminal_child_widget import (
     STATE_AWAITING,
@@ -119,6 +121,10 @@ class MainWindow(QMainWindow):
 
         # Shadow attrs (defaults — sobrescritos pelo restore se houver)
         self._terminal_placeholder_idx: int = 0
+        # Runners — paralelo a terminal_host. Cada workspace ganha uma
+        # RunnerArea lazy; índice 0 do runner_host é um placeholder.
+        self._runner_areas: dict[str, RunnerArea] = {}
+        self._runner_placeholder_idx: int = 0
         self._sidebar_last_size: int = SIDEBAR_DEFAULT_W
         self._terminal_last_size: int = 520
         self._content_last_size: int = 380
@@ -512,7 +518,7 @@ class MainWindow(QMainWindow):
         data = current.data(0, Qt.ItemDataRole.UserRole)
         if isinstance(data, Workspace):
             return data
-        # Pode ser um filho (ClaudeSession) — sobe pro parent
+        # Pode ser um filho (aba viva) — sobe pro parent
         parent = current.parent()
         if parent is not None:
             data = parent.data(0, Qt.ItemDataRole.UserRole)
@@ -742,7 +748,29 @@ class MainWindow(QMainWindow):
         self.terminal_host.currentChanged.connect(
             lambda _i: self._refresh_plan_usage_status()
         )
-        return builder.pane
+
+        # Embute o host num QTabWidget com aba "Terminal" + "Runners".
+        pane = builder.pane
+        layout = pane.layout()
+        layout.removeWidget(self.terminal_host)
+
+        self._bottom_tabs = QTabWidget(pane)
+        self._bottom_tabs.setDocumentMode(True)
+        self._bottom_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self._bottom_tabs.addTab(self.terminal_host, "Terminal")
+
+        self.runner_host = QStackedWidget()
+        self.runner_host.setMinimumHeight(0)
+        runner_empty = QLabel("Selecione um workspace para ver seus runners.")
+        runner_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        runner_empty.setStyleSheet(
+            "background: #0e0e0e; color: #555; padding: 28px;"
+        )
+        self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
+        self._bottom_tabs.addTab(self.runner_host, "Runners")
+
+        layout.addWidget(self._bottom_tabs, stretch=1)
+        return pane
 
     def _build_sidebar(self) -> QWidget:
         builder = SidebarBuilder(
@@ -984,17 +1012,6 @@ class MainWindow(QMainWindow):
                     widget.is_running(),
                 )
 
-        # Última sessão do Claude (se houver) como child — visível mesmo
-        # sem terminal ativo. Duplo-clique retoma via `claude --resume`.
-        for i in range(self.list_widget.topLevelItemCount()):
-            ws_item = self.list_widget.topLevelItem(i)
-            ws = ws_item.data(0, Qt.ItemDataRole.UserRole)
-            if not isinstance(ws, Workspace):
-                continue
-            last = self._last_session_for(ws)
-            if last is not None:
-                self._add_last_session_child(ws_item, last)
-
         if current_id:
             ws_item = self._find_workspace_item(current_id)
             if ws_item is not None and not ws_item.isHidden():
@@ -1136,8 +1153,6 @@ class MainWindow(QMainWindow):
 
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, _col: int) -> None:
         # Clique simples numa aba ativa/em ação (tab_id) já foca a aba.
-        # Sessões históricas (ClaudeSession) continuam exigindo duplo-clique
-        # pra evitar relaunch acidental.
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
@@ -1149,18 +1164,12 @@ class MainWindow(QMainWindow):
         self._focus_terminal_tab(pdata, data)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
-        # Double-click ou Enter — sessão histórica retoma via --resume
-        # NO TERMINAL INTERNO; terminal vivo foca a aba existente.
+        # Double-click ou Enter numa aba viva foca a aba existente.
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
         pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(pdata, Workspace):
-            return
-        if isinstance(data, ClaudeSession):
-            # Rota pelo launcher embutido (mesmo fluxo do botão Retomar
-            # do card) — não abre Konsole externo
-            self._launch_claude_for(pdata, data.id, data.origin_cwd)
             return
         if not isinstance(data, int):  # tab_id
             return
@@ -1175,37 +1184,6 @@ class MainWindow(QMainWindow):
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 break
-
-    def _last_session_for(self, ws: Workspace) -> ClaudeSession | None:
-        if not ws.folders:
-            return None
-        try:
-            cwd, _ = ws.launch_paths()
-            paths = list({cwd, *ws.folders})
-            sessions = list_sessions_for_paths(paths, limit=1)
-        except Exception:
-            log.exception("Falha ao listar sessões do workspace %s", ws.id)
-            return None
-        return sessions[0] if sessions else None
-
-    def _add_last_session_child(
-        self, ws_item: QTreeWidgetItem, session: ClaudeSession
-    ) -> None:
-        from PySide6.QtGui import QFont
-
-        label = session.label(max_preview=40)
-        child = QTreeWidgetItem([label])
-        child.setData(0, Qt.ItemDataRole.UserRole, session)
-        child.setToolTip(
-            0, f"Última sessão — duplo-clique pra retomar ({session.id})"
-        )
-        child.setForeground(0, QBrush(QColor("#7a8290")))
-        font = QFont(self.list_widget.font())
-        font.setItalic(True)
-        font.setPointSizeF(max(font.pointSizeF() - 1, 8.0))
-        child.setFont(0, font)
-        ws_item.addChild(child)
-        ws_item.setExpanded(True)
 
     def _show_settings(self) -> None:
         # Garante que estamos na view de workspaces (settings vive no
@@ -1232,6 +1210,83 @@ class MainWindow(QMainWindow):
             self.terminal_host.setCurrentWidget(area)
         else:
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
+        # Runner area é lazy — cria quando o workspace é selecionado pela
+        # primeira vez. Garante widgets pra runners persistidos mesmo antes
+        # de o usuário abrir a aba "Runners".
+        runner_area = self._get_or_create_runner_area(workspace)
+        self.runner_host.setCurrentWidget(runner_area)
+
+    def _get_or_create_runner_area(self, workspace: Workspace) -> RunnerArea:
+        area = self._runner_areas.get(workspace.id)
+        if area is not None:
+            return area
+        area = RunnerArea(workspace)
+        self._runner_areas[workspace.id] = area
+        self.runner_host.addWidget(area)
+        ws = workspace
+        area.set_edit_handler(
+            lambda runner, w=ws: self._open_runner_edit(w, runner)
+        )
+        area.set_generate_handler(
+            lambda w=ws: self._generate_runner_with_claude(w)
+        )
+        area.runners_changed.connect(lambda w=ws: self._persist_workspace(w))
+        area.running_count_changed.connect(
+            lambda count, wid=ws.id: self._on_runner_running(wid, count)
+        )
+        return area
+
+    def _open_runner_edit(self, workspace, runner) -> None:
+        dlg = RunnerEditDialog(
+            runner,
+            on_generate_with_claude=lambda: self._generate_runner_with_claude(
+                workspace
+            ),
+            parent=self,
+        )
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        new_cfg = dlg.result_runner()
+        if runner is None:
+            workspace.runners.append(new_cfg)
+        else:
+            for i, r in enumerate(workspace.runners):
+                if r.id == new_cfg.id:
+                    workspace.runners[i] = new_cfg
+                    break
+        self._persist_workspace(workspace)
+        area = self._runner_areas.get(workspace.id)
+        if area is not None:
+            area.refresh()
+
+    def _generate_runner_with_claude(self, workspace) -> None:
+        from ..launchers import launch_claude_for_runner_gen
+        from ..services.runner_prompt import build_generate_prompt
+
+        hint, ok = QInputDialog.getText(
+            self,
+            "Gerar runner com Claude",
+            "Qual runner você quer gerar? (ex: 'web em next', 'glassfish do ogpms')",
+        )
+        if not ok:
+            return
+        prompt = build_generate_prompt(workspace, hint)
+        try:
+            launch_claude_for_runner_gen(workspace, self.settings, prompt)
+        except LauncherError as e:
+            QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+
+    def _persist_workspace(self, workspace) -> None:
+        self.workspaces_coord.replace(workspace)
+
+    def _on_runner_running(self, workspace_id: str, count: int) -> None:
+        if not hasattr(self, "_runner_running_counts"):
+            self._runner_running_counts: dict[str, int] = {}
+        if count <= 0:
+            self._runner_running_counts.pop(workspace_id, None)
+        else:
+            self._runner_running_counts[workspace_id] = count
+        self._refresh_item_label(workspace_id)
 
     def _get_terminal_area(self, workspace: Workspace) -> TerminalArea:
         """Compat: delega pro TerminalCoordinator."""
@@ -1670,8 +1725,7 @@ class MainWindow(QMainWindow):
         widget.set_continue_eligible(
             term is not None and term.was_restored_on_startup()
         )
-        # Tarefas concluídas (processo finalizado) ficam ocultas na sidebar —
-        # ainda acessíveis via "↻ última sessão" do workspace.
+        # Tarefas concluídas (processo finalizado) ficam ocultas na sidebar.
         child.setHidden(state == STATE_DONE)
         ws_item.setExpanded(True)
         self.terminals_coord.state.tree_items[tab_id] = child
@@ -1740,8 +1794,6 @@ class MainWindow(QMainWindow):
         for i in range(ws_item.childCount()):
             sib = ws_item.child(i)
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
-            # Children "↻ última sessão" carregam um ClaudeSession (não hashable)
-            # em UserRole — ignoramos, só desambiguamos entre tabs vivas.
             if not isinstance(sib_id, int):
                 continue
             if sib_id == tab_id:
@@ -1766,7 +1818,6 @@ class MainWindow(QMainWindow):
         for i in range(ws_item.childCount()):
             sib = ws_item.child(i)
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
-            # Ignora siblings históricos (UserRole = ClaudeSession, não int)
             if not isinstance(sib_id, int):
                 continue
             sib_widget = self.list_widget.itemWidget(sib, 0)
@@ -1992,12 +2043,18 @@ class MainWindow(QMainWindow):
     def _cleanup_terminal_for(self, workspace_id: str) -> None:
         self.plugin_coord.dispatch_workspace_closed(workspace_id)
         area = self.terminals_coord.cleanup_area(workspace_id)
-        if area is None:
-            return
-        self.terminal_host.removeWidget(area)
-        area.deleteLater()
-        if self.terminal_host.count() == 1:
-            self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
+        if area is not None:
+            self.terminal_host.removeWidget(area)
+            area.deleteLater()
+            if self.terminal_host.count() == 1:
+                self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
+        runner_area = self._runner_areas.pop(workspace_id, None)
+        if runner_area is not None:
+            runner_area.close_all()
+            self.runner_host.removeWidget(runner_area)
+            runner_area.deleteLater()
+            if self.runner_host.count() == 1:
+                self.runner_host.setCurrentIndex(self._runner_placeholder_idx)
 
     # ---------- tarefas ----------
 

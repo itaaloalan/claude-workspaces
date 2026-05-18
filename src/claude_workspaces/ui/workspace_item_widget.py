@@ -7,8 +7,7 @@ nome + indicador de "rodando" (bolinha verde + badge de count) + botões:
   workspace; o badge `×N` aparece a partir de 2.
 - `＋` abre um Claude novo no workspace (mesma ação de "Abrir Claude" /
   do botão "Abrir Claude" no detalhe / atalho).
-- `▾`/`▸` colapsa/expande os filhos do workspace (consoles em execução
-  + última sessão sugerida pra `--resume`).
+- `▾`/`▸` colapsa/expande os filhos do workspace (consoles em execução).
 """
 
 from __future__ import annotations

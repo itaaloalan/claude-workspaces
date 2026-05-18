@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.20] — 2026-05-18
+
+### Removido
+- **Sidebar — item "última sessão" por workspace**: removido o child que
+  exibia a sessão mais recente do Claude embaixo de cada workspace na
+  sidebar. Como as sessões abertas anteriormente já são restauradas
+  automaticamente como abas, esse atalho ficou redundante. `Ctrl+Shift+R`
+  continua retomando a última sessão do workspace atual.
+
 ## [0.7.19] — 2026-05-18
 
 ### Adicionado
