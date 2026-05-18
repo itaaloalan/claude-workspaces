@@ -1241,13 +1241,22 @@ class MainWindow(QMainWindow):
             group.setData(0, Qt.ItemDataRole.UserRole, ("runner_group", ws.id, ""))
             group.setSizeHint(0, QSize(0, 24))
             ws_item.addChild(group)
+
+            def _toggle(g=group):
+                g.setExpanded(not g.isExpanded())
+                w = self.list_widget.itemWidget(g, 0)
+                if isinstance(w, RunnerGroupWidget):
+                    w.set_collapsed(not g.isExpanded())
+
             header = RunnerGroupWidget(
                 "Runners workspace",
                 on_add_blank=lambda w=ws: self._open_runner_edit(w, None),
                 on_generate=lambda w=ws: self._generate_runner_with_claude(w),
+                on_toggle_collapse=_toggle,
             )
             self.list_widget.setItemWidget(group, 0, header)
             group.setExpanded(True)
+            header.set_collapsed(False)
             self._runner_group_items[ws.id] = group
 
         self._runner_tree_items.setdefault(ws.id, {})
@@ -1325,13 +1334,21 @@ class MainWindow(QMainWindow):
             def _gen(w=ws):
                 self._generate_runner_with_claude(w)
 
+            def _toggle(g=group):
+                g.setExpanded(not g.isExpanded())
+                w = self.list_widget.itemWidget(g, 0)
+                if isinstance(w, RunnerGroupWidget):
+                    w.set_collapsed(not g.isExpanded())
+
             header = RunnerGroupWidget(
                 "Runners console",
                 on_add_blank=_add_blank,
                 on_generate=_gen,
+                on_toggle_collapse=_toggle,
             )
             self.list_widget.setItemWidget(group, 0, header)
             group.setExpanded(True)
+            header.set_collapsed(False)
             self._console_runner_group_items[gk] = group
 
         self._runner_tree_items.setdefault(ws.id, {})

@@ -51,6 +51,7 @@ class RunnerGroupWidget(QWidget):
         label: str,
         on_add_blank: Callable[[], None],
         on_generate: Callable[[], None] | None = None,
+        on_toggle_collapse: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -61,6 +62,15 @@ class RunnerGroupWidget(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(2, 2, 4, 2)
         row.setSpacing(6)
+
+        self._collapse_btn = QPushButton("▾")
+        self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._collapse_btn.setFixedSize(18, 18)
+        self._collapse_btn.setStyleSheet(_BTN_QSS)
+        self._collapse_btn.setToolTip("Recolher / expandir runners")
+        if on_toggle_collapse is not None:
+            self._collapse_btn.clicked.connect(on_toggle_collapse)
+        row.addWidget(self._collapse_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._label = QLabel(label)
         font = QFont(self._label.font())
@@ -81,6 +91,10 @@ class RunnerGroupWidget(QWidget):
         self._on_generate = on_generate
         self._add_btn.clicked.connect(self._open_add_menu)
         row.addWidget(self._add_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        """Atualiza o ícone do chevron (▸ recolhido, ▾ expandido)."""
+        self._collapse_btn.setText("▸" if collapsed else "▾")
 
     def _open_add_menu(self) -> None:
         # Se não tem gerador (escopo console-pending sem area), abre direto.

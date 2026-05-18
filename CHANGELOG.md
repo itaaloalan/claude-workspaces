@@ -6,6 +6,14 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.17.1] — 2026-05-18
+
+### Alterado
+- **Botão ▾/▸ no header dos grupos de runners**: cada header
+  "Runners workspace" / "Runners console" ganhou um chevron explícito
+  pra recolher/expandir o grupo, no mesmo padrão do header do
+  workspace. Antes a única forma era pela seta nativa da tree.
+
 ## [0.17.0] — 2026-05-18
 
 ### Alterado
