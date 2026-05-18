@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.8.0] — 2026-05-18
+
+### Adicionado
+- **Runners**: cada workspace pode definir um conjunto de runners
+  (processos de longa duração — web, api, glassfish, camera, mobile, …)
+  com comandos `start`/`stop`/`restart` independentes. Nova aba **Runners**
+  ao lado da aba Terminal mostra o log ao vivo de cada runner via PTY +
+  xterm.js (mesmo motor da aba Terminal). Botões de **Rodar todos** /
+  **Parar todos**, **Importar** / **Exportar** JSON, e **+ Novo runner**
+  com opção "Gerar com Claude" — esta abre o Claude no diretório do
+  próprio claude-workspaces (com `docs/runners-spec.md` carregado) pra
+  gerar a config consumindo menos tokens. Persistência junto do workspace
+  em `~/.config/claude-workspaces/workspaces.json`.
+
 ## [0.7.20] — 2026-05-18
 
 ### Removido

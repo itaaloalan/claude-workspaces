@@ -7,6 +7,42 @@ def _new_id() -> str:
 
 
 @dataclass
+class RunnerConfig:
+    """Runner = processo de longa duração do workspace (web/api/glassfish/…).
+
+    Comandos rodam via `bash -lc <cmd>` para herdar aliases/PATH do shell de
+    login. `stop_cmd`/`restart_cmd` vazios caem em fallbacks: stop = SIGTERM
+    no process group; restart = stop + start.
+    """
+    name: str = ""
+    start_cmd: str = ""
+    stop_cmd: str = ""
+    restart_cmd: str = ""
+    cwd: str = ""                       # vazio → primeira pasta do workspace
+    env: dict[str, str] = field(default_factory=dict)
+    enabled: bool = True                # incluído no "Rodar todos"
+    id: str = field(default_factory=_new_id)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RunnerConfig":
+        env_raw = data.get("env") or {}
+        env = {str(k): str(v) for k, v in env_raw.items()} if isinstance(env_raw, dict) else {}
+        return cls(
+            name=str(data.get("name", "")),
+            start_cmd=str(data.get("start_cmd", "")),
+            stop_cmd=str(data.get("stop_cmd", "")),
+            restart_cmd=str(data.get("restart_cmd", "")),
+            cwd=str(data.get("cwd", "")),
+            env=env,
+            enabled=bool(data.get("enabled", True)),
+            id=str(data.get("id") or _new_id()),
+        )
+
+
+@dataclass
 class Workspace:
     name: str
     folders: list[str] = field(default_factory=list)
@@ -18,6 +54,7 @@ class Workspace:
     branch_prefix: str = ""           # "" → settings.branch_prefix
     default_isolate_worktree: bool | None = None
     default_create_new_branch: bool | None = None
+    runners: list[RunnerConfig] = field(default_factory=list)
 
     @property
     def primary_folder(self) -> str | None:
@@ -56,6 +93,11 @@ class Workspace:
         create_branch = data.get("default_create_new_branch")
         if create_branch is not None and not isinstance(create_branch, bool):
             create_branch = None
+        runners_raw = data.get("runners") or []
+        runners = [
+            RunnerConfig.from_dict(r) for r in runners_raw
+            if isinstance(r, dict)
+        ]
         return cls(
             name=data["name"],
             folders=list(data.get("folders", [])),
@@ -64,4 +106,5 @@ class Workspace:
             branch_prefix=str(data.get("branch_prefix") or ""),
             default_isolate_worktree=isolate,
             default_create_new_branch=create_branch,
+            runners=runners,
         )

@@ -123,6 +123,27 @@ def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
     _spawn([cmd, *workspace.folders], cwd)
 
 
+def launch_claude_for_runner_gen(
+    workspace: Workspace, settings: Settings, prompt: str
+) -> None:
+    """Abre Claude no diretório do próprio claude-workspaces com um prompt
+    inicial pra gerar um RunnerConfig. Fica nesse cwd (não no workspace alvo)
+    porque é lá que mora a doc `docs/runners-spec.md` — o Claude lê a spec
+    em vez de raciocinar do zero, consumindo menos tokens.
+
+    Passa o prompt como argv final do `claude` (modo non-interactive seed).
+    """
+    _require(settings.terminal_command, "terminal")
+    repo = find_app_repo_root()
+    if repo is None:
+        raise LauncherError(
+            "Repositório do claude-workspaces não encontrado — gerador "
+            "precisa rodar no diretório do projeto pra ler docs/runners-spec.md"
+        )
+    cmd = [settings.claude_command, *settings.claude_extra_args, prompt]
+    _run_in_terminal(settings, cmd, repo)
+
+
 def find_app_repo_root() -> Path | None:
     p = Path(__file__).resolve().parent
     for _ in range(8):
