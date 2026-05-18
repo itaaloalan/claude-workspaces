@@ -2592,6 +2592,16 @@ class MainWindow(QMainWindow):
                 # Workspace, Retomar de session card, etc) não setam.
                 terminal.mark_restored_on_startup()
             self._wire_terminal_runner_panel(workspace, terminal)
+            # Se o console restaurado tem runners persistidos (matching
+            # console_session_id), garante a RunnerArea já criada — assim
+            # o painel "Runners (console)" não aparece vazio até o user
+            # clicar em ▤ Runners, e o grupo "Runners console" da sidebar
+            # consegue ler o sid da area pra ligar os children.
+            sid = terminal.claimed_session_id() or ""
+            if sid and any(
+                (r.console_session_id or "") == sid for r in workspace.runners
+            ):
+                self._ensure_terminal_runner_panel(workspace, terminal)
             area = self.terminals_coord.area_for(workspace.id)
             if area is not None:
                 self.terminal_host.setCurrentWidget(area)

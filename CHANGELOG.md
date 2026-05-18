@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.7] — 2026-05-18
+
+### Corrigido
+- **Runners do console "sumiam" ao reabrir o app**: os runners
+  persistidos (com `console_session_id`) já existiam no
+  `workspaces.json` o tempo todo, mas a `RunnerArea` do console era
+  criada só on-demand (no clique em ▤ Runners). Como o sid da area é
+  usado pra ligar o grupo "Runners console" da sidebar, sem area não
+  havia ligação. Agora, ao restaurar uma sessão via `--resume`, o app
+  cria automaticamente a `RunnerArea` se existir ≥1 runner com sid
+  matching — runners aparecem na sidebar e na aba "Runners (console)"
+  já no primeiro paint, sem precisar clicar em nada.
+
 ## [0.18.6] — 2026-05-18
 
 ### Corrigido
