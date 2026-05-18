@@ -492,6 +492,11 @@ class GitPanel(QWidget):
             block = block.next()
         cursor.endEditBlock()
 
+    def _show_diff_for(self, item: QTreeWidgetItem) -> None:
+        if not self._diff_visible:
+            self._toggle_diff()
+        self._on_single_click(item, 0)
+
     def _toggle_diff(self) -> None:
         self._diff_visible = not self._diff_visible
         self._diff.setVisible(self._diff_visible)
@@ -604,6 +609,13 @@ class GitPanel(QWidget):
                     lambda: self.open_file_requested.emit(first_data["path"]),
                 )
             )
+            if not first_data.get("is_untracked"):
+                menu.addAction(
+                    self._action(
+                        "👁 Ver diff",
+                        lambda it=items[0]: self._show_diff_for(it),
+                    )
+                )
             menu.addSeparator()
 
         if any_untracked or any_unstaged:

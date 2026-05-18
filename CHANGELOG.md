@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.7.19] — 2026-05-18
+
+### Adicionado
+- **Git panel — "Ver diff" no menu de contexto**: clicar com botão direito num
+  arquivo modificado agora oferece a opção `👁 Ver diff`, que abre o painel de
+  diff (se estiver oculto) e carrega o diff do arquivo clicado. Atalho útil
+  pra evitar o passo manual de abrir o painel pelo botão da toolbar antes de
+  selecionar o arquivo. Só aparece pra arquivos rastreados — untracked não
+  tem diff.
+
 ## [0.7.18] — 2026-05-18
 
 ### Mudado
