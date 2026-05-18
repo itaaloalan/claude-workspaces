@@ -1588,7 +1588,7 @@ class MainWindow(QMainWindow):
         return None
 
     # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
-    _CHILD_HEIGHT = 42
+    _CHILD_HEIGHT = 58
 
     def _wire_child_actions(
         self, widget: "TerminalChildWidget", tab_id: int

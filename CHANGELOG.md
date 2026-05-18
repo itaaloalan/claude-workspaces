@@ -9,6 +9,12 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
 ## [0.7.7] — 2026-05-18
 
 ### Adicionado
+- **Modelo + tokens da sessão na sidebar**: 3a linha de cada row de
+  console mostra `opus-4-7 · 139 in · 61.2K out · 8.5M cache` direto,
+  sem precisar abrir o menu de contexto. Custo de propósito não vai
+  nessa linha (continua no menu de contexto, evita poluir a sidebar
+  com valor em USD). Tooltip expande pra valores absolutos. Atualiza
+  junto do poll de git (a cada 5s).
 - **Ações inline em cada console da sidebar**: `▶ Continuar` (manda
   'continue' direto) e `⚙ Modo` (abre o popup com Plan/Auto/Default,
   `/effort` e `/model`) à direita do título de cada row de console. O
@@ -19,6 +25,13 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   vez. Estado persistido em `show_terminal_actions`. Menu de contexto
   (clique direito no console) continua exibindo as mesmas ações com a
   toolbar oculta.
+
+### Corrigido
+- **Branch + arquivos modificados (0.7.6) não aparecia** na sidebar:
+  o `_repo_poller.request(term.claude_cwd)` mandava o método em vez
+  do valor (`claude_cwd` é função, não property). Erro silencioso
+  porque o TypeError caía no `except Exception` do worker. Agora
+  chama com `()`.
 
 ### Alterado
 - Revertido o toolbar expandido do console central (0.7.5) — volta pra

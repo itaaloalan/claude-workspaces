@@ -176,6 +176,24 @@ class TerminalChildWidget(QWidget):
         sub_row.addWidget(self._action_label, stretch=1)
 
         vbox.addLayout(sub_row)
+
+        # 3a linha: modelo + tokens da sessão Claude (in/out/cache).
+        # Custo de propósito não vai aqui — informação cara de mostrar a
+        # toda hora, ainda fica no menu de contexto. Preenchido pelo
+        # main_window via `update_session_info` (lê do JSONL claimed).
+        self._session_label = QLabel("")
+        self._session_label.setTextFormat(Qt.TextFormat.RichText)
+        self._session_label.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+        )
+        self._session_label.setWordWrap(False)
+        self._session_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+        )
+        self._session_label.setMaximumHeight(14)
+        self._session_label.setVisible(False)
+        vbox.addWidget(self._session_label)
+
         outer.addLayout(vbox, stretch=1)
 
         # Lado direito: branch + contagem de arquivos modificados do repo.
@@ -298,3 +316,55 @@ class TerminalChildWidget(QWidget):
             tip = f"Branch: {branch} — working tree limpo"
         self._git_label.setToolTip(tip)
         self._git_label.setVisible(True)
+
+    def update_session_info(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_tokens: int,
+    ) -> None:
+        """Atualiza a 3a linha com modelo + tokens da sessão claimed.
+        Modelo é encurtado (claude-opus-4-7 → opus-4-7). Tokens vão como
+        `Nin · Mout · Kcache` se houver volume; senão omite. Custo não
+        entra aqui de propósito — fica no menu de contexto."""
+        if not model and input_tokens == 0 and output_tokens == 0:
+            self._session_label.setVisible(False)
+            self._session_label.setText("")
+            return
+        model_short = _shorten_model(model) if model else "?"
+        parts = [
+            f"<span style='color: {theme.TEXT_LINK};'>{model_short}</span>"
+        ]
+        if input_tokens or output_tokens or cache_tokens:
+            tk = (
+                f"<span style='color: {theme.TEXT_FAINT};'>"
+                f"{_fmt_tokens(input_tokens)} in · "
+                f"{_fmt_tokens(output_tokens)} out · "
+                f"{_fmt_tokens(cache_tokens)} cache"
+                f"</span>"
+            )
+            parts.append(tk)
+        self._session_label.setText(
+            f"<span style='color: {theme.TEXT_DISABLED};'> · </span>".join(parts)
+        )
+        self._session_label.setToolTip(
+            f"Modelo: {model or '?'} — "
+            f"{input_tokens:,} in · {output_tokens:,} out · {cache_tokens:,} cache"
+        )
+        self._session_label.setVisible(True)
+
+
+def _shorten_model(model: str) -> str:
+    """`claude-opus-4-7` → `opus-4-7`. Mantém sufixos como `[1m]`."""
+    if model.startswith("claude-"):
+        return model[len("claude-"):]
+    return model
+
+
+def _fmt_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
