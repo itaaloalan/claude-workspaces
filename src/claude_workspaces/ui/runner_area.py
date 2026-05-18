@@ -129,6 +129,11 @@ class RunnerArea(QWidget):
         self.tabs.setTabsClosable(False)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
+        # Quando o user arrasta uma aba pra reordenar, sincroniza
+        # `ws.runners` pra ordem dele virar a verdade — sem isso o
+        # `_refresh_from_workspace` (chamado a cada add/remove) volta
+        # pra ordem original e a sidebar fica fora de fase com o painel.
+        self.tabs.tabBar().tabMoved.connect(self._on_tab_moved)
         self._stack.addWidget(self.tabs)
 
         outer.addWidget(self._stack, stretch=1)
@@ -286,6 +291,29 @@ class RunnerArea(QWidget):
             bar.setTabTextColor(idx, QColor())  # reset
         else:
             bar.setTabTextColor(idx, color)
+
+    def _on_tab_moved(self, _from: int, _to: int) -> None:
+        """Persiste a nova ordem das abas em `ws.runners` mantendo as
+        posições relativas dos runners fora de escopo (eles não aparecem
+        nas abas mas precisam ficar no mesmo lugar da lista). Emite
+        `runners_changed` pra sidebar e o disco refletirem."""
+        in_scope_ids: list[str] = []
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget):
+                in_scope_ids.append(w.runner_id())
+        by_id = {r.id: r for r in self._ws.runners}
+        new_list: list[RunnerConfig] = []
+        pos = 0
+        for r in self._ws.runners:
+            if self._matches_scope(r):
+                if pos < len(in_scope_ids):
+                    new_list.append(by_id[in_scope_ids[pos]])
+                    pos += 1
+            else:
+                new_list.append(r)
+        self._ws.runners = new_list
+        self.runners_changed.emit()
 
     def _recompute_running_count(self) -> None:
         count = 0

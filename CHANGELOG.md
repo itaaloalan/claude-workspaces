@@ -6,6 +6,25 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.18.10] — 2026-05-18
+
+### Corrigido
+- **Item do console expande quando tem runners**: o grupo "Runners
+  console" estava sendo criado corretamente como filho do item do
+  console, mas o `_install_console_runner_children` forçava
+  `term_item.setExpanded(False)` no final, escondendo o grupo recém
+  adicionado dentro de um console colapsado. Resultado: o painel
+  "Runners (console)" aparecia com os runners, mas a sidebar parecia
+  vazia. Agora o item de console é expandido sempre que tem runners
+  no escopo, deixando o grupo visível por default.
+- **Ordem das abas sincroniza com a sidebar**: arrastar abas de
+  runner no painel (workspace ou console) agora persiste a nova
+  ordem em `ws.runners`, mantendo as posições relativas dos runners
+  fora de escopo. Antes, ao adicionar um novo runner o
+  `_refresh_from_workspace` recriava as abas na ordem original do
+  workspace e a ordenação manual sumia — e a sidebar mostrava uma
+  ordem ainda diferente. Agora painel e sidebar concordam.
+
 ## [0.18.9] — 2026-05-18
 
 ### Corrigido

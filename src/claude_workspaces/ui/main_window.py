@@ -1376,10 +1376,10 @@ class MainWindow(QMainWindow):
             group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
-        # Default: o item do console fica recolhido — o user expande
-        # clicando na seta quando precisar. O grupo de runners dentro
-        # dele começa expandido (já decidimos acima).
-        term_item.setExpanded(False)
+        # Tem runners no console — expande o item pro grupo ficar visível.
+        # Sem isso o grupo era criado mas ficava escondido dentro do item
+        # de console colapsado, dando a impressão de "não tem runners".
+        term_item.setExpanded(True)
 
     def _toggle_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
         """Inicia/para um runner pela sidebar. Cria a RunnerArea sob
