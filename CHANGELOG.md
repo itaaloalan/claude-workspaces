@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.9.2] — 2026-05-18
+
+### Corrigido
+- **Stop do runner ficava travado em "rodando"**: `PtySession.terminate()`
+  fechava o FD e zerava o pid mas não emitia `finished`, então a UI
+  do RunnerWidget e o footer da sidebar nunca saíam do estado
+  "running" (botão Stop habilitado, dot verde). Agora emite `finished`
+  após o cleanup, e o sinal sempre dispara mesmo quando o stop é
+  iniciado pelo app.
+- **`npm start` / `ng serve` continuavam rodando após Stop**: o sinal
+  era enviado só pro PID líder (bash/npm), deixando o `node` filho
+  segurando a porta. Agora `terminate()` usa `os.killpg(SIGTERM)` —
+  como `pty.fork()` coloca o filho como session leader, a PID também
+  é PGID e o SIGTERM atinge todos os descendentes em um sweep.
+
 ## [0.9.1] — 2026-05-18
 
 ### Adicionado

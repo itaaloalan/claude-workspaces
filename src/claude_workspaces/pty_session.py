@@ -122,12 +122,38 @@ class PtySession(QObject):
             pass
 
     def terminate(self) -> None:
-        if self.pid is not None:
+        """Mata o processo do pty e tudo abaixo dele.
+
+        Why killpg em vez de kill: programas como `npm start` rodam um
+        node filho — SIGHUP só no bash/npm wrapper deixa o node solto,
+        ocupando a porta. Como pty.fork() coloca o filho como session
+        leader, a PID dele é também a PGID; killpg pega todos os
+        descendentes em um sweep.
+
+        Why SIGTERM antes de SIGKILL: dá ao processo chance de cleanup
+        (fechar sockets, flush de logs). SIGKILL é fallback se o group
+        ainda existe ~300ms depois.
+        """
+        pid = self.pid
+        if pid is not None:
             try:
-                os.kill(self.pid, signal.SIGHUP)
+                os.killpg(pid, signal.SIGTERM)
             except OSError:
-                pass
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+        # Cleanup do FD/notifier — depois disso o filho perde o
+        # controlling tty, então qualquer processo restante recebe
+        # SIGHUP em reads/writes ao stdio.
+        had_pid = self.pid is not None
         self._cleanup()
+        # Garante que listeners (RunnerWidget._on_session_finished) saem
+        # de "running" mesmo quando o stop é iniciado pelo app — sem
+        # isso, a UI fica travada no estado anterior porque _cleanup
+        # zera o pid mas não emite `finished`.
+        if had_pid:
+            self.finished.emit()
 
     def _cleanup(self) -> None:
         if self._notifier is not None:
