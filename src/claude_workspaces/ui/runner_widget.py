@@ -61,6 +61,10 @@ class RunnerWidget(QWidget):
         # crescer indefinidamente em runners de log alto.
         self._output_buf: str = ""
         self._browser_opened_this_start: bool = False
+        # Buffer de log pra "Copiar log" — guarda os últimos ~1MB. Não
+        # reseta a cada start (mantém histórico cross-restart pra debug).
+        self._log_buf: str = ""
+        self._log_buf_max: int = 1_000_000
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -92,8 +96,14 @@ class RunnerWidget(QWidget):
         )
         toolbar.addWidget(self._edit_btn)
 
+        self._copy_btn = QPushButton("📋 Copiar log")
+        self._copy_btn.setToolTip("Copia o log atual deste runner pro clipboard")
+        self._copy_btn.clicked.connect(self._copy_log)
+        toolbar.addWidget(self._copy_btn)
+
         self._del_btn = QPushButton("🗑")
         self._del_btn.setToolTip("Remover runner")
+        self._del_btn.setFixedWidth(36)
         self._del_btn.clicked.connect(
             lambda: self.remove_requested.emit(self._runner.id)
         )
@@ -217,15 +227,18 @@ class RunnerWidget(QWidget):
             self._spawn(cmd, intent)
 
     def _on_pty_output(self, data: bytes) -> None:
+        try:
+            chunk = data.decode("utf-8", errors="replace")
+        except Exception:
+            return
+        # Log completo (cap em ~1MB) pra "Copiar log".
+        self._log_buf = (self._log_buf + chunk)[-self._log_buf_max:]
+
         if not self._runner.open_browser_on_ready:
             return
         if self._browser_opened_this_start:
             return
         if self._intent != "start" and self._intent != "restart":
-            return
-        try:
-            chunk = data.decode("utf-8", errors="replace")
-        except Exception:
             return
         # Mantém só os últimos ~16KB pra detecção (URLs aparecem cedo
         # no startup, mas alguns servers logam warnings antes).
@@ -238,6 +251,22 @@ class RunnerWidget(QWidget):
         # Pequeno delay pra dar tempo do server aceitar conexões antes
         # do browser bater na porta.
         QTimer.singleShot(400, lambda u=url: self._open_browser(u))
+
+    def _copy_log(self) -> None:
+        from PySide6.QtGui import QGuiApplication
+
+        from ..services.runner_url_detect import strip_ansi
+
+        text = strip_ansi(self._log_buf) if self._log_buf else ""
+        QGuiApplication.clipboard().setText(text)
+        prev = self._status.text()
+        self._status.setText(
+            f"(log copiado — {len(text)} chars)"
+            if text
+            else "(log vazio)"
+        )
+        # Volta o status original depois de 2s.
+        QTimer.singleShot(2000, lambda t=prev: self._status.setText(t))
 
     def _open_browser(self, url: str) -> None:
         cmd = (self._settings.browser_command or "").strip()

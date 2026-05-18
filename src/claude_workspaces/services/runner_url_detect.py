@@ -67,5 +67,10 @@ def _normalize(url: str) -> str | None:
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 
 
-def _strip_ansi(text: str) -> str:
+def strip_ansi(text: str) -> str:
+    """Remove sequências ANSI/escape do texto (cores, cursor, OSC)."""
     return _ANSI_RE.sub("", text)
+
+
+def _strip_ansi(text: str) -> str:  # alias interno (compat)
+    return strip_ansi(text)

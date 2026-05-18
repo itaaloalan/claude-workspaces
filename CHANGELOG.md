@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.9.1] — 2026-05-18
+
+### Adicionado
+- **Botão 📋 Copiar log** no toolbar de cada runner: copia o log atual
+  (até ~1MB, com ANSI strip-ado) pro clipboard. Útil pra colar em
+  bug reports ou jogar pro Claude analisar.
+
+### Corrigido
+- **Botão "Remover" do runner desproporcional**: largura fixada em
+  36px pra ficar do tamanho do ícone 🗑, parando de competir com os
+  botões de texto.
+
 ## [0.9.0] — 2026-05-18
 
 ### Adicionado
