@@ -132,15 +132,19 @@ class PtySession(QObject):
 
         Why SIGTERM antes de SIGKILL: dá ao processo chance de cleanup
         (fechar sockets, flush de logs). SIGKILL é fallback se o group
-        ainda existe ~300ms depois.
+        ainda existe ~600ms depois — agendado via QTimer pra não
+        bloquear a UI. Sem o fallback, asadmin/java do GlassFish ficava
+        órfão entre restarts do app.
         """
         pid = self.pid
         if pid is not None:
             try:
                 os.killpg(pid, signal.SIGTERM)
+                self._schedule_sigkill(pid)
             except OSError:
                 try:
                     os.kill(pid, signal.SIGTERM)
+                    self._schedule_sigkill(pid)
                 except OSError:
                     pass
         # Cleanup do FD/notifier — depois disso o filho perde o
@@ -154,6 +158,25 @@ class PtySession(QObject):
         # zera o pid mas não emite `finished`.
         if had_pid:
             self.finished.emit()
+
+    def _schedule_sigkill(self, pid: int) -> None:
+        from PySide6.QtCore import QTimer
+
+        def _kill() -> None:
+            try:
+                os.killpg(pid, 0)
+            except OSError:
+                return  # grupo já morreu
+            log.warning("pgid=%s não respondeu a SIGTERM, enviando SIGKILL", pid)
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except OSError:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+
+        QTimer.singleShot(600, _kill)
 
     def _cleanup(self) -> None:
         if self._notifier is not None:

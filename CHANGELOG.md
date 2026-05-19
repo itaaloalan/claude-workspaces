@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.25.1] — 2026-05-19
+
+### Corrigido
+- **`pty_session.terminate` agora cumpre o SIGKILL fallback prometido
+  no docstring** (`pty_session.py`): o comentário já dizia "SIGKILL é
+  fallback se o group ainda existe ~300ms depois", mas a implementação
+  só mandava SIGTERM e seguia. Resultado: ao reiniciar o app com um
+  runner pesado rodando (caso real: `asadmin start-domain` do
+  GlassFish do ogpms), o `java` filho ficava órfão e continuava
+  ocupando memória/swap após o app fechar. Agora, 600 ms depois do
+  SIGTERM, um `QTimer.singleShot` checa se o pgid ainda existe
+  (`killpg(pid, 0)`) e, em caso positivo, manda `SIGKILL` no grupo
+  inteiro.
+
 ## [0.25.0] — 2026-05-19
 
 ### Adicionado
