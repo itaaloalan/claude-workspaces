@@ -666,7 +666,7 @@ class GitPanel(QWidget):
                 menu.addAction(
                     self._action(
                         "👁 Ver diff",
-                        lambda it=items[0]: self._show_diff_for(it),
+                        lambda _=False, it=items[0]: self._show_diff_for(it),
                     )
                 )
             menu.addSeparator()
@@ -744,7 +744,7 @@ class GitPanel(QWidget):
         menu.addAction(
             self._action(
                 "📁 Abrir pasta",
-                lambda f=folder: self._open_folder(f),
+                lambda: self._open_folder(folder),
             )
         )
 
@@ -755,7 +755,7 @@ class GitPanel(QWidget):
         menu.addAction(
             self._action(
                 "⎇ Trocar branch…",
-                lambda f=folder: self._open_branch_picker(f),
+                lambda: self._open_branch_picker(folder),
             )
         )
 
