@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.25.0] — 2026-05-19
+
+### Adicionado
+- **Histórico de sessões de runner-gen com retomada**
+  (`services/runner_gen_history.py`, `ui/runner_gen_dialog.py`,
+  `ui/main_window.py`): toda vez que você clica em "Gerar com Claude"
+  no dialog de runner, persistimos `{workspace_id, session_id, cwd,
+  hint, created_at}` num arquivo dedicado
+  (`~/.config/claude-workspaces/runner_gen_sessions.json`),
+  independente da aba ainda estar aberta no fechamento do app. O
+  antigo `QInputDialog.getText` foi substituído por um
+  `RunnerGenDialog` com campo de hint, lista das gerações anteriores
+  do workspace (mais recentes primeiro), filtro por texto, e botões
+  "↻ Retomar selecionada" (faz `claude --resume <id>` no cwd
+  original) e "Esquecer" (remove do índice). Entradas cujo JSONL
+  sumiu do disco aparecem cinzas e não dá pra retomar.
+
 ## [0.24.9] — 2026-05-19
 
 ### Corrigido

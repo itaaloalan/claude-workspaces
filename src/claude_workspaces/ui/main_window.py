@@ -1811,16 +1811,14 @@ class MainWindow(QMainWindow):
 
     def _generate_runner_with_claude(self, workspace) -> None:
         from ..launchers import find_app_repo_root
+        from ..services.runner_gen_history import RunnerGenEntry, add_entry
         from ..services.runner_prompt import build_generate_prompt
+        from .runner_gen_dialog import RunnerGenDialog
 
-        hint, ok = QInputDialog.getText(
-            self,
-            "Gerar runner com Claude",
-            "Qual runner você quer gerar? (ex: 'web em next', 'glassfish do ogpms')",
-        )
-        if not ok:
+        dlg = RunnerGenDialog(workspace.id, workspace.name, parent=self)
+        if dlg.exec() != dlg.DialogCode.Accepted:
             return
-        prompt = build_generate_prompt(workspace, hint)
+        mode = dlg.mode()
 
         repo = find_app_repo_root()
         if repo is None:
@@ -1832,16 +1830,59 @@ class MainWindow(QMainWindow):
             )
             return
 
-        argv = [self.settings.claude_command, *self.settings.claude_extra_args, prompt]
         area = self.terminals_coord.get_or_create_area(workspace)
-        title = f"runner-gen #{area.count() + 1}"
-        terminal = area.add_terminal(title)
-        terminal.configure_claude(str(repo))
-        label = f"claude (runner-gen) — {workspace.name}"
+
+        if mode == "resume":
+            entry = dlg.selected_entry()
+            if entry is None:
+                return
+            argv = [
+                self.settings.claude_command,
+                *self.settings.claude_extra_args,
+                "--resume",
+                entry.session_id,
+            ]
+            title = f"runner-gen #{area.count() + 1} (resume)"
+            terminal = area.add_terminal(title)
+            terminal.configure_claude(entry.cwd, resume_id=entry.session_id)
+            label = f"claude (runner-gen resume) — {workspace.name}"
+            cwd = entry.cwd
+        else:
+            hint = dlg.hint()
+            prompt = build_generate_prompt(workspace, hint)
+            argv = [
+                self.settings.claude_command,
+                *self.settings.claude_extra_args,
+                prompt,
+            ]
+            title = f"runner-gen #{area.count() + 1}"
+            terminal = area.add_terminal(title)
+            terminal.configure_claude(str(repo))
+            label = f"claude (runner-gen) — {workspace.name}"
+            cwd = str(repo)
+
+            ws_id = workspace.id
+
+            def _record_once(sid: str, *, _t=terminal, _cwd=cwd, _ws=ws_id, _hint=hint) -> None:
+                if not sid:
+                    return
+                try:
+                    add_entry(RunnerGenEntry(
+                        workspace_id=_ws, session_id=sid, cwd=_cwd, hint=_hint,
+                    ))
+                except Exception:
+                    log.exception("Falha ao registrar runner-gen no histórico")
+                try:
+                    _t.claimed_session_id_changed.disconnect(_record_once)
+                except (TypeError, RuntimeError):
+                    pass
+
+            terminal.claimed_session_id_changed.connect(_record_once)
+
         try:
             terminal.start_shell_command(
                 argv,
-                str(repo),
+                cwd,
                 label=label,
                 shell=self.settings.shell_command or None,
             )
