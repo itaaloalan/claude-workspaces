@@ -1835,7 +1835,16 @@ class MainWindow(QMainWindow):
             )
             return
 
+        if not workspace.folders:
+            QMessageBox.warning(
+                self,
+                "Workspace sem pastas",
+                "Adicione ao menos uma pasta no workspace antes de gerar runner.",
+            )
+            return
+
         area = self.terminals_coord.get_or_create_area(workspace)
+        ws_cwd, extras = workspace.launch_paths()
 
         if mode == "resume":
             entry = dlg.selected_entry()
@@ -1847,6 +1856,11 @@ class MainWindow(QMainWindow):
                 "--resume",
                 entry.session_id,
             ]
+            # Re-anexa --add-dir igual à geração nova pra Claude ainda ler o spec
+            # e enxergar pastas extras.
+            argv += ["--add-dir", str(repo)]
+            for extra in extras:
+                argv += ["--add-dir", extra]
             title = f"runner-gen #{area.count() + 1} (resume)"
             terminal = area.add_terminal(title)
             terminal.configure_claude(entry.cwd, resume_id=entry.session_id)
@@ -1854,17 +1868,22 @@ class MainWindow(QMainWindow):
             cwd = entry.cwd
         else:
             hint = dlg.hint()
-            prompt = build_generate_prompt(workspace, hint)
+            spec_path = Path(repo) / "docs" / "runners-spec.md"
+            prompt = build_generate_prompt(workspace, hint, spec_path=spec_path)
             argv = [
                 self.settings.claude_command,
                 *self.settings.claude_extra_args,
-                prompt,
+                "--add-dir",
+                str(repo),
             ]
+            for extra in extras:
+                argv += ["--add-dir", extra]
+            argv.append(prompt)
             title = f"runner-gen #{area.count() + 1}"
             terminal = area.add_terminal(title)
-            terminal.configure_claude(str(repo))
+            terminal.configure_claude(ws_cwd)
             label = f"claude (runner-gen) — {workspace.name}"
-            cwd = str(repo)
+            cwd = ws_cwd
 
             ws_id = workspace.id
 

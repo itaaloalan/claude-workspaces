@@ -22,12 +22,19 @@ def pending_runner_path(workspace: Workspace) -> Path:
     )
 
 
-def build_generate_prompt(workspace: Workspace, hint: str = "") -> str:
+def build_generate_prompt(
+    workspace: Workspace, hint: str = "", spec_path: str | Path | None = None
+) -> str:
     folders = "\n".join(f"  - {f}" for f in workspace.folders) or "  (sem pastas)"
     hint_block = f"\nHint do usuário: {hint}\n" if hint.strip() else ""
     out_path = pending_runner_path(workspace)
+    spec_ref = (
+        f"`{spec_path}` (caminho absoluto — disponível via --add-dir)"
+        if spec_path
+        else "`docs/runners-spec.md` deste repositório (claude-workspaces)"
+    )
     return (
-        f"Leia `docs/runners-spec.md` deste repositório (claude-workspaces) e "
+        f"Leia {spec_ref} e "
         f"gere a configuração de um Runner para o workspace abaixo.\n\n"
         f"Workspace: {workspace.name}\n"
         f"Pastas:\n{folders}\n"

@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.26.4] — 2026-05-19
+
+### Alterado
+- **runner-gen agora roda no cwd do projeto do usuário, não do
+  claude-workspaces** (`ui/main_window.py::_generate_runner_with_claude`,
+  `services/runner_prompt.py`): antes o Claude da geração era lançado
+  com `cwd = repo do claude-workspaces` pra conseguir ler
+  `docs/runners-spec.md` — efeito colateral: o JSONL ficava em
+  `~/.claude/projects/<claude-workspaces>` e a sessão aparecia
+  associada ao projeto errado. Agora o `cwd` é a primeira pasta do
+  workspace (igual ao botão "Abrir Claude"), `docs/runners-spec.md`
+  vai por caminho absoluto no prompt, e o repo do claude-workspaces
+  + pastas extras entram via `--add-dir`. A retomada (`--resume`)
+  reaplica os mesmos `--add-dir`. O índice de runner-gen passa a
+  guardar o `cwd` do projeto, então `claude --resume` resume no
+  lugar certo.
+
 ## [0.26.3] — 2026-05-19
 
 ### Corrigido
