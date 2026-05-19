@@ -905,17 +905,55 @@ class MainWindow(QMainWindow):
 
     def _on_workspace_expanded(self, item: "QTreeWidgetItem") -> None:
         self._update_workspace_collapsed_icon(item, collapsed=False)
+        self._persist_workspace_collapsed(item, collapsed=False)
 
     def _on_workspace_collapsed(self, item: "QTreeWidgetItem") -> None:
         self._update_workspace_collapsed_icon(item, collapsed=True)
+        self._persist_workspace_collapsed(item, collapsed=True)
+
+    def _persist_workspace_collapsed(
+        self, item: "QTreeWidgetItem", collapsed: bool
+    ) -> None:
+        """Salva o estado expandido/colapsado no settings.
+        Cobre tanto workspaces (top-level) quanto o submenu
+        'Runners workspace' (dado = ('runner_group', ws_id, '')).
+        Runner groups de console não são persistidos — o `tab_id` muda
+        a cada execução, então não dá pra correlacionar entre sessões.
+        Tolera falha de IO sem travar a UI."""
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if isinstance(data, Workspace):
+            current = bool(self.settings.workspace_collapsed.get(data.id, False))
+            if current == collapsed:
+                return
+            self.settings.workspace_collapsed[data.id] = collapsed
+        elif (
+            isinstance(data, tuple)
+            and len(data) == 3
+            and data[0] == "runner_group"
+            and data[2] == ""
+        ):
+            ws_id = data[1]
+            current = bool(self.settings.runner_group_collapsed.get(ws_id, False))
+            if current == collapsed:
+                return
+            self.settings.runner_group_collapsed[ws_id] = collapsed
+        else:
+            return
+        try:
+            self.settings.save()
+        except OSError:
+            log.exception("falha ao salvar collapsed state")
 
     def _update_workspace_collapsed_icon(
         self, item: "QTreeWidgetItem", collapsed: bool
     ) -> None:
+        from .runner_group_widget import RunnerGroupWidget
         from .workspace_item_widget import WorkspaceItemWidget
 
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, WorkspaceItemWidget):
+            widget.set_collapsed(collapsed)
+        elif isinstance(widget, RunnerGroupWidget):
             widget.set_collapsed(collapsed)
 
     def _on_sidebar_context_menu(self, pos) -> None:
@@ -1078,7 +1116,9 @@ class MainWindow(QMainWindow):
             if tip:
                 item.setToolTip(0, tip)
             self.list_widget.addTopLevelItem(item)
-            item.setExpanded(True)
+            # Restaura estado colapsado persistido (default = expandido).
+            collapsed = bool(self.settings.workspace_collapsed.get(ws.id, False))
+            item.setExpanded(not collapsed)
             self._install_workspace_item_widget(item, ws)
 
         self._apply_filter(
@@ -1279,8 +1319,11 @@ class MainWindow(QMainWindow):
                 on_toggle_collapse=_toggle,
             )
             self.list_widget.setItemWidget(group, 0, header)
-            group.setExpanded(True)
-            header.set_collapsed(False)
+            collapsed = bool(
+                self.settings.runner_group_collapsed.get(ws.id, False)
+            )
+            group.setExpanded(not collapsed)
+            header.set_collapsed(collapsed)
             self._runner_group_items[ws.id] = group
 
         self._runner_tree_items.setdefault(ws.id, {})
@@ -1872,15 +1915,16 @@ class MainWindow(QMainWindow):
             hint = dlg.hint()
             spec_path = Path(repo) / "docs" / "runners-spec.md"
             prompt = build_generate_prompt(workspace, hint, spec_path=spec_path)
+            # NÃO usar --add-dir aqui: Claude CLI 2.1.x descarta o prompt
+            # posicional silenciosamente quando --add-dir está presente.
+            # Como passamos --dangerously-skip-permissions (extra_args), o
+            # claude consegue ler os paths absolutos do spec e das pastas
+            # extras via Read sem precisar de --add-dir.
             argv = [
                 self.settings.claude_command,
                 *self.settings.claude_extra_args,
-                "--add-dir",
-                str(repo),
+                prompt,
             ]
-            for extra in extras:
-                argv += ["--add-dir", extra]
-            argv.append(prompt)
             title = f"runner-gen #{area.count() + 1}"
             terminal = area.add_terminal(title)
             terminal.configure_claude(ws_cwd)

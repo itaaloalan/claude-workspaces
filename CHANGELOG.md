@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.28.1] — 2026-05-19
+
+### Corrigido
+- **Runner-gen ignorava o prompt inicial** (`ui/main_window.py`,
+  `services/runner_prompt.py`, `docs/runners-spec.md`): no 0.27.1 a
+  tela preta sumiu, mas o Claude CLI 2.1.x tem outro comportamento
+  surpreendente — quando lançado com `--add-dir` **+** prompt
+  posicional, ele descarta o prompt silenciosamente e abre só o
+  welcome screen vazio. Como já passamos `--dangerously-skip-permissions`,
+  o `--add-dir` virou redundante (claude lê os paths absolutos do spec
+  e das pastas extras via Read). Removido o `--add-dir` do launch de
+  runner-gen — o prompt agora é entregue de verdade e o Claude começa
+  a investigar imediatamente. O prompt foi ajustado pra deixar
+  explícito que os paths absolutos do workspace devem ser lidos via
+  Read/Glob/LS.
+
 ## [0.28.0] — 2026-05-19
 
 ### Adicionado
