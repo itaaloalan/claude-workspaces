@@ -259,6 +259,34 @@ def test_needs_decision_true_em_picker_interativo():
     assert a.needs_decision is True
 
 
+def test_needs_decision_true_em_picker_sem_espacos():
+    """Regressão: o Claude TUI emite o picker usando cursor positioning
+    absoluto, e strip_ansi remove os escapes sem reinserir espaços. O
+    footer chega como 'Entertoselect·↑/↓tonavigate·Esctocancel'. A
+    detecção tem que normalizar antes de comparar pra não perder esse
+    caso — sem o fix, sessões com picker aberto apareciam como Ocioso."""
+    buf = (
+        "Qual?\n"
+        "❯ 1.OpçãoA\n"
+        "2.OpçãoB\n"
+        "Entertoselect·↑/↓tonavigate·Esctocancel\n"
+    ).encode()
+    a = parse_status(buf, last_output_age=5)
+    assert a.is_working is False
+    assert a.needs_decision is True
+
+
+def test_needs_decision_true_em_permission_prompt_sem_espacos():
+    """Mesma regressão pro permission prompt ('Doyouwant...' + ❯ N.)."""
+    buf = (
+        "Doyouwantmetorunthetests?\n"
+        "❯ 1.Yes\n"
+        "2.No\n"
+    ).encode()
+    a = parse_status(buf, last_output_age=5)
+    assert a.needs_decision is True
+
+
 def test_picker_footer_nao_vira_status_display():
     """O footer 'Enter to select…' não deve virar o display da última
     ação — preferimos a linha real (título/pergunta do picker)."""

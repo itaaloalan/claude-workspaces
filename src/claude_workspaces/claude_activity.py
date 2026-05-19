@@ -85,6 +85,15 @@ DECISION_QUESTION_RE = re.compile(r"\bdo you want\b", re.IGNORECASE)
 DECISION_CHOICE_RE = re.compile(r"❯\s*\d+\.")
 INTERACTIVE_FOOTER_RE = re.compile(r"enter to select", re.IGNORECASE)
 
+# Versões normalizadas (só [a-z0-9]) usadas como fallback quando o Claude TUI
+# emite o texto com cursor positioning absoluto entre palavras — strip_ansi
+# remove os escapes mas não reinsere os espaços, então "Enter to select"
+# vira "Entertoselect" e a regex acima não casa. Why: dump real do buffer
+# mostrou a linha "Entertoselect·↑/↓tonavigate·Esctocancel", o que travou
+# a detecção e fez sessões com picker aberto aparecerem como "Ocioso".
+_INTERACTIVE_FOOTER_NORM = "entertoselect"
+_DECISION_QUESTION_NORM = "doyouwant"
+
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
 
 PROMPT_TAILS = (">", "$", "%", "#")
@@ -150,9 +159,10 @@ def _has_decision_prompt(lines: list[str]) -> bool:
     ("Enter to select…") sozinho já basta — ele só aparece com input
     bloqueado."""
     tail = lines[-12:]
-    if any(INTERACTIVE_FOOTER_RE.search(ln) for ln in tail):
+    tail_norm = [_normalize(ln) for ln in tail]
+    if any(_INTERACTIVE_FOOTER_NORM in n for n in tail_norm):
         return True
-    has_question = any(DECISION_QUESTION_RE.search(ln) for ln in tail)
+    has_question = any(_DECISION_QUESTION_NORM in n for n in tail_norm)
     has_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
     return has_question and has_choice
 
@@ -210,7 +220,7 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
     last = lines[-1]
     last_is_idle = _is_idle_marker(last)
     looks_prompt = _looks_like_prompt(last)
-    last_is_picker_footer = bool(INTERACTIVE_FOOTER_RE.search(last))
+    last_is_picker_footer = _INTERACTIVE_FOOTER_NORM in _normalize(last)
 
     # Posição da última ocorrência de cada marker. Quem aparece DEPOIS no
     # buffer ganha — assim Claude trabalhando seguido do footer cai pra
@@ -234,7 +244,7 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
                 continue
             if _looks_like_prompt(line):
                 continue
-            if INTERACTIVE_FOOTER_RE.search(line):
+            if _INTERACTIVE_FOOTER_NORM in _normalize(line):
                 continue
             display_line = line
             break

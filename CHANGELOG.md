@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.1] — 2026-05-19
+
+### Corrigido
+- **Picker do Claude aparecia como "Ocioso" em vez de "Aguardando"**
+  (`claude_activity.py`): o TUI emite o footer
+  `Enter to select · ↑/↓ to navigate · Esc to cancel` usando cursor
+  positioning absoluto entre palavras, e `strip_ansi` remove os
+  escapes sem reinserir espaços, resultando em
+  `Entertoselect·↑/↓tonavigate·Esctocancel`. A detecção que dependia
+  da regex literal `"enter to select"` falhava, e o mesmo acontecia
+  com o permission prompt `"Do you want..."`. `_has_decision_prompt`
+  agora normaliza as linhas (lowercase + remove não-alfanuméricos)
+  antes de comparar, casando ambas as formas.
+
 ## [0.24.0] — 2026-05-19
 
 ### Adicionado
