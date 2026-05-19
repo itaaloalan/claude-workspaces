@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.6] — 2026-05-19
+
+### Corrigido
+- **Popup do banner sumia rápido mesmo com urgency=critical**
+  (`services/desktop_notifier.py`, `ui/main_window.py`): KDE Plasma 6
+  trata `expire_timeout=0` como "fica no histórico pra sempre" mas o
+  popup ainda obedece o setting global "Show pop-ups for X seconds"
+  (~6s default). Mudei o inbox alert pra usar `timeout_ms=300000`
+  (5min) — força o popup a ficar visível enquanto isso. Também
+  passamos a hint `desktop-entry='claude-workspaces'` pro Plasma
+  reconhecer o app em System Settings → Notifications → Applications
+  (permite override per-app).
+
 ## [0.24.5] — 2026-05-19
 
 ### Adicionado

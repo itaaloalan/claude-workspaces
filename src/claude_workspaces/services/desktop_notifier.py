@@ -126,12 +126,16 @@ class DesktopNotifier(QObject):
         timeout_ms: int = 6000,
         replaces_id: int = 0,
         urgency: int = 1,
+        desktop_entry: str | None = None,
     ) -> int | None:
         """Dispara notificação. Retorna o id (int) ou None em falha.
 
         `urgency`: 0=low, 1=normal (default), 2=critical. Critical é
         sticky por padrão em GNOME/KDE — útil pra alertas de
         atenção que não devem sumir sem o usuário interagir.
+        `desktop_entry`: nome do .desktop file (sem .desktop) — permite
+        ao servidor (ex: KDE Plasma) achar configurações per-app no
+        System Settings → Notifications → Applications.
         """
         if not self.available:
             return None
@@ -145,11 +149,15 @@ class DesktopNotifier(QObject):
         # Hints D-Bus: urgency é byte; gdbus aceita literais GVariant tipo
         # `{"urgency": <byte 2>}`. Mantém vazio quando urgency=normal pra
         # não tomar decisão pelo servidor desnecessariamente.
+        hint_parts: list[str] = []
         if urgency != 1:
             urgency_byte = max(0, min(2, int(urgency)))
-            hints_arg = "{'urgency': <byte " + str(urgency_byte) + ">}"
-        else:
-            hints_arg = "{}"
+            hint_parts.append("'urgency': <byte " + str(urgency_byte) + ">")
+        if desktop_entry:
+            # Escapa aspas simples pro literal GVariant
+            safe = desktop_entry.replace("'", "\\'")
+            hint_parts.append("'desktop-entry': <'" + safe + "'>")
+        hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
         try:
             proc = subprocess.run(
                 [
