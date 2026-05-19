@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.26.3] — 2026-05-19
+
+### Corrigido
+- **Painel não mostra mais o fallback USD durante cooldown da API**
+  (`main_window.py::_refresh_plan_usage_status`): o fallback estimado
+  por preços públicos da API é tão impreciso pra Max 5x que mostrava
+  números absurdos (caso real: 100% no painel logo após o reset da
+  sessão, quando claude.ai mostrava 0%). Agora, quando a API está em
+  cooldown explícito (HTTP 429 com `Retry-After`), o painel troca os
+  3 %s por "API em cooldown · retry em Xmin · clique ⟳ depois disso
+  pra sincronizar" — informação honesta vale mais que estimativa
+  errada. Quando a API responde, os números voltam normalmente.
+
 ## [0.26.2] — 2026-05-19
 
 ### Adicionado

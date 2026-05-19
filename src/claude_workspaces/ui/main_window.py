@@ -2764,6 +2764,34 @@ class MainWindow(QMainWindow):
                 _set_container_visible(True)
                 return
 
+        # API falhou. Se estamos em cooldown explícito (rate limit), o
+        # fallback USD-baseado dá valores muito errados (caso real:
+        # claude.ai 34%, fallback 100%) — melhor mostrar só o aviso de
+        # cooldown e deixar o usuário aguardar/clicar no refresh
+        # depois do retry-after, em vez de mentir com % estimado.
+        cooldown_now = cooldown_remaining_seconds()
+        if cooldown_now > 0:
+            mins = max(1, cooldown_now // 60)
+            label.setText(
+                f"<span style='color: {theme.TEXT_FAINT};'>"
+                f"Uso do plano:</span> "
+                f"<span style='color: {theme.WARNING};'>"
+                f"API em cooldown</span>"
+                f"<br><span style='color: {theme.TEXT_DISABLED}; "
+                f"font-size: 10px;'>retry em {mins}min · clique ⟳ depois "
+                f"disso pra sincronizar</span>"
+            )
+            label.setToolTip(
+                "/api/oauth/usage está rate-limited.\n"
+                f"Próxima tentativa permitida em {mins} minutos "
+                "(servidor manda Retry-After).\n"
+                "Os números do fallback USD-baseado são imprecisos pra "
+                "Max 5x (não há mapeamento público token→cota), por isso "
+                "estão ocultos até a API responder."
+            )
+            _set_container_visible(True)
+            return
+
         # --- 2. Fallback: cálculo USD-baseado a partir dos JSONLs ---
         try:
             usage = recent_plan_usage(5 * 3600)
