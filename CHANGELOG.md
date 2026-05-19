@@ -6,6 +6,44 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.20.0] — 2026-05-18
+
+### Performance
+- **`git status` em 1 subprocess em vez de 4–5** (`git_status.py`):
+  consolidado em `git status --porcelain=v2 --branch -z`, que devolve
+  branch, ahead/behind e arquivos numa só chamada. Antes rodava
+  `rev-parse --show-toplevel` + `rev-parse --abbrev-ref HEAD` +
+  `rev-list --left-right --count` + `status --porcelain=v1` por pasta.
+  Em workspaces com 10 pastas, reduz de ~50 forks de `git` por refresh
+  pra 10. Parser dedicado de v2 (`_parse_porcelain_v2`) lida com
+  records `1`/`2`/`?`/`u` e detached HEAD via `branch.oid`.
+- **Diff de arquivo untracked grande não trava mais a UI**
+  (`git_status.get_diff`): preview limitado a 512 KiB (`MAX_DIFF_BYTES`).
+  Acima disso, mostra header + 512 KiB com prefixo `+`, em vez de
+  carregar megabytes inteiros no `QPlainTextEdit`.
+- **Highlight de diff via `QSyntaxHighlighter`** (`ui/git_panel.py`):
+  antes um loop manual reformatava cada `QTextBlock` no `setPlainText`.
+  Agora o Qt aplica formato apenas aos blocos afetados, virtualizado.
+  Trocar de arquivo em diffs grandes ficou perceptivelmente mais
+  responsivo.
+- **Refresh do git panel pula rebuild quando estado não mudou**
+  (`ui/git_panel.py`): cada `refresh()` agora calcula um fingerprint
+  imutável do estado dos repos (branch, ahead/behind, lista de arquivos)
+  e — se idêntico ao anterior e a árvore já existe — sai sem destruir e
+  reconstruir os `QTreeWidgetItem`. Preserva scroll/seleção durante os
+  polls de 30s quando nada mudou.
+- **Cache de `git ls-files` no quick open** (`services/quick_open.py`):
+  TTL de 5s por pasta. Antes cada keystroke disparava um subprocess
+  `git ls-files` por pasta — com 5 pastas × 10 keystrokes eram 50 forks
+  por busca. Agora a maioria dos keystrokes consecutivos reusa o
+  resultado cacheado.
+- **File finder roda busca em `QThreadPool`** (`ui/file_finder.py`):
+  o walk (incluindo `git ls-files`/`fd`/fallback Python) saiu da thread
+  de UI pra um `QRunnable`. Epoch counter descarta resultados obsoletos
+  quando o usuário continua digitando. Cache de índice por folder
+  (TTL 30s) elimina re-listagem entre keystrokes. Em repos com 10k+
+  arquivos, primeiro keystroke deixa de bloquear a UI por ~1s.
+
 ## [0.19.2] — 2026-05-18
 
 ### Corrigido

@@ -2,7 +2,16 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QBrush, QClipboard, QColor, QFont, QGuiApplication
+from PySide6.QtGui import (
+    QAction,
+    QBrush,
+    QClipboard,
+    QColor,
+    QFont,
+    QGuiApplication,
+    QSyntaxHighlighter,
+    QTextCharFormat,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -60,6 +69,59 @@ T_FILE = "file"
 T_REPO = "repo"
 
 
+def _fingerprint_statuses(statuses: dict[str, GitStatus]) -> tuple:
+    """Tupla hashável que captura o estado visível dos repos no painel.
+    Usado pra pular rebuild da árvore quando o poll dispara sem mudanças."""
+    return tuple(
+        (
+            folder,
+            st.is_repo,
+            st.branch,
+            st.ahead,
+            st.behind,
+            st.error,
+            tuple((f.status, f.path) for f in st.files),
+        )
+        for folder, st in statuses.items()
+    )
+
+
+class _DiffHighlighter(QSyntaxHighlighter):
+    """Highlighter de diff unified — só aplica formato à linha visível
+    via Qt (re-highlight incremental do framework). Substitui o loop
+    manual O(n) que rodava em todas as QTextBlock a cada troca de
+    arquivo."""
+
+    def __init__(self, document) -> None:
+        super().__init__(document)
+        self.plus = QTextCharFormat()
+        self.plus.setForeground(QColor("#5ac35a"))
+        self.minus = QTextCharFormat()
+        self.minus.setForeground(QColor("#d57272"))
+        self.header = QTextCharFormat()
+        self.header.setForeground(QColor("#7aa6e6"))
+
+    def highlightBlock(self, text: str) -> None:
+        if not text:
+            return
+        # Headers de hunk/file primeiro (prefixos de 2-4 chars) — antes do +/-
+        # pra "+++" / "---" não cair no caso single-char.
+        if (
+            text.startswith("+++")
+            or text.startswith("---")
+            or text.startswith("@@")
+            or text.startswith("diff ")
+            or text.startswith("index ")
+        ):
+            self.setFormat(0, len(text), self.header)
+            return
+        c = text[0]
+        if c == "+":
+            self.setFormat(0, len(text), self.plus)
+        elif c == "-":
+            self.setFormat(0, len(text), self.minus)
+
+
 class GitPanel(QWidget):
     """Painel estilo IntelliJ Commit:
     - QTreeWidget agrupado por repo, com sub-grupos "Changes" e "Unversioned"
@@ -79,6 +141,7 @@ class GitPanel(QWidget):
         super().__init__(parent)
         self.workspace: Workspace | None = None
         self._statuses: dict[str, GitStatus] = {}
+        self._status_fingerprint: tuple = ()
         self._has_any_repo: bool = False
         self._diff_visible: bool = False
 
@@ -136,6 +199,7 @@ class GitPanel(QWidget):
             "}"
         )
         self._diff.setVisible(False)
+        self._diff_highlighter = _DiffHighlighter(self._diff.document())
         split.addWidget(self._diff)
         split.setSizes([400, 0])
         self._tree_diff_split = split
@@ -253,9 +317,28 @@ class GitPanel(QWidget):
             self._collect_unchecked_files(repo_item, unchecked)
             prev_unchecked[folder] = unchecked
 
+        # Coleta primeiro, decide depois: se nada mudou desde o último
+        # refresh, evita rebuild da árvore (preserva scroll/seleção e zera
+        # custo de paint do QTreeWidget). Fingerprint = tuple imutável das
+        # infos visíveis por repo.
+        if not self.workspace or not self.workspace.folders:
+            new_statuses: dict[str, GitStatus] = {}
+        else:
+            new_statuses = {
+                folder: get_status(folder) for folder in self.workspace.folders
+            }
+
+        new_fp = _fingerprint_statuses(new_statuses)
+        if new_fp == self._status_fingerprint and self._tree.topLevelItemCount():
+            # Estado idêntico — só atualiza referência e sai. Evita rebuild
+            # da árvore inteira durante polls quando nada mudou no repo.
+            self._statuses = new_statuses
+            return
+
         self._tree.blockSignals(True)
         self._tree.clear()
-        self._statuses = {}
+        self._statuses = new_statuses
+        self._status_fingerprint = new_fp
 
         if not self.workspace or not self.workspace.folders:
             self._counter.setText("")
@@ -268,8 +351,7 @@ class GitPanel(QWidget):
         repo_folders: list[str] = []
         total_files = 0
         for folder in self.workspace.folders:
-            status = get_status(folder)
-            self._statuses[folder] = status
+            status = self._statuses[folder]
             if not status.is_repo:
                 continue
             repo_folders.append(folder)
@@ -454,45 +536,14 @@ class GitPanel(QWidget):
         folder = data["folder"]
         rel = data["rel_path"]
         text = get_diff(folder, rel, staged=data["is_staged"] and not data["is_unstaged"])
+        # setPlainText dispara o QSyntaxHighlighter automaticamente — Qt
+        # re-formata só os blocks afetados, sem precisar varrer o doc.
         self._diff.setPlainText(text)
-        self._highlight_diff_colors()
 
     def _on_double_click(self, item: QTreeWidgetItem, _col: int) -> None:
         data = item.data(0, Qt.ItemDataRole.UserRole) or {}
         if data.get("type") == T_FILE:
             self.open_file_requested.emit(data["path"])
-
-    def _highlight_diff_colors(self) -> None:
-        from PySide6.QtGui import QTextCharFormat, QTextCursor
-
-        cursor = self._diff.textCursor()
-        cursor.beginEditBlock()
-        plus = QTextCharFormat()
-        plus.setForeground(QColor("#5ac35a"))
-        minus = QTextCharFormat()
-        minus.setForeground(QColor("#d57272"))
-        header = QTextCharFormat()
-        header.setForeground(QColor("#7aa6e6"))
-        block = self._diff.document().firstBlock()
-        while block.isValid():
-            line = block.text()
-            cursor.setPosition(block.position())
-            cursor.setPosition(
-                block.position() + len(line), QTextCursor.MoveMode.KeepAnchor
-            )
-            if (
-                line.startswith("+++")
-                or line.startswith("---")
-                or line.startswith("@@")
-                or line.startswith("diff ")
-            ):
-                cursor.setCharFormat(header)
-            elif line.startswith("+"):
-                cursor.setCharFormat(plus)
-            elif line.startswith("-"):
-                cursor.setCharFormat(minus)
-            block = block.next()
-        cursor.endEditBlock()
 
     def _show_diff_for(self, item: QTreeWidgetItem) -> None:
         if not self._diff_visible:

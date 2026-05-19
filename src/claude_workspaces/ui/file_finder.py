@@ -1,14 +1,27 @@
 """Localizador de arquivos do workspace — busca fuzzy via `fd` (com
 fallback puro Python) e botões pra abrir no app default (xdg-open) ou
-no editor configurado."""
+no editor configurado.
+
+A busca roda num `QThreadPool` pra não bloquear a UI em repos grandes.
+Resultados antigos são descartados se o usuário continuou digitando
+(epoch counter)."""
 from __future__ import annotations
 
 import logging
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import (
+    QObject,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+)
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog,
@@ -26,6 +39,146 @@ log = logging.getLogger(__name__)
 
 _MAX_RESULTS = 200
 _DEBOUNCE_MS = 180
+_CACHE_TTL_S = 30.0
+
+# Cache simples por folder do resultado do `git ls-files` ou walk Python.
+# Vale a pena pois entre keystrokes consecutivos a árvore não muda.
+_index_cache: dict[str, tuple[float, list[Path]]] = {}
+
+
+def _index_folder(base: Path, fd: str | None) -> list[Path]:
+    """Devolve lista de arquivos do folder (cacheada). Tenta `git ls-files`
+    primeiro (respeita .gitignore, é rápido), cai pra `fd` ou walk."""
+    key = str(base)
+    now = time.monotonic()
+    hit = _index_cache.get(key)
+    if hit and (now - hit[0]) < _CACHE_TTL_S:
+        return hit[1]
+
+    paths: list[Path] = []
+    # 1. git ls-files — melhor: respeita .gitignore, evita lixo
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(base), "ls-files"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode == 0:
+            paths = [base / line for line in r.stdout.splitlines() if line]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    if not paths:
+        # 2. fallback: fd (rápido + respeita .gitignore) ou walk Python
+        if fd:
+            try:
+                r = subprocess.run(
+                    [fd, "--type", "f", "--max-results", "10000", ".", str(base)],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if r.returncode in (0, 1):
+                    paths = [Path(line) for line in r.stdout.splitlines() if line]
+            except subprocess.TimeoutExpired:
+                pass
+        if not paths:
+            paths = list(_walk(base))
+
+    _index_cache[key] = (now, paths)
+    return paths
+
+
+_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__",
+              "dist", "build", ".next", "target", ".mypy_cache",
+              ".pytest_cache", ".ruff_cache", ".tox"}
+
+
+def _walk(base: Path):
+    stack = [base]
+    while stack:
+        cur = stack.pop()
+        try:
+            entries = list(cur.iterdir())
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                if e.is_symlink():
+                    continue
+                if e.is_dir():
+                    if e.name in _SKIP_DIRS or e.name.startswith("."):
+                        continue
+                    stack.append(e)
+                elif e.is_file():
+                    yield e
+            except OSError:
+                continue
+
+
+def _filter(paths: list[Path], needle: str, limit: int) -> list[Path]:
+    out: list[Path] = []
+    for p in paths:
+        if needle in p.name.lower():
+            out.append(p)
+            if len(out) >= limit:
+                break
+    return out
+
+
+def _search(folders: list[str], query: str, limit: int) -> list[tuple[str, str]]:
+    """Procura arquivos cujo nome casa com `query` (case-insensitive).
+    Retorna lista de (abs_path, display) — display é "pasta/relativo"
+    quando há múltiplas pastas, senão só o relativo."""
+    fd = shutil.which("fd")
+    show_root = len(folders) > 1
+    needle = query.lower()
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for folder in folders:
+        base = Path(folder)
+        try:
+            indexed = _index_folder(base, fd)
+        except Exception:
+            log.debug("file_finder: index falhou em %s", folder, exc_info=True)
+            continue
+        for p in _filter(indexed, needle, limit):
+            ap = str(p)
+            if ap in seen:
+                continue
+            seen.add(ap)
+            try:
+                rel = str(p.relative_to(base))
+            except ValueError:
+                rel = ap
+            display = f"{base.name}/{rel}" if show_root else rel
+            out.append((ap, display))
+            if len(out) >= limit:
+                return out
+    return out
+
+
+class _SearchSignals(QObject):
+    done = Signal(int, list)  # epoch, results
+
+
+class _SearchTask(QRunnable):
+    def __init__(self, epoch: int, folders: list[str], query: str, limit: int):
+        super().__init__()
+        self.epoch = epoch
+        self.folders = folders
+        self.query = query
+        self.limit = limit
+        self.signals = _SearchSignals()
+
+    def run(self) -> None:
+        try:
+            res = _search(self.folders, self.query, self.limit)
+        except Exception:
+            log.exception("file_finder: busca falhou")
+            res = []
+        self.signals.done.emit(self.epoch, res)
 
 
 class FileFinder(QWidget):
@@ -42,6 +195,8 @@ class FileFinder(QWidget):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._run_search)
+        self._pool = QThreadPool.globalInstance()
+        self._epoch = 0  # incrementado a cada nova busca; resultados antigos são descartados
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -125,12 +280,22 @@ class FileFinder(QWidget):
 
     def _run_search(self) -> None:
         query = self._input.text().strip()
-        self._list.clear()
         if not query or not self._folders:
+            self._list.clear()
             self._status.setText("")
             self._update_buttons()
             return
-        results = _search(self._folders, query, limit=_MAX_RESULTS)
+        self._epoch += 1
+        self._status.setText("buscando…")
+        task = _SearchTask(self._epoch, list(self._folders), query, _MAX_RESULTS)
+        task.signals.done.connect(self._on_search_done)
+        self._pool.start(task)
+
+    def _on_search_done(self, epoch: int, results: list) -> None:
+        # Descarta resultado obsoleto: usuário já disparou outra busca
+        if epoch != self._epoch:
+            return
+        self._list.clear()
         for path, rel in results:
             item = QListWidgetItem(rel)
             item.setData(Qt.ItemDataRole.UserRole, path)
@@ -208,86 +373,10 @@ class FileFinderDialog(QDialog):
         self.accept()
 
 
-def _search(folders: list[str], query: str, limit: int) -> list[tuple[str, str]]:
-    """Procura arquivos cujo nome casa com `query` (case-insensitive).
-    Retorna lista de (abs_path, display) — display é "pasta/relativo"
-    quando há múltiplas pastas, senão só o relativo."""
-    fd = shutil.which("fd")
-    show_root = len(folders) > 1
-    out: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    for folder in folders:
-        base = Path(folder)
-        try:
-            paths = _fd_search(fd, base, query, limit) if fd else _py_search(base, query, limit)
-        except Exception:
-            log.debug("file_finder: busca falhou em %s", folder, exc_info=True)
-            paths = []
-        for p in paths:
-            ap = str(p)
-            if ap in seen:
-                continue
-            seen.add(ap)
-            try:
-                rel = str(p.relative_to(base))
-            except ValueError:
-                rel = ap
-            display = f"{base.name}/{rel}" if show_root else rel
-            out.append((ap, display))
-            if len(out) >= limit:
-                return out
-    return out
-
-
-def _fd_search(fd: str, base: Path, query: str, limit: int) -> list[Path]:
-    # `fd` já ignora .gitignore e arquivos ocultos por padrão.
-    cmd = [
-        fd,
-        "--type", "f",
-        "--max-results", str(limit),
-        "--ignore-case",
-        query,
-        str(base),
-    ]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-    except subprocess.TimeoutExpired:
-        return []
-    if proc.returncode not in (0, 1):
-        return []
-    return [Path(line) for line in proc.stdout.splitlines() if line]
-
-
-_SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__",
-              "dist", "build", ".next", "target", ".mypy_cache",
-              ".pytest_cache", ".ruff_cache", ".tox"}
-
-
-def _py_search(base: Path, query: str, limit: int) -> list[Path]:
-    needle = query.lower()
-    out: list[Path] = []
-    for path in _walk(base):
-        if needle in path.name.lower():
-            out.append(path)
-            if len(out) >= limit:
-                break
-    return out
-
-
-def _walk(base: Path):
-    stack = [base]
-    while stack:
-        cur = stack.pop()
-        try:
-            entries = list(cur.iterdir())
-        except OSError:
-            continue
-        for e in entries:
-            if e.is_symlink():
-                continue
-            if e.is_dir():
-                if e.name in _SKIP_DIRS or e.name.startswith("."):
-                    continue
-                stack.append(e)
-            elif e.is_file():
-                yield e
+def invalidate_cache(folder: str | None = None) -> None:
+    """Limpa o cache de índices. Use após operações que alteram a árvore
+    (ex.: criar/mover arquivo conhecido)."""
+    if folder is None:
+        _index_cache.clear()
+    else:
+        _index_cache.pop(folder, None)
