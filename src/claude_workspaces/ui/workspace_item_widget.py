@@ -7,7 +7,9 @@ nome + indicador de "rodando" (bolinha verde + badge de count) + botões:
   workspace; o badge `×N` aparece a partir de 2.
 - `＋` abre um Claude novo no workspace (mesma ação de "Abrir Claude" /
   do botão "Abrir Claude" no detalhe / atalho).
-- `▾`/`▸` colapsa/expande os filhos do workspace (consoles em execução).
+- `⌄`/`›` colapsa/expande os filhos do workspace (consoles em execução).
+  Chevrons foram escolhidos no lugar de `▾`/`▸` porque o triângulo
+  apontado pra direita parecia botão de play.
 """
 
 from __future__ import annotations
@@ -118,7 +120,7 @@ class WorkspaceItemWidget(QWidget):
         self._add_btn.clicked.connect(on_add_claude)
         row.addWidget(self._add_btn)
 
-        self._collapse_btn = QPushButton("▾")
+        self._collapse_btn = QPushButton("⌄")
         self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._collapse_btn.setFixedSize(22, 22)
         self._collapse_btn.setToolTip("Recolher / expandir os consoles deste workspace")
@@ -145,5 +147,6 @@ class WorkspaceItemWidget(QWidget):
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do botão de colapsar pra refletir o estado
-        atual do tree item (▸ recolhido, ▾ expandido)."""
-        self._collapse_btn.setText("▸" if collapsed else "▾")
+        atual do tree item (› recolhido, ⌄ expandido). Chevrons em vez
+        de triângulos pra não parecerem botão de play."""
+        self._collapse_btn.setText("›" if collapsed else "⌄")

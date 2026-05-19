@@ -6,6 +6,28 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.29.0] — 2026-05-19
+
+### Adicionado
+- **Estado colapsado da sidebar persiste entre sessões**
+  (`settings.py`, `ui/main_window.py`,
+  `ui/workspace_item_widget.py`, `ui/runner_group_widget.py`): o app
+  agora salva, por workspace, se o próprio workspace está recolhido e
+  se o submenu "Runners workspace" está recolhido. Antes, tudo voltava
+  expandido ao reabrir o app — desperdiçava espaço pra quem trabalha
+  com muitos workspaces. Persistência em
+  `~/.config/claude-workspaces/settings.json` (campos novos
+  `workspace_collapsed`, `runner_group_collapsed`). Runner groups de
+  console não são persistidos porque o `tab_id` não é estável entre
+  sessões.
+
+### Alterado
+- **Ícone de colapsar trocado de triângulo pra chevron**
+  (`ui/workspace_item_widget.py`, `ui/runner_group_widget.py`): `▾`/`▸`
+  viraram `⌄`/`›`. O triângulo apontado pra direita estava ficando muito
+  parecido com o botão de play (▶) dos runners na mesma linha — gerava
+  confusão visual.
+
 ## [0.28.1] — 2026-05-19
 
 ### Corrigido

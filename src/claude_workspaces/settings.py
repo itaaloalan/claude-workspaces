@@ -33,6 +33,10 @@ class Settings:
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
     # Dock direito (Tarefas + Git + Skills colapsáveis)
     right_dock_collapsed: dict = field(default_factory=dict)  # {panel_id: bool}
+    # Estado colapsado dos workspaces na sidebar (persistente entre sessões).
+    workspace_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
+    # Estado colapsado do submenu "Runners workspace" por workspace.
+    runner_group_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Defaults pro LaunchClaudeDialog
     default_isolate_worktree: bool = False
     default_create_new_branch: bool = True
