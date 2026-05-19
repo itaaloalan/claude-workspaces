@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.26.1] — 2026-05-19
+
+### Corrigido
+- **`plan_usage_api` agora respeita `Retry-After` em 429**
+  (`plan_usage_api.py`): em vez de retentar a cada 60s, o cache
+  negativo passa a durar exatamente o que a Anthropic pediu (até
+  3600s). Sem isso, qualquer retry durante o bloqueio só reinicia o
+  contador. User-Agent ajustado pra `claude-code/2.1.144` (imita a CLI
+  oficial — UA desconhecido recebia 429 mais agressivo). Tooltip do
+  painel agora mostra "API em cooldown (Xmin restantes)" quando o
+  fallback USD-baseado está sendo usado por rate-limit, deixando claro
+  por que os números divergem do claude.ai temporariamente.
+
 ## [0.26.0] — 2026-05-19
 
 ### Adicionado

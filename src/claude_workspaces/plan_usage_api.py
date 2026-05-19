@@ -49,6 +49,15 @@ _cache: PlanUsageSnapshot | None = None
 _cache_negative_until: float = 0.0
 
 
+def cooldown_remaining_seconds() -> int:
+    """Quantos segundos até o próximo retry permitido (>0 indica que a
+    última chamada falhou e estamos em backoff)."""
+    if _cache_negative_until <= 0:
+        return 0
+    remaining = _cache_negative_until - time.monotonic()
+    return max(0, int(remaining))
+
+
 def _read_oauth_token() -> str | None:
     """Lê o accessToken do `~/.claude/.credentials.json`. Retorna None
     se o arquivo não existe, está malformado, ou não tem token."""
@@ -117,16 +126,38 @@ def fetch_plan_usage(force: bool = False) -> PlanUsageSnapshot | None:
     req = urllib.request.Request(
         USAGE_URL,
         headers={
+            # User-Agent precisa imitar a CLI oficial — o endpoint é
+            # rate-limitado por UA/IP, e UAs desconhecidos podem
+            # receber 429 mais agressivo.
             "Authorization": f"Bearer {token}",
             "anthropic-beta": "oauth-2025-04-20",
-            "User-Agent": "claude-cli (claude-workspaces)",
+            "anthropic-version": "2023-06-01",
+            "User-Agent": "claude-code/2.1.144",
             "Accept": "application/json",
         },
     )
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
             body = resp.read().decode("utf-8", errors="replace")
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as exc:
+    except urllib.error.HTTPError as exc:
+        # Em 429, o servidor manda `Retry-After` (segundos). Respeitar
+        # esse valor é importante — Anthropic devolve até 3600s, e
+        # ignorar e retentar a cada 60s só prolonga o bloqueio.
+        retry_after = 0
+        try:
+            ra = exc.headers.get("Retry-After") if exc.headers else None
+            if ra:
+                retry_after = int(ra)
+        except (TypeError, ValueError):
+            retry_after = 0
+        wait = max(retry_after, int(CACHE_TTL_SECONDS))
+        log.debug(
+            "falha em /api/oauth/usage: HTTP %s (retry-after %ss)",
+            exc.code, retry_after or "?",
+        )
+        _cache_negative_until = now + wait
+        return _cache
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         log.debug("falha em /api/oauth/usage: %s", exc)
         _cache_negative_until = now + CACHE_TTL_SECONDS
         return _cache

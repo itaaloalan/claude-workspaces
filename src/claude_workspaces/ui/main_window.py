@@ -2627,7 +2627,7 @@ class MainWindow(QMainWindow):
         pro cálculo USD-baseado a partir dos JSONLs locais."""
         from datetime import datetime, timedelta, timezone
 
-        from ..plan_usage_api import fetch_plan_usage
+        from ..plan_usage_api import cooldown_remaining_seconds, fetch_plan_usage
         from ..usage_telemetry import recent_plan_usage, weekly_plan_usage
 
         label = getattr(self, "_context_status_label", None)
@@ -2802,9 +2802,18 @@ class MainWindow(QMainWindow):
             f"{sonnet_pct:.0f}%</span>"
         )
 
+        cooldown = cooldown_remaining_seconds()
+        cooldown_note = ""
+        if cooldown > 0:
+            mins = cooldown // 60
+            cooldown_note = (
+                f"\nAPI /api/oauth/usage em cooldown ({mins}min restantes — "
+                f"rate-limited). Reabra após esse tempo pra ver os % reais."
+            )
         label.setText("<br>".join(lines))
         label.setToolTip(
-            "Plan usage limits (fallback USD-baseado — API indisponível)\n"
+            "Plan usage limits (fallback USD-baseado — API indisponível)"
+            + cooldown_note + "\n"
             f"Sessão 5h: ${usage.cost_usd:.2f} / ${self.settings.plan_usd_limit_5h:.0f}"
             f"  →  {sess_pct:.0f}%"
             + (
