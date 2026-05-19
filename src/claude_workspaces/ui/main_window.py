@@ -36,6 +36,7 @@ from ..launchers import (
 from ..logging_utils import log_exceptions
 from ..models import Workspace
 from ..repo_status_poller import RepoStatusPoller
+from ..hook_manager import refresh_installed_hook
 from ..services.desktop_notifier import DesktopNotifier
 from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
@@ -174,6 +175,9 @@ class MainWindow(QMainWindow):
         # proativamente quando o tab sai do inbox (voltou a trabalhar /
         # terminou / usuário clicou na aba), evitando banner stale.
         self._active_notifications: dict[int, int] = {}
+        # Mantém o notify-hook.py instalado em sincronia com o packaged
+        # (ex: versão com botão "Abrir console" via D-Bus).
+        refresh_installed_hook()
         self._init_desktop_notifier()
         self.terminals_coord.set_reminder_interval(
             self.settings.notify_reminder_seconds,
@@ -2003,6 +2007,11 @@ class MainWindow(QMainWindow):
         )
         if notifier.available and notifier.supports_actions:
             self._desktop_notifier = notifier
+            # Escuta ações disparadas em QUALQUER notificação D-Bus (inclusive
+            # as emitidas pelo notify-hook.py rodando em subprocess do Claude
+            # Code). Filtramos por prefixo `open-console:` pra não colidir
+            # com as actions internas do inbox alert ("open"/"snooze5"/"seen").
+            notifier.action_invoked.connect(self._on_global_dbus_action)
             log.info("Notificador D-Bus com ações ativo (caps=%s)", notifier.capabilities)
         else:
             self._desktop_notifier = None
@@ -2089,6 +2098,49 @@ class MainWindow(QMainWindow):
             self.terminals_coord.dismiss_inbox(tab_id)
         else:
             log.debug("Ação de notificação desconhecida: %s", key)
+
+    def _on_global_dbus_action(self, note_id: int, key: str) -> None:
+        """Recebe ActionInvoked de qualquer notificação no bus.
+
+        O notify-hook.py (Stop hook do Claude Code) emite ações com chave
+        `open-console:<session_id>`. Como o hook é subprocess separado, o
+        DesktopNotifier do app não registra o note_id em `_pending` —
+        usamos o sinal global pra interceptar. As actions do inbox alert
+        (chaves "open"/"snooze5"/"seen") já são tratadas pelo on_action
+        por-nota, então ignoramos elas aqui.
+        """
+        if not isinstance(key, str) or not key.startswith("open-console:"):
+            return
+        session_id = key.split(":", 1)[1].strip()
+        if not session_id:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            return
+        if not self._focus_terminal_by_session_id(session_id):
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+    def _focus_terminal_by_session_id(self, session_id: str) -> bool:
+        """Procura o TerminalWidget com `claimed_session_id == session_id`
+        e foca o workspace + aba correspondentes. Retorna True se achou."""
+        for workspace_id, area in self.terminals_coord._areas.items():
+            for i in range(area.tabs.count()):
+                w = area.tabs.widget(i)
+                if not isinstance(w, TerminalWidget):
+                    continue
+                if w.claimed_session_id() == session_id:
+                    ws_item = self._find_workspace_item(workspace_id)
+                    if ws_item is not None:
+                        self.list_widget.setCurrentItem(ws_item)
+                    area.tabs.setCurrentIndex(i)
+                    self.terminal_host.setCurrentWidget(area)
+                    self.show()
+                    self.raise_()
+                    self.activateWindow()
+                    return True
+        return False
 
     def _on_inbox_entry_removed(self, tab_id: int) -> None:
         """Tab saiu do inbox (voltou a trabalhar, terminou, foi focado).

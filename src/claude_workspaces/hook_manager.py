@@ -62,6 +62,36 @@ def is_hook_installed() -> bool:
     return False
 
 
+def refresh_installed_hook() -> bool:
+    """Re-copia o script packaged sobre o instalado se eles diferirem.
+
+    Why: o hook é copiado pro ~/.config no install_hook(); quando o app é
+    atualizado e o script mudou (ex: ganhou ações D-Bus), o instalado fica
+    desatualizado até o usuário toggleeer a opção. Esta função é chamada no
+    startup pra manter o script em sincronia sem exigir reinstalação manual.
+    """
+    if not is_hook_installed():
+        return False
+    try:
+        src = _package_hook_script()
+    except FileNotFoundError:
+        return False
+    dst = installed_hook_script()
+    try:
+        if dst.exists() and dst.read_bytes() == src.read_bytes():
+            return False
+    except OSError:
+        pass
+    try:
+        shutil.copy(src, dst)
+        dst.chmod(0o755)
+        log.info("Hook atualizado em %s", dst)
+        return True
+    except OSError:
+        log.warning("Falha ao atualizar hook em %s", dst, exc_info=True)
+        return False
+
+
 def install_hook() -> Path:
     """Copia o script pra ~/.config/claude-workspaces/ e adiciona o hook
     Stop em ~/.claude/settings.json."""

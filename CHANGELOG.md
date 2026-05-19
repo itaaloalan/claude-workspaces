@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.23.0] — 2026-05-19
+
+### Adicionado
+- **Botão "Abrir console" nas notificações do hook Stop**
+  (`packaging/notify-hook.py`, `ui/main_window.py`,
+  `services/desktop_notifier.py`): o `notify-hook.py` passou a emitir a
+  notificação via `gdbus call ... .Notify` com a ação
+  `open-console:<session_id>`, em vez do `notify-send` plano. O
+  `MainWindow` escuta o sinal D-Bus `ActionInvoked` globalmente e, ao
+  receber essa chave, encontra o `TerminalWidget` com
+  `claimed_session_id` correspondente e foca o workspace + aba dentro
+  do app. Fallback automático pra `notify-send` quando `gdbus` ou o
+  servidor de notificações não suportam ações.
+- **Auto-refresh do hook instalado** (`hook_manager.py`,
+  `ui/main_window.py`): nova função `refresh_installed_hook()` é
+  chamada no startup e re-copia o `notify-hook.py` packaged sobre o
+  instalado em `~/.config/claude-workspaces/` quando difere do source.
+  Evita ter que toggleear Remover/Ativar notificações manualmente pra
+  pegar updates do script após um upgrade da app.
+
 ## [0.22.0] — 2026-05-19
 
 ### Adicionado
