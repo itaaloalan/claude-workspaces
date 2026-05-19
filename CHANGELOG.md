@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.4] — 2026-05-19
+
+### Corrigido
+- **Notificação nativa sumia rápido demais**
+  (`services/desktop_notifier.py`, `ui/main_window.py`): o alerta de
+  inbox usava `timeout_ms=8000` sem `urgency`, então em alguns
+  ambientes o banner sumia antes do usuário ver. Adicionei
+  parâmetro `urgency` em `DesktopNotifier.notify` (mapeia pra hint
+  D-Bus padrão) e o alerta de inbox agora dispara com `urgency=2`
+  (critical) + `timeout_ms=0` (não expira). GNOME/KDE mantêm
+  notificações critical sticky até interação do usuário.
+
 ## [0.24.3] — 2026-05-19
 
 ### Corrigido

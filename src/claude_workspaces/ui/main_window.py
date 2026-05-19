@@ -2079,14 +2079,19 @@ class MainWindow(QMainWindow):
             # passa replaces_id pro servidor substituir no lugar em vez de
             # empilhar um segundo banner.
             prev_nid = self._active_notifications.get(tab_id, 0)
+            # urgency=2 (critical) + timeout_ms=0 (não expira): inbox alert
+            # é "Claude precisa de você" — sumir sozinho em 8s fazia o user
+            # perder o aviso quando estava com a tela em outra coisa.
+            # GNOME/KDE mantêm critical sticky até interação.
             nid = self._desktop_notifier.notify(
                 title=title,
                 body=body,
                 actions=actions,
                 on_action=lambda key, _tid=tab_id, _wid=workspace_id:
                     self._handle_notification_action(_tid, _wid, key),
-                timeout_ms=8000,
+                timeout_ms=0,
                 replaces_id=prev_nid,
+                urgency=2,
             )
             if nid is not None:
                 self._active_notifications[tab_id] = nid

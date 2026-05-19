@@ -125,8 +125,14 @@ class DesktopNotifier(QObject):
         icon: str = "",
         timeout_ms: int = 6000,
         replaces_id: int = 0,
+        urgency: int = 1,
     ) -> int | None:
-        """Dispara notificação. Retorna o id (int) ou None em falha."""
+        """Dispara notificação. Retorna o id (int) ou None em falha.
+
+        `urgency`: 0=low, 1=normal (default), 2=critical. Critical é
+        sticky por padrão em GNOME/KDE — útil pra alertas de
+        atenção que não devem sumir sem o usuário interagir.
+        """
         if not self.available:
             return None
         actions = actions or []
@@ -136,6 +142,14 @@ class DesktopNotifier(QObject):
         # gdbus aceita arrays/dicts em formato GVariant via JSON-ish.
         # Usamos json.dumps pra escapar strings com segurança.
         actions_arg = json.dumps(action_list)
+        # Hints D-Bus: urgency é byte; gdbus aceita literais GVariant tipo
+        # `{"urgency": <byte 2>}`. Mantém vazio quando urgency=normal pra
+        # não tomar decisão pelo servidor desnecessariamente.
+        if urgency != 1:
+            urgency_byte = max(0, min(2, int(urgency)))
+            hints_arg = "{'urgency': <byte " + str(urgency_byte) + ">}"
+        else:
+            hints_arg = "{}"
         try:
             proc = subprocess.run(
                 [
@@ -150,7 +164,7 @@ class DesktopNotifier(QObject):
                     title,
                     body,
                     actions_arg,
-                    "{}",
+                    hints_arg,
                     str(int(timeout_ms)),
                 ],
                 capture_output=True, text=True, timeout=3,
