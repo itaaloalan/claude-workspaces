@@ -6,6 +6,30 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.0] — 2026-05-19
+
+### Adicionado
+- **Cronômetro de ociosidade na sidebar**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`): o label
+  "Ocioso" agora é renderizado em vermelho (`theme.DANGER`) e exibe o
+  tempo decorrido desde a última atividade — `Ocioso · 45s`,
+  `Ocioso · 2m 30s`, `Ocioso · 1h 05m`. Um `QTimer` de 1s no
+  `MainWindow` chama `tick_idle()` em cada `TerminalChildWidget`, que
+  só atualiza se estiver em `STATE_IDLE`. Cronômetro reseta a cada
+  transição de estado (entrar de novo em idle recomeça do zero).
+
+## [0.23.1] — 2026-05-19
+
+### Corrigido
+- **Botão `+` no workspace não trocava o projeto selecionado**
+  (`ui/main_window.py`): ao clicar `+` num workspace diferente do
+  atualmente selecionado na sidebar, o console novo era aberto, mas
+  o painel de detalhes (à direita) e `_current_workspace()` continuavam
+  apontando pro projeto anterior. Agora o handler `on_add` em
+  `_install_workspace_item_widget` chama
+  `list_widget.setCurrentItem(item)` antes de `_launch_claude_for`,
+  garantindo que o workspace alvo do `+` vire o ativo.
+
 ## [0.23.0] — 2026-05-19
 
 ### Adicionado

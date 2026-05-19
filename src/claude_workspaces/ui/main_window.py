@@ -195,6 +195,15 @@ class MainWindow(QMainWindow):
         self._repo_poll_timer.timeout.connect(self._refresh_terminal_git_info)
         self._repo_poll_timer.start()
 
+        # Tick de 1s pra atualizar o cronômetro "Ocioso · 2m 30s" na
+        # sidebar. Sempre ativo — o cost de iterar pelos tree_items uma
+        # vez por segundo é desprezível e simplifica a lógica (não
+        # precisa start/stop conforme transições de estado).
+        self._idle_tick_timer = QTimer(self)
+        self._idle_tick_timer.setInterval(1_000)
+        self._idle_tick_timer.timeout.connect(self._on_idle_tick)
+        self._idle_tick_timer.start()
+
         self._restore_geometry()
         self.refresh_list()
         # Plugin host depende do PluginsView e do GitPanel (ambos só existem
@@ -1193,6 +1202,10 @@ class MainWindow(QMainWindow):
         from .workspace_item_widget import WorkspaceItemWidget
 
         def on_add() -> None:
+            # Garante que o workspace alvo do + vire o selecionado — sem
+            # isso, o painel de detalhes/abas continua no projeto antigo
+            # mesmo com o console novo sendo aberto neste workspace.
+            self.list_widget.setCurrentItem(item)
             self._launch_claude_for(ws, "", "")
 
         def on_toggle() -> None:
@@ -1937,6 +1950,15 @@ class MainWindow(QMainWindow):
         for tab_id, (status, working, title) in list(self.terminals_coord.state.activity.items()):
             if working:
                 self._update_terminal_child(tab_id, title, status, True, True)
+
+    def _on_idle_tick(self) -> None:
+        """Tick de 1s — pede a cada TerminalChildWidget que reescreva seu
+        label de estado, atualizando o cronômetro de ociosidade. Widgets
+        que não estão idle ignoram a chamada."""
+        for item in self.terminals_coord.state.tree_items.values():
+            widget = self.list_widget.itemWidget(item, 0)
+            if isinstance(widget, TerminalChildWidget):
+                widget.tick_idle()
 
     def _on_settings_saved(self) -> None:
         """Re-aplica configs que afetam coordinators / tray ao salvar."""

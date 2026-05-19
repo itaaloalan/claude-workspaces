@@ -5,6 +5,7 @@ console do Claude rodando num workspace, no estilo IntelliJ:
             Trabalhando · última ação do Claude
 """
 
+import time
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt
@@ -36,7 +37,7 @@ STATE_LABEL = {
 STATE_COLOR = {
     STATE_WORKING: theme.WARNING,
     STATE_AWAITING: theme.WAITING,
-    STATE_IDLE: "#7a8a9a",
+    STATE_IDLE: theme.DANGER,
     STATE_DONE: theme.SUCCESS,
 }
 
@@ -119,6 +120,10 @@ class TerminalChildWidget(QWidget):
         self._current_state: str = STATE_IDLE
         self._continue_eligible: bool = False
         self._actions_user_visible: bool = True
+        # Timestamp em que entrou em STATE_IDLE — usado pra exibir
+        # "Ocioso · 2m 30s" na sidebar. Resetado a cada transição
+        # de estado; quando volta pra idle, recomeça do zero.
+        self._idle_since: float | None = None
 
         # Bloco de ações vai à direita da row, vertical-center alinhado
         # com a branch — mais coerente do que ficar grudado no título.
@@ -273,7 +278,14 @@ class TerminalChildWidget(QWidget):
             f"color: {STATE_COLOR[state]}; font-family: monospace;"
             f" font-size: {icon_size}px;"
         )
-        self._state_label.setText(STATE_LABEL[state])
+        # Entrou agora em idle? marca o instante pra começar a contar.
+        # Saiu de idle? zera. Reentrar em idle reinicia o cronômetro.
+        if state == STATE_IDLE:
+            if self._current_state != STATE_IDLE or self._idle_since is None:
+                self._idle_since = time.monotonic()
+        else:
+            self._idle_since = None
+        self._state_label.setText(self._compose_state_text(state))
         self._state_label.setStyleSheet(
             f"color: {STATE_COLOR[state]};"
             f" font-size: 10px; font-weight: 600;"
@@ -291,6 +303,22 @@ class TerminalChildWidget(QWidget):
         # em sessão restaurada+ociosa.
         self._current_state = state
         self._refresh_continue_visibility()
+
+    def _compose_state_text(self, state: str) -> str:
+        base = STATE_LABEL[state]
+        if state == STATE_IDLE and self._idle_since is not None:
+            elapsed = int(time.monotonic() - self._idle_since)
+            if elapsed >= 1:
+                return f"{base} · {_fmt_elapsed(elapsed)}"
+        return base
+
+    def tick_idle(self) -> None:
+        """Re-renderiza o label de estado quando ocioso pra atualizar o
+        cronômetro 'Ocioso · 2m 30s'. Chamado por um QTimer no MainWindow
+        a cada segundo enquanto houver consoles ociosos."""
+        if self._current_state != STATE_IDLE or self._idle_since is None:
+            return
+        self._state_label.setText(self._compose_state_text(STATE_IDLE))
 
     def set_action_callbacks(
         self,
@@ -440,6 +468,19 @@ def _shorten_model(model: str) -> str:
     if model.startswith("claude-"):
         return model[len("claude-"):]
     return model
+
+
+def _fmt_elapsed(seconds: int) -> str:
+    """Formata segundos como `45s`, `2m 30s`, `1h 05m` — compacto pra
+    caber na sidebar sem empurrar os outros labels da row."""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        m, s = divmod(seconds, 60)
+        return f"{m}m {s:02d}s"
+    h, rem = divmod(seconds, 3600)
+    m, _ = divmod(rem, 60)
+    return f"{h}h {m:02d}m"
 
 
 def _fmt_tokens(n: int) -> str:
