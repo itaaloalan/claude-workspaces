@@ -2088,15 +2088,24 @@ class MainWindow(QMainWindow):
             # X seconds" (~6s default). Passar 300000 explicitamente força
             # o popup a ficar visível por 5min. desktop_entry permite
             # configuração per-app em System Settings → Notifications.
+            # Quando "Não perturbe" está ativo no servidor (KDE/GNOME),
+            # rebaixa pra urgency=1 (normal) — critical bypassa DND por
+            # design do freedesktop, então o respeito ao DND é opt-in nosso.
+            if self._desktop_notifier.inhibited():
+                notify_urgency = 1
+                notify_timeout = 6000
+            else:
+                notify_urgency = 2
+                notify_timeout = 300000
             nid = self._desktop_notifier.notify(
                 title=title,
                 body=body,
                 actions=actions,
                 on_action=lambda key, _tid=tab_id, _wid=workspace_id:
                     self._handle_notification_action(_tid, _wid, key),
-                timeout_ms=300000,
+                timeout_ms=notify_timeout,
                 replaces_id=prev_nid,
-                urgency=2,
+                urgency=notify_urgency,
                 desktop_entry="claude-workspaces",
             )
             if nid is not None:

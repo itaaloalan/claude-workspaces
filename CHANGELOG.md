@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.9] — 2026-05-19
+
+### Corrigido
+- **Inbox alert respeita "Não perturbe"**
+  (`services/desktop_notifier.py`, `ui/main_window.py`): antes a
+  notificação ia sempre como `urgency=2` (critical), que bypassa DND
+  por design do freedesktop. Agora consultamos a property `Inhibited`
+  em `org.freedesktop.Notifications` via D-Bus e, quando DND está
+  ativo, rebaixamos pra `urgency=1` + timeout 6s. Fora do DND
+  segue critical/sticky de 5min como antes. Novo método
+  `DesktopNotifier.inhibited()`.
+
 ## [0.24.8] — 2026-05-19
 
 ### Adicionado

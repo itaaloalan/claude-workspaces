@@ -203,6 +203,35 @@ class DesktopNotifier(QObject):
             self._pending.pop(oldest, None)
         return note_id
 
+    def inhibited(self) -> bool:
+        """True se "Não perturbe" (DND) está ativo no servidor de notificações.
+
+        Lê a property `Inhibited` em `org.freedesktop.Notifications` via
+        `org.freedesktop.DBus.Properties.Get`. KDE Plasma 6 e GNOME Shell
+        expõem essa property quando o usuário ativa DND globalmente ou
+        algum app pediu `Inhibit`. Falha silenciosamente como False —
+        servidores antigos não expõem a property.
+        """
+        if not self.available:
+            return False
+        try:
+            proc = subprocess.run(
+                [
+                    self._gdbus_path or "gdbus", "call",
+                    "--session",
+                    "--dest", _BUS_SERVICE,
+                    "--object-path", _BUS_PATH,
+                    "--method", "org.freedesktop.DBus.Properties.Get",
+                    _BUS_IFACE, "Inhibited",
+                ],
+                capture_output=True, text=True, timeout=2,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return False
+        if proc.returncode != 0:
+            return False
+        return "true" in proc.stdout.lower()
+
     def close(self, note_id: int) -> None:
         if not self.available or note_id <= 0:
             return
