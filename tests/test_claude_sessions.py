@@ -27,6 +27,14 @@ def test_encode_project_path_simple():
     assert _encode_project_path("/home/user/proj") == "-home-user-proj"
 
 
+def test_encode_project_path_with_spaces_underscores_dots():
+    assert (
+        _encode_project_path("/home/italo/Projetos/SIPE Sistemas/ponto_python_antigo/api")
+        == "-home-italo-Projetos-SIPE-Sistemas-ponto-python-antigo-api"
+    )
+    assert _encode_project_path("/home/italo/.local/share/x") == "-home-italo--local-share-x"
+
+
 def test_project_sessions_dir_under_home():
     out = project_sessions_dir("/abs/path")
     assert ".claude/projects" in str(out)

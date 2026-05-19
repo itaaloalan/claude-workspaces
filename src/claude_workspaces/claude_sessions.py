@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,8 +39,13 @@ class ClaudeSession:
 
 
 def _encode_project_path(path: str) -> str:
-    """Claude Code armazena cada projeto em ~/.claude/projects/<path-com-/-trocada-por-->"""
-    return path.replace("/", "-")
+    """Claude Code armazena cada projeto em ~/.claude/projects/<path-sanitizado>.
+
+    O Claude Code troca qualquer caractere não-alfanumérico (`/`, espaço, `_`,
+    `.`, etc.) por `-`. Só preservar `/` -> `-` quebra projetos com espaços ou
+    underscores no caminho (ex: `/home/.../SIPE Sistemas/ponto_python_antigo`).
+    """
+    return re.sub(r"[^A-Za-z0-9-]", "-", path)
 
 
 def project_sessions_dir(project_path: str) -> Path:

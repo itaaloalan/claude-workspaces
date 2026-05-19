@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.2] — 2026-05-19
+
+### Corrigido
+- **Sessões recentes do Claude não apareciam para projetos com espaço/underscore
+  no caminho** (`claude_sessions.py`): o encoder de path só trocava `/` por `-`,
+  mas o Claude Code também converte espaços, `_` e `.` para `-` ao nomear a
+  pasta em `~/.claude/projects/`. Resultado: projetos como
+  `/home/italo/Projetos/SIPE Sistemas/ponto_python_antigo/api` nunca casavam
+  com o diretório real `-home-italo-Projetos-SIPE-Sistemas-ponto-python-antigo-api`
+  e o painel mostrava "nenhuma sessão encontrada". Agora qualquer caractere
+  não-alfanumérico vira `-`.
+
 ## [0.24.1] — 2026-05-19
 
 ### Corrigido
