@@ -34,6 +34,12 @@ class RunnerConfig:
     # rodar várias instâncias do mesmo serviço com branch/porta diferentes
     # em consoles paralelos.
     console_session_id: str = ""
+    # Metadata da sessão Claude que originou este runner (via "Gerar com
+    # Claude"). Permite retomar a conversa de geração depois pra pedir
+    # ajustes — preenchido em `runners_io.import_runners` quando o reload
+    # vem do rascunho de runner-gen. Não é portável: removido no export.
+    gen_session_id: str = ""
+    gen_cwd: str = ""
     id: str = field(default_factory=_new_id)
 
     def to_dict(self) -> dict:
@@ -54,6 +60,8 @@ class RunnerConfig:
             open_browser_on_ready=bool(data.get("open_browser_on_ready", False)),
             browser_url=str(data.get("browser_url", "")),
             console_session_id=str(data.get("console_session_id", "")),
+            gen_session_id=str(data.get("gen_session_id", "")),
+            gen_cwd=str(data.get("gen_cwd", "")),
             id=str(data.get("id") or _new_id()),
         )
 

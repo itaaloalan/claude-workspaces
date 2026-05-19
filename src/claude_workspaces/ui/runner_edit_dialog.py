@@ -79,6 +79,7 @@ class RunnerEditDialog(QDialog):
         self,
         runner: RunnerConfig | None,
         on_generate_with_claude=None,
+        on_resume_gen=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -161,6 +162,27 @@ class RunnerEditDialog(QDialog):
             )
             gen_btn.clicked.connect(on_generate_with_claude)
             layout.addWidget(gen_btn)
+
+        # Botão pra retomar a sessão Claude que originou este runner.
+        # Só aparece quando estamos editando (runner != None) e há
+        # metadata de geração persistida.
+        if (
+            on_resume_gen is not None
+            and runner is not None
+            and runner.gen_session_id
+            and runner.gen_cwd
+        ):
+            resume_btn = QPushButton("↻ Retomar geração com Claude")
+            resume_btn.setToolTip(
+                "Reabre via `claude --resume` a sessão que gerou este runner — "
+                "use pra pedir ajustes sem perder o contexto da conversa."
+            )
+            sid = runner.gen_session_id
+            cwd = runner.gen_cwd
+            resume_btn.clicked.connect(
+                lambda _checked=False, s=sid, c=cwd: on_resume_gen(s, c)
+            )
+            layout.addWidget(resume_btn)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel

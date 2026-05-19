@@ -443,6 +443,7 @@ class RunnerArea(QWidget):
 
     def _reload_from_draft(self) -> None:
         from ..runners_io import import_runners
+        from ..services.runner_gen_history import entries_for_workspace
         from ..services.runner_prompt import pending_runner_path
 
         path = pending_runner_path(self._ws)
@@ -455,9 +456,19 @@ class RunnerArea(QWidget):
                 "salvar o arquivo antes de recarregar.",
             )
             return
+        # Carrega a entrada mais recente do histórico de runner-gen pra
+        # stampar nos runners importados — assim o "Retomar geração" no
+        # dialog de edição sabe qual sessão Claude abrir.
+        recent = entries_for_workspace(self._ws.id)
+        gen_sid = recent[0].session_id if recent else ""
+        gen_cwd = recent[0].cwd if recent else ""
         try:
             added, replaced = import_runners(
-                self._ws, path, console_session_id=self._console_session_id
+                self._ws,
+                path,
+                console_session_id=self._console_session_id,
+                gen_session_id=gen_sid,
+                gen_cwd=gen_cwd,
             )
         except (OSError, ValueError) as e:
             QMessageBox.critical(self, "Erro ao importar rascunho", str(e))

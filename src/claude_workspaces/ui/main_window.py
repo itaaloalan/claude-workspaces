@@ -1703,6 +1703,8 @@ class MainWindow(QMainWindow):
             on_generate_with_claude=lambda: self._generate_runner_with_claude(
                 workspace
             ),
+            on_resume_gen=lambda sid, cwd, w=workspace:
+                self._resume_runner_gen_session(w, sid, cwd),
             parent=self,
         )
         if dlg.exec() != dlg.DialogCode.Accepted:
@@ -1903,6 +1905,65 @@ class MainWindow(QMainWindow):
 
             terminal.claimed_session_id_changed.connect(_record_once)
 
+        try:
+            terminal.start_shell_command(
+                argv,
+                cwd,
+                label=label,
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+            return
+        self._bottom_tabs.setCurrentWidget(self.terminal_host)
+        self.terminal_host.setCurrentWidget(area)
+
+    def _resume_runner_gen_session(self, workspace, session_id: str, cwd: str) -> None:
+        """Reabre uma sessão Claude de runner-gen via `--resume`.
+
+        Usado pelo dialog de edição (botão "Retomar geração com Claude")
+        e pode ser reusado por outros pontos. O JSONL precisa existir em
+        `~/.claude/projects/<encoded(cwd)>/<session_id>.jsonl`.
+        """
+        from ..claude_sessions import project_sessions_dir
+        from ..launchers import find_app_repo_root
+
+        if not session_id or not cwd:
+            QMessageBox.information(
+                self,
+                "Sessão indisponível",
+                "Este runner não tem sessão de geração associada — "
+                "foi criado manualmente ou antes desse recurso existir.",
+            )
+            return
+        jsonl = project_sessions_dir(cwd) / f"{session_id}.jsonl"
+        if not jsonl.exists():
+            QMessageBox.warning(
+                self,
+                "Sessão não encontrada",
+                f"O JSONL da sessão de geração não existe mais:\n{jsonl}",
+            )
+            return
+
+        repo = find_app_repo_root()
+        argv = [
+            self.settings.claude_command,
+            *self.settings.claude_extra_args,
+            "--resume",
+            session_id,
+        ]
+        if repo is not None:
+            argv += ["--add-dir", str(repo)]
+        if workspace.folders:
+            _, extras = workspace.launch_paths()
+            for extra in extras:
+                argv += ["--add-dir", extra]
+
+        area = self.terminals_coord.get_or_create_area(workspace)
+        title = f"runner-gen #{area.count() + 1} (resume)"
+        terminal = area.add_terminal(title)
+        terminal.configure_claude(cwd, resume_id=session_id)
+        label = f"claude (runner-gen resume) — {workspace.name}"
         try:
             terminal.start_shell_command(
                 argv,

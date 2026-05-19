@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.27.0] — 2026-05-19
+
+### Adicionado
+- **Botão "↻ Retomar geração com Claude" no dialog de edição do
+  runner** (`models.py`, `runners_io.py`, `ui/runner_edit_dialog.py`,
+  `ui/runner_area.py::_reload_from_draft`, `ui/main_window.py`):
+  `RunnerConfig` ganhou `gen_session_id` + `gen_cwd`, stampados em
+  `import_runners` quando o reload vem do rascunho de runner-gen
+  (consulta `runner_gen_history` pra pegar a entrada mais recente do
+  workspace). No dialog de edição, quando esses campos existem
+  aparece um botão que chama `_resume_runner_gen_session` —
+  `claude --resume <id>` no cwd original com `--add-dir` reaplicado
+  pro repo do claude-workspaces e pastas extras. Permite pedir
+  ajustes no runner sem perder o contexto da conversa de geração.
+  Os campos `gen_*` são removidos no export portável (referenciam
+  JSONL local).
+
 ## [0.26.4] — 2026-05-19
 
 ### Alterado

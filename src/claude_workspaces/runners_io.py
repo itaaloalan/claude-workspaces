@@ -32,9 +32,10 @@ def export_runners(
             {
                 k: v
                 for k, v in r.to_dict().items()
-                # id é local; console_session_id é re-stampado no import
-                # (não é portável entre máquinas/sessões).
-                if k not in ("id", "console_session_id")
+                # id é local; console_session_id é re-stampado no import.
+                # gen_session_id/gen_cwd referenciam um JSONL em
+                # ~/.claude/projects/ dessa máquina — não portável.
+                if k not in ("id", "console_session_id", "gen_session_id", "gen_cwd")
             }
             for r in workspace.runners
             if (r.console_session_id or "") == console_session_id
@@ -49,6 +50,8 @@ def import_runners(
     workspace: Workspace,
     path: str | Path,
     console_session_id: str = "",
+    gen_session_id: str = "",
+    gen_cwd: str = "",
 ) -> tuple[int, int]:
     """Importa runners, fazendo merge por nome dentro do escopo informado.
 
@@ -76,11 +79,19 @@ def import_runners(
         data = dict(item)
         data["id"] = _new_id()  # nunca herda id do export
         data["console_session_id"] = console_session_id  # stampa escopo destino
+        if gen_session_id:
+            data["gen_session_id"] = gen_session_id
+            data["gen_cwd"] = gen_cwd
         new = RunnerConfig.from_dict(data)
         if new.name in by_name:
             idx = by_name[new.name]
             # Preserva id do existente pra não invalidar widgets em execução.
             new.id = workspace.runners[idx].id
+            # Preserva gen_* anterior se o import não trouxe novo (caso
+            # de import portável reaproveitando nome).
+            if not gen_session_id:
+                new.gen_session_id = workspace.runners[idx].gen_session_id
+                new.gen_cwd = workspace.runners[idx].gen_cwd
             workspace.runners[idx] = new
             replaced += 1
         else:
