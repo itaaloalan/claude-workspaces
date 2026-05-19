@@ -2070,16 +2070,13 @@ class MainWindow(QMainWindow):
         workspace_id = info.get("workspace_id", "")
 
         if self._desktop_notifier is not None:
-            # Ação "default" (chave especial no spec) dispara quando o user
-            # clica em qualquer parte do banner — não só nos botões. Aponta
-            # pro mesmo handler que "open", então clicar no banner foca o
-            # console direto. Label fica vazia pra não tentar virar botão.
-            actions = [
-                ("default", ""),
-                ("open", "Abrir console"),
-                ("snooze5", "Adiar 5 min"),
-                ("seen", "Já vi"),
-            ]
+            # Sem actions: KDE Plasma 6 trata qualquer notificação com
+            # action como transient (vai pro tray em ~6s ignorando
+            # urgency/timeout/hints — testado exaustivamente). Como
+            # queremos o banner sticky pra avisar que Claude precisa de
+            # atenção, sacrificamos os botões — usuário interage via
+            # sidebar/inbox dentro do app.
+            actions: list[tuple[str, str]] = []
             # Se já existe notificação ativa pra esse tab (re-lembrete),
             # passa replaces_id pro servidor substituir no lugar em vez de
             # empilhar um segundo banner.

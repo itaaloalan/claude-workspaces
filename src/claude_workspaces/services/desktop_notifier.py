@@ -158,6 +158,10 @@ class DesktopNotifier(QObject):
             safe = desktop_entry.replace("'", "\\'")
             hint_parts.append("'desktop-entry': <'" + safe + "'>")
         hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
+        log.warning(
+            "DEBUG notify: urgency=%s timeout_ms=%s hints=%r replaces_id=%s actions=%d title=%r",
+            urgency, timeout_ms, hints_arg, replaces_id, len(actions), title,
+        )
         try:
             proc = subprocess.run(
                 [

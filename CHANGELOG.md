@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.7] — 2026-05-19
+
+### Mudado
+- **Inbox alert agora vai sem actions clicáveis pra ganhar
+  comportamento sticky** (`ui/main_window.py`): KDE Plasma 6 trata
+  qualquer notificação com `actions` como transient (popup vai pro
+  tray em ~6s) — comportamento testado exaustivamente que ignora
+  urgency=critical, timeout_ms=300000, e todos os hints conhecidos
+  (resident, transient=false, x-kde-display-appname). Como prioridade
+  é não perder o aviso de "Claude precisa de você", removemos as
+  actions ("Abrir console", "Adiar 5 min", "Já vi"). Interação
+  passa a ser via sidebar/inbox dentro do app. Log temporário em
+  `services/desktop_notifier.notify` mantido pra investigação.
+
 ## [0.24.6] — 2026-05-19
 
 ### Corrigido
