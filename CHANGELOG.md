@@ -6,6 +6,28 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.26.2] — 2026-05-19
+
+### Adicionado
+- **Botão ⟳ no painel de uso do plano** (`sidebar_builder.py`,
+  `main_window.py`) que força chamada nova ao `/api/oauth/usage`
+  ignorando cache + cooldown negativo — útil quando o número parece
+  travado e você quer ver o estado atual sem esperar o ciclo de 60s.
+  Logo abaixo das 3 linhas de %, o painel agora exibe
+  `sync HH:MM:SS · API` ou `sync HH:MM:SS · fallback USD (cooldown
+  Xmin)` em cinza-escuro pequenininho, deixando claro qual fonte foi
+  consultada e quando. Sem isso o painel parecia "vivo" mesmo quando
+  o fallback servia números desatualizados.
+
+### Mudado
+- **Notificações de console pronto usam o tempo padrão do SO**
+  (`main_window.py::_handle_alert`): antes forçávamos `urgency=critical
+  + timeout_ms=300000` (5min), o que ignorava a preferência "Show
+  pop-ups for X seconds" do servidor de notificações. Agora mandamos
+  `urgency=normal + timeout_ms=-1` (default freedesktop = "servidor
+  decide"), então o popup respeita o tempo configurado pelo usuário em
+  System Settings → Notifications.
+
 ## [0.26.1] — 2026-05-19
 
 ### Corrigido

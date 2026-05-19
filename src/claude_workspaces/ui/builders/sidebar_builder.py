@@ -233,11 +233,45 @@ class SidebarBuilder:
         # de contexto + tokens absolutos). Atualizado pela MainWindow no
         # mesmo poll que atualiza git/tokens (5s). Fica oculto enquanto
         # não há sessão ativa pra evitar ruído visual.
+        # Linha 1: label do uso. Linha 2 (dentro da mesma row): botão
+        # refresh + timestamp do último sync. Tudo agrupado num container
+        # pra esconder/mostrar junto.
+        self.context_status_container = QWidget()
+        ctx_row = QHBoxLayout(self.context_status_container)
+        ctx_row.setContentsMargins(0, 0, 0, 0)
+        ctx_row.setSpacing(6)
+
         self.context_status_label = QLabel("")
         self.context_status_label.setStyleSheet(_CONTEXT_STATUS_QSS)
-        self.context_status_label.setVisible(False)
         self.context_status_label.setTextFormat(Qt.TextFormat.RichText)
-        layout.addWidget(self.context_status_label)
+        ctx_row.addWidget(self.context_status_label, stretch=1)
+
+        # Botão refresh — clicável, força chamada nova do
+        # /api/oauth/usage (ignora cache + cooldown). Discreto: só o
+        # ícone unicode "⟳", do mesmo tom faint do texto.
+        self.context_status_refresh_btn = QPushButton("⟳")
+        self.context_status_refresh_btn.setCursor(
+            QCursor(Qt.CursorShape.PointingHandCursor)
+        )
+        self.context_status_refresh_btn.setToolTip(
+            "Forçar sincronização do uso do plano com /api/oauth/usage"
+        )
+        self.context_status_refresh_btn.setFlat(True)
+        self.context_status_refresh_btn.setFixedSize(20, 20)
+        self.context_status_refresh_btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_FAINT}; "
+            "background: transparent; border: none; font-size: 13px; "
+            "padding: 0px; }"
+            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
+            "QPushButton:disabled { color: #555; }"
+        )
+        ctx_row.addWidget(
+            self.context_status_refresh_btn,
+            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+        )
+
+        self.context_status_container.setVisible(False)
+        layout.addWidget(self.context_status_container)
 
         # Localizar arquivo — input compacto que abre um modal de busca
         # com os resultados do workspace ativo. Mora aqui na sidebar

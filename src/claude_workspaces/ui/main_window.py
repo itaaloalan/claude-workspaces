@@ -857,6 +857,11 @@ class MainWindow(QMainWindow):
         self.self_dev_btn = builder.self_dev_btn
         self.version_label = builder.version_label
         self._context_status_label = builder.context_status_label
+        self._context_status_container = builder.context_status_container
+        self._context_status_refresh_btn = builder.context_status_refresh_btn
+        self._context_status_refresh_btn.clicked.connect(
+            self._on_context_status_refresh_clicked
+        )
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -2123,21 +2128,15 @@ class MainWindow(QMainWindow):
             # passa replaces_id pro servidor substituir no lugar em vez de
             # empilhar um segundo banner.
             prev_nid = self._active_notifications.get(tab_id, 0)
-            # urgency=2 (critical) + timeout_ms=300000 (5min): KDE Plasma 6
-            # trata expire_timeout=0 como "fica no histórico pra sempre"
-            # mas o popup ainda obedece o setting global "Show pop-ups for
-            # X seconds" (~6s default). Passar 300000 explicitamente força
-            # o popup a ficar visível por 5min. desktop_entry permite
-            # configuração per-app em System Settings → Notifications.
-            # Quando "Não perturbe" está ativo no servidor (KDE/GNOME),
-            # rebaixa pra urgency=1 (normal) — critical bypassa DND por
-            # design do freedesktop, então o respeito ao DND é opt-in nosso.
-            if self._desktop_notifier.inhibited():
-                notify_urgency = 1
-                notify_timeout = 6000
-            else:
-                notify_urgency = 2
-                notify_timeout = 300000
+            # urgency=1 (normal) + timeout_ms=-1: deixa o servidor de
+            # notificação aplicar o tempo padrão configurado pelo usuário
+            # no SO (KDE/GNOME têm "Show pop-ups for X seconds" em
+            # System Settings → Notifications). Antes forçávamos 5min
+            # com urgency=critical, o que ignorava a preferência do
+            # usuário e prendia o banner. desktop_entry permite
+            # configuração per-app no painel do SO se quiserem ajustar.
+            notify_urgency = 1
+            notify_timeout = -1
             nid = self._desktop_notifier.notify(
                 title=title,
                 body=body,
@@ -2614,7 +2613,22 @@ class MainWindow(QMainWindow):
         # claude.ai.
         self._refresh_plan_usage_status()
 
-    def _refresh_plan_usage_status(self) -> None:
+    def _on_context_status_refresh_clicked(self) -> None:
+        """Click no botão ⟳ ao lado do status do plano: força chamada
+        nova ignorando cache e cooldown negativo. Feedback visual:
+        desabilita o botão durante a request pra evitar double-click."""
+        btn = getattr(self, "_context_status_refresh_btn", None)
+        if btn is not None:
+            btn.setEnabled(False)
+            btn.setText("…")
+        try:
+            self._refresh_plan_usage_status(force=True)
+        finally:
+            if btn is not None:
+                btn.setText("⟳")
+                btn.setEnabled(True)
+
+    def _refresh_plan_usage_status(self, force: bool = False) -> None:
         """Atualiza o label de uso do plano na sidebar com 3 linhas
         (replica `Plan usage limits` do claude.ai):
           - Sessão 5h: % · reset NhNNm
@@ -2631,8 +2645,15 @@ class MainWindow(QMainWindow):
         from ..usage_telemetry import recent_plan_usage, weekly_plan_usage
 
         label = getattr(self, "_context_status_label", None)
+        container = getattr(self, "_context_status_container", None)
         if label is None:
             return
+
+        def _set_container_visible(visible: bool) -> None:
+            if container is not None:
+                container.setVisible(visible)
+            else:
+                label.setVisible(visible)
 
         def _color(p: float) -> str:
             if p < 50:
@@ -2644,7 +2665,7 @@ class MainWindow(QMainWindow):
         # --- 1. Caminho preferido: API oficial ---
         snap = None
         try:
-            snap = fetch_plan_usage()
+            snap = fetch_plan_usage(force=force)
         except Exception:  # noqa: BLE001
             log.debug("fetch_plan_usage falhou", exc_info=True)
 
@@ -2732,9 +2753,15 @@ class MainWindow(QMainWindow):
                 )
 
             if api_lines:
+                self._last_plan_usage_sync_at = datetime.now()
+                sync_str = self._last_plan_usage_sync_at.strftime("%H:%M:%S")
+                api_lines.append(
+                    f"<span style='color: {theme.TEXT_DISABLED}; "
+                    f"font-size: 10px;'>sync {sync_str} · API</span>"
+                )
                 label.setText("<br>".join(api_lines))
                 label.setToolTip("\n".join(tooltip_lines))
-                label.setVisible(True)
+                _set_container_visible(True)
                 return
 
         # --- 2. Fallback: cálculo USD-baseado a partir dos JSONLs ---
@@ -2743,10 +2770,10 @@ class MainWindow(QMainWindow):
             weekly = weekly_plan_usage(7)
         except Exception:  # noqa: BLE001
             log.debug("falha ao agregar uso do plano", exc_info=True)
-            label.setVisible(False)
+            _set_container_visible(False)
             return
         if (usage.first_ts is None or usage.cost_usd <= 0) and weekly.all_cost_usd <= 0:
-            label.setVisible(False)
+            _set_container_visible(False)
             return
 
         lines: list[str] = []
@@ -2804,12 +2831,19 @@ class MainWindow(QMainWindow):
 
         cooldown = cooldown_remaining_seconds()
         cooldown_note = ""
+        cooldown_label = ""
         if cooldown > 0:
             mins = cooldown // 60
             cooldown_note = (
                 f"\nAPI /api/oauth/usage em cooldown ({mins}min restantes — "
                 f"rate-limited). Reabra após esse tempo pra ver os % reais."
             )
+            cooldown_label = f" · API em cooldown ({mins}min)"
+        sync_str = datetime.now().strftime("%H:%M:%S")
+        lines.append(
+            f"<span style='color: {theme.TEXT_DISABLED}; font-size: 10px;'>"
+            f"sync {sync_str} · fallback USD{cooldown_label}</span>"
+        )
         label.setText("<br>".join(lines))
         label.setToolTip(
             "Plan usage limits (fallback USD-baseado — API indisponível)"
@@ -2832,7 +2866,7 @@ class MainWindow(QMainWindow):
             "`plan_weekly_usd_limit_all` e `plan_weekly_usd_limit_sonnet` "
             "em settings.json pra calibrar com claude.ai."
         )
-        label.setVisible(True)
+        _set_container_visible(True)
 
     def _on_repo_status_ready(
         self, folder: str, branch: str, modified: int
