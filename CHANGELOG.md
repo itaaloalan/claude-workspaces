@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.8] — 2026-05-19
+
+### Adicionado
+- **Sidebar pisca quando sessão está "Aguardando"**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`): o label
+  "Aguardando" agora alterna entre laranja e branco a cada segundo,
+  chamando atenção visual pra qual console o Claude pediu decisão.
+  Aproveita o timer de 1s já existente (`_idle_tick_timer`), via
+  novo método `tick_awaiting()`. Sair do estado AWAITING reseta a cor.
+
 ## [0.24.7] — 2026-05-19
 
 ### Mudado

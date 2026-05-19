@@ -1959,6 +1959,7 @@ class MainWindow(QMainWindow):
             widget = self.list_widget.itemWidget(item, 0)
             if isinstance(widget, TerminalChildWidget):
                 widget.tick_idle()
+                widget.tick_awaiting()
 
     def _on_settings_saved(self) -> None:
         """Re-aplica configs que afetam coordinators / tray ao salvar."""

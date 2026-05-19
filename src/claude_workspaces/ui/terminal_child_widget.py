@@ -124,6 +124,10 @@ class TerminalChildWidget(QWidget):
         # "Ocioso · 2m 30s" na sidebar. Resetado a cada transição
         # de estado; quando volta pra idle, recomeça do zero.
         self._idle_since: float | None = None
+        # Flag de pisca-pisca do estado AWAITING — alterna a cada
+        # tick_awaiting() pra chamar atenção visual quando Claude
+        # pede decisão. Resetado fora do estado awaiting.
+        self._awaiting_blink_on: bool = False
 
         # Bloco de ações vai à direita da row, vertical-center alinhado
         # com a branch — mais coerente do que ficar grudado no título.
@@ -319,6 +323,23 @@ class TerminalChildWidget(QWidget):
         if self._current_state != STATE_IDLE or self._idle_since is None:
             return
         self._state_label.setText(self._compose_state_text(STATE_IDLE))
+
+    def tick_awaiting(self) -> None:
+        """Pisca o label 'Aguardando' alternando entre laranja (WAITING)
+        e branco (TEXT_BRIGHT) a cada chamada. Chamado pelo mesmo timer
+        de 1s do tick_idle no MainWindow. Sai do estado awaiting reseta
+        a cor e o flag — próxima entrada começa do zero."""
+        if self._current_state != STATE_AWAITING:
+            if self._awaiting_blink_on:
+                self._awaiting_blink_on = False
+            return
+        self._awaiting_blink_on = not self._awaiting_blink_on
+        color = theme.TEXT_BRIGHT if self._awaiting_blink_on else theme.WAITING
+        self._state_label.setStyleSheet(
+            f"color: {color};"
+            f" font-size: 10px; font-weight: 600;"
+            f" letter-spacing: 0.3px;"
+        )
 
     def set_action_callbacks(
         self,
