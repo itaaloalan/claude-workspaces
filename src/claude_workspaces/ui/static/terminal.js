@@ -66,6 +66,12 @@
             });
         }
 
+        if (bridge.clear_requested) {
+            bridge.clear_requested.connect(function () {
+                term.reset();
+            });
+        }
+
         term.onData(function (data) {
             bridge.input_from_terminal(data);
         });

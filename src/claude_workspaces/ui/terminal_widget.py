@@ -39,6 +39,7 @@ class TerminalBridge(QObject):
     # UTF-8 corretamente (chars multi-byte como ─ │ ╭ não quebram).
     output_to_terminal = Signal("QByteArray")
     force_fit_requested = Signal()
+    clear_requested = Signal()
     ready = Signal()
 
     def __init__(self, session: PtySession) -> None:

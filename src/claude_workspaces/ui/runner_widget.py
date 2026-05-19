@@ -101,9 +101,20 @@ class RunnerWidget(QWidget):
         self._copy_btn.clicked.connect(self._copy_log)
         toolbar.addWidget(self._copy_btn)
 
+        self._clear_btn = QPushButton("🧹 Limpar log")
+        self._clear_btn.setToolTip(
+            "Limpa o terminal e descarta o buffer de log deste runner"
+        )
+        self._clear_btn.clicked.connect(self._clear_log)
+        toolbar.addWidget(self._clear_btn)
+
+        # Altura igualada à dos botões irmãos — o glyph 🗑 sozinho
+        # renderiza com line-height maior em algumas fontes e empurra o
+        # botão pra cima dos demais. Width fixo mantém o look "icon-only".
+        btn_h = self._copy_btn.sizeHint().height()
         self._del_btn = QPushButton("🗑")
         self._del_btn.setToolTip("Remover runner")
-        self._del_btn.setFixedWidth(36)
+        self._del_btn.setFixedSize(36, btn_h)
         self._del_btn.clicked.connect(
             lambda: self.remove_requested.emit(self._runner.id)
         )
@@ -266,6 +277,14 @@ class RunnerWidget(QWidget):
             else "(log vazio)"
         )
         # Volta o status original depois de 2s.
+        QTimer.singleShot(2000, lambda t=prev: self._status.setText(t))
+
+    def _clear_log(self) -> None:
+        self._log_buf = ""
+        self._output_buf = ""
+        self.bridge.clear_requested.emit()
+        prev = self._status.text()
+        self._status.setText("(log limpo)")
         QTimer.singleShot(2000, lambda t=prev: self._status.setText(t))
 
     def _open_browser(self, url: str) -> None:

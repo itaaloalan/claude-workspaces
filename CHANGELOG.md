@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.21.1] — 2026-05-19
+
+### Corrigido
+- **Altura do botão 🗑 (remover runner)** (`ui/runner_widget.py`):
+  o glyph 🗑 sozinho era renderizado com line-height maior que os
+  botões irmãos, deixando o botão visivelmente mais alto. Agora a
+  altura é fixada via `sizeHint()` do botão "Copiar log" pra alinhar
+  com os demais.
+
+### Adicionado
+- **Botão "🧹 Limpar log"** no toolbar de cada runner: descarta o
+  buffer de "Copiar log" e reseta o xterm.js (via novo sinal
+  `clear_requested` no `TerminalBridge`). Útil pra limpar ruído de
+  builds anteriores sem ter que reiniciar o processo.
+
 ## [0.21.0] — 2026-05-19
 
 ### Adicionado
