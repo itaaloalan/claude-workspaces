@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.5] — 2026-05-19
+
+### Adicionado
+- **Click no banner foca o console**
+  (`ui/main_window.py`): registramos a ação especial `default` (do
+  spec D-Bus de notificações) que dispara quando o usuário clica em
+  qualquer parte do banner — não só nos botões. Aponta pro mesmo
+  handler de "Abrir console". Antes só os 3 botões eram clicáveis.
+
 ## [0.24.4] — 2026-05-19
 
 ### Corrigido

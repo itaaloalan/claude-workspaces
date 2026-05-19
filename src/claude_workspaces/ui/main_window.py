@@ -2070,7 +2070,12 @@ class MainWindow(QMainWindow):
         workspace_id = info.get("workspace_id", "")
 
         if self._desktop_notifier is not None:
+            # Ação "default" (chave especial no spec) dispara quando o user
+            # clica em qualquer parte do banner — não só nos botões. Aponta
+            # pro mesmo handler que "open", então clicar no banner foca o
+            # console direto. Label fica vazia pra não tentar virar botão.
             actions = [
+                ("default", ""),
                 ("open", "Abrir console"),
                 ("snooze5", "Adiar 5 min"),
                 ("seen", "Já vi"),
@@ -2114,7 +2119,7 @@ class MainWindow(QMainWindow):
         # O servidor fecha o banner ao invocar action, então o note_id já
         # não é mais válido — descarta pra não tentar close() depois.
         self._active_notifications.pop(tab_id, None)
-        if key == "open":
+        if key in ("open", "default"):
             self.show()
             self.raise_()
             self.activateWindow()
