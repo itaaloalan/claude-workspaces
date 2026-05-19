@@ -5,6 +5,7 @@
 
 import logging
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QVBoxLayout,
 )
 
@@ -45,20 +47,19 @@ class LaunchClaudeDialog(QDialog):
         self.workspace = workspace
         self.settings = settings or Settings()
         self.setWindowTitle("Abrir Claude")
-        self.resize(640, 460)
+        self.resize(560, 420)
 
         v = QVBoxLayout(self)
-        v.setSpacing(10)
+        v.setSpacing(6)
+        v.setContentsMargins(12, 10, 12, 10)
 
-        v.addWidget(QLabel(f"<b>Workspace:</b> {workspace.name}"))
-
-        # ---------- Pastas ----------
-        v.addWidget(QLabel("<b>Pastas no contexto desta sessão:</b>"))
-        hint = QLabel(
-            "A primeira marcada vira o cwd; demais entram como <code>--add-dir</code>."
+        header = QLabel(
+            f"<b>Workspace:</b> {workspace.name} &nbsp;·&nbsp; "
+            f"<span style='color:#b0b0b0;'>1ª pasta = cwd, demais como "
+            f"<code>--add-dir</code></span>"
         )
-        hint.setStyleSheet("color: #b0b0b0; font-size: 11px;")
-        v.addWidget(hint)
+        header.setTextFormat(Qt.TextFormat.RichText)
+        v.addWidget(header)
 
         self._folder_checks: list[tuple[QCheckBox, str]] = []
         for folder in workspace.folders:
@@ -79,7 +80,6 @@ class LaunchClaudeDialog(QDialog):
         v.addWidget(sep)
 
         # ---------- Git ----------
-        v.addWidget(QLabel("<b>Git:</b>"))
         primary = workspace.folders[0] if workspace.folders else None
         status = get_status(primary) if primary else None
         self._is_repo = bool(status and status.is_repo)
@@ -89,13 +89,15 @@ class LaunchClaudeDialog(QDialog):
         )
 
         if self._is_repo:
-            v.addWidget(QLabel(
-                f"Branch atual da pasta primária: <code>{self._current_branch}</code>"
-            ))
+            git_hdr = QLabel(
+                f"<b>Git:</b> branch atual <code>{self._current_branch}</code>"
+            )
         else:
-            no_repo = QLabel("(pasta primária não é repo git — worktree indisponível)")
-            no_repo.setStyleSheet("color: #b0b0b0;")
-            v.addWidget(no_repo)
+            git_hdr = QLabel(
+                "<b>Git:</b> <span style='color:#b0b0b0;'>"
+                "pasta primária não é repo — worktree indisponível</span>"
+            )
+        v.addWidget(git_hdr)
 
         # Defaults: workspace override > settings
         isolate_default = (
@@ -154,13 +156,28 @@ class LaunchClaudeDialog(QDialog):
 
         v.addLayout(form)
 
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("color: #2a2a2a;")
+        v.addWidget(sep2)
+
+        prompt_label = QLabel(
+            "<b>Prompt inicial</b> "
+            "<span style='color:#b0b0b0;'>(opcional — enviado ao iniciar)</span>"
+        )
+        v.addWidget(prompt_label)
+        self.initial_prompt_edit = QPlainTextEdit()
+        self.initial_prompt_edit.setPlaceholderText(
+            "Ex.: revise o arquivo X e proponha melhorias…"
+        )
+        self.initial_prompt_edit.setFixedHeight(64)
+        v.addWidget(self.initial_prompt_edit)
+
         # Wiring
         self.isolate_chk.toggled.connect(self._on_isolate_toggled)
         self.new_branch_chk.toggled.connect(self._on_new_branch_toggled)
         self.branch_edit.textChanged.connect(self._refresh_preview)
         self.existing_combo.currentTextChanged.connect(self._refresh_preview)
-
-        v.addStretch()
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -228,3 +245,6 @@ class LaunchClaudeDialog(QDialog):
 
     def result_base_branch(self) -> str:
         return self.base_edit.text().strip()
+
+    def result_initial_prompt(self) -> str:
+        return self.initial_prompt_edit.toPlainText().strip()

@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.28.0] — 2026-05-19
+
+### Adicionado
+- **Dialog "Abrir Claude" mais compacto + prompt inicial opcional**
+  (`ui/launch_claude_dialog.py`,
+  `ui/coordinators/launch_coordinator.py`): modal reduzido de 640×460
+  → 560×420, com spacing apertado (10→6), header consolidado numa
+  linha só (workspace + dica de cwd/`--add-dir`), e a seção Git
+  colapsada num único `<b>Git:</b> branch atual …`. Novo campo
+  `Prompt inicial (opcional)` (`QPlainTextEdit` de 64 px) — se
+  preenchido, o coordinator agenda um `send_text` via `QTimer` 1.5 s
+  depois do spawn pra digitar o prompt na TUI do Claude como se fosse
+  o usuário. Optei por send_text via PTY em vez de prompt posicional
+  no argv pra evitar a regressão de tela preta documentada em 0.27.1
+  quando há `--add-dir` + prompt grande.
+
 ## [0.27.1] — 2026-05-19
 
 ### Corrigido

@@ -59,6 +59,7 @@ class LaunchCoordinator(QObject):
 
         cwd, extras = workspace.launch_paths()
         worktree_label = ""
+        initial_prompt = ""
         if cwd_override:
             cwd = cwd_override
             extras = []
@@ -86,6 +87,7 @@ class LaunchCoordinator(QObject):
                 return None
             cwd, extras = plan.cwd, plan.extras
             worktree_label = plan.worktree_label
+            initial_prompt = dialog.result_initial_prompt()
 
         argv = build_claude_argv(
             self.settings.claude_command,
@@ -111,6 +113,15 @@ class LaunchCoordinator(QObject):
             log.exception("Falha ao abrir Claude embutido")
             QMessageBox.warning(self._parent_window, "Falha", str(e))
             return None
+        if initial_prompt:
+            # Why: Claude CLI 2.1.x trava (tela preta) com prompt
+            # posicional >~500 chars junto de --add-dir (ver 0.27.1).
+            # Mais robusto: deixar a TUI subir e digitar o prompt via
+            # PTY, como se o usuário tivesse digitado.
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(
+                1500, lambda t=terminal, p=initial_prompt: t.send_text(p)
+            )
         self.sessions_refresh_requested.emit()
         return terminal
 
