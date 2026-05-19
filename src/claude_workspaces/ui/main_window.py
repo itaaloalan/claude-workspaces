@@ -1066,6 +1066,7 @@ class MainWindow(QMainWindow):
         self._apply_filter(
             self.top_bar.search.text() if hasattr(self, "top_bar") else ""
         )
+        self._refresh_activity_badges()
 
         # Reanexa abas de terminais já existentes
         for ws_id, area in self.terminals_coord._areas.items():
@@ -1439,6 +1440,39 @@ class MainWindow(QMainWindow):
         else:
             self.terminals_coord.state.running_counts[workspace_id] = count
         self._refresh_item_label(workspace_id)
+        self._refresh_activity_badges()
+
+    def _refresh_activity_badges(self) -> None:
+        """Atualiza os contadores do ActivityBar (workspaces + apps).
+
+        Workspaces: "trabalhando/total" — quantos têm runtime Claude
+        ativo vs total cadastrado. Apps: total de PWAs configurados.
+        """
+        if not hasattr(self, "activity_bar"):
+            return
+        total = len(self.workspaces_coord.workspaces)
+        working = sum(
+            1
+            for ws in self.workspaces_coord.workspaces
+            if self.terminals_coord.state.running_counts.get(ws.id, 0) > 0
+        )
+        if total > 0:
+            badge = f"{working}/{total}" if working > 0 else str(total)
+            tip = (
+                f"{working} trabalhando · {total - working} ocioso(s) · "
+                f"{total} no total"
+            )
+            self.activity_bar.set_badge(VIEW_WORKSPACES, badge, tip)
+        else:
+            self.activity_bar.set_badge(VIEW_WORKSPACES, "")
+
+        apps = len(self.settings.apps or [])
+        if apps > 0:
+            self.activity_bar.set_badge(
+                VIEW_APPS, str(apps), f"{apps} app(s) auxiliar(es) configurado(s)"
+            )
+        else:
+            self.activity_bar.set_badge(VIEW_APPS, "")
 
     # ---------- seleção / settings ----------
 
@@ -1923,6 +1957,8 @@ class MainWindow(QMainWindow):
             self._desktop_notifier.deleteLater()
             self._desktop_notifier = None
         self._init_desktop_notifier()
+        # Apps podem ter sido adicionados/removidos no settings → refresh badge.
+        self._refresh_activity_badges()
 
     def _init_tray(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():

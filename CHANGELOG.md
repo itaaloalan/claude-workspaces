@@ -6,6 +6,39 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.21.0] — 2026-05-19
+
+### Adicionado
+- **Labels + badges no ActivityBar** (`ui/activity_bar.py`): cada entrada
+  da coluna vertical de ícones (Workspaces / Catálogo / Hooks / MCP /
+  Plugins / Apps / Settings) agora exibe ícone **+ label embaixo**, em
+  vez de só o glyph. Antes só dava pra identificar via tooltip ao passar
+  o mouse — agora é navegável de relance.
+- **Contadores (badges) ao lado do ícone**: pequena pílula azul indica
+  estado/quantidade do que está por trás de cada menu.
+  - **Workspaces**: formato `trabalhando/total` (ex: `2/5`). Quando
+    nada está rodando, mostra só o total. Tooltip detalha
+    "N trabalhando · M ocioso(s) · T no total". Atualiza
+    automaticamente em `refresh_list` e a cada
+    `workspace_running_changed` (mesmo signal que já dirigia o spinner
+    da sidebar).
+  - **Apps auxiliares**: contagem de PWAs configurados em
+    `settings.apps`. Atualiza ao salvar settings.
+  - API genérica `activity_bar.set_badge(view_id, text, tooltip)` —
+    outras views (catálogo/hooks/mcp/plugins) podem alimentar contagens
+    no futuro sem mexer no widget.
+
+### Alterado
+- **Ícone de Workspaces**: trocado `❒` (quadrado vazio, pouco
+  representativo) por `▦` (grade preenchida), evocando "vários projetos
+  em tiles" — alinhado com a metáfora de workspaces múltiplos.
+- **Largura do ActivityBar**: 48px → 68px pra comportar os labels sem
+  truncar. Não afeta o splitter principal (a barra fica fora dele).
+- **Botões viraram `QFrame` custom** (`_NavButton`) em vez de
+  `QPushButton` — necessário pra layout vertical com ícone + label +
+  badge na mesma linha do ícone. Exclusividade de seleção é gerenciada
+  manualmente (substitui o `QButtonGroup`).
+
 ## [0.20.0] — 2026-05-18
 
 ### Performance
