@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.27.1] — 2026-05-19
+
+### Corrigido
+- **Runner-gen ficava com tela preta** (`services/runner_prompt.py`,
+  `docs/runners-spec.md`): o Claude CLI 2.1.x trava na PTY (não
+  renderiza nada) quando recebe `--add-dir` + prompt posicional acima
+  de ~500 chars. O prompt do gerador tinha ~6 KB com toda a instrução
+  inline, fatal. Movida a instrução de investigação (Passo 1/2/2.5/3/4)
+  e o formato de saída pro próprio `docs/runners-spec.md` (que o Claude
+  já lê via `--add-dir`); o prompt agora é um ponteiro curto de ~450
+  chars. Claude renderiza imediatamente e segue o spec via Read.
+
 ## [0.27.0] — 2026-05-19
 
 ### Adicionado
