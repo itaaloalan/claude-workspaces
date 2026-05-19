@@ -8,7 +8,7 @@ Inspirado em [superset-sh/superset](https://github.com/superset-sh/superset).
 
 ## O problema
 
-O Claude Code é poderoso mas trabalhar em vários projetos ao mesmo tempo vira bagunça: várias janelas abertas, contexto misturado, difícil saber qual console está esperando você, qual está trabalhando, custo descontrolado, sessões antigas perdidas, branches colidindo.
+O Claude Code é poderoso, mas trabalhar em vários projetos ao mesmo tempo vira bagunça: várias janelas abertas, contexto misturado, difícil saber qual console está esperando você, qual está trabalhando, custo descontrolado, sessões antigas perdidas, branches colidindo.
 
 ## O que o app entrega
 
@@ -19,17 +19,17 @@ O Claude Code é poderoso mas trabalhar em vários projetos ao mesmo tempo vira 
 - **Sidebar com árvore de atividade**: cada console rodando aparece sob seu workspace com estado em tempo real (Trabalhando · spinner / Aguardando ! / Ocioso ❚❚ / Concluído ✓) e o título da sessão. "Aguardando" só aparece quando Claude exibe um permission prompt — turnos terminados sem ação pendente ficam como "Ocioso".
 - **Restaura abas Claude**: ao fechar o app, salva as sessões Claude em curso e reabre tudo com `--resume` no próximo startup.
 - **Worktrees opcionais**: ao abrir Claude, escolha se quer isolar em git worktree numa nova branch (ou existente) — útil pra rodar múltiplos agentes no mesmo repo em paralelo.
-- **Painel Git estilo IntelliJ**: árvore de arquivos com checkboxes pra seletivamente staged + commit inline. Right-click pra Add/Unstage/Rollback/Delete.
+- **Painel Git estilo IntelliJ**: árvore de arquivos com checkboxes pra fazer stage seletivo + commit inline. Botão direito pra Add/Unstage/Rollback/Delete.
 - **Abrir PR direto da UI**: depois de um commit, botão pra `gh pr create` com título/corpo gerados a partir do diff e dos commits da branch.
 - **Telemetria de tokens/custo** por workspace (lê os JSONLs do Claude).
 - **Skills/Agents/Comandos** listados com filtros, contadores de uso (% e quando), clique copia `/nome`. Editor + lint + playground integrados no Catálogo.
-- **Plugins** (manifest v2): bundles que podem reagir a eventos do app (`tab_idle`, `tab_started`, etc), expor comandos pra paleta e configurações editáveis inline. Botão "Exemplos" instala bundles do repo com um clique; botão "Solicitar criação" pede pro Claude desenhar um plugin novo. Detalhe em [docs/PLUGIN_SPEC.md](docs/PLUGIN_SPEC.md).
+- **Plugins** (manifest v2): bundles que podem reagir a eventos do app (`tab_idle`, `tab_started`, etc.), expor comandos pra paleta e configurações editáveis inline. Botão "Exemplos" instala bundles do repo com um clique; botão "Solicitar criação" pede pro Claude desenhar um plugin novo. Detalhes em [docs/PLUGIN_SPEC.md](docs/PLUGIN_SPEC.md).
 - **Apps auxiliares**: PWAs/sites embutidos via QtWebEngine (Taskis, ClickUp, ou o que você adicionar) com perfil isolado por app — login persiste e um app não enxerga cookie do outro.
 - **Memória do workspace**: editor inline do CLAUDE.md da pasta primária.
 - **Busca em sessões** (Ctrl+Shift+F): texto livre em todas as sessões antigas com snippet.
 - **Handoff**: botão "→ Tarefa" passa contexto de uma sessão pra outra com briefing pré-preenchido (inclui branch, ahead/behind, arquivos modificados).
 - **MCP postgres**: cria/edita config do MCP postgres do Claude por workspace. View "MCP servers" mostra tudo que está configurado em `~/.claude.json`.
-- **Templates**: 4 bundled (Vazio, Java+Spring+PostgreSQL, Web Next.js, Python FastAPI) ou JSONs custom em `~/.config/claude-workspaces/templates/`.
+- **Templates**: 4 inclusos (Vazio, Java+Spring+PostgreSQL, Web Next.js, Python FastAPI) ou JSONs customizados em `~/.config/claude-workspaces/templates/`.
 
 ## Instalação
 
