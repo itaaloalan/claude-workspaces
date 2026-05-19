@@ -2389,28 +2389,23 @@ class MainWindow(QMainWindow):
     def _compute_disambiguated_title(
         self, ws_item: QTreeWidgetItem | None, tab_id: int, base_title: str
     ) -> str:
-        """Se outros children do mesmo workspace têm o mesmo título base,
-        retorna `base (N)` em ordem de criação (tab_id crescente).
-        O mais antigo fica sem sufixo, os seguintes ganham (2), (3)..."""
+        """Prepende `#N ` ao título, onde N é a posição do console entre
+        os irmãos do mesmo workspace (ordenado por tab_id crescente — o
+        mais antigo é #1). Assim cada workspace numera seus consoles de
+        forma independente e sempre sequencial."""
         if not base_title or ws_item is None:
             return base_title
-        siblings_same: list[int] = []
+        sibling_ids: list[int] = []
         for i in range(ws_item.childCount()):
             sib = ws_item.child(i)
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
-            if not isinstance(sib_id, int):
-                continue
-            if sib_id == tab_id:
-                continue
-            if self._tab_base_titles.get(sib_id, "") == base_title:
-                siblings_same.append(sib_id)
-        if not siblings_same:
-            return base_title
-        all_ids = sorted(siblings_same + [int(tab_id)])
-        position = all_ids.index(int(tab_id))
-        if position == 0:
-            return base_title
-        return f"{base_title} ({position + 1})"
+            if isinstance(sib_id, int):
+                sibling_ids.append(sib_id)
+        if int(tab_id) not in sibling_ids:
+            sibling_ids.append(int(tab_id))
+        sibling_ids.sort()
+        position = sibling_ids.index(int(tab_id)) + 1
+        return f"#{position} {base_title}"
 
     def _refresh_workspace_child_titles(
         self, ws_item: QTreeWidgetItem | None

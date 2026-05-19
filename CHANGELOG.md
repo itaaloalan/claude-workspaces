@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.22.0] — 2026-05-19
+
+### Adicionado
+- **Numeração sequencial dos consoles na sidebar** (`ui/main_window.py`):
+  cada console agora exibe `#N` antes do nome, com N reiniciado por
+  workspace e atribuído por ordem de criação (tab_id crescente). Ao
+  fechar um console, os demais são renumerados automaticamente via
+  `_refresh_workspace_child_titles`. Substitui o sufixo `(N)` que só
+  aparecia em colisões de nome — agora todo console tem um identificador
+  visual estável dentro do seu workspace.
+
 ## [0.21.2] — 2026-05-19
 
 ### Corrigido
