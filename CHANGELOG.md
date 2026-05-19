@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.21.2] — 2026-05-19
+
+### Corrigido
+- **Console novo não aparecia/quebrava a sidebar** (`ui/main_window.py`):
+  `_add_terminal_child` referenciava `ws_data` sem definir a variável
+  no escopo da função, levantando `NameError` toda vez que um novo
+  console era adicionado ao tree do workspace. Em re-listagens, a
+  exceção interrompia o loop antes de instalar os runners. Agora
+  `ws_data` é lido do `UserRole` do `ws_item` antes de chamar
+  `_install_console_runner_children`.
+
 ## [0.21.1] — 2026-05-19
 
 ### Corrigido

@@ -2338,6 +2338,7 @@ class MainWindow(QMainWindow):
         if cwd:
             self._repo_poller.request(cwd)
         # Anexa os runners deste console como filhos do tree item.
+        ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
         if isinstance(ws_data, Workspace):
             self._install_console_runner_children(child, ws_data, tab_id)
 
