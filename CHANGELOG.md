@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.24.3] — 2026-05-19
+
+### Corrigido
+- **Notificação nativa não disparava na transição idle→awaiting**
+  (`ui/coordinators/terminal_coordinator.py`): o `inbox_alert` só
+  emitia quando a sessão saía de `working`, então pickers que
+  apareciam direto de idle (caso típico quando o frame de "working"
+  é curto demais pro parser de 250ms pegar) ficavam mudos. Agora
+  também dispara quando `needs_decision` transita de False→True,
+  rastreando `_prev_needs_decision` por tab. Cleanup correspondente
+  em `_on_tab_removed` e `release_workspace`.
+
 ## [0.24.2] — 2026-05-19
 
 ### Corrigido

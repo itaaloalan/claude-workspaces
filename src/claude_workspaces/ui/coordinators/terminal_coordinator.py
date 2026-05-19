@@ -70,6 +70,11 @@ class TerminalCoordinator(QObject):
         self._reminder_timer = QTimer(self)
         self._reminder_timer.setInterval(REMINDER_TICK_MS)
         self._reminder_timer.timeout.connect(self._check_reminders)
+        # Estado prévio de needs_decision por tab — usado pra detectar a
+        # transição idle→awaiting que também merece alerta nativo
+        # (`_on_tab_activity`). Separado de `state.activity` pra não
+        # mudar o formato da tupla (status, is_working, title).
+        self._prev_needs_decision: dict[int, bool] = {}
 
     # ---------- Areas ----------
 
@@ -108,6 +113,7 @@ class TerminalCoordinator(QObject):
         inbox_before = set(self.state.inbox.keys())
         released = self.state.release_workspace(workspace_id)
         for tab_id in released:
+            self._prev_needs_decision.pop(tab_id, None)
             self.tab_removed.emit(tab_id)
             if tab_id in inbox_before:
                 self.inbox_entry_removed.emit(tab_id)
@@ -133,13 +139,23 @@ class TerminalCoordinator(QObject):
     ) -> None:
         prev = self.state.activity.get(tab_id, ("", False, title))
         prev_working = prev[1]
+        prev_needs_decision = self._prev_needs_decision.get(tab_id, False)
         self.state.activity[tab_id] = (status, is_working, title)
+        self._prev_needs_decision[tab_id] = needs_decision
         # Garante mapping tab→workspace pra cleanup em bloco se o workspace
         # for deletado (release_workspace) antes do tab fechar normalmente.
         self.state.register_tab(tab_id, workspace_id)
 
-        # Detecção working → idle: adiciona ao inbox
-        if prev_working and not is_working and is_running:
+        # Adiciona ao inbox em duas transições que merecem atenção:
+        #   1) working → not-working (Claude terminou um turno)
+        #   2) not-awaiting → awaiting (Claude pediu uma decisão — pode
+        #      vir direto de idle quando o picker aparece tão rápido que
+        #      o parser não pega o frame de working)
+        # Why: antes só (1) disparava notificação nativa, então pickers
+        # que apareciam saindo de idle ficavam mudos.
+        entered_decision = needs_decision and not prev_needs_decision
+        ended_working = prev_working and not is_working
+        if (ended_working or entered_decision) and is_running:
             already_present = tab_id in self.state.inbox
             self.state.add_to_inbox(tab_id, {
                 "workspace_id": workspace_id,
@@ -179,6 +195,7 @@ class TerminalCoordinator(QObject):
         )
 
     def _on_tab_removed(self, tab_id: int) -> None:
+        self._prev_needs_decision.pop(tab_id, None)
         was_in_inbox = tab_id in self.state.inbox
         inbox_changed = self.state.release_tab(tab_id)
         if inbox_changed:
