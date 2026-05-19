@@ -2620,25 +2620,18 @@ class MainWindow(QMainWindow):
           - Sessão 5h: % · reset NhNNm
           - Semana (todos): % · reset seg 07:00
           - Semana (Sonnet): %
-        Sem cifrão na UI — Max 5x é assinatura, não pay-per-use. Valores
-        absolutos ficam no tooltip."""
+
+        Estratégia: tenta `/api/oauth/usage` (mesmo endpoint que o
+        `/status` do Claude Code consome — números idênticos ao
+        claude.ai). Se token ausente, expirado ou request falha, cai
+        pro cálculo USD-baseado a partir dos JSONLs locais."""
         from datetime import datetime, timedelta, timezone
 
+        from ..plan_usage_api import fetch_plan_usage
         from ..usage_telemetry import recent_plan_usage, weekly_plan_usage
 
         label = getattr(self, "_context_status_label", None)
         if label is None:
-            return
-        try:
-            usage = recent_plan_usage(5 * 3600)
-            weekly = weekly_plan_usage(7)
-        except Exception:  # noqa: BLE001
-            log.debug("falha ao agregar uso do plano", exc_info=True)
-            label.setVisible(False)
-            return
-        # Sem nada nas duas janelas → some completamente.
-        if (usage.first_ts is None or usage.cost_usd <= 0) and weekly.all_cost_usd <= 0:
-            label.setVisible(False)
             return
 
         def _color(p: float) -> str:
@@ -2648,9 +2641,115 @@ class MainWindow(QMainWindow):
                 return theme.WARNING
             return theme.DANGER
 
-        lines: list[str] = []
+        # --- 1. Caminho preferido: API oficial ---
+        snap = None
+        try:
+            snap = fetch_plan_usage()
+        except Exception:  # noqa: BLE001
+            log.debug("fetch_plan_usage falhou", exc_info=True)
 
-        # --- Linha 1: sessão 5h ---
+        if snap is not None and (
+            snap.five_hour is not None
+            or snap.seven_day is not None
+            or snap.seven_day_sonnet is not None
+        ):
+            api_lines: list[str] = []
+            tooltip_lines: list[str] = ["Plan usage limits (via /api/oauth/usage)"]
+
+            def _reset_phrase(reset_at):
+                if reset_at is None:
+                    return ""
+                delta = reset_at - datetime.now(timezone.utc)
+                mins_left = max(int(delta.total_seconds() // 60), 0)
+                if mins_left >= 60:
+                    return f"{mins_left // 60}h{mins_left % 60:02d}m"
+                return f"{mins_left}m"
+
+            if snap.five_hour is not None:
+                pct = snap.five_hour.utilization_pct
+                reset_str = _reset_phrase(snap.five_hour.resets_at)
+                line = (
+                    f"<span style='color: {theme.TEXT_FAINT};'>Sessão 5h:</span> "
+                    f"<span style='color: {_color(pct)}; font-weight: 600;'>"
+                    f"{pct:.0f}%</span>"
+                )
+                if reset_str:
+                    line += (
+                        f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
+                        f"<span style='color: {theme.TEXT_FAINT};'>"
+                        f"reset {reset_str}</span>"
+                    )
+                api_lines.append(line)
+                tip = f"Sessão 5h: {pct:.0f}%"
+                if snap.five_hour.resets_at is not None:
+                    tip += (
+                        "  ·  reseta "
+                        f"{snap.five_hour.resets_at.astimezone().strftime('%H:%M')}"
+                        f" ({reset_str})"
+                    )
+                tooltip_lines.append(tip)
+
+            if snap.seven_day is not None:
+                pct = snap.seven_day.utilization_pct
+                reset_at = snap.seven_day.resets_at
+                reset_wall = (
+                    reset_at.astimezone().strftime("%a %H:%M").lower()
+                    if reset_at is not None
+                    else ""
+                )
+                line = (
+                    f"<span style='color: {theme.TEXT_FAINT};'>Semana (todos):</span> "
+                    f"<span style='color: {_color(pct)}; font-weight: 600;'>"
+                    f"{pct:.0f}%</span>"
+                )
+                if reset_wall:
+                    line += (
+                        f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
+                        f"<span style='color: {theme.TEXT_FAINT};'>"
+                        f"reset {reset_wall}</span>"
+                    )
+                api_lines.append(line)
+                tip = f"Semana (todos): {pct:.0f}%"
+                if reset_at is not None:
+                    tip += (
+                        "  ·  reseta "
+                        f"{reset_at.astimezone().strftime('%a %d/%m %H:%M')}"
+                    )
+                tooltip_lines.append(tip)
+
+            if snap.seven_day_sonnet is not None:
+                pct = snap.seven_day_sonnet.utilization_pct
+                api_lines.append(
+                    f"<span style='color: {theme.TEXT_FAINT};'>Semana (Sonnet):</span> "
+                    f"<span style='color: {_color(pct)}; font-weight: 600;'>"
+                    f"{pct:.0f}%</span>"
+                )
+                tooltip_lines.append(f"Semana (Sonnet): {pct:.0f}%")
+
+            if snap.seven_day_opus is not None:
+                tooltip_lines.append(
+                    f"Semana (Opus): {snap.seven_day_opus.utilization_pct:.0f}%"
+                )
+
+            if api_lines:
+                label.setText("<br>".join(api_lines))
+                label.setToolTip("\n".join(tooltip_lines))
+                label.setVisible(True)
+                return
+
+        # --- 2. Fallback: cálculo USD-baseado a partir dos JSONLs ---
+        try:
+            usage = recent_plan_usage(5 * 3600)
+            weekly = weekly_plan_usage(7)
+        except Exception:  # noqa: BLE001
+            log.debug("falha ao agregar uso do plano", exc_info=True)
+            label.setVisible(False)
+            return
+        if (usage.first_ts is None or usage.cost_usd <= 0) and weekly.all_cost_usd <= 0:
+            label.setVisible(False)
+            return
+
+        lines: list[str] = []
         reset_5h_str = ""
         reset_5h_wall = ""
         sess_pct = 0.0
@@ -2705,7 +2804,7 @@ class MainWindow(QMainWindow):
 
         label.setText("<br>".join(lines))
         label.setToolTip(
-            "Plan usage limits (replica claude.ai)\n"
+            "Plan usage limits (fallback USD-baseado — API indisponível)\n"
             f"Sessão 5h: ${usage.cost_usd:.2f} / ${self.settings.plan_usd_limit_5h:.0f}"
             f"  →  {sess_pct:.0f}%"
             + (

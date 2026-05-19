@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.26.0] — 2026-05-19
+
+### Adicionado
+- **Painel de uso do plano agora consome `/api/oauth/usage`** (mesmo
+  endpoint que o `/status` do Claude Code) — os % de Sessão 5h, Semana
+  (todos) e Semana (Sonnet) agora batem exatamente com o que o
+  claude.ai mostra, em vez de estimar dividindo o custo USD acumulado
+  por um limite calibrado na mão. Caso típico antes desta mudança:
+  painel exibia "Sessão 5h: 59%" enquanto o claude.ai mostrava 21% —
+  divergência inevitável porque a Anthropic não publica a conversão
+  token→cota e o limite USD era arbitrário. Novo módulo
+  `plan_usage_api.py` lê o `accessToken` de
+  `~/.claude/.credentials.json`, chama o endpoint com cache de 60s
+  (mais cache negativo se rate-limited ou token expirado), e devolve
+  utilização + `resets_at` por bucket (`five_hour`, `seven_day`,
+  `seven_day_opus`, `seven_day_sonnet`). O reset agora vem direto da
+  API, então a divergência de minutos no "reset NhNNm" (causada por
+  usar o `first_ts` do JSONL local em vez do início real da sessão
+  Anthropic) também some.
+- **Fallback transparente pro cálculo USD-baseado** quando a API
+  falha (token expirado, offline, rate-limit). Tooltip identifica
+  qual fonte foi usada.
+
 ## [0.25.1] — 2026-05-19
 
 ### Corrigido
