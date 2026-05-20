@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -252,21 +252,34 @@ class PersistentToast(QWidget):
 
 
 def position_toasts(toasts: list[PersistentToast]) -> None:
-    """Empilha os toasts no canto top-right da tela primária.
+    """Empilha os toasts no canto top-right da tela do cursor (multi-monitor).
 
-    Mais antigo em cima, novos descem. Recalcula tudo porque cada toast pode
-    ter altura diferente (body com mais ou menos linhas). Usa `sizeHint`
-    forçado via `adjustSize` pra pegar altura real depois do layout resolver.
+    Mais antigo em cima, novos descem. Pra pegar altura real (body com
+    word-wrap muda altura), forçamos `layout().activate()` + `adjustSize()`
+    e depois lemos `frameGeometry().height()`. Se o widget ainda não foi
+    realizado pelo Qt (height=0), cai pra sizeHint como aproximação.
+
+    A função é idempotente: pode ser chamada após cada show/update/remove
+    e sempre recalcula tudo do zero.
     """
-    screen = QGuiApplication.primaryScreen()
+    # Tela do cursor — multi-monitor: queremos os toasts onde o usuário
+    # está olhando, não no monitor primário fixo.
+    cursor_pos = QCursor.pos()
+    screen = QGuiApplication.screenAt(cursor_pos) or QGuiApplication.primaryScreen()
     if screen is None:
         return
     geo = screen.availableGeometry()
     y = geo.top() + MARGIN
     x = geo.right() - MARGIN - WIDTH
     for toast in toasts:
+        # Força layout a recalcular ANTES de medir; sem isso adjustSize
+        # devolve sizeHint stale e dois toasts seguidos parecem ter a
+        # mesma altura mesmo com body de tamanhos diferentes.
+        lay = toast.layout()
+        if lay is not None:
+            lay.activate()
         toast.adjustSize()
-        h = toast.sizeHint().height()
+        h = toast.frameGeometry().height() or toast.sizeHint().height()
         toast.move(QPoint(x, y))
         y += h + GAP
 

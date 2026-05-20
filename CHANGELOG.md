@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.44.1] — 2026-05-20
+
+### Corrigido
+- **Toasts sobrepostos no canto da tela**
+  (`ui/persistent_toast.py`, `ui/main_window.py`): `position_toasts`
+  era chamado logo após `toast.show()`, antes do Qt processar o
+  showEvent e calcular a geometria real — `sizeHint().height()`
+  retornava valor stale e dois toasts seguidos terminavam com a
+  mesma altura no cálculo, sobrepondo. Diferimos a chamada via
+  `QTimer.singleShot(0, ...)` pro próximo tick do event loop, e
+  passamos a usar `frameGeometry().height()` (real) com fallback
+  pra sizeHint. Também: posicionamento na tela do cursor
+  (multi-monitor) em vez de sempre na primária.
+
+- **Notif do SO ficava sticky pra sempre**
+  (`ui/main_window.py`): com a divisão de responsabilidades, a
+  notif do sistema tinha virado `urgency=critical` pra ser
+  sticky — mas isso é o toast in-app que carrega. Voltamos pra
+  `urgency=normal` + timeout configurável (10s default): notif
+  do SO some sozinha pra não acumular popup velho.
+
 ## [0.44.0] — 2026-05-20
 
 ### Adicionado

@@ -2401,12 +2401,13 @@ class MainWindow(QMainWindow):
 
         if self._desktop_notifier is not None:
             # Divisão de responsabilidades:
-            # - Notif D-Bus: SEM action, SEM som → KDE deixa sticky sem
-            #   fight de hints. Só presença visual no canto/central de
-            #   notificações pra caso da janela do app estar em outro
-            #   virtual desktop ou minimizada.
-            # - Toast in-app (`_show_persistent_toast`): tem o botão
-            #   "Abrir console" + toca o som de alerta. Lifecycle nosso.
+            # - Notif D-Bus: SEM action, SEM som, urgency=normal e timeout
+            #   configurável (~10s) → aparece, fica visível um instante e
+            #   some sozinha pra não ficar acumulando popup velho. Quem
+            #   carrega a persistência é o toast in-app.
+            # - Toast in-app (`_show_persistent_toast`): tem os botões
+            #   (Abrir/Adiar/Já vi) + som + auto-dismiss com barra de
+            #   progresso. Lifecycle 100% nosso.
             prev_nid = self._active_notifications.get(tab_id, 0)
             nid = self._desktop_notifier.notify(
                 title=title,
@@ -2414,7 +2415,7 @@ class MainWindow(QMainWindow):
                 actions=[],
                 timeout_ms=int(self.settings.notify_timeout_ms),
                 replaces_id=prev_nid,
-                urgency=2,
+                urgency=1,
                 desktop_entry="claude-workspaces",
                 sound_name=None,
             )
@@ -2443,7 +2444,7 @@ class MainWindow(QMainWindow):
         existing = self._active_toasts.get(tab_id)
         if existing is not None:
             existing.update_content(title, body)
-            position_toasts(list(self._active_toasts.values()))
+            QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
             return
         sound_name = (
             self.settings.notify_sound_name.strip()
@@ -2472,7 +2473,7 @@ class MainWindow(QMainWindow):
         )
         self._active_toasts[tab_id] = toast
         toast.show()
-        position_toasts(list(self._active_toasts.values()))
+        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
 
     def _handle_toast_action(self, tab_id: int, workspace_id: str) -> None:
         """Clique em 'Abrir console' no toast — mesma rota da action D-Bus.
@@ -2482,7 +2483,7 @@ class MainWindow(QMainWindow):
         console.
         """
         self._active_toasts.pop(tab_id, None)
-        position_toasts(list(self._active_toasts.values()))
+        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
         nid = self._active_notifications.pop(tab_id, None)
         if nid is not None and self._desktop_notifier is not None:
             self._desktop_notifier.close(nid)
@@ -2491,7 +2492,7 @@ class MainWindow(QMainWindow):
     def _on_toast_dismissed(self, tab_id: int) -> None:
         """Usuário clicou no X — toast some, mas não muda estado do inbox."""
         self._active_toasts.pop(tab_id, None)
-        position_toasts(list(self._active_toasts.values()))
+        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
 
     def _close_persistent_toast(self, tab_id: int) -> None:
         """Fecha o toast programaticamente (tab saiu do inbox / mudou estado)."""
@@ -2499,7 +2500,7 @@ class MainWindow(QMainWindow):
         if toast is not None:
             toast.hide()
             toast.deleteLater()
-            position_toasts(list(self._active_toasts.values()))
+            QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
 
     def _arm_notification_keepalive(self, tab_id: int, is_reminder: bool) -> None:
         """Inicia (ou reinicia) o timer que re-emite a notif a cada 5s.
