@@ -154,6 +154,8 @@ class SettingsPanel(QWidget):
         self._default_new_branch_chk.setChecked(self.settings.default_create_new_branch)
         self._branch_prefix.setText(self.settings.branch_prefix)
         self._notify_native_chk.setChecked(self.settings.notify_native_enabled)
+        self._notify_sound_chk.setChecked(self.settings.notify_sound_enabled)
+        self._notify_sound_name.setText(self.settings.notify_sound_name)
         self._notify_reminder_chk.setChecked(self.settings.notify_reminder_enabled)
         self._notify_reminder_secs.setValue(self.settings.notify_reminder_seconds)
         self._notify_app_name.setText(self.settings.notify_app_name)
@@ -184,6 +186,8 @@ class SettingsPanel(QWidget):
             self._branch_prefix.text().strip().strip("/") or "claude"
         )
         self.settings.notify_native_enabled = self._notify_native_chk.isChecked()
+        self.settings.notify_sound_enabled = self._notify_sound_chk.isChecked()
+        self.settings.notify_sound_name = self._notify_sound_name.text().strip()
         self.settings.notify_reminder_enabled = self._notify_reminder_chk.isChecked()
         self.settings.notify_reminder_seconds = int(self._notify_reminder_secs.value())
         self.settings.notify_app_name = (
@@ -295,6 +299,25 @@ class SettingsPanel(QWidget):
             "Mostrar notificação nativa (toast/tray) ao final de cada tarefa"
         )
         layout.addWidget(self._notify_native_chk)
+
+        self._notify_sound_chk = QCheckBox(
+            "Tocar som nas notificações nativas"
+        )
+        self._notify_sound_chk.setToolTip(
+            "Usa a hint sound-name do D-Bus — o servidor de notificações "
+            "(KDE/GNOME/dunst) toca o sample correspondente do tema."
+        )
+        layout.addWidget(self._notify_sound_chk)
+
+        sound_form = QFormLayout()
+        self._notify_sound_name = QLineEdit()
+        self._notify_sound_name.setPlaceholderText("message-new-instant")
+        self._notify_sound_name.setToolTip(
+            "Nome XDG do som (ex: message-new-instant, message, complete, "
+            "bell, alarm-clock-elapsed). Vazio = sem som."
+        )
+        sound_form.addRow("Nome do som:", self._notify_sound_name)
+        layout.addLayout(sound_form)
 
         self._notify_reminder_chk = QCheckBox(
             "Reavisar tarefas paradas sem foco"

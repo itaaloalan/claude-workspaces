@@ -127,6 +127,7 @@ class DesktopNotifier(QObject):
         replaces_id: int = 0,
         urgency: int = 1,
         desktop_entry: str | None = None,
+        sound_name: str | None = None,
     ) -> int | None:
         """Dispara notificação. Retorna o id (int) ou None em falha.
 
@@ -157,6 +158,11 @@ class DesktopNotifier(QObject):
             # Escapa aspas simples pro literal GVariant
             safe = desktop_entry.replace("'", "\\'")
             hint_parts.append("'desktop-entry': <'" + safe + "'>")
+        if sound_name:
+            # sound-name é um nome XDG (ex: "message-new-instant"); o
+            # servidor de notificações resolve via libcanberra/tema atual.
+            safe_snd = sound_name.replace("'", "\\'")
+            hint_parts.append("'sound-name': <'" + safe_snd + "'>")
         hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
         log.warning(
             "DEBUG notify: urgency=%s timeout_ms=%s hints=%r replaces_id=%s actions=%d title=%r",

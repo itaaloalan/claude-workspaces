@@ -50,6 +50,7 @@ def _send_dbus(
     action_key: str,
     icon: str,
     timeout_ms: int,
+    sound_name: str = "",
 ) -> bool:
     gdbus = shutil.which("gdbus")
     if not gdbus:
@@ -58,6 +59,11 @@ def _send_dbus(
         actions_arg = json.dumps([action_key, OPEN_ACTION_LABEL])
     else:
         actions_arg = "[]"
+    if sound_name:
+        safe_snd = sound_name.replace("'", "\\'")
+        hints_arg = "{'sound-name': <'" + safe_snd + "'>}"
+    else:
+        hints_arg = "{}"
     try:
         proc = subprocess.run(
             [
@@ -72,7 +78,7 @@ def _send_dbus(
                 title,
                 body,
                 actions_arg,
-                "{}",
+                hints_arg,
                 str(int(timeout_ms)),
             ],
             capture_output=True, text=True, timeout=3,
@@ -110,6 +116,11 @@ def main() -> int:
     default_body = str(
         settings.get("notify_hook_default_body") or DEFAULT_BODY_PLACEHOLDER
     )
+    sound_enabled = bool(settings.get("notify_sound_enabled", True))
+    sound_name = (
+        str(settings.get("notify_sound_name") or "message-new-instant").strip()
+        if sound_enabled else ""
+    )
 
     transcript_path = data.get("transcript_path")
     cwd = data.get("cwd") or os.getcwd()
@@ -132,7 +143,9 @@ def main() -> int:
     body = last_user_msg[:240]
 
     action_key = f"{OPEN_ACTION_PREFIX}{session_id}" if session_id else ""
-    ok = _send_dbus(app_name, title, body, action_key, "claude-workspaces", 8000)
+    ok = _send_dbus(
+        app_name, title, body, action_key, "claude-workspaces", 8000, sound_name
+    )
     if not ok:
         _send_notify_send(app_name, title, body, "claude-workspaces")
     return 0

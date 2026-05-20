@@ -2261,6 +2261,10 @@ class MainWindow(QMainWindow):
             # configuração per-app no painel do SO se quiserem ajustar.
             notify_urgency = 1
             notify_timeout = -1
+            sound_name = (
+                self.settings.notify_sound_name.strip()
+                if self.settings.notify_sound_enabled else None
+            ) or None
             nid = self._desktop_notifier.notify(
                 title=title,
                 body=body,
@@ -2271,6 +2275,7 @@ class MainWindow(QMainWindow):
                 replaces_id=prev_nid,
                 urgency=notify_urgency,
                 desktop_entry="claude-workspaces",
+                sound_name=sound_name,
             )
             if nid is not None:
                 self._active_notifications[tab_id] = nid

@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.30.0] — 2026-05-20
+
+### Adicionado
+- **Som nas notificações nativas** (`settings.py`,
+  `services/desktop_notifier.py`, `ui/main_window.py`,
+  `ui/settings_panel.py`, `packaging/notify-hook.py`): notificações de
+  "Pronto" / "Ainda aguardando" e o hook Stop do Claude Code agora
+  enviam a hint `sound-name` do D-Bus (`org.freedesktop.Notifications`),
+  fazendo o servidor (KDE Plasma, GNOME Shell, dunst) tocar o sample
+  correspondente do tema sonoro via libcanberra. Default é
+  `message-new-instant`. Configurável em Configurações → Notificações
+  (checkbox "Tocar som nas notificações nativas" + campo "Nome do som")
+  — aceita qualquer nome XDG (`message`, `complete`, `bell`,
+  `alarm-clock-elapsed`, …). Novos campos em settings.json:
+  `notify_sound_enabled`, `notify_sound_name`.
+
 ## [0.29.0] — 2026-05-19
 
 ### Adicionado

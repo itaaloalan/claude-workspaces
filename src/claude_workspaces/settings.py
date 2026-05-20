@@ -68,6 +68,13 @@ class Settings:
     notify_reminder_prefix: str = "🔁 Ainda aguardando"
     notify_hook_title_format: str = "Claude — {project}"
     notify_hook_default_body: str = "(turno encerrado)"
+    # Som das notificações nativas. Usa a hint `sound-name` do
+    # org.freedesktop.Notifications — o servidor (KDE Plasma, GNOME
+    # Shell, dunst) toca o sample correspondente do tema sonoro via
+    # libcanberra. Nomes padrão XDG: "message-new-instant", "message",
+    # "complete", "bell", "alarm-clock-elapsed". Vazio = sem som.
+    notify_sound_enabled: bool = True
+    notify_sound_name: str = "message-new-instant"
     # Debounce da transição working→idle no status da sidebar. Why: o parser
     # de status oscila entre is_working True/False enquanto o Claude alterna
     # tool calls e geração de texto dentro do mesmo turno. O app só mostra
