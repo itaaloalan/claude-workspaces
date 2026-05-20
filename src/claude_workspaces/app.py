@@ -1,11 +1,20 @@
 import logging
+import os
 import sys
 
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication
+# Sob KDE Plasma 6 Wayland, cada subprocesso do QtWebEngineProcess
+# registra surface wayland própria com `--application-name=Claude
+# Workspaces` e aparece como janela vazia na overview (Meta+W). Forçar
+# o Chromium embarcado pra X11/XWayland mantém o app principal no
+# Wayland (sem perder DPI/HiDPI) mas evita as surfaces fantasmas dos
+# renderers. Precisa ser setado ANTES de qualquer import do QtWebEngine.
+os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform=x11")
 
-from .logging_setup import setup_logging
-from .ui.main_window import MainWindow
+from PySide6.QtGui import QColor, QPalette  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from .logging_setup import setup_logging  # noqa: E402
+from .ui.main_window import MainWindow  # noqa: E402
 
 
 def _build_dark_palette() -> QPalette:

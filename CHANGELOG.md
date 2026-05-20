@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.7] — 2026-05-20
+
+### Corrigido
+- **Janelas fantasmas vazias na overview do Plasma Wayland** (`app.py`):
+  sob KDE Plasma 6 Wayland, cada subprocesso do `QtWebEngineProcess`
+  registra surface wayland própria com `--application-name=Claude
+  Workspaces` e aparece como janela vazia na overview (Meta+W). Como
+  cada `QWebEngineView` (xterm.js dos terminais, runners, apps) spawn
+  um renderer separado, o número de janelas fantasmas crescia com a
+  quantidade de views. Solução: setar `QTWEBENGINE_CHROMIUM_FLAGS=--ozone-platform=x11`
+  antes de qualquer import do QtWebEngine — o app principal continua
+  no Wayland (sem perder HiDPI), mas o Chromium embarcado usa
+  X11/XWayland e os renderers não criam mais surfaces avulsas. A
+  correção anterior (0.37.6, `_SameViewPage` no `apps_view`) atacava
+  outra fonte de janelas extras (`window.open()` das webapps) e
+  continua valendo.
+
 ## [0.37.6] — 2026-05-20
 
 ### Melhorado
