@@ -1401,6 +1401,8 @@ class MainWindow(QMainWindow):
                 on_add_blank=lambda w=ws: self._open_runner_edit(w, None),
                 on_generate=lambda w=ws: self._generate_runner_with_claude(w),
                 on_toggle_collapse=_toggle,
+                on_stop_all=lambda w=ws: self._stop_all_workspace_runners(w),
+                on_restart_all=lambda w=ws: self._restart_all_workspace_runners(w),
             )
             self.list_widget.setItemWidget(group, 0, header)
             collapsed = bool(
@@ -1510,6 +1512,8 @@ class MainWindow(QMainWindow):
                 on_add_blank=_add_blank,
                 on_generate=_gen,
                 on_toggle_collapse=_toggle,
+                on_stop_all=lambda w=ws, t=term: self._stop_all_console_runners(w, t),
+                on_restart_all=lambda w=ws, t=term: self._restart_all_console_runners(w, t),
             )
             self.list_widget.setItemWidget(group, 0, header)
             group.setExpanded(True)
@@ -1877,6 +1881,30 @@ class MainWindow(QMainWindow):
             lambda rid, txt, wid=ws.id: self._on_runner_status_changed(wid, rid, txt)
         )
         return area
+
+    # ---- bulk actions disparadas pelo header da sidebar ------------------
+
+    def _stop_all_workspace_runners(self, workspace: Workspace) -> None:
+        area = self._runner_areas.get(workspace.id)
+        if area is None:
+            return
+        area.stop_all()
+
+    def _restart_all_workspace_runners(self, workspace: Workspace) -> None:
+        # Garante a RunnerArea pra cobrir o caso de o usuário clicar
+        # "↻" no header sem ter aberto a aba de runners ainda.
+        area = self._get_or_create_runner_area(workspace)
+        area.restart_all()
+
+    def _stop_all_console_runners(self, workspace: Workspace, terminal) -> None:
+        area = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
+        if area is None:
+            return
+        area.stop_all()
+
+    def _restart_all_console_runners(self, workspace: Workspace, terminal) -> None:
+        area = self._ensure_terminal_runner_panel(workspace, terminal)
+        area.restart_all()
 
     def _open_runner_edit(
         self, workspace, runner, console_session_id: str = ""

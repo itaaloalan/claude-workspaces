@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.49.0] — 2026-05-20
+
+### Adicionado
+- **Parar todos / Reiniciar todos no header da sidebar**
+  (`ui/runner_group_widget.py`, `ui/runner_area.py`,
+  `ui/main_window.py`): o cabeçalho "Runners workspace" / "Runners
+  console" ganhou dois botões compactos — `■` para parar tudo do
+  escopo e `↻` para reiniciar tudo (usa `restart_cmd` quando o runner
+  define um, senão faz stop+start). `RunnerArea` expõe `run_all`,
+  `stop_all` e `restart_all` públicos pra o header disparar sem
+  precisar focar a aba de runners; o restart no escopo workspace
+  instancia a área lazy se ainda não existia.
+
 ## [0.48.1] — 2026-05-20
 
 ### Corrigido

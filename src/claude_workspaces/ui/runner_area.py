@@ -344,16 +344,40 @@ class RunnerArea(QWidget):
     # ---- ações de área ---------------------------------------------------
 
     def _run_all(self) -> None:
+        self.run_all()
+
+    def _stop_all(self) -> None:
+        self.stop_all()
+
+    def run_all(self) -> None:
+        """Inicia todos os runners habilitados deste escopo que não estão
+        rodando. Público pra ser disparado de fora (ex.: header da sidebar)."""
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             if isinstance(w, RunnerWidget) and w.config().enabled and not w.is_running():
                 w.start()
 
-    def _stop_all(self) -> None:
+    def stop_all(self) -> None:
+        """Para todos os runners deste escopo que estão rodando."""
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             if isinstance(w, RunnerWidget) and w.is_running():
                 w.stop()
+
+    def restart_all(self) -> None:
+        """Reinicia todos os runners habilitados deste escopo. Quem está
+        rodando faz `restart` (usa restart_cmd se houver); quem está parado
+        é iniciado."""
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if not isinstance(w, RunnerWidget):
+                continue
+            if not w.config().enabled:
+                continue
+            if w.is_running():
+                w.restart()
+            else:
+                w.start()
 
     def _remove_all(self) -> None:
         in_scope = [r for r in self._ws.runners if self._matches_scope(r)]

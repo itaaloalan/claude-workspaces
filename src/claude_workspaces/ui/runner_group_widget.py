@@ -52,6 +52,8 @@ class RunnerGroupWidget(QWidget):
         on_add_blank: Callable[[], None],
         on_generate: Callable[[], None] | None = None,
         on_toggle_collapse: Callable[[], None] | None = None,
+        on_stop_all: Callable[[], None] | None = None,
+        on_restart_all: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -81,6 +83,24 @@ class RunnerGroupWidget(QWidget):
         )
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addStretch(1)
+
+        if on_restart_all is not None:
+            self._restart_all_btn = QPushButton("↻")
+            self._restart_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._restart_all_btn.setFixedSize(20, 18)
+            self._restart_all_btn.setToolTip("Reiniciar todos os runners deste escopo")
+            self._restart_all_btn.setStyleSheet(_BTN_QSS)
+            self._restart_all_btn.clicked.connect(on_restart_all)
+            row.addWidget(self._restart_all_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        if on_stop_all is not None:
+            self._stop_all_btn = QPushButton("■")
+            self._stop_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._stop_all_btn.setFixedSize(20, 18)
+            self._stop_all_btn.setToolTip("Parar todos os runners deste escopo")
+            self._stop_all_btn.setStyleSheet(_BTN_QSS)
+            self._stop_all_btn.clicked.connect(on_stop_all)
+            row.addWidget(self._stop_all_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._add_btn = QPushButton("＋")
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
