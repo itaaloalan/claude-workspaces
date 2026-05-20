@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.50.1] — 2026-05-20
+
+### Corrigido
+- **Reiniciar todos no header da sidebar agora starta runners parados**
+  (`ui/runner_widget.py`): a guarda `_bridge_ready` no `_spawn` segurava
+  o `start`/`restart` enquanto o QWebChannel da view não tivesse
+  sinalizado `frontend_ready`. Quando o usuário clicava ↻ com o
+  RunnerArea ainda não realizado (painel nunca aberto), o bridge demorava
+  demais e o pending_cmd ficava na fila — processos nunca subiam.
+  PTY agora roda independente do display; output pré-bridge fica só
+  no `_log_buf` (já disponível via "Copiar log").
+
 ## [0.50.0] — 2026-05-20
 
 ### Adicionado

@@ -251,11 +251,13 @@ class RunnerWidget(QWidget):
     # ---- core ------------------------------------------------------------
 
     def _spawn(self, cmd: str, intent: str) -> None:
-        if not self._bridge_ready:
-            self._pending_cmd = (cmd, intent)
-            self._status.setText(f"(carregando) {intent}")
-            self._emit_status_label("carregando")
-            return
+        # Não bloqueia por bridge: o PTY roda independente do display do
+        # xterm.js. Output que chegar antes do bridge JS subscrever fica
+        # só no `_log_buf` (acessível via "Copiar log"). Sem isso, clicar
+        # "Reiniciar todos" no header da sidebar com o RunnerArea ainda
+        # não realizado deixava os processos parados — o widget enfileirava
+        # `_pending_cmd` esperando um bridge que demorava demais a ficar
+        # ready em painel ainda não visível.
         cwd = self._runner.cwd or self._default_cwd
         argv = ["bash", "-lc", cmd]
         # Reset do estado de detecção a cada start/restart pra reabrir
