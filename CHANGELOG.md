@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.32.0] — 2026-05-20
+
+### Adicionado
+- **Botão ✖ pra remover console direto da sidebar**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`): antes só dava
+  pra encerrar/remover um console pelo menu de contexto (clique direito
+  → "Encerrar/remover console"). Agora o row tem um botão ✖ inline ao
+  lado de ▶ e ⚙, com hover em vermelho pra deixar claro que é
+  destrutivo. Pede confirmação antes (mensagem muda se o processo está
+  rodando ou já encerrado). Visibilidade segue o mesmo toggle do header
+  WORKSPACES (`show_terminal_actions`); o ✖ fica habilitado mesmo em
+  console já encerrado pra permitir limpar a sidebar.
+
 ## [0.31.0] — 2026-05-20
 
 ### Adicionado

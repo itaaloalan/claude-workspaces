@@ -2542,7 +2542,26 @@ class MainWindow(QMainWindow):
             global_pos.setY(global_pos.y() + 4)
             popup.show_at(global_pos)
 
-        widget.set_action_callbacks(on_continue, on_open_mode_popup)
+        def on_close() -> None:
+            from PySide6.QtWidgets import QMessageBox
+            term = self._terminal_widget_for(tab_id)
+            title = self._tab_base_titles.get(tab_id, "console")
+            running = term is not None and term.is_running()
+            msg = (
+                f"Encerrar e remover '{title}'?\n\n"
+                "O processo Claude será finalizado e a aba removida."
+            ) if running else (
+                f"Remover '{title}' da sidebar?"
+            )
+            res = QMessageBox.question(
+                self, "Remover console", msg,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if res == QMessageBox.StandardButton.Yes:
+                self._close_terminal_by_tab_id(tab_id)
+
+        widget.set_action_callbacks(on_continue, on_open_mode_popup, on_close)
 
     def _add_terminal_child(
         self,

@@ -158,6 +158,35 @@ class TerminalChildWidget(QWidget):
         self._mode_btn.setEnabled(False)
         actions_layout.addWidget(self._mode_btn)
 
+        # ✖ Encerrar/remover console — mesmo atalho que estava só no menu
+        # de contexto (clique direito). Hover em vermelho pra deixar claro
+        # que é destrutivo.
+        self._close_btn = QPushButton("✖")
+        self._close_btn.setFixedSize(20, 18)
+        self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._close_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: transparent;"
+            f"  color: {theme.TEXT_FAINT};"
+            f"  border: 0;"
+            f"  border-radius: 4px;"
+            f"  padding: 0px 4px;"
+            f"  font-size: 12px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f"  background: {theme.BG_SURFACE};"
+            f"  color: {theme.DANGER};"
+            f"}}"
+            f"QPushButton:disabled {{"
+            f"  color: {theme.TEXT_DISABLED};"
+            f"}}"
+        )
+        self._close_btn.setToolTip(
+            "Encerrar/remover console — encerra o processo (se rodando)"
+            " e remove esta aba"
+        )
+        actions_layout.addWidget(self._close_btn)
+
         sub_row = QHBoxLayout()
         sub_row.setContentsMargins(0, 0, 0, 0)
         sub_row.setSpacing(6)
@@ -345,8 +374,9 @@ class TerminalChildWidget(QWidget):
         self,
         on_continue: Callable[[], None],
         on_open_mode_popup: Callable[[QWidget], None],
+        on_close: Callable[[], None] | None = None,
     ) -> None:
-        """Conecta os cliques dos botões inline (▶ ⚙). `on_open_mode_popup`
+        """Conecta os cliques dos botões inline (▶ ⚙ ✖). `on_open_mode_popup`
         recebe o próprio botão como anchor pra posicionar o ModePopup."""
         # Desconecta primeiro pra evitar duplicar handlers ao reconectar
         try:
@@ -357,10 +387,16 @@ class TerminalChildWidget(QWidget):
             self._mode_btn.clicked.disconnect()
         except RuntimeError:
             pass
+        try:
+            self._close_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
         self._continue_btn.clicked.connect(lambda _=False: on_continue())
         self._mode_btn.clicked.connect(
             lambda _=False, b=self._mode_btn: on_open_mode_popup(b)
         )
+        if on_close is not None:
+            self._close_btn.clicked.connect(lambda _=False: on_close())
 
     def set_actions_visible(self, visible: bool) -> None:
         """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do
@@ -370,7 +406,9 @@ class TerminalChildWidget(QWidget):
         self._actions_widget.setVisible(visible)
 
     def set_actions_enabled(self, enabled: bool) -> None:
-        """Habilita/desabilita os botões conforme o terminal está rodando."""
+        """Habilita/desabilita os botões conforme o terminal está rodando.
+        O ✖ fica sempre habilitado — faz sentido remover mesmo console
+        já encerrado (limpa a sidebar)."""
         self._continue_btn.setEnabled(enabled)
         self._mode_btn.setEnabled(enabled)
         self._refresh_continue_visibility()
