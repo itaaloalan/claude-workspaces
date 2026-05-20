@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.50.4] — 2026-05-20
+
+### Mudado
+- **`restart_all` do header da sidebar ignora flag `enabled`**
+  (`ui/runner_area.py`): "Reiniciar todos" agora reinicia geral sem
+  exceção — runners com `enabled: false` no JSON também sobem. O flag
+  `enabled` continua valendo só pro "▶ Rodar todos" do painel de
+  runners (escopo restrito por design).
+
 ## [0.50.3] — 2026-05-20
 
 ### Corrigido

@@ -387,12 +387,13 @@ class RunnerArea(QWidget):
             self.tabs.count(),
             self._console_session_id,
         )
+        # NÃO respeita `enabled` — esse flag é só pro "▶ Rodar todos" do
+        # painel de runners (escopo restrito). "Reiniciar todos" no header
+        # da sidebar significa "reinicia geral, sem exceção" — incluir
+        # disabled foi pedido explícito do usuário ao ver runner pulado.
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             if not isinstance(w, RunnerWidget):
-                continue
-            if not w.config().enabled:
-                log.info("restart_all: skip %r (disabled)", w.config().name)
                 continue
             if w.is_running():
                 log.info("restart_all: restart %r", w.config().name)
