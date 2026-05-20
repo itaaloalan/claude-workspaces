@@ -1401,8 +1401,8 @@ class MainWindow(QMainWindow):
                 on_add_blank=lambda w=ws: self._open_runner_edit(w, None),
                 on_generate=lambda w=ws: self._generate_runner_with_claude(w),
                 on_toggle_collapse=_toggle,
-                on_stop_all=lambda w=ws: self._stop_all_workspace_runners(w),
-                on_restart_all=lambda w=ws: self._restart_all_workspace_runners(w),
+                on_stop_all=lambda _c=False, w=ws: self._stop_all_workspace_runners(w),
+                on_restart_all=lambda _c=False, w=ws: self._restart_all_workspace_runners(w),
             )
             self.list_widget.setItemWidget(group, 0, header)
             collapsed = bool(
@@ -1512,8 +1512,8 @@ class MainWindow(QMainWindow):
                 on_add_blank=_add_blank,
                 on_generate=_gen,
                 on_toggle_collapse=_toggle,
-                on_stop_all=lambda w=ws, t=term: self._stop_all_console_runners(w, t),
-                on_restart_all=lambda w=ws, t=term: self._restart_all_console_runners(w, t),
+                on_stop_all=lambda _c=False, w=ws, t=term: self._stop_all_console_runners(w, t),
+                on_restart_all=lambda _c=False, w=ws, t=term: self._restart_all_console_runners(w, t),
             )
             self.list_widget.setItemWidget(group, 0, header)
             group.setExpanded(True)

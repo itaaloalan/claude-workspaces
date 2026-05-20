@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.50.3] — 2026-05-20
+
+### Corrigido
+- **Parar/Reiniciar todos do header da sidebar — `AttributeError: 'bool'`**
+  (`ui/main_window.py`): o sinal `QPushButton.clicked` emite `checked: bool`
+  posicionalmente, que sobrescrevia o `w=ws` das lambdas
+  `on_stop_all`/`on_restart_all` e fazia `_get_or_create_runner_area(True)`
+  estourar com `AttributeError: 'bool' object has no attribute 'id'`. A
+  exceção era silenciosa do ponto de vista do usuário — clique sumia e os
+  runners não startavam. Agora a assinatura é
+  `lambda _c=False, w=ws, …: …` nos quatro pontos (workspace+console).
+
 ## [0.50.2] — 2026-05-20
 
 ### Corrigido
