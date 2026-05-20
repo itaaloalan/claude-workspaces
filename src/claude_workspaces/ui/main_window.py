@@ -3089,7 +3089,9 @@ class MainWindow(QMainWindow):
 
     def _on_context_status_refresh_clicked(self) -> None:
         """Click no botão ⟳ ao lado do status do plano: força chamada
-        nova ignorando cache e cooldown negativo. Feedback visual:
+        nova ignorando o cache TTL. Em cooldown (rate-limit), o force
+        é ignorado dentro do fetch (forçar só renova o 429), e a UI
+        apenas re-renderiza com o estado atual. Feedback visual:
         desabilita o botão durante a request pra evitar double-click."""
         btn = getattr(self, "_context_status_refresh_btn", None)
         if btn is not None:

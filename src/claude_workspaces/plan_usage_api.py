@@ -28,7 +28,11 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-CACHE_TTL_SECONDS = 300.0
+# TTL longo: o endpoint tem rate-limit de janela ~1h (Retry-After até
+# 3600s em 429), e os números só mudam quando o usuário usa o Claude —
+# 30min é granularidade mais que suficiente e evita conflito com o CLI
+# oficial, que compartilha o mesmo token e janela de rate-limit.
+CACHE_TTL_SECONDS = 1800.0
 REQUEST_TIMEOUT_SECONDS = 8.0
 
 
@@ -116,8 +120,10 @@ def fetch_plan_usage(force: bool = False) -> PlanUsageSnapshot | None:
         return _cache
     # Cache negativo: depois de uma falha (rate limit/token expirado),
     # não retentar por um tempo — evita martelar a API a cada refresh
-    # do painel (que roda a cada poucos segundos).
-    if not force and now < _cache_negative_until:
+    # do painel (que roda a cada poucos segundos). Mesmo com force=True
+    # (clique no ⟳), respeitamos o Retry-After do servidor — forçar
+    # durante cooldown só renova a janela de 429 e prolonga o bloqueio.
+    if now < _cache_negative_until:
         return _cache  # devolve o cache antigo se ainda existir (pode ser None)
 
     token = _read_oauth_token()

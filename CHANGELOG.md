@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.48.1] — 2026-05-20
+
+### Corrigido
+- **Sidebar não fica mais presa em "cooldown" do uso do plano**
+  (`plan_usage_api.py`, `ui/main_window.py`): TTL do cache de
+  `/api/oauth/usage` subiu de 5min pra 30min, e o clique no ⟳ agora
+  respeita o `Retry-After` do servidor em vez de forçar uma nova
+  chamada — antes, cada force durante o cooldown renovava a janela de
+  429 e prolongava o bloqueio indefinidamente. A granularidade de
+  30min é suficiente pros números do plano e evita conflito de
+  rate-limit com o CLI oficial que compartilha o mesmo token.
+
 ## [0.48.0] — 2026-05-20
 
 ### Adicionado
