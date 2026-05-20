@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.42.0] — 2026-05-20
+
+### Adicionado
+- **Banner sticky no KDE via keepalive (QTimer re-emit)**
+  (`ui/main_window.py`): KDE Plasma 6 transient-iza qualquer notif
+  com action ignorando urgency/resident/transient. Workaround:
+  `QTimer` por tab re-emite a notif a cada 5s com `replaces_id`,
+  fazendo o banner reaparecer antes do Plasma matá-lo (~6s). O
+  popup fica visualmente sticky. Cancelado quando o tab sai do
+  inbox ou o usuário clica em "Abrir console". Outros apps
+  (Telegram/KMail) só conseguem sticky porque usam KNotification
+  nativa do KDE, que não tem binding Python decente.
+
 ## [0.41.0] — 2026-05-20
 
 ### Alterado

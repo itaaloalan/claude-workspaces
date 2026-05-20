@@ -176,6 +176,12 @@ class MainWindow(QMainWindow):
         # proativamente quando o tab sai do inbox (voltou a trabalhar /
         # terminou / usuário clicou na aba), evitando banner stale.
         self._active_notifications: dict[int, int] = {}
+        # tab_id → QTimer que re-emite a notif com replaces_id pra
+        # ressuscitar o banner no KDE Plasma 6 (que transient-iza
+        # notifs com action ignorando urgency/resident/timeout). Sem
+        # isso o usuário perde o popup em ~6s. Cancelado quando a
+        # entry sai do inbox ou o usuário clica na action.
+        self._notification_keepalive: dict[int, QTimer] = {}
         # Mantém o notify-hook.py instalado em sincronia com o packaged
         # (ex: versão com botão "Abrir console" via D-Bus).
         refresh_installed_hook()
@@ -2399,6 +2405,7 @@ class MainWindow(QMainWindow):
             )
             if nid is not None:
                 self._active_notifications[tab_id] = nid
+                self._arm_notification_keepalive(tab_id, is_reminder)
                 return
             log.debug("D-Bus notify falhou — fallback pro tray.showMessage")
 
@@ -2411,6 +2418,48 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("showMessage falhou", exc_info=True)
 
+    def _arm_notification_keepalive(self, tab_id: int, is_reminder: bool) -> None:
+        """Inicia (ou reinicia) o timer que re-emite a notif a cada 5s.
+
+        Solução pro KDE Plasma 6 transient-izar popups com action: re-emitir
+        com `replaces_id` faz o banner reaparecer no canto. Para quando o
+        tab sai do inbox ou o usuário clica na action. 5s é menos que o
+        timeout que o Plasma aplica (~6s), então o popup não chega a sumir
+        entre re-emissões — o banner fica visualmente sticky.
+        """
+        existing = self._notification_keepalive.get(tab_id)
+        if existing is not None:
+            existing.stop()
+            existing.deleteLater()
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(5000)
+        timer.timeout.connect(
+            lambda _tid=tab_id: self._resurrect_notification(_tid)
+        )
+        self._notification_keepalive[tab_id] = timer
+        timer.start()
+
+    def _cancel_notification_keepalive(self, tab_id: int) -> None:
+        timer = self._notification_keepalive.pop(tab_id, None)
+        if timer is not None:
+            timer.stop()
+            timer.deleteLater()
+
+    def _resurrect_notification(self, tab_id: int) -> None:
+        """Re-emite a notif do tab se ele ainda estiver no inbox.
+
+        Se o tab saiu do inbox no meio (ficou idle, foi clicado, terminou),
+        a entry sumiu de `inbox_entries()` e simplesmente paramos. Senão,
+        re-chamamos `_on_inbox_alert` como re-lembrete — ele já usa
+        `replaces_id` automaticamente via `_active_notifications`.
+        """
+        self._notification_keepalive.pop(tab_id, None)
+        info = self.terminals_coord.inbox_entries().get(tab_id)
+        if info is None:
+            return
+        self._on_inbox_alert(tab_id, info, is_reminder=True)
+
     def _handle_notification_action(
         self, tab_id: int, workspace_id: str, key: str
     ) -> None:
@@ -2418,6 +2467,7 @@ class MainWindow(QMainWindow):
         # O servidor fecha o banner ao invocar action, então o note_id já
         # não é mais válido — descarta pra não tentar close() depois.
         self._active_notifications.pop(tab_id, None)
+        self._cancel_notification_keepalive(tab_id)
         if key in ("open", "default"):
             self.show()
             self.raise_()
@@ -2478,6 +2528,7 @@ class MainWindow(QMainWindow):
         Fecha a notificação D-Bus correspondente se ainda estiver visível —
         senão o banner "✅ Pronto" continua na tela enquanto o console
         já está em outro estado."""
+        self._cancel_notification_keepalive(tab_id)
         nid = self._active_notifications.pop(tab_id, None)
         if nid is None or self._desktop_notifier is None:
             return
