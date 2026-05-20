@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.47.0] — 2026-05-20
+
+### Adicionado
+- **Clicar no `host:port` do runner na sidebar abre a URL no
+  navegador** (`ui/runner_child_widget.py`): label do endereço virou
+  clicável (cursor de mão, hover sublinhado), reaproveitando
+  `services.system_open.open_url`. Tooltip passou pra "Abrir … no
+  navegador" e URL sem esquema ganha `http://` automaticamente.
+
 ## [0.46.1] — 2026-05-20
 
 ### Corrigido

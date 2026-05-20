@@ -109,9 +109,14 @@ class RunnerChildWidget(QWidget):
 
         self._addr_label = QLabel("")
         self._addr_label.setStyleSheet(
-            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+            f"QLabel {{ color: {theme.TEXT_FAINT}; font-size: 10px; }}"
+            f"QLabel:hover {{ color: {theme.TEXT_LINK}; "
+            f"text-decoration: underline; }}"
         )
+        self._addr_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self._addr_label.setVisible(False)
+        self._addr_url: str = ""
+        self._addr_label.mousePressEvent = self._on_addr_clicked  # type: ignore[assignment]
         row.addWidget(self._addr_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._toggle_btn = QPushButton("▶")
@@ -145,12 +150,24 @@ class RunnerChildWidget(QWidget):
         addr = _host_port(url)
         if addr:
             self._addr_label.setText(addr)
-            self._addr_label.setToolTip(url)
+            self._addr_label.setToolTip(f"Abrir {url} no navegador")
             self._addr_label.setVisible(True)
+            self._addr_url = url if "://" in url else f"http://{url}"
         else:
             self._addr_label.setText("")
             self._addr_label.setToolTip("")
             self._addr_label.setVisible(False)
+            self._addr_url = ""
+
+    def _on_addr_clicked(self, event) -> None:
+        if event.button() != Qt.MouseButton.LeftButton or not self._addr_url:
+            return
+        from ..services.system_open import open_url
+        from ..errors import LaunchError
+        try:
+            open_url(self._addr_url)
+        except LaunchError:
+            pass
 
     def set_status(self, status: str) -> None:
         """Mostra a fase atual (linha 2) só durante transições.
