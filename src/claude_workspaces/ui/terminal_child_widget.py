@@ -89,14 +89,18 @@ class TerminalChildWidget(QWidget):
         self._title = title
         # Tamanho previsível pra não brigar com o QTreeWidget no resize
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        # Altura aumentada pra caber a 3a linha de modelo + tokens. Quem
-        # define a altura efetiva do row no QTreeWidget é o setSizeHint
-        # no `_CHILD_HEIGHT` lá no main_window — manter sincronizado.
-        self.setMinimumHeight(71)
-        self.setMaximumHeight(71)
+        # Altura aumentada pra caber a 3a linha (chips de modelo+branch).
+        # Quem define a altura efetiva do row no QTreeWidget é o
+        # setSizeHint no `_CHILD_HEIGHT` lá no main_window — manter
+        # sincronizado (row = widget + 12px de border+padding do item).
+        self.setMinimumHeight(74)
+        self.setMaximumHeight(74)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 2, 4, 2)
+        # 2px de margem à esquerda pra que o `_status_strip` (3px) fique
+        # dentro da borda 1px do QTreeWidget::item — sem isso o strip
+        # encosta no canto e visualmente "fura" o card.
+        outer.setContentsMargins(2, 2, 4, 2)
         outer.setSpacing(6)
 
         # Faixa vertical 3px no canto esquerdo do row, pintada com a cor do
@@ -252,11 +256,7 @@ class TerminalChildWidget(QWidget):
         # Claude — "Context ▓▓▓ 7% · Usage …"). Antes vinha na mesma
         # linha do "Ocioso · 12m 15s", o que poluía o estado quando a
         # statusline era longa. Agora fica numa linha própria entre o
-        # estado e o modelo, com o `_sep_dot` (·) mantido só por compat
-        # — escondido permanentemente (já não há vizinho à esquerda).
-        self._sep_dot = QLabel("·")
-        self._sep_dot.setVisible(False)
-
+        # estado e o modelo.
         self._action_label = QLabel("")
         self._action_label.setStyleSheet(
             f"color: {theme.TEXT_FADED}; font-size: 10px;"
@@ -362,10 +362,8 @@ class TerminalChildWidget(QWidget):
             shown = last_action if len(last_action) <= 55 else last_action[:54] + "…"
             self._action_label.setText(shown)
             self._action_label.setVisible(True)
-            self._sep_dot.setVisible(True)
         else:
             self._action_label.setVisible(False)
-            self._sep_dot.setVisible(False)
         # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
         # em sessão restaurada+ociosa.
         self._current_state = state

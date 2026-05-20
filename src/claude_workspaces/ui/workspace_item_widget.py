@@ -79,10 +79,13 @@ class WorkspaceItemWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(28)
+        # Altura aumentada pra dar respiro entre workspaces — antes ficavam
+        # "colados" um no outro porque o header tinha exatamente a altura
+        # do label + 4px de padding. Agora 8px extras separam visualmente.
+        self.setMinimumHeight(36)
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(2, 2, 2, 2)
+        row.setContentsMargins(2, 4, 2, 8)
         row.setSpacing(4)
 
         self._label = QLabel(name)

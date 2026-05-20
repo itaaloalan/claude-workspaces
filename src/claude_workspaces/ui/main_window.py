@@ -2623,8 +2623,11 @@ class MainWindow(QMainWindow):
                     area._close_tab(i)
                     return
 
-    # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
-    _CHILD_HEIGHT = 71
+    # Altura fixa do row do QTreeWidget pro TerminalChildWidget. Inclui
+    # o overhead de border 1px + padding 5px (top+bottom = 12px) do
+    # ::item — o widget interno mede 74px (sincronizado lá), então
+    # row = 74 + 12 = 86.
+    _CHILD_HEIGHT = 86
 
     def _wire_child_actions(
         self, widget: "TerminalChildWidget", tab_id: int

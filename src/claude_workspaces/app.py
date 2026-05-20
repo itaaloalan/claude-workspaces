@@ -9,7 +9,7 @@ import sys
 # o Chromium embarcado pra X11/XWayland mantém o app principal no
 # Wayland (sem perder DPI/HiDPI) mas evita as surfaces fantasmas dos
 # renderers. Precisa ser setado ANTES de qualquer import do QtWebEngine.
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform=x11")
+os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform-hint=x11")
 
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QPalette  # noqa: E402

@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.9] — 2026-05-20
+
+### Corrigido
+- **Conteúdo do card de console transbordando + workspaces colados**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`,
+  `ui/workspace_item_widget.py`): com a nova borda 1px do `::item` e o
+  chip row de modelo+branch adicionados em 0.37.8, o widget interno
+  (71px) ficou maior que a área útil do row (que perde 12px pra
+  border+padding), e os chips/strip vertical estouravam o card. Altura
+  do widget bumpada pra 74px e `_CHILD_HEIGHT` pra 86px (74 + 12 de
+  overhead). Também adicionei 2px de margem esquerda pro `_status_strip`
+  caber dentro da borda do item. Headers de workspace passaram de 28px
+  pra 36px de altura mínima com 8px de padding-bottom — dá respiro
+  entre workspaces que antes ficavam "colados" um no outro.
+
 ## [0.37.8] — 2026-05-20
 
 ### Melhorado
