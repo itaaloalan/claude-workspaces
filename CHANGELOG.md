@@ -8,6 +8,17 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
 
 ## [0.37.6] — 2026-05-20
 
+### Melhorado
+- **Sidebar — faixa de estado à esquerda e branch/modelo como chips
+  alinhados** (`ui/terminal_child_widget.py`): cada row de console
+  ganhou uma faixa vertical de 3px no canto esquerdo pintada com a
+  cor do estado (vermelho=ocioso, âmbar=trabalhando, laranja=aguardando,
+  verde=concluído) — passa o estado de cada console em um glance, em
+  vez de depender só da linha de seleção monocromática. A branch saiu
+  do label solto vertical-center no canto direito do card e virou um
+  chip ao lado do chip do modelo (`opus-4-7`), na mesma linha — antes
+  ficavam desalinhados verticalmente.
+
 ### Corrigido
 - **Janelas brancas vazias abrindo sozinhas na barra de tarefas**
   (`ui/views/apps_view.py`): webapps embutidos (ClickUp/Taskis/etc)
