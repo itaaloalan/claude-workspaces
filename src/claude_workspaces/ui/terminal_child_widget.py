@@ -111,12 +111,15 @@ class TerminalChildWidget(QWidget):
         # `MainWindow._on_selection_changed` chama `set_selected(bool)`
         # pra mostrar/esconder. É a única pista visual de "este é o
         # console selecionado" — o bg do row é transparente.
+        # Mantida sempre no layout (mesmo quando não selecionada) pra não
+        # deslocar 2+spacing px de todo o conteúdo do card ao selecionar —
+        # isso fazia a linha de estado desalinhar entre consoles. Alterna
+        # só a cor (transparente ↔ branca) via `set_selected`.
         self._selection_strip = QFrame()
         self._selection_strip.setFixedWidth(2)
         self._selection_strip.setStyleSheet(
-            "background: #ffffff; border: 0;"
+            "background: transparent; border: 0;"
         )
-        self._selection_strip.setVisible(False)
         outer.addWidget(self._selection_strip)
 
         self._status_strip = QFrame()
@@ -443,9 +446,13 @@ class TerminalChildWidget(QWidget):
 
     def set_selected(self, selected: bool) -> None:
         """Mostra/esconde a barra branca de seleção encostada do lado
-        direito do `_status_strip`. Chamado pelo MainWindow quando o
-        item da tree muda de seleção."""
-        self._selection_strip.setVisible(selected)
+        direito do `_status_strip`. A strip fica sempre no layout
+        (largura fixa reservada) — alterna só a cor pra não deslocar o
+        conteúdo do card ao selecionar."""
+        color = "#ffffff" if selected else "transparent"
+        self._selection_strip.setStyleSheet(
+            f"background: {color}; border: 0;"
+        )
 
     def set_actions_visible(self, visible: bool) -> None:
         """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do

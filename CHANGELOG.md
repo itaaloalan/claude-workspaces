@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.42.3] — 2026-05-20
+
+### Corrigido
+- **Barra de seleção deslocava o conteúdo do card e desalinhava
+  a linha de status entre consoles** (`ui/terminal_child_widget.py`):
+  o `_selection_strip` (2px branco à esquerda) usava
+  `setVisible(True/False)`, e ao ficar invisível saía do fluxo do
+  `QHBoxLayout` — então o card selecionado ficava 2px + spacing à
+  direita dos outros, fazendo "Trabalhando" / "Ocioso · …" não
+  alinharem horizontalmente entre cards. Agora a strip fica sempre
+  no layout (largura fixa reservada) e só a cor alterna entre
+  branca (selecionado) e transparente (não selecionado).
+
 ## [0.42.2] — 2026-05-20
 
 ### Corrigido
