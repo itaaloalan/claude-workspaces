@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.1] — 2026-05-20
+
+### Corrigido
+- **Diálogo "Remover console" com ícones invisíveis no tema escuro**
+  (`ui/main_window.py`): o `QMessageBox.question` padrão renderizava
+  os botões Yes/No com glifos quase invisíveis sobre fundo escuro.
+  Substituído por `QMessageBox` customizado com botões "Sim"/"Não"
+  em PT-BR sem ícone — fica legível e mais consistente com o resto
+  da UI.
+
 ## [0.37.0] — 2026-05-20
 
 ### Alterado
