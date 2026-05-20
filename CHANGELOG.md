@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.39.2] — 2026-05-20
+
+### Adicionado
+- **Barra branca de seleção ao lado do strip de estado**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`): com o bg
+  da seleção zerado em 0.38.2, não dava pra saber qual console
+  estava selecionado. Adicionada `_selection_strip` (QFrame 2px
+  branco) encostada do lado direito do `_status_strip` — mesma
+  altura, escondida por padrão, ligada/desligada pelo
+  `_on_selection_changed` do MainWindow via `set_selected(bool)`.
+
 ## [0.39.1] — 2026-05-20
 
 ### Corrigido

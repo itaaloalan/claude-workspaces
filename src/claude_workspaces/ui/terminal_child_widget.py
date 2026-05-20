@@ -113,6 +113,19 @@ class TerminalChildWidget(QWidget):
         )
         outer.addWidget(self._status_strip)
 
+        # Barra branca de seleção — fica encostada do lado direito do
+        # `_status_strip`, mesma altura, escondida por padrão. O
+        # `MainWindow._on_selection_changed` chama `set_selected(bool)`
+        # pra mostrar/esconder. É a única pista visual de "este é o
+        # console selecionado" — o bg do row é transparente.
+        self._selection_strip = QFrame()
+        self._selection_strip.setFixedWidth(2)
+        self._selection_strip.setStyleSheet(
+            "background: #ffffff; border: 0;"
+        )
+        self._selection_strip.setVisible(False)
+        outer.addWidget(self._selection_strip)
+
         # Coluna do ícone (spinner ‖/⠋) foi removida do layout — a faixa
         # vertical de estado (`_status_strip`) já cumpre o papel de mostrar
         # o estado do console em um glance, sem duplicar o sinal. O QLabel
@@ -427,6 +440,12 @@ class TerminalChildWidget(QWidget):
         )
         if on_close is not None:
             self._close_btn.clicked.connect(lambda _=False: on_close())
+
+    def set_selected(self, selected: bool) -> None:
+        """Mostra/esconde a barra branca de seleção encostada do lado
+        direito do `_status_strip`. Chamado pelo MainWindow quando o
+        item da tree muda de seleção."""
+        self._selection_strip.setVisible(selected)
 
     def set_actions_visible(self, visible: bool) -> None:
         """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do

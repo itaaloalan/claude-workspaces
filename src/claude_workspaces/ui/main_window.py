@@ -1638,6 +1638,17 @@ class MainWindow(QMainWindow):
     # ---------- seleção / settings ----------
 
     def _on_selection_changed(self, current, _previous) -> None:
+        # Atualiza a barra branca de seleção dos consoles: zera a do
+        # item anterior, liga a do novo. Só TerminalChildWidget tem
+        # `set_selected`; outros widgets (workspace header, runner)
+        # ignoram.
+        for item in (_previous, current):
+            if item is None:
+                continue
+            widget = self.list_widget.itemWidget(item, 0)
+            if isinstance(widget, TerminalChildWidget):
+                widget.set_selected(item is current)
+
         if self.content_stack.currentIndex() != 0:
             self.content_stack.setCurrentIndex(0)
         if current is None:
