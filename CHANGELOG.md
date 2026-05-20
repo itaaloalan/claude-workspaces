@@ -6,6 +6,30 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.43.0] — 2026-05-20
+
+### Adicionado
+- **Toast in-app frameless top-most com botão "Abrir console"**
+  (`ui/persistent_toast.py`, `ui/main_window.py`): nova
+  estratégia de notificação que separa responsabilidades:
+  notif do sistema (D-Bus) fica SEM action e SEM som (assim KDE
+  Plasma deixa sticky sem fight de hints), e um toast in-app
+  no canto bottom-right da tela carrega o botão de ação + toca
+  o som de alerta. Lifecycle 100% nosso: aparece, fica visível
+  até clicar Abrir/X ou o tab sair do inbox, empilha quando há
+  múltiplos consoles em inbox. Usa `Qt.Tool |
+  FramelessWindowHint | WindowStaysOnTopHint` pra ficar acima
+  de outras apps sem roubar foco.
+
+### Removido
+- **Keepalive D-Bus e re-emit 200ms**
+  (`ui/main_window.py`): com a notif do sistema agora sem
+  action, KDE Plasma deixa sticky naturalmente — não precisa
+  mais re-emitir a cada 5s nem forçar re-emit pra renderizar
+  o botão. Código do `_arm_notification_keepalive` ainda
+  existe mas nunca é chamado; será removido depois de
+  confirmar estabilidade.
+
 ## [0.42.3] — 2026-05-20
 
 ### Corrigido

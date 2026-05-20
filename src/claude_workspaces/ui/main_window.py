@@ -39,6 +39,7 @@ from ..models import Workspace
 from ..repo_status_poller import RepoStatusPoller
 from ..hook_manager import refresh_installed_hook
 from ..services.desktop_notifier import DesktopNotifier
+from .persistent_toast import PersistentToast, position_toasts
 from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
 from ..session_persistence import (
@@ -182,6 +183,11 @@ class MainWindow(QMainWindow):
         # isso o usuário perde o popup em ~6s. Cancelado quando a
         # entry sai do inbox ou o usuário clica na action.
         self._notification_keepalive: dict[int, QTimer] = {}
+        # tab_id → PersistentToast — toast in-app frameless top-most que
+        # garante visibilidade independente do que o KDE Plasma faz com a
+        # notif D-Bus. Lifecycle 100% nosso: some só quando o usuário
+        # clica (Abrir/X) ou o tab sai do inbox.
+        self._active_toasts: dict[int, PersistentToast] = {}
         # Mantém o notify-hook.py instalado em sincronia com o packaged
         # (ex: versão com botão "Abrir console" via D-Bus).
         refresh_installed_hook()
@@ -2366,60 +2372,32 @@ class MainWindow(QMainWindow):
         body = "\n".join(body_parts) or "Console pronto pra próxima instrução."
         self._last_alert_tab_id = tab_id
         workspace_id = info.get("workspace_id", "")
+        # Toast in-app top-most (independente do KDE) — garante visibilidade
+        # mesmo com Plasma matando o popup D-Bus. Notif do KDE continua
+        # também, pra caso a janela esteja em outro virtual desktop.
+        self._show_persistent_toast(tab_id, workspace_id, title, body)
 
         if self._desktop_notifier is not None:
-            # KDE Plasma 6 trata notificação com action como transient
-            # (~6s ignorando timeout/urgency), mas o botão "Abrir console"
-            # vale o tradeoff: clique único leva o usuário direto pra aba
-            # certa em vez de garimpar pela sidebar. A notificação ainda
-            # fica na central de notificações depois do popup sumir.
-            actions: list[tuple[str, str]] = [("open", "Abrir console")]
-            # Se já existe notificação ativa pra esse tab (re-lembrete),
-            # passa replaces_id pro servidor substituir no lugar em vez de
-            # empilhar um segundo banner.
+            # Divisão de responsabilidades:
+            # - Notif D-Bus: SEM action, SEM som → KDE deixa sticky sem
+            #   fight de hints. Só presença visual no canto/central de
+            #   notificações pra caso da janela do app estar em outro
+            #   virtual desktop ou minimizada.
+            # - Toast in-app (`_show_persistent_toast`): tem o botão
+            #   "Abrir console" + toca o som de alerta. Lifecycle nosso.
             prev_nid = self._active_notifications.get(tab_id, 0)
-            # urgency=2 (critical) + resident + transient=false: combinação
-            # que mantém o popup sticky no KDE Plasma 6 mesmo com action.
-            # IMPORTANTE: NÃO usar timeout_ms=0 — KDE Plasma 6.6.5 está
-            # bugado e interpreta 0 como "expira imediato" (~40ms), em vez
-            # de "nunca expira" como manda a spec FDO. Usamos o timeout
-            # configurável (default 10s) e contamos com o keepalive de 5s
-            # pra re-emitir antes do popup sumir.
-            notify_urgency = 2
-            notify_timeout = int(self.settings.notify_timeout_ms)
-            sound_name = (
-                self.settings.notify_sound_name.strip()
-                if self.settings.notify_sound_enabled else None
-            ) or None
             nid = self._desktop_notifier.notify(
                 title=title,
                 body=body,
-                actions=actions,
-                on_action=lambda key, _tid=tab_id, _wid=workspace_id:
-                    self._handle_notification_action(_tid, _wid, key),
-                timeout_ms=notify_timeout,
+                actions=[],
+                timeout_ms=int(self.settings.notify_timeout_ms),
                 replaces_id=prev_nid,
-                urgency=notify_urgency,
+                urgency=2,
                 desktop_entry="claude-workspaces",
-                sound_name=sound_name,
-                resident=True,
-                transient=False,
+                sound_name=None,
             )
             if nid is not None:
                 self._active_notifications[tab_id] = nid
-                # Quirk do KDE Plasma 6.6.5: na primeira emissão
-                # (replaces_id=0) o popup renderiza SEM o botão de action,
-                # mas a re-emissão com replaces_id != 0 já mostra o botão.
-                # Pra primeira emissão, agenda re-emit em 200ms só pra
-                # forçar o popup a vir com o botão visível. Depois o
-                # keepalive normal de 5s assume.
-                if prev_nid == 0:
-                    QTimer.singleShot(
-                        200,
-                        lambda _tid=tab_id: self._resurrect_notification(_tid),
-                    )
-                else:
-                    self._arm_notification_keepalive(tab_id, is_reminder)
                 return
             log.debug("D-Bus notify falhou — fallback pro tray.showMessage")
 
@@ -2431,6 +2409,67 @@ class MainWindow(QMainWindow):
             )
         except Exception:
             log.debug("showMessage falhou", exc_info=True)
+
+    def _show_persistent_toast(
+        self, tab_id: int, workspace_id: str, title: str, body: str
+    ) -> None:
+        """Cria (ou atualiza) o toast in-app pro tab_id e reposiciona a pilha.
+
+        Toca o som de alerta junto. Som NÃO toca em atualização (update) pra
+        não bipar de novo a cada re-lembrete — só na primeira aparição.
+        """
+        existing = self._active_toasts.get(tab_id)
+        if existing is not None:
+            existing.update_content(title, body)
+            position_toasts(list(self._active_toasts.values()))
+            return
+        sound_name = (
+            self.settings.notify_sound_name.strip()
+            if self.settings.notify_sound_enabled else ""
+        )
+        if sound_name:
+            # Reusa o player do desktop_notifier — mesma lógica de fallback
+            # pw-play/paplay/canberra, role "music" que não fica mutado.
+            from ..services.desktop_notifier import _play_sound_async
+            _play_sound_async(sound_name)
+        toast = PersistentToast(title, body)
+        toast.action_clicked.connect(
+            lambda _tid=tab_id, _wid=workspace_id:
+                self._handle_toast_action(_tid, _wid)
+        )
+        toast.dismissed.connect(
+            lambda _tid=tab_id: self._on_toast_dismissed(_tid)
+        )
+        self._active_toasts[tab_id] = toast
+        toast.show()
+        position_toasts(list(self._active_toasts.values()))
+
+    def _handle_toast_action(self, tab_id: int, workspace_id: str) -> None:
+        """Clique em 'Abrir console' no toast — mesma rota da action D-Bus.
+
+        Fecha também a notif D-Bus correspondente, senão fica esquecida no
+        canto / na central de notificações depois que o usuário já foi pro
+        console.
+        """
+        self._active_toasts.pop(tab_id, None)
+        position_toasts(list(self._active_toasts.values()))
+        nid = self._active_notifications.pop(tab_id, None)
+        if nid is not None and self._desktop_notifier is not None:
+            self._desktop_notifier.close(nid)
+        self._handle_notification_action(tab_id, workspace_id, "open")
+
+    def _on_toast_dismissed(self, tab_id: int) -> None:
+        """Usuário clicou no X — toast some, mas não muda estado do inbox."""
+        self._active_toasts.pop(tab_id, None)
+        position_toasts(list(self._active_toasts.values()))
+
+    def _close_persistent_toast(self, tab_id: int) -> None:
+        """Fecha o toast programaticamente (tab saiu do inbox / mudou estado)."""
+        toast = self._active_toasts.pop(tab_id, None)
+        if toast is not None:
+            toast.hide()
+            toast.deleteLater()
+            position_toasts(list(self._active_toasts.values()))
 
     def _arm_notification_keepalive(self, tab_id: int, is_reminder: bool) -> None:
         """Inicia (ou reinicia) o timer que re-emite a notif a cada 5s.
@@ -2543,6 +2582,7 @@ class MainWindow(QMainWindow):
         senão o banner "✅ Pronto" continua na tela enquanto o console
         já está em outro estado."""
         self._cancel_notification_keepalive(tab_id)
+        self._close_persistent_toast(tab_id)
         nid = self._active_notifications.pop(tab_id, None)
         if nid is None or self._desktop_notifier is None:
             return
