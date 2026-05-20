@@ -113,6 +113,28 @@ class _AppEditDialog(QDialog):
         }
 
 
+class _SameViewPage(QWebEnginePage):
+    """QWebEnginePage que redireciona `window.open()` (e clicks com
+    target=_blank / "Abrir em nova guia") pra mesma view, em vez de
+    deixar o Qt criar uma janela top-level vazia. Sem isso, web apps
+    como ClickUp/Taskis disparam popups de OAuth/preview que aparecem
+    como retângulos brancos extras na barra de tarefas e voltam a abrir
+    sozinhos quando fechados (o JS da página re-chama window.open).
+    """
+
+    def createWindow(self, _type):  # type: ignore[override]
+        # Página descartável que existe só pra capturar a primeira URL
+        # solicitada e jogar na página principal — depois se autodestrói.
+        temp = QWebEnginePage(self.profile(), self)
+
+        def _redirect(url):
+            self.setUrl(url)
+            temp.deleteLater()
+
+        temp.urlChanged.connect(_redirect)
+        return temp
+
+
 class _AppPage(QWidget):
     """Wrapper com toolbar (back/forward/reload/url) + webview."""
 
@@ -163,7 +185,7 @@ class _AppPage(QWidget):
         )
 
         self._view = QWebEngineView(self)
-        page = QWebEnginePage(self._profile, self._view)
+        page = _SameViewPage(self._profile, self._view)
         self._view.setPage(page)
 
         layout.addWidget(self._view, stretch=1)

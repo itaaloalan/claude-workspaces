@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.6] — 2026-05-20
+
+### Corrigido
+- **Janelas brancas vazias abrindo sozinhas na barra de tarefas**
+  (`ui/views/apps_view.py`): webapps embutidos (ClickUp/Taskis/etc)
+  chamam `window.open()` pra popups de OAuth, preview e "Abrir em
+  nova guia". Sem override do `createWindow` no `QWebEnginePage`, o
+  Qt cria essas popups como janelas top-level vazias que aparecem na
+  taskbar e voltam a abrir quando fechadas (a página re-chama
+  `window.open` quando o popup some). Nova subclasse `_SameViewPage`
+  intercepta o `createWindow`, devolve uma página descartável que
+  captura a primeira URL e redireciona pra view principal —
+  popup vira navegação na mesma aba.
+
 ## [0.37.5] — 2026-05-20
 
 ### Corrigido

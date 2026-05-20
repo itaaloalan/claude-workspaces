@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -40,6 +41,28 @@ STATE_COLOR = {
     STATE_IDLE: theme.DANGER,
     STATE_DONE: theme.SUCCESS,
 }
+
+_CHIP_MODEL_QSS = (
+    f"QLabel {{"
+    f"  color: {theme.TEXT_LINK};"
+    f"  background: {theme.BG_SURFACE};"
+    f"  border: 1px solid {theme.BORDER_INPUT};"
+    f"  border-radius: 4px;"
+    f"  padding: 1px 6px;"
+    f"  font-size: 10px;"
+    f"}}"
+)
+
+_CHIP_BRANCH_QSS = (
+    f"QLabel {{"
+    f"  color: {theme.TEXT_FADED};"
+    f"  background: {theme.BG_SURFACE};"
+    f"  border: 1px solid {theme.BORDER_INPUT};"
+    f"  border-radius: 4px;"
+    f"  padding: 1px 6px;"
+    f"  font-size: 10px;"
+    f"}}"
+)
 
 _INLINE_BTN_QSS = (
     f"QPushButton {{"
@@ -73,8 +96,19 @@ class TerminalChildWidget(QWidget):
         self.setMaximumHeight(71)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(2, 2, 4, 2)
-        outer.setSpacing(8)
+        outer.setContentsMargins(0, 2, 4, 2)
+        outer.setSpacing(6)
+
+        # Faixa vertical 3px no canto esquerdo do row, pintada com a cor do
+        # estado atual (ocioso=vermelho, trabalhando=âmbar, aguardando=laranja,
+        # concluído=verde). Substitui a "linha de seleção" monocromática por
+        # uma pista visual permanente do estado de cada console.
+        self._status_strip = QFrame()
+        self._status_strip.setFixedWidth(3)
+        self._status_strip.setStyleSheet(
+            f"background: {STATE_COLOR[STATE_IDLE]}; border: 0;"
+        )
+        outer.addWidget(self._status_strip)
 
         self._icon = QLabel("⠋")
         self._icon.setFixedSize(QSize(14, 51))
@@ -234,40 +268,39 @@ class TerminalChildWidget(QWidget):
         self._action_label.setMaximumHeight(14)
         vbox.addWidget(self._action_label)
 
-        # 3a linha: modelo + tokens da sessão Claude (in/out/cache).
-        # Custo de propósito não vai aqui — informação cara de mostrar a
-        # toda hora, ainda fica no menu de contexto. Preenchido pelo
-        # main_window via `update_session_info` (lê do JSONL claimed).
+        # 3a linha: chip do modelo + chip da branch lado a lado.
+        # Antes a branch ficava num label solto vertical-centered no canto
+        # direito do card (desalinhada com o modelo). Agora os dois são
+        # chips na mesma row pra leitura linear.
+        model_row = QHBoxLayout()
+        model_row.setContentsMargins(0, 0, 0, 0)
+        model_row.setSpacing(4)
+
         self._session_label = QLabel("")
         self._session_label.setTextFormat(Qt.TextFormat.RichText)
-        self._session_label.setStyleSheet(
-            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
-        )
+        self._session_label.setStyleSheet(_CHIP_MODEL_QSS)
         self._session_label.setWordWrap(False)
         self._session_label.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
         )
-        self._session_label.setMaximumHeight(14)
+        self._session_label.setMaximumHeight(16)
         self._session_label.setVisible(False)
-        vbox.addWidget(self._session_label)
+        model_row.addWidget(self._session_label)
 
-        outer.addLayout(vbox, stretch=1)
-
-        # Lado direito: branch + contagem de arquivos modificados do repo.
-        # Atualizado em segundo plano pelo RepoStatusPoller (main_window).
         self._git_label = QLabel("")
         self._git_label.setTextFormat(Qt.TextFormat.RichText)
-        self._git_label.setStyleSheet(
-            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
-        )
-        self._git_label.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        )
+        self._git_label.setStyleSheet(_CHIP_BRANCH_QSS)
         self._git_label.setSizePolicy(
-            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
         )
+        self._git_label.setMaximumHeight(16)
         self._git_label.setVisible(False)
-        outer.addWidget(self._git_label)
+        model_row.addWidget(self._git_label)
+        model_row.addStretch(1)
+
+        vbox.addLayout(model_row)
+
+        outer.addLayout(vbox, stretch=1)
 
     def set_title(self, title: str, tooltip: str = "") -> None:
         if title:
@@ -308,6 +341,9 @@ class TerminalChildWidget(QWidget):
         self._icon.setStyleSheet(
             f"color: {STATE_COLOR[state]}; font-family: monospace;"
             f" font-size: {icon_size}px;"
+        )
+        self._status_strip.setStyleSheet(
+            f"background: {STATE_COLOR[state]}; border: 0;"
         )
         # Entrou agora em idle? marca o instante pra começar a contar.
         # Saiu de idle? zera. Reentrar em idle reinicia o cronômetro.
@@ -438,18 +474,15 @@ class TerminalChildWidget(QWidget):
             self._git_label.setVisible(False)
             self._git_label.setText("")
             return
-        # Encurta nomes longos pra não roubar espaço do action_label
+        # Encurta nomes longos pra não dominar a row do chip
         b = branch if len(branch) <= 18 else branch[:17] + "…"
         if modified > 0:
             self._git_label.setText(
-                f"<span style='color: {theme.TEXT_FAINT};'>⎇ {b}</span>"
-                f"  <span style='color: {theme.WARNING};'>●{modified}</span>"
+                f"⎇ {b}  <span style='color: {theme.WARNING};'>●{modified}</span>"
             )
             tip = f"Branch: {branch} — {modified} arquivo(s) modificado(s)"
         else:
-            self._git_label.setText(
-                f"<span style='color: {theme.TEXT_FAINT};'>⎇ {b}</span>"
-            )
+            self._git_label.setText(f"⎇ {b}")
             tip = f"Branch: {branch} — working tree limpo"
         self._git_label.setToolTip(tip)
         self._git_label.setVisible(True)
@@ -472,9 +505,7 @@ class TerminalChildWidget(QWidget):
             self._session_label.setText("")
             return
         model_short = _shorten_model(model)
-        self._session_label.setText(
-            f"<span style='color: {theme.TEXT_LINK};'>{model_short}</span>"
-        )
+        self._session_label.setText(model_short)
         self._session_label.setToolTip(f"Modelo: {model}")
         self._session_label.setVisible(True)
 
