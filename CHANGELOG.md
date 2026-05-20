@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.30.1] — 2026-05-20
+
+### Corrigido
+- **Som não tocava no KDE Plasma 6**
+  (`services/desktop_notifier.py`, `packaging/notify-hook.py`): Plasma
+  6 ignora silenciosamente a hint `sound-name` do D-Bus (bug histórico
+  do plasma-workspace). Agora tocamos o sample nós mesmos via
+  `canberra-gtk-play` (respeita o tema sonoro atual), com fallback pra
+  `paplay`/`pw-play` no `.oga` em `/usr/share/sounds/freedesktop/stereo`.
+  A hint continua sendo enviada pro D-Bus pra honrar quem implementa
+  (GNOME Shell, dunst).
+
 ## [0.30.0] — 2026-05-20
 
 ### Adicionado

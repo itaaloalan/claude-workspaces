@@ -34,6 +34,40 @@ BUS_DEST = "org.freedesktop.Notifications"
 BUS_PATH = "/org/freedesktop/Notifications"
 BUS_IFACE = "org.freedesktop.Notifications"
 
+_FREEDESKTOP_SOUND_DIR = "/usr/share/sounds/freedesktop/stereo"
+
+
+def _play_sound_async(sound_name: str) -> None:
+    """Toca um sample XDG em background. Plasma 6 ignora a hint
+    sound-name do D-Bus, então tocamos nós mesmos via canberra/paplay."""
+    if not sound_name:
+        return
+    canberra = shutil.which("canberra-gtk-play")
+    if canberra:
+        try:
+            subprocess.Popen(
+                [canberra, "-i", sound_name],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+        except OSError:
+            pass
+    sample = os.path.join(_FREEDESKTOP_SOUND_DIR, f"{sound_name}.oga")
+    if not os.path.isfile(sample):
+        return
+    for cmd in ("paplay", "pw-play"):
+        bin_path = shutil.which(cmd)
+        if not bin_path:
+            continue
+        try:
+            subprocess.Popen(
+                [bin_path, sample],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+        except OSError:
+            continue
+
 
 def _load_settings() -> dict:
     path = Path.home() / ".config" / "claude-workspaces" / "settings.json"
@@ -143,6 +177,8 @@ def main() -> int:
     body = last_user_msg[:240]
 
     action_key = f"{OPEN_ACTION_PREFIX}{session_id}" if session_id else ""
+    if sound_name:
+        _play_sound_async(sound_name)
     ok = _send_dbus(
         app_name, title, body, action_key, "claude-workspaces", 8000, sound_name
     )

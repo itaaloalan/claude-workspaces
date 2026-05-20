@@ -49,6 +49,48 @@ _BUS_IFACE = "org.freedesktop.Notifications"
 _GDBUS_ID_RE = re.compile(r"uint32\s+(\d+)")
 _PENDING_MAX = 256
 
+# Caminhos comuns dos samples do tema freedesktop. Preferimos
+# canberra-gtk-play (respeita o tema atual e o volume do som-de-sistema);
+# se não estiver disponível, caímos pro paplay/pw-play num .oga direto.
+_FREEDESKTOP_SOUND_DIR = "/usr/share/sounds/freedesktop/stereo"
+
+
+def _play_sound_async(sound_name: str) -> None:
+    """Toca um sample XDG em background sem bloquear o event loop.
+
+    Plasma 6 ignora a hint sound-name do D-Bus, então tocamos nós mesmos.
+    Falha silenciosa se nenhuma ferramenta de áudio estiver instalada.
+    """
+    if not sound_name:
+        return
+    canberra = shutil.which("canberra-gtk-play")
+    if canberra:
+        try:
+            subprocess.Popen(
+                [canberra, "-i", sound_name],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+        except OSError:
+            pass
+    # Fallback: tocar .oga direto via paplay/pw-play.
+    import os
+    sample = os.path.join(_FREEDESKTOP_SOUND_DIR, f"{sound_name}.oga")
+    if not os.path.isfile(sample):
+        return
+    for cmd in ("paplay", "pw-play"):
+        bin_path = shutil.which(cmd)
+        if not bin_path:
+            continue
+        try:
+            subprocess.Popen(
+                [bin_path, sample],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            return
+        except OSError:
+            continue
+
 
 class DesktopNotifier(QObject):
     """Wrapper sobre o serviço FDO Notifications com suporte a ações."""
@@ -159,10 +201,13 @@ class DesktopNotifier(QObject):
             safe = desktop_entry.replace("'", "\\'")
             hint_parts.append("'desktop-entry': <'" + safe + "'>")
         if sound_name:
-            # sound-name é um nome XDG (ex: "message-new-instant"); o
-            # servidor de notificações resolve via libcanberra/tema atual.
+            # sound-name é um nome XDG (ex: "message-new-instant"); enviamos
+            # como hint pro servidor (GNOME Shell honra) e tocamos via
+            # canberra-gtk-play em paralelo, porque KDE Plasma 6 ignora
+            # essa hint silenciosamente — bug histórico do plasma-workspace.
             safe_snd = sound_name.replace("'", "\\'")
             hint_parts.append("'sound-name': <'" + safe_snd + "'>")
+            _play_sound_async(sound_name)
         hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
         log.warning(
             "DEBUG notify: urgency=%s timeout_ms=%s hints=%r replaces_id=%s actions=%d title=%r",
