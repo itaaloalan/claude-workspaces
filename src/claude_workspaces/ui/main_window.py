@@ -2354,13 +2354,12 @@ class MainWindow(QMainWindow):
         workspace_id = info.get("workspace_id", "")
 
         if self._desktop_notifier is not None:
-            # Sem actions: KDE Plasma 6 trata qualquer notificação com
-            # action como transient (vai pro tray em ~6s ignorando
-            # urgency/timeout/hints — testado exaustivamente). Como
-            # queremos o banner sticky pra avisar que Claude precisa de
-            # atenção, sacrificamos os botões — usuário interage via
-            # sidebar/inbox dentro do app.
-            actions: list[tuple[str, str]] = []
+            # KDE Plasma 6 trata notificação com action como transient
+            # (~6s ignorando timeout/urgency), mas o botão "Abrir console"
+            # vale o tradeoff: clique único leva o usuário direto pra aba
+            # certa em vez de garimpar pela sidebar. A notificação ainda
+            # fica na central de notificações depois do popup sumir.
+            actions: list[tuple[str, str]] = [("open", "Abrir console")]
             # Se já existe notificação ativa pra esse tab (re-lembrete),
             # passa replaces_id pro servidor substituir no lugar em vez de
             # empilhar um segundo banner.

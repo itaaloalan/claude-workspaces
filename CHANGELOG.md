@@ -6,6 +6,24 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.39.0] — 2026-05-20
+
+### Adicionado
+- **Notificação nativa — botão "Abrir console"**
+  (`ui/main_window.py`): clique único no banner D-Bus leva direto pra
+  aba certa do workspace, em vez de obrigar o usuário a garimpar pela
+  sidebar. Tradeoff conhecido: no KDE Plasma 6 notificações com action
+  viram transient (~6s), mas continuam acessíveis na central de
+  notificações depois.
+
+### Corrigido
+- **Som da notificação no KDE Plasma**
+  (`services/desktop_notifier.py`): canberra-gtk-play retornava sucesso
+  mas o áudio saía mudo — vai pelo role "event-sounds" do PA/PipeWire,
+  que o Plasma costuma deixar mutado por padrão. Agora preferimos
+  `pw-play`/`paplay` (role "music", mesmo canal do áudio normal);
+  canberra vira fallback.
+
 ## [0.38.2] — 2026-05-20
 
 ### Melhorado

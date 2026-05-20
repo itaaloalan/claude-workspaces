@@ -59,9 +59,9 @@ def _play_sound_async(sound_name: str) -> None:
     """Toca um sample XDG em background sem bloquear o event loop.
 
     Plasma 6 ignora a hint sound-name do D-Bus, então tocamos nós mesmos.
-    Roda numa thread daemon que faz `subprocess.run` capturando stderr —
-    se canberra/paplay falhar (ex: cache vazio, sample faltando), logamos
-    em vez de engolir silenciosamente como Popen+DEVNULL fazia.
+    Ordem: paplay/pw-play (role "music", mesmo canal do áudio normal) ANTES
+    de canberra-gtk-play. canberra usa o role "event-sounds" do PA/PipeWire
+    que tipicamente fica mutado no KDE Plasma — exit 0 sem som de verdade.
     """
     if not sound_name:
         return
@@ -69,6 +69,32 @@ def _play_sound_async(sound_name: str) -> None:
     import threading
 
     def _worker() -> None:
+        sample = os.path.join(_FREEDESKTOP_SOUND_DIR, f"{sound_name}.oga")
+        if os.path.isfile(sample):
+            for cmd in ("pw-play", "paplay"):
+                bin_path = shutil.which(cmd)
+                if not bin_path:
+                    continue
+                try:
+                    r = subprocess.run(
+                        [bin_path, sample],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    stderr = (r.stderr or "").strip()
+                    if r.returncode == 0:
+                        if stderr:
+                            log.info("%s rc=0 mas stderr=%r (sample=%s)", cmd, stderr[:200], sample)
+                        else:
+                            log.info("som tocado via %s: %s", cmd, sample)
+                        return
+                    log.warning(
+                        "%s falhou (rc=%s): stderr=%r",
+                        cmd, r.returncode, stderr[:200],
+                    )
+                except (OSError, subprocess.TimeoutExpired) as e:
+                    log.warning("%s erro: %s", cmd, e)
+        else:
+            log.warning("sample não encontrado: %s", sample)
         canberra = shutil.which("canberra-gtk-play")
         if canberra:
             try:
@@ -78,9 +104,6 @@ def _play_sound_async(sound_name: str) -> None:
                 )
                 stderr = (r.stderr or "").strip()
                 if r.returncode == 0:
-                    # INFO (não DEBUG) pra deixar rastro no app.log; canberra
-                    # às vezes loga warnings em stderr mesmo retornando 0
-                    # (ex: cache do tema, sample faltando no tema atual).
                     if stderr:
                         log.info(
                             "canberra-gtk-play rc=0 mas stderr=%r (sound=%s)",
@@ -95,32 +118,6 @@ def _play_sound_async(sound_name: str) -> None:
                 )
             except (OSError, subprocess.TimeoutExpired) as e:
                 log.warning("canberra-gtk-play erro: %s", e)
-        sample = os.path.join(_FREEDESKTOP_SOUND_DIR, f"{sound_name}.oga")
-        if not os.path.isfile(sample):
-            log.warning("sample não encontrado: %s", sample)
-            return
-        for cmd in ("paplay", "pw-play"):
-            bin_path = shutil.which(cmd)
-            if not bin_path:
-                continue
-            try:
-                r = subprocess.run(
-                    [bin_path, sample],
-                    capture_output=True, text=True, timeout=5,
-                )
-                stderr = (r.stderr or "").strip()
-                if r.returncode == 0:
-                    if stderr:
-                        log.info("%s rc=0 mas stderr=%r (sample=%s)", cmd, stderr[:200], sample)
-                    else:
-                        log.info("som tocado via %s: %s", cmd, sample)
-                    return
-                log.warning(
-                    "%s falhou (rc=%s): stderr=%r",
-                    cmd, r.returncode, stderr[:200],
-                )
-            except (OSError, subprocess.TimeoutExpired) as e:
-                log.warning("%s erro: %s", cmd, e)
 
     threading.Thread(target=_worker, daemon=True).start()
 
