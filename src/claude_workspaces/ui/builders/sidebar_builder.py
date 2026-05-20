@@ -46,17 +46,31 @@ class _StableTree(QTreeWidget):
     item onde o press começou.
     """
 
+    # Debounce: presses esquerda mais próximos do que esse intervalo são
+    # considerados chatter do switch e ignorados (não chegam ao base).
+    _PRESS_DEBOUNCE_MS = 120
+
     def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
+            from PySide6.QtCore import QDateTime
+            now = QDateTime.currentMSecsSinceEpoch()
+            last = getattr(self, "_last_press_ms", 0)
+            if now - last < self._PRESS_DEBOUNCE_MS:
+                # Press espúrio (chatter) — ignora completamente.
+                event.accept()
+                return
+            self._last_press_ms = now
             self._press_item = self.itemAt(event.position().toPoint())
         else:
             self._press_item = None
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
-        if event.buttons() & Qt.MouseButton.LeftButton:
-            return
-        super().mouseMoveEvent(event)
+        # Ignora QUALQUER move — com ou sem botão. Sem isso, mouse com
+        # chatter consegue mudar a seleção mesmo sem segurar o clique
+        # (o switch dispara press espúrios durante o movimento, então
+        # mover o cursor pra baixo "arrasta" a seleção pro item abaixo).
+        return
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:

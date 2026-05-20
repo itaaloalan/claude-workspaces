@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.5] — 2026-05-20
+
+### Corrigido
+- **Sidebar ainda pulando workspace ao mover o mouse — segunda
+  iteração** (`ui/builders/sidebar_builder.py`): a defesa do 0.37.4
+  só bloqueava `mouseMove` com botão esquerdo segurado, mas o switch
+  do mouse com chatter dispara `press` espúrios durante o movimento —
+  o cursor "descendo" entre rows registra novos cliques no item abaixo.
+  Agora: (1) `mouseMoveEvent` é descartado SEMPRE (com ou sem botão);
+  (2) `mousePressEvent` com debounce de 120ms — qualquer press esquerdo
+  que chegue mais perto que isso do anterior é considerado chatter e
+  não chega ao base. Combinado com o restore-no-release do 0.37.4,
+  fecha o caminho do bug pra qualquer combinação plausível de eventos
+  espúrios do switch defeituoso.
+
 ## [0.37.4] — 2026-05-20
 
 ### Corrigido
