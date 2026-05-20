@@ -2481,7 +2481,14 @@ class MainWindow(QMainWindow):
 
         Toca o som de alerta junto. Som NÃO toca em atualização (update) pra
         não bipar de novo a cada re-lembrete — só na primeira aparição.
+
+        Só dispara com a MainWindow visível e não-minimizada: se o app está
+        no tray ou minimizado, o usuário não vê esse overlay frameless mesmo,
+        e o toast acaba aparecendo centralizado em outro monitor/desktop;
+        nesse caso a notificação do S.O. (desktop_notifier) já cobre o aviso.
         """
+        if not self.isVisible() or self.isMinimized():
+            return
         existing = self._active_toasts.get(tab_id)
         if existing is not None:
             existing.update_content(title, body)

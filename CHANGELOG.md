@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.51.1] — 2026-05-20
+
+### Mudado
+- **Toast in-app só aparece com a MainWindow visível** (`ui/main_window.py`):
+  `_show_persistent_toast` agora faz early-return quando a janela está
+  oculta (tray) ou minimizada. Sem isso o overlay frameless caía
+  centralizado em algum monitor mesmo com o app fora de foco, e a
+  notificação do S.O. já cobre o aviso nesse cenário.
+- **Toast arrastável** (`ui/persistent_toast.py`): usuário pode mover o
+  toast clicando e arrastando. Depois de mover, `position_toasts` respeita
+  a posição manual (flag `_dragged`) — não reempurra de volta pro canto e
+  não conta a altura do toast arrastado na pilha dos outros.
+
 ## [0.51.0] — 2026-05-20
 
 ### Mudado

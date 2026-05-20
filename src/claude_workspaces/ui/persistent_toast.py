@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QCursor, QGuiApplication
+from PySide6.QtGui import QCursor, QGuiApplication, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -72,6 +72,13 @@ class PersistentToast(QWidget):
         self._duration_ms = max(1000, int(duration_ms))
         self._remaining_ms = self._duration_ms
         self._hover = False
+        # Drag manual: usuário pode arrastar o toast pelo card.
+        # `_drag_offset` guarda a posição relativa do clique pra que o
+        # frameGeometry().topLeft() seja atualizado preservando o offset.
+        # `_dragged` marca que o usuário moveu — quando True, position_toasts
+        # não vai mais empurrar este toast (respeita a posição manual).
+        self._drag_offset: QPoint | None = None
+        self._dragged = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -230,6 +237,29 @@ class PersistentToast(QWidget):
         super().resizeEvent(event)
         self._update_progress_width()
 
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            new_pos = event.globalPosition().toPoint() - self._drag_offset
+            self.move(new_pos)
+            self._dragged = True
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton and self._drag_offset is not None:
+            self._drag_offset = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
     def _on_action_clicked(self) -> None:
         self._tick_timer.stop()
         self.action_clicked.emit()
@@ -284,6 +314,13 @@ def position_toasts(toasts: list[PersistentToast]) -> None:
         # (mais confiável que frameGeometry pra toasts que ainda nem foram
         # shown — frameGeometry retorna 0 ou stale antes do mapping).
         h = toast.sizeHint().height()
+        # Se o usuário arrastou o toast manualmente, respeita a posição
+        # escolhida — só atualiza tamanho. E não conta a altura dele na
+        # pilha (não empurra os outros), senão arrastar um faria os outros
+        # pularem de posição.
+        if getattr(toast, "_dragged", False):
+            toast.resize(WIDTH, h)
+            continue
         toast.setGeometry(x, y, WIDTH, h)
         y += h + GAP
 
