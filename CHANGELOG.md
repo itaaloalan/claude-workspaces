@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.3] — 2026-05-20
+
+### Corrigido
+- **Placeholder "Nova sessão do claude…" cortando texto**
+  (`ui/main_window.py`): altura do row aumentada de 24px para 30px e
+  padding vertical voltou para 4px (com `setMinimumHeight(24)` no
+  botão) — o texto estava sendo clipado quando a row ficou pequena
+  demais na tentativa anterior.
+
 ## [0.37.2] — 2026-05-20
 
 ### Corrigido

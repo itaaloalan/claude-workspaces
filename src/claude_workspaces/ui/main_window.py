@@ -1303,9 +1303,10 @@ class MainWindow(QMainWindow):
 
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, self._EMPTY_PLACEHOLDER_ROLE)
-        child.setSizeHint(0, QSize(0, 24))
+        child.setSizeHint(0, QSize(0, 30))
         btn = QPushButton("＋  Nova sessão do claude…")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setMinimumHeight(24)
         btn.setToolTip(
             "Abre um Claude novo neste workspace (mesma ação do botão + "
             "ao lado do nome)"
@@ -1313,7 +1314,7 @@ class MainWindow(QMainWindow):
         btn.setStyleSheet(
             "QPushButton { background: transparent; color: #9aa0a6; "
             "border: 1px dashed #3a3a3a; border-radius: 4px; "
-            "padding: 2px 6px; margin: 0px; text-align: left; "
+            "padding: 4px 8px; margin: 0px; text-align: left; "
             "font-size: 11px; }"
             "QPushButton:hover { color: #e6e6e6; border-color: #5a5a5a; "
             "background: #1f1f1f; }"
