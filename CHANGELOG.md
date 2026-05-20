@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.43.1] — 2026-05-20
+
+### Melhorado
+- **Toast in-app: top-right, auto-dismiss com barra de progresso**
+  (`ui/persistent_toast.py`): toast agora aparece no canto
+  superior direito (estava bottom-right), some sozinho depois de
+  30s (auto-dismiss) com uma barra de progresso de 3px no rodapé
+  que encolhe mostrando o tempo restante. Hover pausa o timer —
+  enquanto o mouse estiver em cima, o toast não some. Stacking
+  ajustado pra top-down (mais antigo em cima, novos descem) com
+  `adjustSize` antes de pegar altura, evitando sobreposição.
+
 ## [0.43.0] — 2026-05-20
 
 ### Adicionado

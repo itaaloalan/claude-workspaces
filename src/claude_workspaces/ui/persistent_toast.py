@@ -1,22 +1,21 @@
-"""Toast in-app frameless top-most — substitui a notificação do KDE Plasma
-quando ela some apesar de hints/urgency/resident/transient.
+"""Toast in-app frameless top-most — substitui (em parte) a notificação do
+KDE Plasma quando ela some apesar de hints/urgency/resident/transient.
 
-Lifecycle 100% nosso: aparece via `show_toast`, some via `dismiss` (clique
-no X ou no botão Abrir). Não usa o daemon de notificações, então não está
-sujeito às regras de "qualquer notif com action vira transient" do Plasma.
+Posicionamento: top-right da tela primária. Quando há múltiplos toasts
+(vários consoles em inbox), são empilhados pra baixo — mais novo embaixo.
 
-Posicionamento: bottom-right da tela primária, com `MARGIN` de respiro.
-Quando há múltiplos toasts (vários consoles em inbox), são empilhados pra
-cima — cada novo toast soma a altura do anterior + GAP no offset Y.
+Auto-dismiss com barra de progresso visível: o toast desaparece sozinho
+depois de `duration_ms` (default 30s). Uma faixa fininha no rodapé encolhe
+a cada tick mostrando quanto tempo falta. Hover pausa o timer (usuário
+está lendo); sair do hover retoma.
 """
 from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
-    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -31,15 +30,29 @@ log = logging.getLogger(__name__)
 MARGIN = 16
 GAP = 8
 WIDTH = 360
+# Auto-dismiss default. ~30s dá tempo do usuário ver, ler e clicar
+# sem precisar correr; menos que isso fica curto pra alertas de console.
+DEFAULT_DURATION_MS = 30000
+# Tick rate da barra de progresso. 50ms = animação suave (~20fps) sem
+# pesar no event loop.
+TICK_MS = 50
+PROGRESS_BAR_HEIGHT = 3
 
 
 class PersistentToast(QWidget):
-    """Caixa frameless no canto da tela com título, body e botão "Abrir"."""
+    """Caixa frameless no canto da tela com título, body, botão "Abrir" e
+    barra de progresso que mostra o tempo até auto-dismiss."""
 
     action_clicked = Signal()
     dismissed = Signal()
 
-    def __init__(self, title: str, body: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        body: str,
+        duration_ms: int = DEFAULT_DURATION_MS,
+        parent: QWidget | None = None,
+    ) -> None:
         # Qt.Tool faz a janela não aparecer na taskbar; FramelessWindowHint
         # tira título/borda nativos; WindowStaysOnTopHint garante visibilidade
         # acima de outras apps mesmo sem foco.
@@ -50,18 +63,34 @@ class PersistentToast(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFixedWidth(WIDTH)
 
+        self._duration_ms = max(1000, int(duration_ms))
+        self._remaining_ms = self._duration_ms
+        self._hover = False
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Card visual com bg/borda própria pra parecer um toast — frameless
-        # cru no Qt fica feio e sem affordance de "isso é uma notificação".
+        # Card visual com bg/borda própria pra parecer um toast.
         card = QFrame(self)
         card.setObjectName("toastCard")
         card.setStyleSheet(
             "#toastCard {"
             "  background: #2b2b2b;"
             "  border: 1px solid #555;"
-            "  border-radius: 6px;"
+            "  border-top-left-radius: 6px;"
+            "  border-top-right-radius: 6px;"
+            "  border-bottom: 0;"
+            "}"
+            "#toastProgressContainer {"
+            "  background: #1f1f1f;"
+            "  border: 1px solid #555;"
+            "  border-top: 0;"
+            "  border-bottom-left-radius: 6px;"
+            "  border-bottom-right-radius: 6px;"
+            "}"
+            "#toastProgressFill {"
+            "  background: #3878c4;"
             "}"
             "QLabel#toastTitle { color: #fff; font-weight: 600; font-size: 13px; }"
             "QLabel#toastBody { color: #d8d8d8; font-size: 12px; }"
@@ -114,38 +143,98 @@ class PersistentToast(QWidget):
         action_row.addWidget(open_btn)
         card_lay.addLayout(action_row)
 
+        # Container da barra de progresso (encosta no card, sem gap).
+        # Usamos QFrame com largura manual em vez de QProgressBar porque
+        # QProgressBar tem padding nativo do tema que polui o visual minimal.
+        self._progress_container = QFrame(self)
+        self._progress_container.setObjectName("toastProgressContainer")
+        self._progress_container.setFixedHeight(PROGRESS_BAR_HEIGHT + 2)
+        outer.addWidget(self._progress_container)
+
+        self._progress_fill = QFrame(self._progress_container)
+        self._progress_fill.setObjectName("toastProgressFill")
+        self._progress_fill.setFixedHeight(PROGRESS_BAR_HEIGHT)
+        self._progress_fill.move(1, 1)
+
+        # Timer de auto-dismiss. setSingleShot=False pra disparar a cada
+        # TICK_MS; quando _remaining_ms <= 0, dismiss.
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(TICK_MS)
+        self._tick_timer.timeout.connect(self._on_tick)
+
     def update_content(self, title: str, body: str) -> None:
+        """Atualiza texto e reseta o timer pra duração cheia (é um "novo aviso")."""
         self._title_label.setText(title)
         self._body_label.setText(body)
+        self._remaining_ms = self._duration_ms
+        self._update_progress_width()
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        self._update_progress_width()
+        self._tick_timer.start()
+
+    def enterEvent(self, event: QEvent) -> None:  # type: ignore[override]
+        # Hover pausa o auto-dismiss — usuário está lendo, não tira da frente.
+        self._hover = True
+        self._tick_timer.stop()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event: QEvent) -> None:  # type: ignore[override]
+        self._hover = False
+        self._tick_timer.start()
+        super().leaveEvent(event)
+
+    def _on_tick(self) -> None:
+        self._remaining_ms -= TICK_MS
+        if self._remaining_ms <= 0:
+            self._tick_timer.stop()
+            self._on_close_clicked()
+            return
+        self._update_progress_width()
+
+    def _update_progress_width(self) -> None:
+        # Container tem 1px de border cada lado; área útil = width - 2.
+        container_w = self._progress_container.width()
+        usable = max(0, container_w - 2)
+        ratio = max(0.0, min(1.0, self._remaining_ms / self._duration_ms))
+        self._progress_fill.setFixedWidth(int(usable * ratio))
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._update_progress_width()
 
     def _on_action_clicked(self) -> None:
+        self._tick_timer.stop()
         self.action_clicked.emit()
         self.hide()
         self.deleteLater()
 
     def _on_close_clicked(self) -> None:
+        self._tick_timer.stop()
         self.dismissed.emit()
         self.hide()
         self.deleteLater()
 
 
 def position_toasts(toasts: list[PersistentToast]) -> None:
-    """Empilha os toasts no canto bottom-right da tela primária.
+    """Empilha os toasts no canto top-right da tela primária.
 
-    Mais novo embaixo, antigos sobem. Recalcula tudo porque cada toast pode
-    ter altura diferente (body com mais ou menos linhas).
+    Mais antigo em cima, novos descem. Recalcula tudo porque cada toast pode
+    ter altura diferente (body com mais ou menos linhas). Usa `sizeHint`
+    forçado via `adjustSize` pra pegar altura real depois do layout resolver.
     """
     screen = QGuiApplication.primaryScreen()
     if screen is None:
         return
     geo = screen.availableGeometry()
-    y = geo.bottom() - MARGIN
-    for toast in reversed(toasts):
+    y = geo.top() + MARGIN
+    x = geo.right() - MARGIN - WIDTH
+    for toast in toasts:
         toast.adjustSize()
         h = toast.sizeHint().height()
-        x = geo.right() - MARGIN - WIDTH
-        toast.move(QPoint(x, y - h))
-        y -= h + GAP
+        toast.move(QPoint(x, y))
+        y += h + GAP
 
 
 __all__ = ["PersistentToast", "position_toasts"]
