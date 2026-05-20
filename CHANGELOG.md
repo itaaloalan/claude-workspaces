@@ -6,6 +6,14 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.35.1] — 2026-05-20
+
+### Alterado
+- **Placeholder de workspace vazio** (`ui/main_window.py`): botão renomeado
+  de "Abrir Claude aqui" para "Nova sessão do claude…" e padding/altura
+  reduzidos para caber na largura da sidebar sem cortar a borda
+  tracejada.
+
 ## [0.35.0] — 2026-05-20
 
 ### Adicionado

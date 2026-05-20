@@ -1275,7 +1275,7 @@ class MainWindow(QMainWindow):
     _EMPTY_PLACEHOLDER_ROLE = "__empty_workspace_placeholder__"
 
     def _refresh_empty_placeholder(self, ws_item: "QTreeWidgetItem") -> None:
-        """Garante 1 placeholder com botão 'Abrir Claude aqui' quando o
+        """Garante 1 placeholder com botão 'Nova sessão do claude…' quando o
         workspace não tem nenhum filho real (consoles/runners). Remove
         quando passa a ter qualquer filho. Idempotente, seguro chamar
         após cada add/remove de child."""
@@ -1304,8 +1304,8 @@ class MainWindow(QMainWindow):
 
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, self._EMPTY_PLACEHOLDER_ROLE)
-        child.setSizeHint(0, QSize(0, 28))
-        btn = QPushButton("＋  Abrir Claude aqui")
+        child.setSizeHint(0, QSize(0, 24))
+        btn = QPushButton("＋  Nova sessão do claude…")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setToolTip(
             "Abre um Claude novo neste workspace (mesma ação do botão + "
@@ -1314,7 +1314,8 @@ class MainWindow(QMainWindow):
         btn.setStyleSheet(
             "QPushButton { background: transparent; color: #9aa0a6; "
             "border: 1px dashed #3a3a3a; border-radius: 4px; "
-            "padding: 4px 10px; text-align: left; font-size: 11px; }"
+            "padding: 2px 6px; margin: 0px; text-align: left; "
+            "font-size: 11px; }"
             "QPushButton:hover { color: #e6e6e6; border-color: #5a5a5a; "
             "background: #1f1f1f; }"
         )
@@ -2214,7 +2215,7 @@ class MainWindow(QMainWindow):
         if parent_item is not None:
             self._refresh_workspace_child_titles(parent_item)
             # Se o workspace ficou sem nenhum console, restaura o placeholder
-            # com botão "Abrir Claude aqui" pra dar uma ação visível.
+            # com botão "Nova sessão do claude…" pra dar uma ação visível.
             self._refresh_empty_placeholder(parent_item)
         # Limpa o RunnerArea do console fechado: agora o painel mora no
         # top tab "Runners (console)" (não mais embutido no terminal),
