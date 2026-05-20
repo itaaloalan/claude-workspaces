@@ -11,11 +11,12 @@ ser editada via diálogo "Adicionar app" ou direto no settings.json.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -177,6 +178,11 @@ class _AppPage(QWidget):
         slug = app_cfg.get("slug") or _slugify(app_cfg.get("name", "app"))
         profile_path = _profiles_dir() / slug
         profile_path.mkdir(parents=True, exist_ok=True)
+        self._state_file = profile_path / "state.json"
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(800)
+        self._save_timer.timeout.connect(self._persist_state)
         self._profile = QWebEngineProfile(f"app-{slug}", self)
         self._profile.setPersistentStoragePath(str(profile_path))
         self._profile.setCachePath(str(profile_path / "cache"))
@@ -196,7 +202,12 @@ class _AppPage(QWidget):
         self._home_btn.clicked.connect(self._go_home)
         self._view.urlChanged.connect(self._on_url_changed)
 
-        self._go_home()
+        # Restaura última URL navegada (se houver) — senão cai na home
+        last = self._load_last_url()
+        if last:
+            self._view.setUrl(QUrl(last))
+        else:
+            self._go_home()
 
     def _go_home(self) -> None:
         url = self._cfg.get("url") or ""
@@ -207,6 +218,32 @@ class _AppPage(QWidget):
         self._url_label.setText(qurl.toString())
         self._back_btn.setEnabled(self._view.history().canGoBack())
         self._fwd_btn.setEnabled(self._view.history().canGoForward())
+        # about:blank aparece como estado intermediário de redirect — ignora
+        if qurl.scheme() in ("http", "https"):
+            self._save_timer.start()
+
+    def _load_last_url(self) -> str:
+        try:
+            if self._state_file.is_file():
+                data = json.loads(self._state_file.read_text(encoding="utf-8"))
+                u = data.get("last_url")
+                if isinstance(u, str) and u.startswith(("http://", "https://")):
+                    return u
+        except Exception:
+            log.exception("Falha lendo state.json do app %s", self._cfg.get("slug"))
+        return ""
+
+    def _persist_state(self) -> None:
+        url = self._view.url().toString()
+        if not url.startswith(("http://", "https://")):
+            return
+        try:
+            self._state_file.write_text(
+                json.dumps({"last_url": url}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            log.exception("Falha salvando state.json do app %s", self._cfg.get("slug"))
 
 
 class AppsView(QWidget):

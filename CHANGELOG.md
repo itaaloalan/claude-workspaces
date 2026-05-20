@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.40.0] — 2026-05-20
+
+### Adicionado
+- **Apps auxiliares persistem a última URL entre execuções**
+  (`ui/views/apps_view.py`): antes, ao reabrir o claude-workspaces
+  os PWAs voltavam pra home (só os cookies sobreviviam). Agora cada
+  app salva a URL atual em `apps_profiles/<slug>/state.json` com
+  debounce de 800ms via `QTimer`, e na próxima abertura o `_AppPage`
+  restaura essa URL em vez de chamar `_go_home()` — fim da sensação
+  de F5 ao trocar de aba/relaunch. Entre abas na mesma sessão o
+  estado já era preservado (cada `_AppPage` fica vivo no
+  `QStackedWidget`).
+
 ## [0.39.2] — 2026-05-20
 
 ### Adicionado
