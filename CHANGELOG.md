@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.38.2] — 2026-05-20
+
+### Melhorado
+- **Sidebar — sem background em hover/seleção**
+  (`ui/builders/sidebar_builder.py`): qualquer tint no `::item`
+  selecionado fazia o card destacar demais. Agora o background é
+  totalmente transparente em todos os estados; a faixa vertical
+  colorida (`_status_strip`) é a única pista visual de estado.
+
 ## [0.38.1] — 2026-05-20
 
 ### Removido

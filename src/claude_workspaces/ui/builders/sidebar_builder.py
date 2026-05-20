@@ -130,20 +130,19 @@ _TREE_QSS = (
     f"  border: 0;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
+    # Sem background em hover/seleção — o `_status_strip` colorido no
+    # canto esquerdo do card já é pista visual suficiente. Qualquer tint
+    # no row fazia o card parecer "ativado/destacado" e poluía o painel.
     f"QTreeWidget::item:hover {{"
-    f"  background: rgba(255, 255, 255, 0.025);"
+    f"  background: transparent;"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
-    # Seleção bem sutil — tint branco a 5% de opacidade no lugar do
-    # `BG_SURFACE` cheio (que destacava o card demais e fazia parecer
-    # que tinha algo "ativado" sem motivo). Suficiente pra distinguir
-    # do hover, discreto o bastante pra não roubar atenção.
     f"QTreeWidget::item:selected {{"
-    f"  background: rgba(255, 255, 255, 0.05);"
+    f"  background: transparent;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:selected:hover {{"
-    f"  background: rgba(255, 255, 255, 0.07);"
+    f"  background: transparent;"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
     f"QTreeWidget::branch {{ background: transparent; }}"
