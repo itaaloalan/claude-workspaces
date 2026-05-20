@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.45.0] — 2026-05-20
+
+### Adicionado
+- **Renomear sessão do Claude — o nome aparece nas notificações**
+  (`session_marks.py`, `ui/terminal_widget.py`, `ui/main_window.py`):
+  novo item "✏ Renomear sessão…" no menu de contexto da sidebar.
+  O nome custom tem precedência sobre o preview do primeiro user prompt
+  no título do card e no body das notificações ("Pronto" / "Ainda
+  aguardando"), então dá pra apelidar sessões longas/parecidas e bater
+  o olho no toast já sabendo qual é. Persiste em
+  `session_marks.json` por `session_id` — sobrevive a fechar/reabrir o
+  app. Deixar o campo vazio remove o apelido e volta pro preview.
+
 ## [0.44.2] — 2026-05-20
 
 ### Corrigido

@@ -79,8 +79,45 @@ def set_starred(session_id: str, starred: bool, cwd: str = "") -> None:
         if not entry:
             return
         entry.pop("starred", None)
-        # Se o entry ficou só com cwd (sem nada útil), descarta
-        if not entry.get("tags") and not entry.get("note"):
+        if not entry.get("tags") and not entry.get("note") and not entry.get("custom_name"):
+            marks.pop(session_id, None)
+        else:
+            marks[session_id] = entry
+    _save_marks(marks)
+
+
+def get_custom_name(session_id: str) -> str:
+    """Nome custom escolhido pelo usuário pra essa sessão. Vazio = sem
+    rename. Usado pelo TerminalWidget pra montar `effective_title()` e
+    pelas notificações (toast / native) pra mostrar o nome que o usuário
+    deu, em vez do preview do primeiro user prompt."""
+    if not session_id:
+        return ""
+    name = load_marks().get(session_id, {}).get("custom_name", "")
+    return name if isinstance(name, str) else ""
+
+
+def set_custom_name(session_id: str, name: str, cwd: str = "") -> None:
+    """Salva (ou apaga, se `name` vazio) o nome custom da sessão."""
+    if not session_id:
+        return
+    marks = load_marks()
+    entry = marks.get(session_id, {})
+    name = (name or "").strip()
+    if name:
+        entry["custom_name"] = name
+        if cwd:
+            entry["cwd"] = cwd
+        marks[session_id] = entry
+    else:
+        if not entry:
+            return
+        entry.pop("custom_name", None)
+        if (
+            not entry.get("starred")
+            and not entry.get("tags")
+            and not entry.get("note")
+        ):
             marks.pop(session_id, None)
         else:
             marks[session_id] = entry

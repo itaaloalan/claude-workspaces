@@ -134,6 +134,11 @@ class TerminalWidget(QWidget):
         # ID que reivindicamos pro registry global; usado pra liberar quando
         # o terminal é destruído
         self._claimed_session_id: str | None = None
+        # Nome custom escolhido pelo usuário via "✏ Renomear sessão" no menu
+        # de contexto. Tem precedência sobre `_session_preview` no
+        # `effective_title()`. Persistido em `session_marks.json` por
+        # session_id assim que a sessão é reivindicada.
+        self._custom_name: str = ""
         # Sinaliza que esta sessão foi reaberta no startup (--resume após
         # fechar/abrir o app). Usado pra decidir se o botão ▶ continuar
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
@@ -287,7 +292,13 @@ class TerminalWidget(QWidget):
             self._pre_existing_session_ids = set()
 
     def effective_title(self) -> str:
-        """Título preferido — preview da sessão (truncado) ou _base_title."""
+        """Título preferido — nome custom (se houver), senão preview da
+        sessão truncado, senão _base_title."""
+        if self._custom_name:
+            text = self._custom_name.strip()
+            if len(text) > 60:
+                text = text[:59] + "…"
+            return text
         if self._session_preview:
             text = self._session_preview.replace("\n", " ").strip()
             if len(text) > 60:
@@ -296,9 +307,35 @@ class TerminalWidget(QWidget):
         return self.property("_base_title") or ""
 
     def full_title(self) -> str:
+        if self._custom_name:
+            return self._custom_name.strip()
         if self._session_preview:
             return self._session_preview.strip()
         return self.property("_base_title") or ""
+
+    def custom_name(self) -> str:
+        return self._custom_name
+
+    def set_custom_name(self, name: str) -> None:
+        """Define (ou apaga, se `name` vazio) o nome custom desta sessão.
+        Persiste em `session_marks.json` por session_id (se já reivindicada)
+        e força a UI a re-emitir o título via `activity_changed`, pra que
+        a sidebar e as notificações usem o novo nome imediatamente."""
+        name = (name or "").strip()
+        if name == self._custom_name:
+            return
+        self._custom_name = name
+        sid = self.claimed_session_id()
+        if sid:
+            try:
+                from ..session_marks import set_custom_name as _persist
+                _persist(sid, name, self._claude_cwd or "")
+            except Exception:
+                log.debug("falha ao persistir custom_name", exc_info=True)
+        # Re-emite activity pra que TerminalArea propague o novo título.
+        self.activity_changed.emit(
+            self._last_status, self._last_working, self._last_needs_decision
+        )
 
     def _try_resolve_session(self) -> None:
         if self._session_resolved or not self._claude_cwd:
@@ -350,6 +387,24 @@ class TerminalWidget(QWidget):
             TerminalWidget._claimed_session_ids.discard(self._claimed_session_id)
         self._claimed_session_id = session_id
         TerminalWidget._claimed_session_ids.add(session_id)
+        # Carrega o custom_name persistido (se houver) — usuário pode ter
+        # renomeado essa sessão numa execução anterior do app.
+        if not self._custom_name:
+            try:
+                from ..session_marks import get_custom_name
+                saved = get_custom_name(session_id)
+                if saved:
+                    self._custom_name = saved
+            except Exception:
+                log.debug("falha ao ler custom_name", exc_info=True)
+        elif self._custom_name:
+            # Caso o usuário tenha renomeado antes da sessão resolver —
+            # agora que sabemos o session_id, persiste retroativamente.
+            try:
+                from ..session_marks import set_custom_name as _persist
+                _persist(session_id, self._custom_name, self._claude_cwd or "")
+            except Exception:
+                log.debug("falha ao persistir custom_name", exc_info=True)
         # Informa o painel embutido (e MainWindow) que o session_id mudou —
         # runners criados antes da resolução são re-stampados pra apontar
         # pro id estável da sessão.

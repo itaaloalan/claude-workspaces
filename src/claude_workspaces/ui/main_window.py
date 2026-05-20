@@ -990,6 +990,17 @@ class MainWindow(QMainWindow):
             if term is None:
                 return
             tab_id = data
+            rename_act = QAction("✏ Renomear sessão…", menu)
+            rename_act.setToolTip(
+                "Define um nome custom pra esse console — aparece na "
+                "sidebar e nas notificações em vez do preview do primeiro "
+                "prompt"
+            )
+            rename_act.triggered.connect(
+                lambda _c=False, t=tab_id: self._rename_terminal_session(t)
+            )
+            menu.addAction(rename_act)
+            menu.addSeparator()
             if term.is_running():
                 self._add_session_info_actions(menu, term)
                 continue_act = QAction("▶ Continuar este console", menu)
@@ -2765,6 +2776,24 @@ class MainWindow(QMainWindow):
                 if id(w) == tab_id and isinstance(w, TerminalWidget):
                     return w
         return None
+
+    def _rename_terminal_session(self, tab_id: int) -> None:
+        """Pede um nome custom pra essa sessão e persiste via TerminalWidget.
+        Aparece na sidebar e nas notificações (toast / native) imediatamente.
+        Deixar vazio remove o nome custom e volta pro preview do prompt."""
+        term = self._terminal_widget_for(tab_id)
+        if term is None:
+            return
+        current = term.custom_name()
+        name, ok = QInputDialog.getText(
+            self,
+            "Renomear sessão",
+            "Nome custom (vazio pra voltar ao preview do prompt):",
+            text=current,
+        )
+        if not ok:
+            return
+        term.set_custom_name(name)
 
     def _close_terminal_by_tab_id(self, tab_id: int) -> None:
         """Encerra e remove a aba de terminal correspondente ao tab_id. Usado
