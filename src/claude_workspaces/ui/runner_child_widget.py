@@ -1,17 +1,21 @@
 """Widget custom pros children "runner" da sidebar — uma linha compacta
-por runner do workspace, com nome + estado + botão ▶/■.
+por runner do workspace, com nome + host:port + estado + botão ▶/■.
 
-    [●]  runner-name              [▶]
+    [●]  runner-name  host:port    [▶]
 
 Estados:
     idle/exited → bolinha cinza, botão ▶
     running     → bolinha verde, botão ■
     error       → bolinha vermelha, botão ▶
+
+O host:port só aparece quando há URL conhecida (detectada na saída ou
+configurada em `browser_url`). Vazio = label oculta.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from urllib.parse import urlparse
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -84,6 +88,13 @@ class RunnerChildWidget(QWidget):
         )
         row.addWidget(self._name_label, stretch=1)
 
+        self._addr_label = QLabel("")
+        self._addr_label.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+        )
+        self._addr_label.setVisible(False)
+        row.addWidget(self._addr_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self._toggle_btn = QPushButton("▶")
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.setFixedSize(20, 18)
@@ -98,6 +109,19 @@ class RunnerChildWidget(QWidget):
     def set_name(self, name: str) -> None:
         self._name_label.setText(name)
         self.setToolTip(name)
+
+    def set_url(self, url: str) -> None:
+        """Mostra host:port a partir de uma URL. Vazio = esconde a label."""
+        url = (url or "").strip()
+        addr = _host_port(url)
+        if addr:
+            self._addr_label.setText(addr)
+            self._addr_label.setToolTip(url)
+            self._addr_label.setVisible(True)
+        else:
+            self._addr_label.setText("")
+            self._addr_label.setToolTip("")
+            self._addr_label.setVisible(False)
 
     def set_state(self, state: str) -> None:
         self._state = state if state in _STATE_COLOR else "idle"
@@ -114,3 +138,18 @@ class RunnerChildWidget(QWidget):
         else:
             self._toggle_btn.setText("▶")
             self._toggle_btn.setToolTip("Iniciar runner")
+
+
+def _host_port(url: str) -> str:
+    """Extrai 'host:port' (ou só 'host') de uma URL. Aceita URLs sem
+    esquema fazendo um fallback simples."""
+    if not url:
+        return ""
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    host = parsed.hostname or ""
+    if not host:
+        return ""
+    port = parsed.port
+    if port:
+        return f"{host}:{port}"
+    return host

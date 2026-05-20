@@ -42,6 +42,7 @@ class RunnerArea(QWidget):
     runners_changed = Signal()
     running_count_changed = Signal(int)
     runner_state_changed = Signal(str, str)  # runner_id, state
+    runner_url_changed = Signal(str, str)    # runner_id, url ("" = desconhecido)
 
     def __init__(
         self,
@@ -270,6 +271,9 @@ class RunnerArea(QWidget):
         )
         widget.edit_requested.connect(self._on_edit_request)
         widget.remove_requested.connect(self._on_remove_request)
+        widget.url_changed.connect(
+            lambda url, w=widget: self.runner_url_changed.emit(w.runner_id(), url)
+        )
 
     def _on_runner_state(self, widget: RunnerWidget) -> None:
         self._recompute_running_count()

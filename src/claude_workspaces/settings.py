@@ -26,6 +26,12 @@ class Settings:
     # Vazio = usa QDesktopServices.openUrl (xdg-open no Linux). Pode ser
     # um caminho absoluto ("/usr/bin/firefox") ou nome no PATH ("chromium").
     browser_command: str = ""
+    # Delay (ms) entre detectar a URL/ready_pattern e abrir o browser.
+    # Why: alguns servers logam a URL antes de aceitar conexões — abrir na
+    # hora bate em "ECONNREFUSED" no browser. Default 5000ms cobre cold
+    # start de Glassfish/Spring Boot sem ficar perceptível em devservers
+    # rápidos (Vite/Next). 0 = abre imediato.
+    browser_open_delay_ms: int = 5000
     # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
     body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, middle, right_dock]
     right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]

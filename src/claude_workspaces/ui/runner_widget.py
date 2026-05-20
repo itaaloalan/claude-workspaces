@@ -8,6 +8,7 @@ ao vivo no xterm.js (mesmo HTML/JS da aba Terminal).
 from __future__ import annotations
 
 import logging
+import re
 import shlex
 import subprocess
 from collections.abc import Callable
@@ -43,6 +44,10 @@ class RunnerWidget(QWidget):
     edit_requested = Signal(str)        # runner_id
     remove_requested = Signal(str)      # runner_id
     config_label_changed = Signal(str)  # novo nome p/ aba
+    # URL atual (host:port) — detectada ou via config. "" quando desconhecida.
+    # Emitido sempre que muda; consumido pela sidebar pra mostrar host:port
+    # na linha do runner.
+    url_changed = Signal(str)
 
     def __init__(
         self,
@@ -61,6 +66,10 @@ class RunnerWidget(QWidget):
         # crescer indefinidamente em runners de log alto.
         self._output_buf: str = ""
         self._browser_opened_this_start: bool = False
+        self._ready_pattern_matched: bool = False
+        # URL atual conhecida pelo widget (config ou detectada). Mantida pra
+        # sincronizar a sidebar (host:port). Inicializa a partir da config.
+        self._current_url: str = (runner.browser_url or "").strip()
         # Buffer de log pra "Copiar log" — guarda os últimos ~1MB. Não
         # reseta a cada start (mantém histórico cross-restart pra debug).
         self._log_buf: str = ""
@@ -155,9 +164,28 @@ class RunnerWidget(QWidget):
 
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
+        old_url = (self._runner.browser_url or "").strip()
         self._runner = runner
         if runner.name != old_name:
             self.config_label_changed.emit(runner.name or "(runner)")
+        new_url = (runner.browser_url or "").strip()
+        # browser_url da config tem prioridade sobre URL detectada — se
+        # mudou, sincroniza a sidebar; se ficou vazio e tínhamos detectado
+        # algo, mantém o detectado.
+        if new_url and new_url != old_url:
+            self._set_current_url(new_url)
+        elif not new_url and old_url and self._current_url == old_url:
+            self._set_current_url("")
+
+    def current_url(self) -> str:
+        return self._current_url
+
+    def _set_current_url(self, url: str) -> None:
+        url = (url or "").strip()
+        if url == self._current_url:
+            return
+        self._current_url = url
+        self.url_changed.emit(url)
 
     def is_running(self) -> bool:
         return self._state == "running"
@@ -219,6 +247,7 @@ class RunnerWidget(QWidget):
         if intent in ("start", "restart"):
             self._output_buf = ""
             self._browser_opened_this_start = False
+            self._ready_pattern_matched = False
         try:
             self.session.start(argv, cwd, env=self._runner.env or None)
         except OSError as e:
@@ -255,13 +284,30 @@ class RunnerWidget(QWidget):
         # no startup, mas alguns servers logam warnings antes).
         self._output_buf = (self._output_buf + chunk)[-16384:]
 
+        ready_pat = (self._runner.ready_pattern or "").strip()
+        if ready_pat and not self._ready_pattern_matched:
+            try:
+                if re.search(ready_pat, self._output_buf, re.IGNORECASE):
+                    self._ready_pattern_matched = True
+            except re.error as e:
+                log.warning(
+                    "ready_pattern inválido no runner %s: %s — ignorando",
+                    self._runner.name, e,
+                )
+                self._ready_pattern_matched = True
+            if not self._ready_pattern_matched:
+                return
+
         url = self._runner.browser_url.strip() or detect_url(self._output_buf)
         if not url:
             return
         self._browser_opened_this_start = True
-        # Pequeno delay pra dar tempo do server aceitar conexões antes
-        # do browser bater na porta.
-        QTimer.singleShot(400, lambda u=url: self._open_browser(u))
+        self._set_current_url(url)
+        # Delay configurável (default 5s) — dá tempo do server aceitar
+        # conexões antes do browser bater na porta. Glassfish/Spring Boot
+        # logam a URL antes do listener tá pronto.
+        delay_ms = max(0, int(getattr(self._settings, "browser_open_delay_ms", 5000)))
+        QTimer.singleShot(delay_ms, lambda u=url: self._open_browser(u))
 
     def _copy_log(self) -> None:
         from PySide6.QtGui import QGuiApplication

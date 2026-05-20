@@ -106,6 +106,17 @@ class SettingsPanel(QWidget):
         )
         form.addRow("Browser:", self._browser_cmd)
 
+        self._browser_delay_ms = QSpinBox()
+        self._browser_delay_ms.setRange(0, 60000)
+        self._browser_delay_ms.setSingleStep(500)
+        self._browser_delay_ms.setSuffix(" ms")
+        self._browser_delay_ms.setToolTip(
+            "Delay entre detectar a URL pronta e abrir o browser. "
+            "Alguns servers logam a URL antes de aceitar conexões — esse "
+            "delay evita ECONNREFUSED. Default 5000ms."
+        )
+        form.addRow("Delay p/ abrir browser:", self._browser_delay_ms)
+
         outer.addLayout(form)
 
         outer.addWidget(self._build_worktree_section())
@@ -150,6 +161,7 @@ class SettingsPanel(QWidget):
         self._pycharm_cmd.setText(self.settings.pycharm_command)
         self._rider_cmd.setText(self.settings.rider_command)
         self._browser_cmd.setText(self.settings.browser_command)
+        self._browser_delay_ms.setValue(int(self.settings.browser_open_delay_ms))
         self._default_isolate_chk.setChecked(self.settings.default_isolate_worktree)
         self._default_new_branch_chk.setChecked(self.settings.default_create_new_branch)
         self._branch_prefix.setText(self.settings.branch_prefix)
@@ -181,6 +193,7 @@ class SettingsPanel(QWidget):
         self.settings.pycharm_command = self._pycharm_cmd.text().strip() or "pycharm"
         self.settings.rider_command = self._rider_cmd.text().strip() or "rider"
         self.settings.browser_command = self._browser_cmd.text().strip()
+        self.settings.browser_open_delay_ms = int(self._browser_delay_ms.value())
         self.settings.default_isolate_worktree = self._default_isolate_chk.isChecked()
         self.settings.default_create_new_branch = self._default_new_branch_chk.isChecked()
         self.settings.branch_prefix = (

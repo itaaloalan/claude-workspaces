@@ -1340,6 +1340,11 @@ class MainWindow(QMainWindow):
                 rw = area.widget_for(runner.id)
                 if rw is not None:
                     widget.set_state(rw.current_state())
+                    widget.set_url(rw.current_url())
+            else:
+                # Sem RunnerArea instanciada ainda → usa o browser_url da
+                # config como fallback (URL detectada precisa do runtime).
+                widget.set_url(runner.browser_url or "")
             group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
@@ -1435,11 +1440,16 @@ class MainWindow(QMainWindow):
                 lambda rid=runner.id, wid=ws.id: self._toggle_runner_from_sidebar(wid, rid),
             )
             # Estado inicial: runners de console ficam em _console_runner_areas.
+            url_set = False
             for carea in self._console_runner_areas.get(ws.id, {}).values():
                 rw = carea.widget_for(runner.id)
                 if rw is not None:
                     widget.set_state(rw.current_state())
+                    widget.set_url(rw.current_url())
+                    url_set = True
                     break
+            if not url_set:
+                widget.set_url(runner.browser_url or "")
             group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
@@ -1498,6 +1508,18 @@ class MainWindow(QMainWindow):
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, RunnerChildWidget):
             widget.set_state(state)
+
+    def _on_runner_url_changed(
+        self, workspace_id: str, runner_id: str, url: str
+    ) -> None:
+        from .runner_child_widget import RunnerChildWidget
+
+        item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
+        if item is None:
+            return
+        widget = self.list_widget.itemWidget(item, 0)
+        if isinstance(widget, RunnerChildWidget):
+            widget.set_url(url)
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:
@@ -1736,6 +1758,9 @@ class MainWindow(QMainWindow):
         area.runner_state_changed.connect(
             lambda rid, state, wid=ws.id: self._on_runner_state_changed(wid, rid, state)
         )
+        area.runner_url_changed.connect(
+            lambda rid, url, wid=ws.id: self._on_runner_url_changed(wid, rid, url)
+        )
         return area
 
     def _open_runner_edit(
@@ -1813,6 +1838,10 @@ class MainWindow(QMainWindow):
         area.runner_state_changed.connect(
             lambda rid, state, wid=workspace.id:
                 self._on_runner_state_changed(wid, rid, state)
+        )
+        area.runner_url_changed.connect(
+            lambda rid, url, wid=workspace.id:
+                self._on_runner_url_changed(wid, rid, url)
         )
         self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
         # Painel mora no top tab "Runners (console)" — não embute mais no

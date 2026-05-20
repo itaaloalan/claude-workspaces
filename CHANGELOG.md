@@ -6,6 +6,36 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.33.0] — 2026-05-20
+
+### Adicionado
+- **Host:port dos runners na sidebar**
+  (`ui/runner_child_widget.py`, `ui/runner_widget.py`, `ui/runner_area.py`,
+  `ui/main_window.py`): a linha de cada runner na sidebar agora mostra
+  `host:port` ao lado do nome quando há URL conhecida — seja pela
+  detecção automática (`open_browser_on_ready`) ou pelo campo
+  `browser_url` da config. Vazio = label oculta, mantém o layout
+  compacto. URL detectada em tempo real propaga via novo signal
+  `RunnerWidget.url_changed` → `RunnerArea.runner_url_changed` →
+  `MainWindow._on_runner_url_changed`.
+
+- **Delay configurável p/ abrir o browser dos runners**
+  (`settings.py`, `ui/settings_panel.py`, `ui/runner_widget.py`): novo
+  setting global `browser_open_delay_ms` (default 5000ms, antes era
+  hardcoded em 400ms). Why: servers tipo Glassfish/Spring Boot logam
+  a URL antes do listener aceitar conexões — 400ms não era suficiente
+  e o browser batia em ECONNREFUSED. 5s cobre cold start desses
+  servers sem ficar perceptível em devservers rápidos. Configurável
+  em **Configurações → Delay p/ abrir browser**.
+
+- **Padrão de pronto (`ready_pattern`) nos runners**
+  (`models.py`, `ui/runner_edit_dialog.py`, `ui/runner_widget.py`):
+  novo campo opcional regex case-insensitive aplicado na stdout do
+  runner. Quando preenchido, o browser só abre depois que o padrão
+  casa. Útil pra Glassfish/Tomcat, onde a porta sobe antes do deploy
+  terminar (ex: `Application \[ogpms\] deployed`). Vazio mantém o
+  comportamento antigo (abre na primeira URL detectada).
+
 ## [0.32.1] — 2026-05-20
 
 ### Corrigido

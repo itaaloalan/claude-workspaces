@@ -152,6 +152,18 @@ class RunnerEditDialog(QDialog):
         )
         form.addRow("URL do browser:", self._browser_url)
 
+        self._ready_pattern = QLineEdit(base.ready_pattern)
+        self._ready_pattern.setPlaceholderText(
+            "(opcional — regex que precisa casar antes do browser abrir)"
+        )
+        self._ready_pattern.setToolTip(
+            "Regex case-insensitive aplicado na stdout. Quando preenchido, "
+            "o browser só abre depois que esse padrão aparece no log — "
+            "útil pra Glassfish/Tomcat, onde a porta sobe antes do "
+            "deploy terminar. Ex: 'Application \\[ogpms\\] deployed' ou '>>> ready:'."
+        )
+        form.addRow("Padrão de pronto:", self._ready_pattern)
+
         layout.addLayout(form)
 
         if on_generate_with_claude is not None:
@@ -221,5 +233,6 @@ class RunnerEditDialog(QDialog):
             enabled=self._enabled.isChecked(),
             open_browser_on_ready=self._open_browser.isChecked(),
             browser_url=self._browser_url.text().strip(),
+            ready_pattern=self._ready_pattern.text().strip(),
             env=(base.env if base else {}),
         )

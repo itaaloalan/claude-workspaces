@@ -27,6 +27,12 @@ class RunnerConfig:
     # detectar. URL é aberta uma única vez por start.
     open_browser_on_ready: bool = False
     browser_url: str = ""               # override manual; vazio = autodetect
+    # Regex (case-insensitive) que precisa casar na stdout antes do
+    # browser abrir. Vazio = abre na primeira URL detectada (comportamento
+    # antigo). Útil pra servers em que a porta sobe antes do deploy
+    # terminar — ex: Glassfish, onde a URL final só é válida após
+    # "Application [ogpms] deployed successfully".
+    ready_pattern: str = ""
     # Escopo do runner. Vazio = pertence ao workspace (comportamento
     # antigo, aparece no painel inferior do workspace). Quando preenchido
     # com o session_id de um console Claude, o runner pertence àquele
@@ -59,6 +65,7 @@ class RunnerConfig:
             enabled=bool(data.get("enabled", True)),
             open_browser_on_ready=bool(data.get("open_browser_on_ready", False)),
             browser_url=str(data.get("browser_url", "")),
+            ready_pattern=str(data.get("ready_pattern", "")),
             console_session_id=str(data.get("console_session_id", "")),
             gen_session_id=str(data.get("gen_session_id", "")),
             gen_cwd=str(data.get("gen_cwd", "")),
