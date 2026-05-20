@@ -25,8 +25,14 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Callable
 from typing import Any
+
+# Mapa reason → nome legível pro log (spec FDO §Signals.NotificationClosed).
+# 1=expired (timeout do servidor), 2=dismissed (usuário fechou), 3=closed
+# (CloseNotification chamado), 4=undefined/reserved.
+_CLOSE_REASONS = {1: "expired", 2: "dismissed", 3: "closed_api", 4: "undefined"}
 
 from PySide6.QtCore import QObject, SLOT, Signal, Slot
 
@@ -136,6 +142,12 @@ class DesktopNotifier(QObject):
         self._pending: dict[int, dict[str, Any]] = {}
         self._connected: bool = False
         self._gdbus_path: str | None = shutil.which("gdbus")
+        # Timestamp (monotonic) de quando cada nota foi criada — usado pra
+        # logar quanto tempo o popup ficou vivo ao receber NotificationClosed.
+        self._created_at: dict[int, float] = {}
+        # Server info (nome/vendor/versão/spec-version) — útil pra correlacionar
+        # bugs específicos de implementação (KDE Plasma 6 vs GNOME Shell vs dunst).
+        self._server_info: dict[str, str] = {}
         if _HAS_QTDBUS and self._gdbus_path:
             self._connect()
 
@@ -168,6 +180,30 @@ class DesktopNotifier(QObject):
             args = reply.arguments()
             if args and isinstance(args[0], list):
                 self._caps = {str(c) for c in args[0]}
+            # GetServerInformation devolve (name, vendor, version, spec_version).
+            # Logamos pra deixar rastro de qual servidor estamos falando — KDE
+            # Plasma 6, GNOME Shell e dunst têm comportamentos bem diferentes
+            # de hints como urgency/resident/transient.
+            try:
+                info_reply = iface.call("GetServerInformation")
+                if info_reply.type() == QDBusMessage.MessageType.ReplyMessage:
+                    info_args = info_reply.arguments()
+                    if len(info_args) >= 4:
+                        self._server_info = {
+                            "name": str(info_args[0]),
+                            "vendor": str(info_args[1]),
+                            "version": str(info_args[2]),
+                            "spec_version": str(info_args[3]),
+                        }
+                        log.info(
+                            "Servidor de notificações: name=%s vendor=%s version=%s spec=%s",
+                            self._server_info["name"],
+                            self._server_info["vendor"],
+                            self._server_info["version"],
+                            self._server_info["spec_version"],
+                        )
+            except Exception:
+                log.debug("GetServerInformation falhou", exc_info=True)
             self._iface = iface
             ok_a = bus.connect(
                 _BUS_SERVICE, _BUS_PATH, _BUS_IFACE, "ActionInvoked", "us",
@@ -251,9 +287,17 @@ class DesktopNotifier(QObject):
             # transient e persistente.
             hint_parts.append("'transient': <" + ("true" if transient else "false") + ">")
         hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
-        log.warning(
-            "DEBUG notify: urgency=%s timeout_ms=%s hints=%r replaces_id=%s actions=%d title=%r",
-            urgency, timeout_ms, hints_arg, replaces_id, len(actions), title,
+        # Log da chamada completa + estado do DND. Se o popup sumir cedo, esse
+        # log é o ponto de partida pra investigar: confere se a hint chegou,
+        # se DND não está ativo, e cruza com o NotificationClosed mais à frente
+        # (pelo note_id) pra medir o tempo de vida real do banner.
+        action_keys = [a[0] for a in actions]
+        log.info(
+            "notify enviado: title=%r urgency=%s timeout_ms=%s hints=%s "
+            "replaces_id=%s actions=%s server=%s caps=%s dnd=%s",
+            title, urgency, timeout_ms, hints_arg, replaces_id,
+            action_keys, self._server_info.get("name", "?"),
+            sorted(self._caps), self.inhibited(),
         )
         try:
             proc = subprocess.run(
@@ -289,11 +333,14 @@ class DesktopNotifier(QObject):
             "on_action": on_action,
             "on_closed": on_closed,
         }
+        self._created_at[note_id] = time.monotonic()
+        log.info("notify aceito pelo servidor: note_id=%s title=%r", note_id, title)
         # Cap simples FIFO — entradas antigas que nunca chegaram a fechamento
         # explícito (Plasma só emite reason=1) não devem ficar pendurando.
         while len(self._pending) > _PENDING_MAX:
             oldest = next(iter(self._pending))
             self._pending.pop(oldest, None)
+            self._created_at.pop(oldest, None)
         return note_id
 
     def inhibited(self) -> bool:
@@ -347,6 +394,9 @@ class DesktopNotifier(QObject):
     def _on_action_invoked(self, note_id: int, action_key: str) -> None:
         nid = int(note_id)
         key = str(action_key)
+        created = self._created_at.get(nid)
+        age = f"{time.monotonic() - created:.2f}s" if created else "?"
+        log.info("ActionInvoked: note_id=%s key=%r age=%s", nid, key, age)
         self.action_invoked.emit(nid, key)
         # Após invocar uma action, a notificação está prestes a fechar (reason=2).
         # Removemos pra evitar que cliques duplicados / re-entregas disparem
@@ -361,11 +411,24 @@ class DesktopNotifier(QObject):
     @Slot("uint", "uint")
     def _on_notification_closed(self, note_id: int, reason: int) -> None:
         nid = int(note_id)
-        self.notification_closed.emit(nid, int(reason))
+        reason_int = int(reason)
+        reason_name = _CLOSE_REASONS.get(reason_int, f"unknown({reason_int})")
+        created = self._created_at.get(nid)
+        age_str = f"{time.monotonic() - created:.2f}s" if created else "?"
+        # INFO pra ter rastro de vida do popup. Se reason=expired com age<3s
+        # significa que o servidor ignorou nosso timeout/urgency/resident
+        # (típico do KDE Plasma 6 com action). Se age>>10s, deu certo.
+        log.info(
+            "NotificationClosed: note_id=%s reason=%s(%d) age=%s",
+            nid, reason_name, reason_int, age_str,
+        )
+        if reason_int >= 2:
+            self._created_at.pop(nid, None)
+        self.notification_closed.emit(nid, reason_int)
         # reason=1 (expirou) no Plasma 6 acontece quando a notificação sai do
         # popup mas continua na central de notificações com as actions vivas.
         # Só descartamos o callback em fechamento explícito (>= 2).
-        if int(reason) >= 2:
+        if reason_int >= 2:
             entry = self._pending.pop(nid, None)
         else:
             entry = self._pending.get(nid)

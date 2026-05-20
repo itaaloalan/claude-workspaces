@@ -17,6 +17,17 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   altura, escondida por padrão, ligada/desligada pelo
   `_on_selection_changed` do MainWindow via `set_selected(bool)`.
 
+### Melhorado
+- **Logs de diagnóstico das notificações D-Bus**
+  (`services/desktop_notifier.py`): pra investigar quando o
+  popup some cedo demais no KDE. Agora logamos: identidade do
+  servidor (`GetServerInformation`), capabilities completas,
+  estado de DND no envio, hints/urgency/timeout/actions
+  enviados, `note_id` aceito, `ActionInvoked` com idade do
+  popup, e `NotificationClosed` com `reason` nomeado
+  (expired/dismissed/closed_api) + idade. Se `reason=expired`
+  com age<3s, o servidor ignorou `resident`/`urgency=critical`.
+
 ## [0.39.1] — 2026-05-20
 
 ### Corrigido
