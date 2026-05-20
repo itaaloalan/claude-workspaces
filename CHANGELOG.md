@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.34.1] — 2026-05-20
+
+### Mudado
+- **Cursor pointer em locais clicáveis da sidebar**
+  (`ui/builders/sidebar_builder.py`): os botões "＋ Novo Workspace",
+  "›_ Abrir Terminal", "✦ Claude (sem contexto)" e "🔧 Hack este app"
+  agora trocam o cursor pra mãozinha no hover, igual aos botões inline
+  dos rows. A árvore de workspaces/consoles também passou a usar
+  pointer cursor — sinaliza melhor que os itens são clicáveis.
+
 ## [0.34.0] — 2026-05-20
 
 ### Adicionado

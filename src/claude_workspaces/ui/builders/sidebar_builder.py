@@ -312,6 +312,7 @@ class SidebarBuilder:
             "Abre uma janela nova de terminal em $HOME, sem workspace"
         )
         self.open_terminal_btn.setStyleSheet(_GHOST_ACTION_QSS)
+        self.open_terminal_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         if self._on_open_terminal is not None:
             self.open_terminal_btn.clicked.connect(self._on_open_terminal)
         layout.addWidget(self.open_terminal_btn)
@@ -322,6 +323,7 @@ class SidebarBuilder:
             "workspace (cwd = $HOME)"
         )
         self.open_claude_no_ctx_btn.setStyleSheet(_GHOST_ACTION_QSS)
+        self.open_claude_no_ctx_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         if self._on_open_claude_no_ctx is not None:
             self.open_claude_no_ctx_btn.clicked.connect(self._on_open_claude_no_ctx)
         layout.addWidget(self.open_claude_no_ctx_btn)
@@ -336,6 +338,7 @@ class SidebarBuilder:
             "Abre o Claude no diretório do próprio claude-workspaces pra iterar nele"
         )
         self.self_dev_btn.setStyleSheet(_GHOST_ACTION_QSS)
+        self.self_dev_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.self_dev_btn.clicked.connect(self._on_self_dev_clicked)
         layout.addWidget(self.self_dev_btn)
 
