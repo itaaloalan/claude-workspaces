@@ -2472,8 +2472,12 @@ class MainWindow(QMainWindow):
             lambda _tid=tab_id: self._on_toast_dismissed(_tid)
         )
         self._active_toasts[tab_id] = toast
+        # Ordem importa: posiciona ANTES do show, senão o KWin centraliza
+        # a janela tool-frameless e o move() posterior é ignorado em
+        # alguns cenários. setGeometry atomic dentro de position_toasts
+        # garante que o WM já recebe a posição correta no mapping.
+        position_toasts(list(self._active_toasts.values()))
         toast.show()
-        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
 
     def _handle_toast_action(self, tab_id: int, workspace_id: str) -> None:
         """Clique em 'Abrir console' no toast — mesma rota da action D-Bus.

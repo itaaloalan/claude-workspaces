@@ -30,9 +30,10 @@ log = logging.getLogger(__name__)
 MARGIN = 16
 GAP = 8
 WIDTH = 360
-# Auto-dismiss default. ~30s dá tempo do usuário ver, ler e clicar
-# sem precisar correr; menos que isso fica curto pra alertas de console.
-DEFAULT_DURATION_MS = 30000
+# Auto-dismiss default. 5s casa com expectativa de "toast" comum: aviso
+# rápido que some sozinho, com a barra de progresso mostrando o
+# countdown. Hover pausa pra dar tempo de ler se quiser.
+DEFAULT_DURATION_MS = 5000
 # Tick rate da barra de progresso. 50ms = animação suave (~20fps) sem
 # pesar no event loop.
 TICK_MS = 50
@@ -254,13 +255,13 @@ class PersistentToast(QWidget):
 def position_toasts(toasts: list[PersistentToast]) -> None:
     """Empilha os toasts no canto top-right da tela do cursor (multi-monitor).
 
-    Mais antigo em cima, novos descem. Pra pegar altura real (body com
-    word-wrap muda altura), forçamos `layout().activate()` + `adjustSize()`
-    e depois lemos `frameGeometry().height()`. Se o widget ainda não foi
-    realizado pelo Qt (height=0), cai pra sizeHint como aproximação.
+    DEVE ser chamado ANTES de `toast.show()` pra novos toasts. Senão o KWin
+    aplica sua placement policy (centraliza tool windows frameless) e o
+    `move()` posterior é ignorado em alguns cenários.
 
-    A função é idempotente: pode ser chamada após cada show/update/remove
-    e sempre recalcula tudo do zero.
+    Usamos `setGeometry(x, y, w, h)` em vez de `move()` separado — atomic
+    size+position força o WM a respeitar antes do mapping. Altura calculada
+    via `sizeHint()` depois de `layout().activate()` + `adjustSize()`.
     """
     # Tela do cursor — multi-monitor: queremos os toasts onde o usuário
     # está olhando, não no monitor primário fixo.
@@ -272,15 +273,15 @@ def position_toasts(toasts: list[PersistentToast]) -> None:
     y = geo.top() + MARGIN
     x = geo.right() - MARGIN - WIDTH
     for toast in toasts:
-        # Força layout a recalcular ANTES de medir; sem isso adjustSize
-        # devolve sizeHint stale e dois toasts seguidos parecem ter a
-        # mesma altura mesmo com body de tamanhos diferentes.
         lay = toast.layout()
         if lay is not None:
             lay.activate()
         toast.adjustSize()
-        h = toast.frameGeometry().height() or toast.sizeHint().height()
-        toast.move(QPoint(x, y))
+        # sizeHint depois de adjustSize bate com a altura real desejada
+        # (mais confiável que frameGeometry pra toasts que ainda nem foram
+        # shown — frameGeometry retorna 0 ou stale antes do mapping).
+        h = toast.sizeHint().height()
+        toast.setGeometry(x, y, WIDTH, h)
         y += h + GAP
 
 

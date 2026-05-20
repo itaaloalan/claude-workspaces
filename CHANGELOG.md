@@ -6,6 +6,24 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.44.2] — 2026-05-20
+
+### Corrigido
+- **Toasts centralizados em vez de top-right**
+  (`ui/persistent_toast.py`, `ui/main_window.py`): `position_toasts`
+  rodava DEPOIS de `toast.show()` — KWin já tinha aplicado sua
+  placement policy (centraliza tool-windows frameless) e ignorava
+  o `move()` posterior. Trocado pra `setGeometry` (atomic
+  size+position) chamado ANTES do `show()`. Bonus: top-down do
+  canto top-right na tela do cursor, sem sobreposição.
+
+### Melhorado
+- **Auto-dismiss em 5s em vez de 30s**
+  (`ui/persistent_toast.py`): duração default reduzida pra
+  casar com expectativa de "toast" comum — aviso rápido com
+  barra de progresso mostrando countdown. Hover continua
+  pausando pra dar tempo de ler.
+
 ## [0.44.1] — 2026-05-20
 
 ### Corrigido
