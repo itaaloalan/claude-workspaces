@@ -56,10 +56,13 @@ class PersistentToast(QWidget):
         duration_ms: int = DEFAULT_DURATION_MS,
         parent: QWidget | None = None,
     ) -> None:
-        # Qt.Tool faz a janela não aparecer na taskbar; FramelessWindowHint
-        # tira título/borda nativos; WindowStaysOnTopHint garante visibilidade
-        # acima de outras apps mesmo sem foco.
-        super().__init__(parent, Qt.WindowType.Tool
+        # SplashScreen: KWin (X11 e Wayland) NÃO aplica placement policy
+        # nessa window-type — sem isso, frameless Tool windows acabam
+        # centralizadas pela "smart placement" do WM e o setGeometry é
+        # ignorado no Wayland. FramelessWindowHint tira título/borda
+        # nativos; WindowStaysOnTopHint garante visibilidade acima de
+        # outras apps mesmo sem foco.
+        super().__init__(parent, Qt.WindowType.SplashScreen
                          | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint)
         # Não rouba foco ao aparecer — usuário continua digitando no que estava.

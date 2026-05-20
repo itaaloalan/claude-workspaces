@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.50.5] — 2026-05-20
+
+### Corrigido
+- **Toast in-app aparecia centralizado na tela em vez do canto top-right**
+  (`ui/persistent_toast.py`, `ui/main_window.py`): no KWin Wayland o
+  `Qt.Tool | FramelessWindowHint` cai na "smart placement" do compositor
+  e o `setGeometry` pré-show é ignorado — toast nascia no centro. Trocado
+  pra `Qt.SplashScreen` (window-type que o KWin não auto-posiciona) e
+  somado um `position_toasts` via `QTimer.singleShot(0, …)` depois do
+  `show()` no fluxo de criação, garantindo que o reposicionamento valha
+  uma vez que o surface Wayland exista.
+
 ## [0.50.4] — 2026-05-20
 
 ### Mudado
