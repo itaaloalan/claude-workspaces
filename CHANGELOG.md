@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.50.2] — 2026-05-20
+
+### Corrigido
+- **`restart_all` resyncs tabs e loga decisão por runner**
+  (`ui/runner_area.py`): chama `_refresh_from_workspace()` antes de
+  iterar pra cobrir o caso de o RunnerArea estar fora de fase com
+  `ws.runners` (import/draft que não passaram por `_open_runner_edit`).
+  Log INFO por runner com a decisão (start/restart/skip-disabled) pra
+  facilitar debug em `~/.local/state/claude-workspaces/app.log`.
+
 ## [0.50.1] — 2026-05-20
 
 ### Corrigido

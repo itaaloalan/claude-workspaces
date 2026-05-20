@@ -29,6 +29,11 @@ from ..settings import Settings
 from .runner_widget import RunnerWidget
 
 
+def _logger():
+    import logging
+    return logging.getLogger(__name__)
+
+
 class RunnerArea(QWidget):
     """Container das abas de runners de um workspace.
 
@@ -367,16 +372,33 @@ class RunnerArea(QWidget):
     def restart_all(self) -> None:
         """Reinicia todos os runners habilitados deste escopo. Quem está
         rodando faz `restart` (usa restart_cmd se houver); quem está parado
-        é iniciado."""
+        é iniciado.
+
+        Resync defensivo das abas antes de iterar: o header da sidebar pode
+        ser clicado mesmo sem o painel de runners ter sido aberto, e nesse
+        caso o RunnerArea pode estar fora de fase com `ws.runners` (runners
+        adicionados via import/draft que não passaram por `_open_runner_edit`,
+        por exemplo).
+        """
+        self._refresh_from_workspace()
+        log = _logger()
+        log.info(
+            "restart_all: tabs=%d scope=%r",
+            self.tabs.count(),
+            self._console_session_id,
+        )
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             if not isinstance(w, RunnerWidget):
                 continue
             if not w.config().enabled:
+                log.info("restart_all: skip %r (disabled)", w.config().name)
                 continue
             if w.is_running():
+                log.info("restart_all: restart %r", w.config().name)
                 w.restart()
             else:
+                log.info("restart_all: start %r", w.config().name)
                 w.start()
 
     def _remove_all(self) -> None:
