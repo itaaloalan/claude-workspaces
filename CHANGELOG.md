@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.42.2] — 2026-05-20
+
+### Corrigido
+- **Botão "Abrir console" ausente na primeira emissão**
+  (`ui/main_window.py`): no KDE Plasma 6.6.5, popups com
+  `replaces_id=0` renderizam SEM o botão de action — só
+  re-emissões com `replaces_id != 0` mostram. Como o "Pronto"
+  (working→idle) usa replaces_id=0 e o "Ainda aguardando"
+  (reminder) usa replaces_id=nid_anterior, só o reminder tinha
+  botão. Workaround: na primeira emissão, agenda re-emit em
+  200ms via `QTimer.singleShot` — o popup atualizado já vem
+  com botão. Keepalive normal de 5s assume depois.
+
 ## [0.42.1] — 2026-05-20
 
 ### Corrigido

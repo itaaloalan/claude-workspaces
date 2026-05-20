@@ -2407,7 +2407,19 @@ class MainWindow(QMainWindow):
             )
             if nid is not None:
                 self._active_notifications[tab_id] = nid
-                self._arm_notification_keepalive(tab_id, is_reminder)
+                # Quirk do KDE Plasma 6.6.5: na primeira emissão
+                # (replaces_id=0) o popup renderiza SEM o botão de action,
+                # mas a re-emissão com replaces_id != 0 já mostra o botão.
+                # Pra primeira emissão, agenda re-emit em 200ms só pra
+                # forçar o popup a vir com o botão visível. Depois o
+                # keepalive normal de 5s assume.
+                if prev_nid == 0:
+                    QTimer.singleShot(
+                        200,
+                        lambda _tid=tab_id: self._resurrect_notification(_tid),
+                    )
+                else:
+                    self._arm_notification_keepalive(tab_id, is_reminder)
                 return
             log.debug("D-Bus notify falhou — fallback pro tray.showMessage")
 
