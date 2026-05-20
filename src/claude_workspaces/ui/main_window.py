@@ -770,10 +770,9 @@ class MainWindow(QMainWindow):
         self.terminal_host = builder.host
         self._empty_terminal = builder.empty_label
         self._terminal_placeholder_idx = builder.placeholder_idx
-        # Trocar a área visível (workspace) reflete imediato no % de contexto.
-        self.terminal_host.currentChanged.connect(
-            lambda _i: self._refresh_plan_usage_status()
-        )
+        # Trocar a área visível (workspace) só re-sincroniza o runner host;
+        # o % de plano não muda ao trocar de aba e a chamada extra só
+        # gastava cota da /api/oauth/usage (rate limit agressivo).
         self.terminal_host.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
         )
@@ -2161,11 +2160,9 @@ class MainWindow(QMainWindow):
     def _on_area_created(self, workspace_id: str, area: TerminalArea) -> None:
         """TerminalCoordinator criou uma nova area — adiciona no host."""
         self.terminal_host.addWidget(area)
-        # Trocar a aba ativa do workspace deve refletir imediato no % de
-        # contexto da sidebar (cada aba é uma sessão Claude distinta).
-        area.tabs.currentChanged.connect(
-            lambda _i: self._refresh_plan_usage_status()
-        )
+        # Trocar a aba ativa do workspace só re-sincroniza o runner host;
+        # o % de plano não muda ao trocar de aba (cada chamada extra de
+        # /api/oauth/usage gasta cota desnecessária do rate limit).
         area.tabs.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
         )
@@ -2908,11 +2905,13 @@ class MainWindow(QMainWindow):
                 btn.setEnabled(True)
 
     def _refresh_plan_usage_status(self, force: bool = False) -> None:
-        """Atualiza o label de uso do plano na sidebar com 3 linhas
-        (replica `Plan usage limits` do claude.ai):
-          - Sessão 5h: % · reset NhNNm
-          - Semana (todos): % · reset seg 07:00
-          - Semana (Sonnet): %
+        """Atualiza o label de uso do plano na sidebar numa única linha
+        compacta tipo `5h 34% · sem 41% · son 12%` (cores no número,
+        rótulos em cinza claro). Detalhes completos (reset, fonte,
+        timestamp de sync) ficam no tooltip pra não consumir altura.
+
+        Em cooldown da API, mostra `Uso: cooldown 44m ⟳` numa linha só
+        em vez do banner de 2 linhas anterior.
 
         Estratégia: tenta `/api/oauth/usage` (mesmo endpoint que o
         `/status` do Claude Code consome — números idênticos ao
@@ -2953,7 +2952,7 @@ class MainWindow(QMainWindow):
             or snap.seven_day is not None
             or snap.seven_day_sonnet is not None
         ):
-            api_lines: list[str] = []
+            chips: list[str] = []
             tooltip_lines: list[str] = ["Plan usage limits (via /api/oauth/usage)"]
 
             def _reset_phrase(reset_at):
@@ -2965,21 +2964,17 @@ class MainWindow(QMainWindow):
                     return f"{mins_left // 60}h{mins_left % 60:02d}m"
                 return f"{mins_left}m"
 
-            if snap.five_hour is not None:
-                pct = snap.five_hour.utilization_pct
-                reset_str = _reset_phrase(snap.five_hour.resets_at)
-                line = (
-                    f"<span style='color: {theme.TEXT_FAINT};'>Sessão 5h:</span> "
+            def _chip(label_txt: str, pct: float) -> str:
+                return (
+                    f"<span style='color: {theme.TEXT_FAINT};'>{label_txt} </span>"
                     f"<span style='color: {_color(pct)}; font-weight: 600;'>"
                     f"{pct:.0f}%</span>"
                 )
-                if reset_str:
-                    line += (
-                        f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
-                        f"<span style='color: {theme.TEXT_FAINT};'>"
-                        f"reset {reset_str}</span>"
-                    )
-                api_lines.append(line)
+
+            if snap.five_hour is not None:
+                pct = snap.five_hour.utilization_pct
+                reset_str = _reset_phrase(snap.five_hour.resets_at)
+                chips.append(_chip("5h", pct))
                 tip = f"Sessão 5h: {pct:.0f}%"
                 if snap.five_hour.resets_at is not None:
                     tip += (
@@ -2991,24 +2986,8 @@ class MainWindow(QMainWindow):
 
             if snap.seven_day is not None:
                 pct = snap.seven_day.utilization_pct
+                chips.append(_chip("sem", pct))
                 reset_at = snap.seven_day.resets_at
-                reset_wall = (
-                    reset_at.astimezone().strftime("%a %H:%M").lower()
-                    if reset_at is not None
-                    else ""
-                )
-                line = (
-                    f"<span style='color: {theme.TEXT_FAINT};'>Semana (todos):</span> "
-                    f"<span style='color: {_color(pct)}; font-weight: 600;'>"
-                    f"{pct:.0f}%</span>"
-                )
-                if reset_wall:
-                    line += (
-                        f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
-                        f"<span style='color: {theme.TEXT_FAINT};'>"
-                        f"reset {reset_wall}</span>"
-                    )
-                api_lines.append(line)
                 tip = f"Semana (todos): {pct:.0f}%"
                 if reset_at is not None:
                     tip += (
@@ -3019,11 +2998,7 @@ class MainWindow(QMainWindow):
 
             if snap.seven_day_sonnet is not None:
                 pct = snap.seven_day_sonnet.utilization_pct
-                api_lines.append(
-                    f"<span style='color: {theme.TEXT_FAINT};'>Semana (Sonnet):</span> "
-                    f"<span style='color: {_color(pct)}; font-weight: 600;'>"
-                    f"{pct:.0f}%</span>"
-                )
+                chips.append(_chip("son", pct))
                 tooltip_lines.append(f"Semana (Sonnet): {pct:.0f}%")
 
             if snap.seven_day_opus is not None:
@@ -3031,14 +3006,14 @@ class MainWindow(QMainWindow):
                     f"Semana (Opus): {snap.seven_day_opus.utilization_pct:.0f}%"
                 )
 
-            if api_lines:
+            if chips:
                 self._last_plan_usage_sync_at = datetime.now()
                 sync_str = self._last_plan_usage_sync_at.strftime("%H:%M:%S")
-                api_lines.append(
-                    f"<span style='color: {theme.TEXT_DISABLED}; "
-                    f"font-size: 10px;'>sync {sync_str} · API</span>"
+                sep = (
+                    f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
                 )
-                label.setText("<br>".join(api_lines))
+                label.setText(sep.join(chips))
+                tooltip_lines.append(f"sync {sync_str} · fonte: API")
                 label.setToolTip("\n".join(tooltip_lines))
                 _set_container_visible(True)
                 return
@@ -3052,18 +3027,14 @@ class MainWindow(QMainWindow):
         if cooldown_now > 0:
             mins = max(1, cooldown_now // 60)
             label.setText(
-                f"<span style='color: {theme.TEXT_FAINT};'>"
-                f"Uso do plano:</span> "
-                f"<span style='color: {theme.WARNING};'>"
-                f"API em cooldown</span>"
-                f"<br><span style='color: {theme.TEXT_DISABLED}; "
-                f"font-size: 10px;'>retry em {mins}min · clique ⟳ depois "
-                f"disso pra sincronizar</span>"
+                f"<span style='color: {theme.TEXT_FAINT};'>Uso: </span>"
+                f"<span style='color: {theme.WARNING};'>cooldown {mins}m</span>"
             )
             label.setToolTip(
                 "/api/oauth/usage está rate-limited.\n"
                 f"Próxima tentativa permitida em {mins} minutos "
                 "(servidor manda Retry-After).\n"
+                "Clique ⟳ depois disso pra sincronizar.\n"
                 "Os números do fallback USD-baseado são imprecisos pra "
                 "Max 5x (não há mapeamento público token→cota), por isso "
                 "estão ocultos até a API responder."
@@ -3083,10 +3054,18 @@ class MainWindow(QMainWindow):
             _set_container_visible(False)
             return
 
-        lines: list[str] = []
+        chips: list[str] = []
         reset_5h_str = ""
         reset_5h_wall = ""
         sess_pct = 0.0
+
+        def _chip(label_txt: str, pct: float) -> str:
+            return (
+                f"<span style='color: {theme.TEXT_FAINT};'>{label_txt} </span>"
+                f"<span style='color: {_color(pct)}; font-weight: 600;'>"
+                f"{pct:.0f}%</span>"
+            )
+
         if usage.first_ts is not None and usage.cost_usd > 0:
             limit_5h = max(self.settings.plan_usd_limit_5h, 0.01)
             sess_pct = min(usage.cost_usd / limit_5h * 100.0, 999.0)
@@ -3099,16 +3078,9 @@ class MainWindow(QMainWindow):
                 else f"{mins_left}m"
             )
             reset_5h_wall = reset_at.astimezone().strftime("%H:%M")
-            lines.append(
-                f"<span style='color: {theme.TEXT_FAINT};'>Sessão 5h:</span> "
-                f"<span style='color: {_color(sess_pct)}; font-weight: 600;'>"
-                f"{sess_pct:.0f}%</span> "
-                f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
-                f"<span style='color: {theme.TEXT_FAINT};'>reset {reset_5h_str}</span>"
-            )
+            chips.append(_chip("5h", sess_pct))
 
-        # --- Linhas 2 e 3: limites semanais ---
-        # Reset semanal: próxima segunda 07:00 local.
+        # Reset semanal: próxima segunda 07:00 local (só pro tooltip agora).
         now_local = datetime.now().astimezone()
         days_until_monday = (7 - now_local.weekday()) % 7
         next_monday = (now_local + timedelta(days=days_until_monday)).replace(
@@ -3116,42 +3088,25 @@ class MainWindow(QMainWindow):
         )
         if next_monday <= now_local:
             next_monday += timedelta(days=7)
-        weekly_reset_str = next_monday.strftime("%a %H:%M").lower()
 
         limit_all = max(self.settings.plan_weekly_usd_limit_all, 0.01)
         all_pct = min(weekly.all_cost_usd / limit_all * 100.0, 999.0)
-        lines.append(
-            f"<span style='color: {theme.TEXT_FAINT};'>Semana (todos):</span> "
-            f"<span style='color: {_color(all_pct)}; font-weight: 600;'>"
-            f"{all_pct:.0f}%</span> "
-            f"<span style='color: {theme.TEXT_DISABLED};'>·</span> "
-            f"<span style='color: {theme.TEXT_FAINT};'>reset {weekly_reset_str}</span>"
-        )
+        chips.append(_chip("sem", all_pct))
 
         limit_sonnet = max(self.settings.plan_weekly_usd_limit_sonnet, 0.01)
         sonnet_pct = min(weekly.sonnet_cost_usd / limit_sonnet * 100.0, 999.0)
-        lines.append(
-            f"<span style='color: {theme.TEXT_FAINT};'>Semana (Sonnet):</span> "
-            f"<span style='color: {_color(sonnet_pct)}; font-weight: 600;'>"
-            f"{sonnet_pct:.0f}%</span>"
-        )
+        chips.append(_chip("son", sonnet_pct))
 
         cooldown = cooldown_remaining_seconds()
         cooldown_note = ""
-        cooldown_label = ""
         if cooldown > 0:
             mins = cooldown // 60
             cooldown_note = (
                 f"\nAPI /api/oauth/usage em cooldown ({mins}min restantes — "
                 f"rate-limited). Reabra após esse tempo pra ver os % reais."
             )
-            cooldown_label = f" · API em cooldown ({mins}min)"
-        sync_str = datetime.now().strftime("%H:%M:%S")
-        lines.append(
-            f"<span style='color: {theme.TEXT_DISABLED}; font-size: 10px;'>"
-            f"sync {sync_str} · fallback USD{cooldown_label}</span>"
-        )
-        label.setText("<br>".join(lines))
+        sep = f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
+        label.setText(sep.join(chips))
         label.setToolTip(
             "Plan usage limits (fallback USD-baseado — API indisponível)"
             + cooldown_note + "\n"

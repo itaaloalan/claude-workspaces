@@ -6,6 +6,30 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.41.0] — 2026-05-20
+
+### Alterado
+- **Footer da sidebar compactado em uma linha + menos chamadas
+  à `/api/oauth/usage`** (`ui/main_window.py`, `plan_usage_api.py`):
+  o bloco de "Uso do plano" ocupava 3-4 linhas (`Sessão 5h`,
+  `Semana (todos)`, `Semana (Sonnet)`, linha de sync) e em cooldown
+  virava um banner de 2 linhas (`API em cooldown / retry em Nmin · clique ⟳…`),
+  empurrando os botões pra fora da tela em sidebars curtas. Agora
+  vira chips inline `5h 34% · sem 41% · son 12%` com cores no número
+  e detalhes (resets, fonte, timestamp de sync) movidos pro tooltip.
+  Em cooldown: uma linha só, `Uso: cooldown 44m`.
+- **TTL do cache `/api/oauth/usage` subiu de 60s pra 300s**
+  (`plan_usage_api.py`): a Anthropic devolve `Retry-After` de até
+  1h quando o limite é batido — 5min de TTL local é conservador o
+  bastante pra raramente chegar nesse ponto sem perder responsividade
+  visual.
+- **Mudança de aba/workspace não dispara mais refresh do uso do plano**
+  (`ui/main_window.py`): os handlers `currentChanged` do
+  `terminal_host` e do `area.tabs` chamavam `_refresh_plan_usage_status`,
+  mas o % de plano não muda ao alternar aba — só queimava cota. Só
+  o poll de 5s do `_refresh_terminal_git_info` e o ⟳ manual dão refresh
+  agora.
+
 ## [0.40.0] — 2026-05-20
 
 ### Adicionado

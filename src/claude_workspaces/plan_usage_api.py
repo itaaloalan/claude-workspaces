@@ -10,7 +10,9 @@ Resposta observada (campos relevantes):
     "seven_day_sonnet": {"utilization": <0..100>, "resets_at": "<ISO>"}
   }
 
-Cache de 60s pra não estourar rate limit do endpoint."""
+Cache de 5min pra não estourar rate limit do endpoint (o servidor
+manda Retry-After de até 1h quando bate o limite — vale ser
+conservador no TTL pra raramente chegar nesse ponto)."""
 
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-CACHE_TTL_SECONDS = 60.0
+CACHE_TTL_SECONDS = 300.0
 REQUEST_TIMEOUT_SECONDS = 8.0
 
 
