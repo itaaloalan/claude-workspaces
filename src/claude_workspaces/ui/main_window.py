@@ -188,6 +188,12 @@ class MainWindow(QMainWindow):
         # notif D-Bus. Lifecycle 100% nosso: some só quando o usuário
         # clica (Abrir/X) ou o tab sai do inbox.
         self._active_toasts: dict[int, PersistentToast] = {}
+        # tab_id → timestamp monotônico da última notif "Pronto" emitida.
+        # Debounce: se um console oscila working↔idle rapidamente (ex:
+        # Claude rodando hooks/sub-passos entre estados), suprime as
+        # notif "Pronto" duplicadas dentro do _READY_DEBOUNCE_SEC. Não
+        # afeta reminders (que rodam num timer separado).
+        self._ready_alert_last: dict[int, float] = {}
         # Mantém o notify-hook.py instalado em sincronia com o packaged
         # (ex: versão com botão "Abrir console" via D-Bus).
         refresh_installed_hook()
@@ -2354,6 +2360,22 @@ class MainWindow(QMainWindow):
         Tenta D-Bus com botões; cai pro tray.showMessage se indisponível."""
         if not self.settings.notify_native_enabled:
             return
+        # Debounce do "Pronto": se o mesmo tab disparou working→idle nos
+        # últimos 60s, suprime esse alerta. Console oscila com Claude
+        # rodando hooks/sub-passos entre working↔idle várias vezes e o
+        # usuário só quer ser avisado uma vez por turno. Reminders ignoram
+        # o debounce — eles rodam num timer separado, são intencionais.
+        import time
+        if not is_reminder:
+            last = self._ready_alert_last.get(tab_id, 0.0)
+            now = time.monotonic()
+            if now - last < 60.0:
+                log.debug(
+                    "inbox_alert 'Pronto' suprimido por debounce (tab=%s, age=%.1fs)",
+                    tab_id, now - last,
+                )
+                return
+            self._ready_alert_last[tab_id] = now
         ws = self.workspaces_coord.find_by_id(info.get("workspace_id", ""))
         ws_name = ws.name if ws else "Workspace"
         if is_reminder:
@@ -2436,6 +2458,14 @@ class MainWindow(QMainWindow):
         toast.action_clicked.connect(
             lambda _tid=tab_id, _wid=workspace_id:
                 self._handle_toast_action(_tid, _wid)
+        )
+        toast.snoozed.connect(
+            lambda _tid=tab_id, _wid=workspace_id:
+                self._handle_notification_action(_tid, _wid, "snooze5")
+        )
+        toast.seen.connect(
+            lambda _tid=tab_id, _wid=workspace_id:
+                self._handle_notification_action(_tid, _wid, "seen")
         )
         toast.dismissed.connect(
             lambda _tid=tab_id: self._on_toast_dismissed(_tid)
@@ -2583,6 +2613,9 @@ class MainWindow(QMainWindow):
         já está em outro estado."""
         self._cancel_notification_keepalive(tab_id)
         self._close_persistent_toast(tab_id)
+        # Limpa o debounce — tab saiu do inbox, próxima transição
+        # working→idle é genuína e deve disparar notif sem suprimir.
+        self._ready_alert_last.pop(tab_id, None)
         nid = self._active_notifications.pop(tab_id, None)
         if nid is None or self._desktop_notifier is None:
             return

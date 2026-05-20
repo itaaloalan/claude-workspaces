@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.44.0] — 2026-05-20
+
+### Adicionado
+- **Toast in-app com botões "Já vi" e "Adiar 5min"**
+  (`ui/persistent_toast.py`, `ui/main_window.py`): mesmo
+  conjunto de ações do sininho do inbox (`dismiss_inbox` /
+  `snooze_inbox`), agora acessíveis direto do toast no canto
+  da tela. "Abrir console" continua como CTA principal à
+  direita; secundários ficam à esquerda com peso visual menor.
+
+### Corrigido
+- **Notif "Pronto" duplicando várias vezes**
+  (`ui/main_window.py`): console oscilando working↔idle
+  rapidamente (Claude rodando hooks/sub-passos entre estados)
+  disparava 5+ notificações "✅ Pronto" por turno. Adicionado
+  debounce de 60s por tab_id — só a primeira transição
+  working→idle de cada turno emite alerta; subsequentes
+  dentro de 60s são suprimidas. Reminders escapam do
+  debounce (rodam em timer próprio, são intencionais).
+  Debounce é limpo quando o tab realmente sai do inbox.
+
 ## [0.43.1] — 2026-05-20
 
 ### Melhorado
