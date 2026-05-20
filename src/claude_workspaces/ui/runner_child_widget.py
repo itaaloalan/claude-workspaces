@@ -17,12 +17,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from urllib.parse import urlparse
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -52,7 +53,19 @@ _BTN_QSS = (
 
 
 class RunnerChildWidget(QWidget):
-    """Linha compacta de runner na sidebar (filho de workspace)."""
+    """Linha compacta de runner na sidebar (filho de workspace).
+
+    Layout:
+        Linha 1: [●] ⚙ nome host:port [▶]
+        Linha 2 (opcional): status curto (ex.: "reiniciando"), só aparece
+            quando set_status() recebe texto não vazio. Emite size_hint_changed
+            pra MainWindow reajustar o sizeHint do QTreeWidgetItem.
+    """
+
+    _ROW1_HEIGHT = 22
+    _ROW2_HEIGHT = 12
+
+    size_hint_changed = Signal(int)
 
     def __init__(
         self,
@@ -62,10 +75,16 @@ class RunnerChildWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(22)
-        self.setMaximumHeight(22)
+        self.setMinimumHeight(self._ROW1_HEIGHT)
+        self.setMaximumHeight(self._ROW1_HEIGHT)
 
-        row = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        row_widget = QWidget(self)
+        row_widget.setFixedHeight(self._ROW1_HEIGHT)
+        row = QHBoxLayout(row_widget)
         row.setContentsMargins(4, 2, 4, 2)
         row.setSpacing(6)
 
@@ -103,6 +122,16 @@ class RunnerChildWidget(QWidget):
         self._toggle_btn.clicked.connect(lambda _=False: on_toggle())
         row.addWidget(self._toggle_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        outer.addWidget(row_widget)
+
+        self._status_label = QLabel("")
+        self._status_label.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+            "padding: 0px 0px 2px 22px;"
+        )
+        self._status_label.setVisible(False)
+        outer.addWidget(self._status_label)
+
         self._state = "idle"
         self._apply_state()
 
@@ -122,6 +151,33 @@ class RunnerChildWidget(QWidget):
             self._addr_label.setText("")
             self._addr_label.setToolTip("")
             self._addr_label.setVisible(False)
+
+    def set_status(self, status: str) -> None:
+        """Mostra a fase atual (linha 2) só durante transições.
+
+        Só faz sentido visualizar fases transientes (reiniciando, parando,
+        carregando) — estados estáveis (rodando, parado, erro) já são
+        cobertos pela bolinha colorida na linha 1.
+        """
+        status = (status or "").strip().lower()
+        transient = {"reiniciando", "parando", "carregando"}
+        show = status in transient
+        was_visible = self._status_label.isVisible()
+        if show:
+            self._status_label.setText(status)
+            self._status_label.setVisible(True)
+            target = self._ROW1_HEIGHT + self._ROW2_HEIGHT
+        else:
+            self._status_label.clear()
+            self._status_label.setVisible(False)
+            target = self._ROW1_HEIGHT
+        self.setMinimumHeight(target)
+        self.setMaximumHeight(target)
+        if was_visible != show:
+            self.size_hint_changed.emit(target)
+
+    def preferred_height(self) -> int:
+        return self.maximumHeight()
 
     def set_state(self, state: str) -> None:
         self._state = state if state in _STATE_COLOR else "idle"

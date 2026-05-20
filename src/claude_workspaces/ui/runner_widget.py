@@ -48,6 +48,10 @@ class RunnerWidget(QWidget):
     # Emitido sempre que muda; consumido pela sidebar pra mostrar host:port
     # na linha do runner.
     url_changed = Signal(str)
+    # Label curta da fase atual ("rodando"/"reiniciando"/"parando"/"parado"/
+    # "erro"/"carregando"). Espelha o que aparece à esquerda do toolbar do
+    # runner, em forma resumida pra ser exibido na sidebar.
+    status_changed = Signal(str)
 
     def __init__(
         self,
@@ -74,6 +78,9 @@ class RunnerWidget(QWidget):
         # reseta a cada start (mantém histórico cross-restart pra debug).
         self._log_buf: str = ""
         self._log_buf_max: int = 1_000_000
+        # Label curta da fase ("parado" no boot). Espelha em forma reduzida
+        # o texto do _status; emitida via status_changed pra sidebar.
+        self._status_label: str = "parado"
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -190,6 +197,14 @@ class RunnerWidget(QWidget):
     def is_running(self) -> bool:
         return self._state == "running"
 
+    def current_status_label(self) -> str:
+        return self._status_label
+
+    def _emit_status_label(self, label: str) -> None:
+        if label != self._status_label:
+            self._status_label = label
+            self.status_changed.emit(label)
+
     def current_state(self) -> str:
         return self._state
 
@@ -239,6 +254,7 @@ class RunnerWidget(QWidget):
         if not self._bridge_ready:
             self._pending_cmd = (cmd, intent)
             self._status.setText(f"(carregando) {intent}")
+            self._emit_status_label("carregando")
             return
         cwd = self._runner.cwd or self._default_cwd
         argv = ["bash", "-lc", cmd]
@@ -257,7 +273,7 @@ class RunnerWidget(QWidget):
         label = {"start": "rodando", "stop": "parando", "restart": "reiniciando"}.get(
             intent, intent
         )
-        self._set_state("running", f"● {label}: {cmd[:80]}")
+        self._set_state("running", f"● {label}: {cmd[:80]}", status_label=label)
 
     def _on_bridge_ready(self) -> None:
         self._bridge_ready = True
@@ -357,13 +373,23 @@ class RunnerWidget(QWidget):
         # (não tem como sair de stop pra running sem nova chamada explícita)
         self._set_state("exited", "(processo encerrado)")
 
-    def _set_state(self, state: str, status_text: str) -> None:
+    def _set_state(
+        self, state: str, status_text: str, status_label: str | None = None
+    ) -> None:
         prev = self._state
         self._state = state
         self._status.setText(status_text)
         running = state == "running"
         self._start_btn.setEnabled(not running)
         self._stop_btn.setEnabled(running)
+        if status_label is None:
+            status_label = {
+                "error": "erro",
+                "exited": "parado",
+                "idle": "parado",
+                "running": "rodando",
+            }.get(state, state)
+        self._emit_status_label(status_label)
         if prev != state:
             self.state_changed.emit(state)
 

@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.35.0] — 2026-05-20
+
+### Adicionado
+- **Status de fase do runner na sidebar**
+  (`ui/runner_widget.py`, `ui/runner_area.py`, `ui/runner_child_widget.py`,
+  `ui/main_window.py`): cada linha de runner na sidebar agora exibe uma
+  segunda linha curta com a fase atual (`reiniciando`, `parando`,
+  `carregando`) quando o runner está em transição. Estados estáveis
+  (`rodando`, `parado`, `erro`) continuam representados só pela bolinha
+  colorida — a linha extra só aparece pra dar pista visual durante
+  fases transientes. Implementado via novo `status_changed` em
+  `RunnerWidget` + forward `runner_status_changed` em `RunnerArea`,
+  consumidos por `RunnerChildWidget.set_status()` que reajusta o
+  `sizeHint` do item da tree.
+
 ## [0.34.1] — 2026-05-20
 
 ### Mudado

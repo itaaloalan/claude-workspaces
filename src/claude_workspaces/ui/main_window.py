@@ -1397,6 +1397,8 @@ class MainWindow(QMainWindow):
                 if rw is not None:
                     widget.set_state(rw.current_state())
                     widget.set_url(rw.current_url())
+                    widget.set_status(rw.current_status_label())
+                    child.setSizeHint(0, QSize(0, widget.preferred_height() + 2))
             else:
                 # Sem RunnerArea instanciada ainda → usa o browser_url da
                 # config como fallback (URL detectada precisa do runtime).
@@ -1502,6 +1504,8 @@ class MainWindow(QMainWindow):
                 if rw is not None:
                     widget.set_state(rw.current_state())
                     widget.set_url(rw.current_url())
+                    widget.set_status(rw.current_status_label())
+                    child.setSizeHint(0, QSize(0, widget.preferred_height() + 2))
                     url_set = True
                     break
             if not url_set:
@@ -1564,6 +1568,19 @@ class MainWindow(QMainWindow):
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, RunnerChildWidget):
             widget.set_state(state)
+
+    def _on_runner_status_changed(
+        self, workspace_id: str, runner_id: str, status: str
+    ) -> None:
+        from .runner_child_widget import RunnerChildWidget
+
+        item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
+        if item is None:
+            return
+        widget = self.list_widget.itemWidget(item, 0)
+        if isinstance(widget, RunnerChildWidget):
+            widget.set_status(status)
+            item.setSizeHint(0, QSize(0, widget.preferred_height() + 2))
 
     def _on_runner_url_changed(
         self, workspace_id: str, runner_id: str, url: str
@@ -1817,6 +1834,9 @@ class MainWindow(QMainWindow):
         area.runner_url_changed.connect(
             lambda rid, url, wid=ws.id: self._on_runner_url_changed(wid, rid, url)
         )
+        area.runner_status_changed.connect(
+            lambda rid, txt, wid=ws.id: self._on_runner_status_changed(wid, rid, txt)
+        )
         return area
 
     def _open_runner_edit(
@@ -1898,6 +1918,10 @@ class MainWindow(QMainWindow):
         area.runner_url_changed.connect(
             lambda rid, url, wid=workspace.id:
                 self._on_runner_url_changed(wid, rid, url)
+        )
+        area.runner_status_changed.connect(
+            lambda rid, txt, wid=workspace.id:
+                self._on_runner_status_changed(wid, rid, txt)
         )
         self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
         # Painel mora no top tab "Runners (console)" — não embute mais no
