@@ -32,6 +32,8 @@ from ..launchers import (
     LauncherError,
     find_app_repo_root,
     launch_claude_in_dir,
+    launch_claude_no_ctx,
+    launch_terminal_no_ctx,
 )
 from ..logging_utils import log_exceptions
 from ..models import Workspace
@@ -851,6 +853,8 @@ class MainWindow(QMainWindow):
             on_self_dev_clicked=self._launch_self_dev,
             on_version_clicked=self._show_release_notes,
             on_find_file=self._open_file_finder_dialog,
+            on_open_terminal=self._launch_terminal_no_ctx,
+            on_open_claude_no_ctx=self._launch_claude_no_ctx,
         ).build()
         self._find_file_input = builder.find_file_input
         self.list_widget = builder.list_widget
@@ -1158,6 +1162,7 @@ class MainWindow(QMainWindow):
                     tab_id = sib.data(0, Qt.ItemDataRole.UserRole)
                     if isinstance(tab_id, int):
                         self._install_console_runner_children(sib, ws_data, tab_id)
+                self._refresh_empty_placeholder(it)
 
         if current_id:
             ws_item = self._find_workspace_item(current_id)
@@ -1265,6 +1270,57 @@ class MainWindow(QMainWindow):
             self.terminals_coord.state.running_counts.get(ws.id, 0)
         )
         self.list_widget.setItemWidget(item, 0, widget)
+        self._refresh_empty_placeholder(item)
+
+    _EMPTY_PLACEHOLDER_ROLE = "__empty_workspace_placeholder__"
+
+    def _refresh_empty_placeholder(self, ws_item: "QTreeWidgetItem") -> None:
+        """Garante 1 placeholder com botão 'Abrir Claude aqui' quando o
+        workspace não tem nenhum filho real (consoles/runners). Remove
+        quando passa a ter qualquer filho. Idempotente, seguro chamar
+        após cada add/remove de child."""
+        from PySide6.QtWidgets import QPushButton
+
+        ws = ws_item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(ws, Workspace):
+            return
+
+        placeholder_idx = -1
+        real_count = 0
+        for i in range(ws_item.childCount()):
+            child = ws_item.child(i)
+            if child.data(0, Qt.ItemDataRole.UserRole) == self._EMPTY_PLACEHOLDER_ROLE:
+                placeholder_idx = i
+            else:
+                real_count += 1
+
+        if real_count > 0:
+            if placeholder_idx >= 0:
+                ws_item.takeChild(placeholder_idx)
+            return
+
+        if placeholder_idx >= 0:
+            return  # já existe
+
+        child = QTreeWidgetItem()
+        child.setData(0, Qt.ItemDataRole.UserRole, self._EMPTY_PLACEHOLDER_ROLE)
+        child.setSizeHint(0, QSize(0, 28))
+        btn = QPushButton("＋  Abrir Claude aqui")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(
+            "Abre um Claude novo neste workspace (mesma ação do botão + "
+            "ao lado do nome)"
+        )
+        btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px dashed #3a3a3a; border-radius: 4px; "
+            "padding: 4px 10px; text-align: left; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #5a5a5a; "
+            "background: #1f1f1f; }"
+        )
+        btn.clicked.connect(lambda: self._launch_claude_for(ws, "", ""))
+        ws_item.addChild(child)
+        self.list_widget.setItemWidget(child, 0, btn)
 
     def _install_runner_children(
         self, ws_item: "QTreeWidgetItem", ws: Workspace
@@ -2133,6 +2189,9 @@ class MainWindow(QMainWindow):
         # Aba que saiu pode ter sido a única causa de colisão — re-disambigua
         if parent_item is not None:
             self._refresh_workspace_child_titles(parent_item)
+            # Se o workspace ficou sem nenhum console, restaura o placeholder
+            # com botão "Abrir Claude aqui" pra dar uma ação visível.
+            self._refresh_empty_placeholder(parent_item)
         # Limpa o RunnerArea do console fechado: agora o painel mora no
         # top tab "Runners (console)" (não mais embutido no terminal),
         # então é responsabilidade nossa remover do QStackedWidget.
@@ -2649,6 +2708,7 @@ class MainWindow(QMainWindow):
         ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
         if isinstance(ws_data, Workspace):
             self._install_console_runner_children(child, ws_data, tab_id)
+        self._refresh_empty_placeholder(ws_item)
 
     def _update_terminal_child(
         self,
@@ -3168,6 +3228,22 @@ class MainWindow(QMainWindow):
             )
 
     # ---------- CRUD de workspace ----------
+
+    def _launch_terminal_no_ctx(self) -> None:
+        """Abre uma janela nova de terminal em $HOME, sem workspace."""
+        try:
+            launch_terminal_no_ctx(self.settings)
+        except LauncherError as e:
+            log.exception("Falha ao abrir terminal sem contexto")
+            QMessageBox.warning(self, "Falha ao abrir terminal", str(e))
+
+    def _launch_claude_no_ctx(self) -> None:
+        """Abre o Claude numa janela nova de terminal, sem workspace."""
+        try:
+            launch_claude_no_ctx(self.settings)
+        except LauncherError as e:
+            log.exception("Falha ao abrir Claude sem contexto")
+            QMessageBox.warning(self, "Falha ao abrir Claude", str(e))
 
     def _launch_self_dev(self) -> None:
         repo = find_app_repo_root()

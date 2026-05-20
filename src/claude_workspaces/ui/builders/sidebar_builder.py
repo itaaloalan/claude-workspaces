@@ -168,6 +168,8 @@ class SidebarBuilder:
         on_self_dev_clicked: Callable[[], None],
         on_version_clicked: Callable[[], None] | None = None,
         on_find_file: Callable[[str], None] | None = None,
+        on_open_terminal: Callable[[], None] | None = None,
+        on_open_claude_no_ctx: Callable[[], None] | None = None,
     ) -> None:
         self._on_current_changed = on_current_changed
         self._on_item_clicked = on_item_clicked
@@ -176,6 +178,8 @@ class SidebarBuilder:
         self._on_self_dev_clicked = on_self_dev_clicked
         self._on_version_clicked = on_version_clicked
         self._on_find_file = on_find_file
+        self._on_open_terminal = on_open_terminal
+        self._on_open_claude_no_ctx = on_open_claude_no_ctx
 
     def build(self) -> SidebarBuilder:
         self.wrapper = QWidget()
@@ -218,6 +222,7 @@ class SidebarBuilder:
         self.list_widget.itemClicked.connect(self._on_item_clicked)
         self.list_widget.itemActivated.connect(self._on_item_activated)
         self.list_widget.setStyleSheet(_TREE_QSS)
+        self.list_widget.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         pal = self.list_widget.palette()
         for grp in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
             pal.setColor(grp, QPalette.ColorRole.Text, QColor(theme.TEXT_PRIMARY))
@@ -293,8 +298,33 @@ class SidebarBuilder:
         self.add_btn = QPushButton("＋  Novo Workspace")
         self.add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
         self.add_btn.setStyleSheet(_PRIMARY_ACTION_QSS)
+        self.add_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.add_btn.clicked.connect(self._on_add_clicked)
         layout.addWidget(self.add_btn)
+
+        # Atalhos rápidos sem workspace: abrir só um terminal novo, ou
+        # rodar Claude sem nenhum contexto de projeto (cwd = $HOME).
+        # Ambos abrem uma janela nova do terminal configurado (konsole
+        # por padrão) — úteis pra perguntas avulsas que não pertencem
+        # a nenhum workspace.
+        self.open_terminal_btn = QPushButton("›_  Abrir Terminal")
+        self.open_terminal_btn.setToolTip(
+            "Abre uma janela nova de terminal em $HOME, sem workspace"
+        )
+        self.open_terminal_btn.setStyleSheet(_GHOST_ACTION_QSS)
+        if self._on_open_terminal is not None:
+            self.open_terminal_btn.clicked.connect(self._on_open_terminal)
+        layout.addWidget(self.open_terminal_btn)
+
+        self.open_claude_no_ctx_btn = QPushButton("✦  Claude (sem contexto)")
+        self.open_claude_no_ctx_btn.setToolTip(
+            "Abre o Claude em uma janela nova do terminal, sem nenhum "
+            "workspace (cwd = $HOME)"
+        )
+        self.open_claude_no_ctx_btn.setStyleSheet(_GHOST_ACTION_QSS)
+        if self._on_open_claude_no_ctx is not None:
+            self.open_claude_no_ctx_btn.clicked.connect(self._on_open_claude_no_ctx)
+        layout.addWidget(self.open_claude_no_ctx_btn)
 
         sep = QWidget()
         sep.setFixedHeight(1)

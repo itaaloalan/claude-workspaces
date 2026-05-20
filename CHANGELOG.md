@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.34.0] — 2026-05-20
+
+### Adicionado
+- **Placeholder "＋ Abrir Claude aqui" em workspace vazio**
+  (`ui/main_window.py`): quando um workspace não tem nenhum console nem
+  runner rodando, expandi-lo na sidebar agora mostra um botão tracejado
+  "＋ Abrir Claude aqui" como filho — mesma ação do botão + no header
+  do workspace, mas evita o "nada acontece" visual de antes. Some
+  sozinho quando o primeiro console/runner aparece e volta quando o
+  último é fechado. Marcado via UserRole sentinel
+  `__empty_workspace_placeholder__`; ignorado pelos handlers existentes
+  (que só reagem a `int`/`tuple`).
+
+- **Atalhos de sidebar "Abrir Terminal" e "Claude (sem contexto)"**
+  (`ui/builders/sidebar_builder.py`, `ui/main_window.py`,
+  `launchers.py`): dois novos botões ghost logo abaixo de "Novo
+  Workspace" — abrem uma janela nova do terminal (konsole por padrão,
+  via `settings.terminal_command`) em `$HOME`, sem workspace nenhum.
+  O primeiro só abre o shell; o segundo já roda `claude` dentro.
+  Úteis pra perguntas avulsas que não pertencem a um projeto. Novas
+  funções `launch_terminal_no_ctx` e `launch_claude_no_ctx` em
+  `launchers.py`.
+
 ## [0.33.0] — 2026-05-20
 
 ### Adicionado

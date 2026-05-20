@@ -109,6 +109,21 @@ def launch_konsole(workspace: Workspace, settings: Settings) -> None:
     _spawn([settings.terminal_command], cwd)
 
 
+def launch_terminal_no_ctx(settings: Settings) -> None:
+    """Abre uma janela de terminal nova sem workspace nenhum, partindo
+    de $HOME. Equivalente a abrir o konsole pelo menu do sistema."""
+    _require(settings.terminal_command, "terminal")
+    _spawn([settings.terminal_command], Path.home())
+
+
+def launch_claude_no_ctx(settings: Settings) -> None:
+    """Abre uma janela nova de terminal rodando `claude` sem nenhum
+    contexto de workspace (cwd = $HOME, sem --add-dir)."""
+    _require(settings.terminal_command, "terminal")
+    cmd = [settings.claude_command, *settings.claude_extra_args]
+    _run_in_terminal(settings, cmd, Path.home())
+
+
 def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
     if not workspace.folders:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
