@@ -106,14 +106,7 @@ class TerminalChildWidget(QWidget):
         # estado atual (ocioso=vermelho, trabalhando=âmbar, aguardando=laranja,
         # concluído=verde). Substitui a "linha de seleção" monocromática por
         # uma pista visual permanente do estado de cada console.
-        self._status_strip = QFrame()
-        self._status_strip.setFixedWidth(3)
-        self._status_strip.setStyleSheet(
-            f"background: {STATE_COLOR[STATE_IDLE]}; border: 0;"
-        )
-        outer.addWidget(self._status_strip)
-
-        # Barra branca de seleção — fica encostada do lado direito do
+        # Barra branca de seleção — fica encostada do lado esquerdo do
         # `_status_strip`, mesma altura, escondida por padrão. O
         # `MainWindow._on_selection_changed` chama `set_selected(bool)`
         # pra mostrar/esconder. É a única pista visual de "este é o
@@ -125,6 +118,13 @@ class TerminalChildWidget(QWidget):
         )
         self._selection_strip.setVisible(False)
         outer.addWidget(self._selection_strip)
+
+        self._status_strip = QFrame()
+        self._status_strip.setFixedWidth(3)
+        self._status_strip.setStyleSheet(
+            f"background: {STATE_COLOR[STATE_IDLE]}; border: 0;"
+        )
+        outer.addWidget(self._status_strip)
 
         # Coluna do ícone (spinner ‖/⠋) foi removida do layout — a faixa
         # vertical de estado (`_status_strip`) já cumpre o papel de mostrar
