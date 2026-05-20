@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.50.0] — 2026-05-20
+
+### Adicionado
+- **Botão ✏ inline pra renomear console na sidebar**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`): o row de cada
+  console ganhou um ícone de edit alinhado à direita ao lado de ▶ ⚙ ✖.
+  Mesma ação do "Renomear sessão…" do clique direito — agora acessível
+  em um clique sem precisar abrir o menu de contexto.
+
 ## [0.49.0] — 2026-05-20
 
 ### Adicionado

@@ -187,6 +187,16 @@ class TerminalChildWidget(QWidget):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(2)
 
+        self._rename_btn = QPushButton("✏")
+        self._rename_btn.setFixedSize(20, 18)
+        self._rename_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._rename_btn.setStyleSheet(_INLINE_BTN_QSS)
+        self._rename_btn.setToolTip(
+            "Renomear sessão — define um nome custom pra esse console"
+            " (aparece na sidebar e nas notificações)"
+        )
+        actions_layout.addWidget(self._rename_btn)
+
         self._continue_btn = QPushButton("▶")
         self._continue_btn.setFixedSize(20, 18)
         self._continue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -421,8 +431,9 @@ class TerminalChildWidget(QWidget):
         on_continue: Callable[[], None],
         on_open_mode_popup: Callable[[QWidget], None],
         on_close: Callable[[], None] | None = None,
+        on_rename: Callable[[], None] | None = None,
     ) -> None:
-        """Conecta os cliques dos botões inline (▶ ⚙ ✖). `on_open_mode_popup`
+        """Conecta os cliques dos botões inline (✏ ▶ ⚙ ✖). `on_open_mode_popup`
         recebe o próprio botão como anchor pra posicionar o ModePopup."""
         # Desconecta primeiro pra evitar duplicar handlers ao reconectar
         try:
@@ -437,12 +448,18 @@ class TerminalChildWidget(QWidget):
             self._close_btn.clicked.disconnect()
         except RuntimeError:
             pass
+        try:
+            self._rename_btn.clicked.disconnect()
+        except RuntimeError:
+            pass
         self._continue_btn.clicked.connect(lambda _=False: on_continue())
         self._mode_btn.clicked.connect(
             lambda _=False, b=self._mode_btn: on_open_mode_popup(b)
         )
         if on_close is not None:
             self._close_btn.clicked.connect(lambda _=False: on_close())
+        if on_rename is not None:
+            self._rename_btn.clicked.connect(lambda _=False: on_rename())
 
     def set_selected(self, selected: bool) -> None:
         """Mostra/esconde a barra branca de seleção encostada do lado

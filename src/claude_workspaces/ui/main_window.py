@@ -2917,7 +2917,12 @@ class MainWindow(QMainWindow):
             if box.clickedButton() is yes_btn:
                 self._close_terminal_by_tab_id(tab_id)
 
-        widget.set_action_callbacks(on_continue, on_open_mode_popup, on_close)
+        def on_rename() -> None:
+            self._rename_terminal_session(tab_id)
+
+        widget.set_action_callbacks(
+            on_continue, on_open_mode_popup, on_close, on_rename
+        )
 
     def _add_terminal_child(
         self,
