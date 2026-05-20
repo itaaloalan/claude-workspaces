@@ -210,7 +210,6 @@ class SidebarBuilder:
     - `list_widget`: o QTreeWidget (workspaces como roots, sessions/tabs como filhos)
     - `context_status_label`: label do % de contexto da sessão ativa (oculto se sem sessão)
     - `add_btn`: botão "+ Novo Workspace"
-    - `self_dev_btn`: botão "🔧 Hack este app"
     - `version_label`: label clicável com a versão atual (abre release notes)
     """
 
@@ -220,21 +219,15 @@ class SidebarBuilder:
         on_item_clicked: Callable,
         on_item_activated: Callable,
         on_add_clicked: Callable[[], None],
-        on_self_dev_clicked: Callable[[], None],
         on_version_clicked: Callable[[], None] | None = None,
         on_find_file: Callable[[str], None] | None = None,
-        on_open_terminal: Callable[[], None] | None = None,
-        on_open_claude_no_ctx: Callable[[], None] | None = None,
     ) -> None:
         self._on_current_changed = on_current_changed
         self._on_item_clicked = on_item_clicked
         self._on_item_activated = on_item_activated
         self._on_add_clicked = on_add_clicked
-        self._on_self_dev_clicked = on_self_dev_clicked
         self._on_version_clicked = on_version_clicked
         self._on_find_file = on_find_file
-        self._on_open_terminal = on_open_terminal
-        self._on_open_claude_no_ctx = on_open_claude_no_ctx
 
     def build(self) -> SidebarBuilder:
         self.wrapper = QWidget()
@@ -357,44 +350,9 @@ class SidebarBuilder:
         self.add_btn.clicked.connect(self._on_add_clicked)
         layout.addWidget(self.add_btn)
 
-        # Atalhos rápidos sem workspace: abrir só um terminal novo, ou
-        # rodar Claude sem nenhum contexto de projeto (cwd = $HOME).
-        # Ambos abrem uma janela nova do terminal configurado (konsole
-        # por padrão) — úteis pra perguntas avulsas que não pertencem
-        # a nenhum workspace.
-        self.open_terminal_btn = QPushButton("›_  Abrir Terminal")
-        self.open_terminal_btn.setToolTip(
-            "Abre um shell embutido em $HOME numa aba nova (sem workspace)"
-        )
-        self.open_terminal_btn.setStyleSheet(_GHOST_ACTION_QSS)
-        self.open_terminal_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        if self._on_open_terminal is not None:
-            self.open_terminal_btn.clicked.connect(self._on_open_terminal)
-        layout.addWidget(self.open_terminal_btn)
-
-        self.open_claude_no_ctx_btn = QPushButton("✦  Claude (sem contexto)")
-        self.open_claude_no_ctx_btn.setToolTip(
-            "Abre o Claude embutido numa aba nova, sem workspace (cwd = $HOME)"
-        )
-        self.open_claude_no_ctx_btn.setStyleSheet(_GHOST_ACTION_QSS)
-        self.open_claude_no_ctx_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        if self._on_open_claude_no_ctx is not None:
-            self.open_claude_no_ctx_btn.clicked.connect(self._on_open_claude_no_ctx)
-        layout.addWidget(self.open_claude_no_ctx_btn)
-
-        sep = QWidget()
-        sep.setFixedHeight(1)
-        sep.setStyleSheet(f"background: {theme.BORDER_SOFT};")
-        layout.addWidget(sep)
-
-        self.self_dev_btn = QPushButton("🔧  Hack este app")
-        self.self_dev_btn.setToolTip(
-            "Abre o Claude no diretório do próprio claude-workspaces pra iterar nele"
-        )
-        self.self_dev_btn.setStyleSheet(_GHOST_ACTION_QSS)
-        self.self_dev_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.self_dev_btn.clicked.connect(self._on_self_dev_clicked)
-        layout.addWidget(self.self_dev_btn)
+        # Os botões "Abrir Terminal", "Claude (sem contexto)" e
+        # "Hack este app" vivem na activity bar à esquerda — libera
+        # espaço vertical aqui pra lista de workspaces.
 
         self.version_label = _ClickableLabel(f"v{__version__}  ·  notas")
         self.version_label.setStyleSheet(_VERSION_LABEL_QSS)

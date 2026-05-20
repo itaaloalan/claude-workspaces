@@ -363,6 +363,9 @@ class MainWindow(QMainWindow):
 
         self.activity_bar = ActivityBar()
         self.activity_bar.view_changed.connect(self._on_activity_view_changed)
+        self.activity_bar.open_terminal_clicked.connect(self._launch_terminal_no_ctx)
+        self.activity_bar.open_claude_no_ctx_clicked.connect(self._launch_claude_no_ctx)
+        self.activity_bar.hack_app_clicked.connect(self._launch_self_dev)
         shell_row.addWidget(self.activity_bar)
 
         self.main_stack = QStackedWidget()
@@ -866,15 +869,11 @@ class MainWindow(QMainWindow):
             on_item_clicked=self._on_tree_item_clicked,
             on_item_activated=self._on_tree_item_activated,
             on_add_clicked=self.add_workspace,
-            on_self_dev_clicked=self._launch_self_dev,
             on_version_clicked=self._show_release_notes,
             on_find_file=self._open_file_finder_dialog,
-            on_open_terminal=self._launch_terminal_no_ctx,
-            on_open_claude_no_ctx=self._launch_claude_no_ctx,
         ).build()
         self._find_file_input = builder.find_file_input
         self.list_widget = builder.list_widget
-        self.self_dev_btn = builder.self_dev_btn
         self.version_label = builder.version_label
         self._context_status_label = builder.context_status_label
         self._context_status_container = builder.context_status_container
@@ -2747,8 +2746,20 @@ class MainWindow(QMainWindow):
     def _focus_tab_from_inbox(self, workspace_id: str, tab_id: int) -> None:
         self.terminals_coord.remove_from_inbox(tab_id)
         ws_item = self._find_workspace_item(workspace_id)
+        # Marca o console específico no sidebar (não só o workspace) —
+        # ao clicar "Abrir console" na notif, o usuário espera ver o
+        # row do console destacado, não só o workspace selecionado.
+        target_item = ws_item
         if ws_item is not None:
-            self.list_widget.setCurrentItem(ws_item)
+            if not ws_item.isExpanded():
+                ws_item.setExpanded(True)
+            for j in range(ws_item.childCount()):
+                child = ws_item.child(j)
+                if child.data(0, Qt.ItemDataRole.UserRole) == tab_id:
+                    target_item = child
+                    break
+            self.list_widget.setCurrentItem(target_item)
+            self.list_widget.scrollToItem(target_item)
         area = self.terminals_coord.area_for(workspace_id)
         if area is None:
             return
@@ -2756,7 +2767,15 @@ class MainWindow(QMainWindow):
             if id(area.tabs.widget(i)) == tab_id:
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
+                # Se o terminal pane estiver minimizado, restaura — sem
+                # isso o usuário clica na notif e não vê o console.
+                if self._terminal_is_minimized():
+                    self._toggle_terminal()
                 break
+        # Traz a janela pra frente — clique na notif do KDE não foca
+        # a app sozinho (action invocada via D-Bus não dá activation).
+        self.raise_()
+        self.activateWindow()
 
     def _resolve_state(
         self, is_working: bool, is_running: bool, needs_decision: bool = False

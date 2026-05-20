@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.46.0] — 2026-05-20
+
+### Alterado
+- **Botões "Abrir Terminal", "Claude (sem contexto)" e "Hack este app"
+  mudaram pra activity bar à esquerda** (`ui/activity_bar.py`,
+  `ui/builders/sidebar_builder.py`, `ui/main_window.py`): viraram
+  ícones acima de Settings, liberando ~120px de espaço vertical na
+  sidebar de workspaces. Comportamento idêntico ao anterior — só a
+  posição mudou.
+- **"Abrir console" na notificação seleciona o console no sidebar e
+  restaura o pane do terminal** (`ui/main_window.py`):
+  `_focus_tab_from_inbox` agora marca o row filho do console (não só
+  o workspace), expande o workspace se estava colapsado, rola pra
+  visível, restaura o pane do terminal se estiver minimizado e traz
+  a janela pra frente. Antes só trocava de aba — fácil de perder de
+  vista qual console pediu atenção.
+
 ## [0.45.0] — 2026-05-20
 
 ### Adicionado

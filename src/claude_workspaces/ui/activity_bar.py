@@ -172,6 +172,11 @@ class _NavButton(QFrame):
 
 class ActivityBar(QWidget):
     view_changed = Signal(str)
+    # Action buttons — ações globais (não trocam view), pra liberar
+    # espaço da sidebar de workspaces.
+    open_terminal_clicked = Signal()
+    open_claude_no_ctx_clicked = Signal()
+    hack_app_clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -210,6 +215,34 @@ class ActivityBar(QWidget):
             self._buttons[view_id] = btn
 
         layout.addStretch()
+
+        # Action buttons globais — acima do separador de settings, pra
+        # liberar espaço na sidebar de workspaces.
+        sep_actions = QLabel()
+        sep_actions.setFixedHeight(1)
+        sep_actions.setStyleSheet(f"background: {theme.BORDER}; margin: 0 10px;")
+        layout.addWidget(sep_actions)
+
+        self._open_terminal_btn = _NavButton(
+            "›_", "Terminal",
+            "Abre um shell embutido em $HOME numa aba nova (sem workspace)",
+        )
+        self._open_terminal_btn.clicked.connect(self.open_terminal_clicked)
+        layout.addWidget(self._open_terminal_btn)
+
+        self._open_claude_btn = _NavButton(
+            "✦", "Claude",
+            "Abre o Claude embutido numa aba nova, sem workspace (cwd = $HOME)",
+        )
+        self._open_claude_btn.clicked.connect(self.open_claude_no_ctx_clicked)
+        layout.addWidget(self._open_claude_btn)
+
+        self._hack_btn = _NavButton(
+            "🔧", "Hack",
+            "Abre o Claude no diretório do próprio claude-workspaces pra iterar nele",
+        )
+        self._hack_btn.clicked.connect(self.hack_app_clicked)
+        layout.addWidget(self._hack_btn)
 
         sep = QLabel()
         sep.setFixedHeight(1)
