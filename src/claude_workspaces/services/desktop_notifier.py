@@ -200,6 +200,8 @@ class DesktopNotifier(QObject):
         urgency: int = 1,
         desktop_entry: str | None = None,
         sound_name: str | None = None,
+        resident: bool = False,
+        transient: bool | None = None,
     ) -> int | None:
         """Dispara notificação. Retorna o id (int) ou None em falha.
 
@@ -238,6 +240,16 @@ class DesktopNotifier(QObject):
             safe_snd = sound_name.replace("'", "\\'")
             hint_parts.append("'sound-name': <'" + safe_snd + "'>")
             _play_sound_async(sound_name)
+        if resident:
+            # `resident=true` (FDO): notificação NÃO some quando uma ação é
+            # invocada. KDE também usa pra manter o popup visível com actions
+            # em vez de tratar como transient.
+            hint_parts.append("'resident': <true>")
+        if transient is not None:
+            # `transient=false` força o servidor a manter na central de
+            # notificações. KDE Plasma 6 lê isso pra decidir entre popup
+            # transient e persistente.
+            hint_parts.append("'transient': <" + ("true" if transient else "false") + ">")
         hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
         log.warning(
             "DEBUG notify: urgency=%s timeout_ms=%s hints=%r replaces_id=%s actions=%d title=%r",

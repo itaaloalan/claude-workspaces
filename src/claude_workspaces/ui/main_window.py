@@ -2364,12 +2364,13 @@ class MainWindow(QMainWindow):
             # passa replaces_id pro servidor substituir no lugar em vez de
             # empilhar um segundo banner.
             prev_nid = self._active_notifications.get(tab_id, 0)
-            # urgency=1 (normal) + timeout configurável: default 10s
-            # via settings.notify_timeout_ms. -1 = usa default do SO,
-            # 0 = sticky, >0 = força em ms. desktop_entry permite
-            # configuração per-app no painel do SO.
-            notify_urgency = 1
-            notify_timeout = int(self.settings.notify_timeout_ms)
+            # urgency=2 (critical) + resident + transient=false: combinação
+            # que mantém o popup sticky no KDE Plasma 6 mesmo com action.
+            # Critical bypassa o auto-dismiss padrão, resident impede sumir
+            # ao clicar action, transient=false força entrada persistente.
+            # timeout_ms=0 = sticky (servidor decide quando some).
+            notify_urgency = 2
+            notify_timeout = 0
             sound_name = (
                 self.settings.notify_sound_name.strip()
                 if self.settings.notify_sound_enabled else None
@@ -2385,6 +2386,8 @@ class MainWindow(QMainWindow):
                 urgency=notify_urgency,
                 desktop_entry="claude-workspaces",
                 sound_name=sound_name,
+                resident=True,
+                transient=False,
             )
             if nid is not None:
                 self._active_notifications[tab_id] = nid

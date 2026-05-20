@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.39.1] — 2026-05-20
+
+### Corrigido
+- **Banner sumindo rápido demais com o botão "Abrir console"**
+  (`services/desktop_notifier.py`, `ui/main_window.py`): KDE Plasma 6
+  tratava o popup como transient (~6s) assim que aparecia uma action.
+  Agora mandamos urgency=2 (critical, sticky por padrão no KDE),
+  hint `resident=true` (não some ao clicar a ação) e
+  `transient=false` (entrada persistente na central), com
+  `timeout_ms=0` pra deixar o servidor decidir quando some.
+
 ## [0.39.0] — 2026-05-20
 
 ### Adicionado
