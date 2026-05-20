@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.36.0] — 2026-05-20
+
+### Adicionado
+- **Atalhos "sem contexto" agora embutidos** (`ui/main_window.py`,
+  `ui/builders/sidebar_builder.py`): os botões "›_ Abrir Terminal" e
+  "✦ Claude (sem contexto)" da sidebar não abrem mais janela externa
+  do konsole — abrem uma aba nova **dentro do app**, numa
+  `TerminalArea` dedicada ("sem ctx") que vive no `terminal_host`
+  central. Cada clique adiciona mais uma aba, o foco vai pra ela
+  automaticamente, e as abas persistem mesmo trocando de workspace
+  (basta voltar a clicar pra reanexar a area).
+
+### Removido
+- `launchers.launch_terminal_no_ctx` / `launch_claude_no_ctx`: não
+  têm mais chamadores depois da migração pra embutido.
+
 ## [0.35.2] — 2026-05-20
 
 ### Alterado

@@ -32,8 +32,6 @@ from ..launchers import (
     LauncherError,
     find_app_repo_root,
     launch_claude_in_dir,
-    launch_claude_no_ctx,
-    launch_terminal_no_ctx,
 )
 from ..logging_utils import log_exceptions
 from ..models import Workspace
@@ -3254,21 +3252,56 @@ class MainWindow(QMainWindow):
 
     # ---------- CRUD de workspace ----------
 
+    def _ensure_no_ctx_area(self) -> TerminalArea:
+        """Cria sob demanda uma TerminalArea sem workspace pra hospedar
+        abas 'sem contexto'. Vive no terminal_host (QStackedWidget) junto
+        com as areas dos workspaces — a cada clique nos atalhos da sidebar
+        adicionamos uma aba nova nessa area."""
+        area = getattr(self, "_no_ctx_area", None)
+        if area is None:
+            area = TerminalArea()
+            self._no_ctx_area = area
+            self.terminal_host.addWidget(area)
+        return area
+
     def _launch_terminal_no_ctx(self) -> None:
-        """Abre uma janela nova de terminal em $HOME, sem workspace."""
+        """Abre um shell embutido em $HOME como nova aba na area 'sem ctx'."""
+        area = self._ensure_no_ctx_area()
+        home = str(Path.home())
+        title = f"shell (sem ctx) #{area.count() + 1}"
+        terminal = area.add_terminal(title)
         try:
-            launch_terminal_no_ctx(self.settings)
-        except LauncherError as e:
-            log.exception("Falha ao abrir terminal sem contexto")
+            terminal.start_interactive_shell(
+                home, shell=self.settings.shell_command or None
+            )
+        except Exception as e:
+            log.exception("Falha ao abrir terminal sem contexto embutido")
             QMessageBox.warning(self, "Falha ao abrir terminal", str(e))
+            return
+        self._bottom_tabs.setCurrentWidget(self.terminal_host)
+        self.terminal_host.setCurrentWidget(area)
 
     def _launch_claude_no_ctx(self) -> None:
-        """Abre o Claude numa janela nova de terminal, sem workspace."""
+        """Abre o Claude embutido em $HOME como nova aba na area 'sem ctx'."""
+        area = self._ensure_no_ctx_area()
+        home = str(Path.home())
+        title = f"claude (sem ctx) #{area.count() + 1}"
+        terminal = area.add_terminal(title)
+        terminal.configure_claude(home)
+        argv = [self.settings.claude_command, *self.settings.claude_extra_args]
         try:
-            launch_claude_no_ctx(self.settings)
-        except LauncherError as e:
-            log.exception("Falha ao abrir Claude sem contexto")
+            terminal.start_shell_command(
+                argv,
+                home,
+                label="claude (sem ctx)",
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
+            log.exception("Falha ao abrir Claude sem contexto embutido")
             QMessageBox.warning(self, "Falha ao abrir Claude", str(e))
+            return
+        self._bottom_tabs.setCurrentWidget(self.terminal_host)
+        self.terminal_host.setCurrentWidget(area)
 
     def _launch_self_dev(self) -> None:
         repo = find_app_repo_root()

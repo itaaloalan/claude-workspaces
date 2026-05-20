@@ -309,7 +309,7 @@ class SidebarBuilder:
         # a nenhum workspace.
         self.open_terminal_btn = QPushButton("›_  Abrir Terminal")
         self.open_terminal_btn.setToolTip(
-            "Abre uma janela nova de terminal em $HOME, sem workspace"
+            "Abre um shell embutido em $HOME numa aba nova (sem workspace)"
         )
         self.open_terminal_btn.setStyleSheet(_GHOST_ACTION_QSS)
         self.open_terminal_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -319,8 +319,7 @@ class SidebarBuilder:
 
         self.open_claude_no_ctx_btn = QPushButton("✦  Claude (sem contexto)")
         self.open_claude_no_ctx_btn.setToolTip(
-            "Abre o Claude em uma janela nova do terminal, sem nenhum "
-            "workspace (cwd = $HOME)"
+            "Abre o Claude embutido numa aba nova, sem workspace (cwd = $HOME)"
         )
         self.open_claude_no_ctx_btn.setStyleSheet(_GHOST_ACTION_QSS)
         self.open_claude_no_ctx_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
