@@ -2252,15 +2252,12 @@ class MainWindow(QMainWindow):
             # passa replaces_id pro servidor substituir no lugar em vez de
             # empilhar um segundo banner.
             prev_nid = self._active_notifications.get(tab_id, 0)
-            # urgency=1 (normal) + timeout_ms=-1: deixa o servidor de
-            # notificação aplicar o tempo padrão configurado pelo usuário
-            # no SO (KDE/GNOME têm "Show pop-ups for X seconds" em
-            # System Settings → Notifications). Antes forçávamos 5min
-            # com urgency=critical, o que ignorava a preferência do
-            # usuário e prendia o banner. desktop_entry permite
-            # configuração per-app no painel do SO se quiserem ajustar.
+            # urgency=1 (normal) + timeout configurável: default 10s
+            # via settings.notify_timeout_ms. -1 = usa default do SO,
+            # 0 = sticky, >0 = força em ms. desktop_entry permite
+            # configuração per-app no painel do SO.
             notify_urgency = 1
-            notify_timeout = -1
+            notify_timeout = int(self.settings.notify_timeout_ms)
             sound_name = (
                 self.settings.notify_sound_name.strip()
                 if self.settings.notify_sound_enabled else None

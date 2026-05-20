@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.31.0] — 2026-05-20
+
+### Adicionado
+- **Duração configurável do banner de notificação** (`settings.py`,
+  `ui/settings_panel.py`, `ui/main_window.py`): novo campo
+  `notify_timeout_ms` (default 10000 = 10s) controla o tempo de
+  exibição do banner. Antes usávamos `-1` (default do SO), o que
+  fazia o banner sumir em ~5s no KDE Plasma respeitando a config
+  "Show pop-ups for X seconds". Agora dá pra forçar um tempo maior
+  sem mexer no painel do SO. Valores aceitos: `-1` mantém o
+  comportamento antigo (default do servidor), `0` deixa sticky
+  (banner não some sozinho), `>0` força o tempo em ms. Ajustável
+  no painel de Configurações → Notificações → "Duração do banner".
+
 ## [0.30.2] — 2026-05-20
 
 ### Mudado

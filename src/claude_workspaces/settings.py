@@ -75,6 +75,12 @@ class Settings:
     # "complete", "bell", "alarm-clock-elapsed". Vazio = sem som.
     notify_sound_enabled: bool = True
     notify_sound_name: str = "message-new-instant"
+    # Tempo de exibição (ms) do banner da notificação nativa.
+    # -1 = usa o default do servidor (KDE/GNOME respeitam a config do SO);
+    #  0 = sticky (banner não some sozinho — só fechando manualmente);
+    # >0 = força esse tempo em ms, ignorando o default do SO.
+    # Default 10000ms (10s) pra dar tempo de ler sem ficar sticky.
+    notify_timeout_ms: int = 10000
     # Debounce da transição working→idle no status da sidebar. Why: o parser
     # de status oscila entre is_working True/False enquanto o Claude alterna
     # tool calls e geração de texto dentro do mesmo turno. O app só mostra

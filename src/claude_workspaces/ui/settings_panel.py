@@ -156,6 +156,7 @@ class SettingsPanel(QWidget):
         self._notify_native_chk.setChecked(self.settings.notify_native_enabled)
         self._notify_sound_chk.setChecked(self.settings.notify_sound_enabled)
         self._notify_sound_name.setText(self.settings.notify_sound_name)
+        self._notify_timeout_ms.setValue(int(self.settings.notify_timeout_ms))
         self._notify_reminder_chk.setChecked(self.settings.notify_reminder_enabled)
         self._notify_reminder_secs.setValue(self.settings.notify_reminder_seconds)
         self._notify_app_name.setText(self.settings.notify_app_name)
@@ -188,6 +189,7 @@ class SettingsPanel(QWidget):
         self.settings.notify_native_enabled = self._notify_native_chk.isChecked()
         self.settings.notify_sound_enabled = self._notify_sound_chk.isChecked()
         self.settings.notify_sound_name = self._notify_sound_name.text().strip()
+        self.settings.notify_timeout_ms = int(self._notify_timeout_ms.value())
         self.settings.notify_reminder_enabled = self._notify_reminder_chk.isChecked()
         self.settings.notify_reminder_seconds = int(self._notify_reminder_secs.value())
         self.settings.notify_app_name = (
@@ -318,6 +320,19 @@ class SettingsPanel(QWidget):
         )
         sound_form.addRow("Nome do som:", self._notify_sound_name)
         layout.addLayout(sound_form)
+
+        timeout_form = QFormLayout()
+        self._notify_timeout_ms = QSpinBox()
+        self._notify_timeout_ms.setRange(-1, 600000)
+        self._notify_timeout_ms.setSingleStep(1000)
+        self._notify_timeout_ms.setSuffix(" ms")
+        self._notify_timeout_ms.setToolTip(
+            "Tempo de exibição do banner. -1 = default do SO "
+            "(respeita KDE/GNOME); 0 = sticky (não some sozinho); "
+            ">0 = força esse tempo em ms. Default 10000 (10s)."
+        )
+        timeout_form.addRow("Duração do banner:", self._notify_timeout_ms)
+        layout.addLayout(timeout_form)
 
         self._notify_reminder_chk = QCheckBox(
             "Reavisar tarefas paradas sem foco"
