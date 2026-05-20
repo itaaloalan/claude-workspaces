@@ -2388,8 +2388,11 @@ class MainWindow(QMainWindow):
             self._ready_alert_last[tab_id] = now
         ws = self.workspaces_coord.find_by_id(info.get("workspace_id", ""))
         ws_name = ws.name if ws else "Workspace"
+        kind = info.get("kind", "ready")
         if is_reminder:
             title_prefix = self.settings.notify_reminder_prefix
+        elif kind == "decision":
+            title_prefix = self.settings.notify_decision_prefix
         else:
             title_prefix = self.settings.notify_ready_prefix
         title = f"{title_prefix} — {ws_name}" if title_prefix else ws_name

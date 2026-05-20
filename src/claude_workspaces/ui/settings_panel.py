@@ -173,6 +173,7 @@ class SettingsPanel(QWidget):
         self._notify_reminder_secs.setValue(self.settings.notify_reminder_seconds)
         self._notify_app_name.setText(self.settings.notify_app_name)
         self._notify_ready_prefix.setText(self.settings.notify_ready_prefix)
+        self._notify_decision_prefix.setText(self.settings.notify_decision_prefix)
         self._notify_reminder_prefix.setText(self.settings.notify_reminder_prefix)
         self._notify_hook_title_fmt.setText(self.settings.notify_hook_title_format)
         self._notify_hook_default_body.setText(self.settings.notify_hook_default_body)
@@ -209,6 +210,7 @@ class SettingsPanel(QWidget):
             self._notify_app_name.text().strip() or "Claude Workspaces"
         )
         self.settings.notify_ready_prefix = self._notify_ready_prefix.text()
+        self.settings.notify_decision_prefix = self._notify_decision_prefix.text()
         self.settings.notify_reminder_prefix = self._notify_reminder_prefix.text()
         self.settings.notify_hook_title_format = (
             self._notify_hook_title_fmt.text().strip() or "Claude — {project}"
@@ -390,6 +392,14 @@ class SettingsPanel(QWidget):
             "Prefixo do título quando uma tarefa termina (formato: '<prefixo> — <workspace>')."
         )
         texts_form.addRow("Prefixo 'pronto':", self._notify_ready_prefix)
+
+        self._notify_decision_prefix = QLineEdit()
+        self._notify_decision_prefix.setPlaceholderText("❓ Decisão")
+        self._notify_decision_prefix.setToolTip(
+            "Prefixo do título quando o Claude abre um picker/permission prompt "
+            "(formato: '<prefixo> — <workspace>')."
+        )
+        texts_form.addRow("Prefixo 'decisão':", self._notify_decision_prefix)
 
         self._notify_reminder_prefix = QLineEdit()
         self._notify_reminder_prefix.setPlaceholderText("🔁 Ainda aguardando")

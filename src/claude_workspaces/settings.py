@@ -71,6 +71,7 @@ class Settings:
     #     mensagem do usuário do transcript.
     notify_app_name: str = "Claude Workspaces"
     notify_ready_prefix: str = "✅ Pronto"
+    notify_decision_prefix: str = "❓ Decisão"
     notify_reminder_prefix: str = "🔁 Ainda aguardando"
     notify_hook_title_format: str = "Claude — {project}"
     notify_hook_default_body: str = "(turno encerrado)"

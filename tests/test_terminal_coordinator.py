@@ -21,7 +21,10 @@ def qapp():
 
 
 @pytest.fixture
-def coord(qapp):
+def coord(qapp, monkeypatch):
+    # Zera o threshold de duração mínima de working pra que transições
+    # working→idle síncronas nos testes contem normalmente como inbox.
+    monkeypatch.setattr(TerminalCoordinator, "_MIN_WORKING_DURATION_S", 0.0)
     return TerminalCoordinator()
 
 
@@ -42,6 +45,24 @@ def test_working_to_idle_triggers_inbox(coord):
     coord._on_tab_activity("ws1", 1001, "claude #1", "auto mode on", False, True)
     assert coord.inbox_count() == 1
     assert inbox_emits[-1] == 1
+
+
+def test_working_flicker_below_threshold_no_inbox(qapp, monkeypatch):
+    """Flicker working→idle abaixo do threshold mínimo NÃO vira inbox.
+
+    Reproduz o cenário "abre novo terminal → ✅ Pronto fantasma": parser
+    cai no fallback `recent` durante render do welcome banner, vira
+    working brevemente, depois flipa pra idle quando output dá pausa.
+    """
+    monkeypatch.setattr(TerminalCoordinator, "_MIN_WORKING_DURATION_S", 1.5)
+    coord = TerminalCoordinator()
+    alerts = []
+    coord.inbox_alert.connect(lambda *a: alerts.append(a))
+    coord._on_tab_activity("ws1", 1001, "claude #1", "thinking", True, True)
+    # Transição síncrona = duração ~0s, muito abaixo de 1.5s
+    coord._on_tab_activity("ws1", 1001, "claude #1", "auto mode on", False, True)
+    assert coord.inbox_count() == 0
+    assert alerts == []
 
 
 def test_idle_to_working_clears_inbox(coord):

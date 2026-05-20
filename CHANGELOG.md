@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.47.1] — 2026-05-20
+
+### Adicionado
+- **Prefixo separado pra notificação de decisão**
+  (`settings.py`, `ui/settings_panel.py`, `ui/main_window.py`,
+  `ui/coordinators/terminal_coordinator.py`): novo
+  `notify_decision_prefix` (default `"❓ Decisão"`) usado quando o
+  Claude abre um picker/permission prompt. Antes esses casos
+  apareciam como `"✅ Pronto"` mesmo que o Claude não tivesse
+  terminado, só estivesse perguntando — agora o título reflete a
+  semântica correta. Configurável em Settings → Notificações.
+
+### Corrigido
+- **Notificação "✅ Pronto" fantasma ao abrir um novo terminal**
+  (`ui/coordinators/terminal_coordinator.py`): o parser do TUI do Claude
+  caía no fallback `recent && !looks_prompt` durante o render do
+  welcome banner (sem working/idle marker ainda detectado), flipava
+  `is_working` pra True e, quando o output dava uma pausa, voltava pra
+  False — esse working→idle fake disparava o alerta. Agora o
+  coordinator só conta como working→idle real se o tab ficou em
+  working por ≥ 1.5s. Turnos reais do Claude duram bem mais que isso;
+  flickers de startup duram milissegundos.
+
 ## [0.47.0] — 2026-05-20
 
 ### Adicionado

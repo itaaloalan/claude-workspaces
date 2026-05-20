@@ -56,6 +56,12 @@ class TerminalCoordinator(QObject):
     spinner_tick = Signal(str)  # current spinner char
     terminal_area_created = Signal(str, object)  # workspace_id, TerminalArea
 
+    # Duração mínima (segundos) que um tab precisa ficar em is_working=True
+    # antes da transição pra is_working=False contar como "Pronto". Filtra
+    # flicker de startup do TUI do Claude. Class attr pra testes poderem
+    # zerar e ainda validar a transição síncrona.
+    _MIN_WORKING_DURATION_S = 1.5
+
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._areas: dict[str, TerminalArea] = {}
@@ -75,6 +81,14 @@ class TerminalCoordinator(QObject):
         # (`_on_tab_activity`). Separado de `state.activity` pra não
         # mudar o formato da tupla (status, is_working, title).
         self._prev_needs_decision: dict[int, bool] = {}
+        # Timestamp monotônico de quando cada tab entrou em is_working=True.
+        # Usado pra filtrar flicker de startup: na primeira renderização do
+        # TUI do Claude (welcome banner) o parser cai no fallback "recent &&
+        # !looks_prompt" → vira working brevemente, e quando o output dá uma
+        # pausa volta pra idle. Sem esse filtro, o working→idle fake dispara
+        # "✅ Pronto" assim que o terminal abre. Turnos reais do Claude
+        # duram bem mais que esse threshold.
+        self._working_started_at: dict[int, float] = {}
 
     # ---------- Areas ----------
 
@@ -114,6 +128,7 @@ class TerminalCoordinator(QObject):
         released = self.state.release_workspace(workspace_id)
         for tab_id in released:
             self._prev_needs_decision.pop(tab_id, None)
+            self._working_started_at.pop(tab_id, None)
             self.tab_removed.emit(tab_id)
             if tab_id in inbox_before:
                 self.inbox_entry_removed.emit(tab_id)
@@ -155,12 +170,29 @@ class TerminalCoordinator(QObject):
         # que apareciam saindo de idle ficavam mudos.
         entered_decision = needs_decision and not prev_needs_decision
         ended_working = prev_working and not is_working
-        if (ended_working or entered_decision) and is_running:
+        # Filtra flicker de startup: só conta como working→idle de verdade
+        # se o tab ficou em working por pelo menos _MIN_WORKING_DURATION_S.
+        import time as _time
+        if is_working and not prev_working:
+            self._working_started_at[tab_id] = _time.monotonic()
+        ended_working_real = False
+        if ended_working:
+            started = self._working_started_at.pop(tab_id, None)
+            if started is not None and _time.monotonic() - started >= type(self)._MIN_WORKING_DURATION_S:
+                ended_working_real = True
+        if (ended_working_real or entered_decision) and is_running:
             already_present = tab_id in self.state.inbox
+            # `kind` diferencia "Claude terminou um turno" (ready) de
+            # "Claude abriu picker/permission prompt" (decision). MainWindow
+            # usa pra escolher o prefixo do título da notificação — sem
+            # isso, picker abrindo aparecia como "✅ Pronto", o que é
+            # enganoso porque Claude não terminou, está perguntando.
+            kind = "decision" if entered_decision else "ready"
             self.state.add_to_inbox(tab_id, {
                 "workspace_id": workspace_id,
                 "title": title,
                 "status": status,
+                "kind": kind,
             })
             self.inbox_changed.emit(len(self.state.inbox))
             # Primeira chegada (não bounce de working transiente): emite
@@ -196,6 +228,7 @@ class TerminalCoordinator(QObject):
 
     def _on_tab_removed(self, tab_id: int) -> None:
         self._prev_needs_decision.pop(tab_id, None)
+        self._working_started_at.pop(tab_id, None)
         was_in_inbox = tab_id in self.state.inbox
         inbox_changed = self.state.release_tab(tab_id)
         if inbox_changed:
