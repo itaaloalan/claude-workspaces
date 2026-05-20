@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.32.1] — 2026-05-20
+
+### Corrigido
+- **Logs de falha ao tocar som da notificação**
+  (`services/desktop_notifier.py`): antes usávamos `subprocess.Popen`
+  com `stderr=DEVNULL` pra tocar `canberra-gtk-play`/`paplay`/`pw-play`
+  em background — qualquer falha (cache do canberra vazio, sample
+  ausente, sem acesso ao pulse) era engolida silenciosamente e o
+  usuário via "notificação sem som" sem nenhuma pista. Agora rodamos
+  em thread daemon com `subprocess.run` capturando stderr e logamos
+  o motivo (`rc`, stderr truncado) no `app.log`. Ajuda a
+  diagnosticar quando o som não toca.
+
 ## [0.32.0] — 2026-05-20
 
 ### Adicionado

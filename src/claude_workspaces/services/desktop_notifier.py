@@ -59,37 +59,56 @@ def _play_sound_async(sound_name: str) -> None:
     """Toca um sample XDG em background sem bloquear o event loop.
 
     Plasma 6 ignora a hint sound-name do D-Bus, então tocamos nós mesmos.
-    Falha silenciosa se nenhuma ferramenta de áudio estiver instalada.
+    Roda numa thread daemon que faz `subprocess.run` capturando stderr —
+    se canberra/paplay falhar (ex: cache vazio, sample faltando), logamos
+    em vez de engolir silenciosamente como Popen+DEVNULL fazia.
     """
     if not sound_name:
         return
-    canberra = shutil.which("canberra-gtk-play")
-    if canberra:
-        try:
-            subprocess.Popen(
-                [canberra, "-i", sound_name],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            return
-        except OSError:
-            pass
-    # Fallback: tocar .oga direto via paplay/pw-play.
     import os
-    sample = os.path.join(_FREEDESKTOP_SOUND_DIR, f"{sound_name}.oga")
-    if not os.path.isfile(sample):
-        return
-    for cmd in ("paplay", "pw-play"):
-        bin_path = shutil.which(cmd)
-        if not bin_path:
-            continue
-        try:
-            subprocess.Popen(
-                [bin_path, sample],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
+    import threading
+
+    def _worker() -> None:
+        canberra = shutil.which("canberra-gtk-play")
+        if canberra:
+            try:
+                r = subprocess.run(
+                    [canberra, "-i", sound_name],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if r.returncode == 0:
+                    log.debug("som tocado via canberra-gtk-play: %s", sound_name)
+                    return
+                log.warning(
+                    "canberra-gtk-play falhou (rc=%s): stderr=%r",
+                    r.returncode, (r.stderr or "").strip()[:200],
+                )
+            except (OSError, subprocess.TimeoutExpired) as e:
+                log.warning("canberra-gtk-play erro: %s", e)
+        sample = os.path.join(_FREEDESKTOP_SOUND_DIR, f"{sound_name}.oga")
+        if not os.path.isfile(sample):
+            log.warning("sample não encontrado: %s", sample)
             return
-        except OSError:
-            continue
+        for cmd in ("paplay", "pw-play"):
+            bin_path = shutil.which(cmd)
+            if not bin_path:
+                continue
+            try:
+                r = subprocess.run(
+                    [bin_path, sample],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if r.returncode == 0:
+                    log.debug("som tocado via %s: %s", cmd, sample)
+                    return
+                log.warning(
+                    "%s falhou (rc=%s): stderr=%r",
+                    cmd, r.returncode, (r.stderr or "").strip()[:200],
+                )
+            except (OSError, subprocess.TimeoutExpired) as e:
+                log.warning("%s erro: %s", cmd, e)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 class DesktopNotifier(QObject):
