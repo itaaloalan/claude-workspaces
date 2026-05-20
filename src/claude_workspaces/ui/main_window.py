@@ -2380,11 +2380,13 @@ class MainWindow(QMainWindow):
             prev_nid = self._active_notifications.get(tab_id, 0)
             # urgency=2 (critical) + resident + transient=false: combinação
             # que mantém o popup sticky no KDE Plasma 6 mesmo com action.
-            # Critical bypassa o auto-dismiss padrão, resident impede sumir
-            # ao clicar action, transient=false força entrada persistente.
-            # timeout_ms=0 = sticky (servidor decide quando some).
+            # IMPORTANTE: NÃO usar timeout_ms=0 — KDE Plasma 6.6.5 está
+            # bugado e interpreta 0 como "expira imediato" (~40ms), em vez
+            # de "nunca expira" como manda a spec FDO. Usamos o timeout
+            # configurável (default 10s) e contamos com o keepalive de 5s
+            # pra re-emitir antes do popup sumir.
             notify_urgency = 2
-            notify_timeout = 0
+            notify_timeout = int(self.settings.notify_timeout_ms)
             sound_name = (
                 self.settings.notify_sound_name.strip()
                 if self.settings.notify_sound_enabled else None

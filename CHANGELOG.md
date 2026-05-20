@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.42.1] — 2026-05-20
+
+### Corrigido
+- **Popup sumindo em 40ms apesar do keepalive**
+  (`ui/main_window.py`): KDE Plasma 6.6.5 interpreta `timeout_ms=0`
+  como "expira imediato" (~40ms — confirmado pelo log
+  `NotificationClosed reason=expired age=0.04s`), em vez de "nunca
+  expira" como manda a spec FDO. Voltamos a usar
+  `settings.notify_timeout_ms` (default 10s); o keepalive de 5s
+  re-emite antes do popup expirar, mantendo o banner visível.
+
 ## [0.42.0] — 2026-05-20
 
 ### Adicionado
