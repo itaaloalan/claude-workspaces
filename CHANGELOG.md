@@ -6,6 +6,24 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.38.0] — 2026-05-20
+
+### Melhorado
+- **Redesign do card de console — menos linhas, layout consistente**
+  (`ui/terminal_child_widget.py`, `ui/builders/sidebar_builder.py`,
+  `ui/main_window.py`): a coluna do ícone spinner (`‖`/`⠋`) foi removida
+  do layout — a faixa vertical de estado (`_status_strip`) já cumpre
+  o papel de sinalizar idle/working/awaiting/done sem duplicar.
+  Chips de modelo (`opus-4-7`) e branch (`⎇ main`) perderam border e
+  background — viraram só texto colorido (model em azul `TEXT_LINK`
+  bold, branch em cinza `TEXT_FAINT`). O `QTreeWidget::item` ficou
+  sem qualquer border/separator: só mudança discreta de bg em
+  hover/seleção — antes tinha 1px de borda lateral + border-bottom
+  separador + bordas nos chips, somando "linhas demais". Statusline
+  (`Context ▓▓▓ %`) ganhou `font-family: monospace` consistente.
+  Altura do row caiu de 86 pra 82px (overhead do item caiu de 12px
+  pra 8px sem as bordas).
+
 ## [0.37.9] — 2026-05-20
 
 ### Corrigido

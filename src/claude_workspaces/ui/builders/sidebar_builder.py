@@ -120,29 +120,26 @@ _TREE_QSS = (
     f"  color: {theme.TEXT_PRIMARY};"
     f"  outline: 0;"
     f"}}"
-    # Base: 1px border transparent + border-bottom acinzentada — serve de
-    # separador discreto entre rows adjacentes não selecionadas. O total
-    # de border-space é 1px/lado em todos os estados (transparent / sólido)
-    # pra não haver shift de layout quando o item entra em hover/seleção.
+    # Layout limpo: sem bordas no item, só mudança discreta de bg na
+    # seleção/hover. O respiro entre cards vem do `setSpacing` do tree
+    # (via showGridLines/padding interno do widget) e do padding-bottom
+    # do header de workspace. Removido o border-bottom separador (poluía
+    # visualmente quando combinado com a borda da seleção).
     f"QTreeWidget::item {{"
-    f"  padding: 5px 6px;"
-    f"  border: 1px solid transparent;"
-    f"  border-bottom: 1px solid {theme.BORDER_SOFT};"
+    f"  padding: 4px 4px;"
+    f"  border: 0;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:hover {{"
     f"  background: {theme.BG_PANEL};"
-    f"  border: 1px solid {theme.BORDER_SOFT};"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
     f"QTreeWidget::item:selected {{"
     f"  background: {theme.BG_SURFACE};"
-    f"  border: 1px solid {theme.BORDER};"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:selected:hover {{"
     f"  background: {theme.BG_SURFACE};"
-    f"  border: 1px solid {theme.BORDER_INPUT};"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
     f"QTreeWidget::branch {{ background: transparent; }}"

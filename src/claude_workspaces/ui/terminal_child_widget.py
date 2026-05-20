@@ -45,21 +45,20 @@ STATE_COLOR = {
 _CHIP_MODEL_QSS = (
     f"QLabel {{"
     f"  color: {theme.TEXT_LINK};"
-    f"  background: {theme.BG_SURFACE};"
-    f"  border: 1px solid {theme.BORDER_INPUT};"
-    f"  border-radius: 4px;"
-    f"  padding: 1px 6px;"
+    f"  background: transparent;"
+    f"  border: 0;"
+    f"  padding: 0px 4px 0px 0px;"
     f"  font-size: 10px;"
+    f"  font-weight: 600;"
     f"}}"
 )
 
 _CHIP_BRANCH_QSS = (
     f"QLabel {{"
-    f"  color: {theme.TEXT_FADED};"
-    f"  background: {theme.BG_SURFACE};"
-    f"  border: 1px solid {theme.BORDER_INPUT};"
-    f"  border-radius: 4px;"
-    f"  padding: 1px 6px;"
+    f"  color: {theme.TEXT_FAINT};"
+    f"  background: transparent;"
+    f"  border: 0;"
+    f"  padding: 0px 4px;"
     f"  font-size: 10px;"
     f"}}"
 )
@@ -114,15 +113,13 @@ class TerminalChildWidget(QWidget):
         )
         outer.addWidget(self._status_strip)
 
-        self._icon = QLabel("⠋")
-        self._icon.setFixedSize(QSize(14, 51))
-        self._icon.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
-        )
-        self._icon.setStyleSheet(
-            f"color: {theme.WARNING}; font-family: monospace; font-size: 12px;"
-        )
-        outer.addWidget(self._icon)
+        # Coluna do ícone (spinner ‖/⠋) foi removida do layout — a faixa
+        # vertical de estado (`_status_strip`) já cumpre o papel de mostrar
+        # o estado do console em um glance, sem duplicar o sinal. O QLabel
+        # continua existindo (escondido) pra manter compatibilidade com
+        # `update_state` que ainda chama `setText` nele.
+        self._icon = QLabel()
+        self._icon.setVisible(False)
 
         vbox = QVBoxLayout()
         vbox.setContentsMargins(0, 0, 0, 0)
@@ -259,7 +256,8 @@ class TerminalChildWidget(QWidget):
         # estado e o modelo.
         self._action_label = QLabel("")
         self._action_label.setStyleSheet(
-            f"color: {theme.TEXT_FADED}; font-size: 10px;"
+            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+            f" font-family: monospace;"
         )
         self._action_label.setWordWrap(False)
         self._action_label.setSizePolicy(
