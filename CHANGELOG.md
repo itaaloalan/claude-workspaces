@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.46.1] — 2026-05-20
+
+### Corrigido
+- **Clicar na notificação não focava o terminal quando o painel
+  inferior tava na aba "Runners workspace"/"Runners (console)"**
+  (`ui/main_window.py:_focus_tab_from_inbox`): além de selecionar a
+  sub-aba do console, agora também volta o `_bottom_tabs` pra aba
+  "Terminal". Sem isso o `setCurrentIndex` da aba interna era
+  invisível porque o painel mostrado era o de runners.
+
 ## [0.46.0] — 2026-05-20
 
 ### Alterado

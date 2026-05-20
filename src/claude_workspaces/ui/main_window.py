@@ -2767,6 +2767,10 @@ class MainWindow(QMainWindow):
             if id(area.tabs.widget(i)) == tab_id:
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
+                # Se o usuário tava na aba "Runners workspace"/"Runners
+                # (console)", volta pro "Terminal" — senão a notif só
+                # troca a sub-aba invisível.
+                self._bottom_tabs.setCurrentWidget(self.terminal_host)
                 # Se o terminal pane estiver minimizado, restaura — sem
                 # isso o usuário clica na notif e não vê o console.
                 if self._terminal_is_minimized():
