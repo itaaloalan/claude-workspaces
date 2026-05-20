@@ -6,6 +6,28 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.38.1] — 2026-05-20
+
+### Removido
+- **Linha "Uso (30d): in/out/cache · US$ X" no painel central de workspace**
+  (`ui/workspace_details.py`): a info de custo/tokens não agrega muito
+  no fluxo de abrir Claude/IDE e ainda destacava preço. Função
+  `_refresh_usage` + label + chamada removidas.
+
+### Adicionado
+- **"Sessões recentes do Claude" colapsável** (`ui/workspace_details.py`):
+  chevron `▾/▸` ao lado do título colapsa lista + filtro + botão de
+  favoritos pra liberar espaço no painel central quando o usuário não
+  está navegando histórico de sessões.
+
+### Melhorado
+- **Seleção da sidebar muito sutil — não parece mais "ativada"**
+  (`ui/builders/sidebar_builder.py`): o bg `BG_SURFACE` cheio destacava
+  o card selecionado demais e dava a impressão de algo "ligado" sem
+  motivo. Trocado por tint branco a 5% (`rgba(255,255,255,0.05)`),
+  com hover a 2.5% e selected+hover a 7%. Suficiente pra diferenciar,
+  discreto pra não roubar atenção.
+
 ## [0.38.0] — 2026-05-20
 
 ### Melhorado

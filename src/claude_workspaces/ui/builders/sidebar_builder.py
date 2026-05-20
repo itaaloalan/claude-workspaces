@@ -131,15 +131,19 @@ _TREE_QSS = (
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:hover {{"
-    f"  background: {theme.BG_PANEL};"
+    f"  background: rgba(255, 255, 255, 0.025);"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
+    # Seleção bem sutil — tint branco a 5% de opacidade no lugar do
+    # `BG_SURFACE` cheio (que destacava o card demais e fazia parecer
+    # que tinha algo "ativado" sem motivo). Suficiente pra distinguir
+    # do hover, discreto o bastante pra não roubar atenção.
     f"QTreeWidget::item:selected {{"
-    f"  background: {theme.BG_SURFACE};"
+    f"  background: rgba(255, 255, 255, 0.05);"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
     f"QTreeWidget::item:selected:hover {{"
-    f"  background: {theme.BG_SURFACE};"
+    f"  background: rgba(255, 255, 255, 0.07);"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
     f"QTreeWidget::branch {{ background: transparent; }}"

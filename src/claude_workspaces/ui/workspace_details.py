@@ -92,10 +92,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._folders.setStyleSheet("color: #b0b0b0; font-family: monospace; font-size: 11px;")
         c.addWidget(self._folders)
 
-        self._usage_label = QLabel()
-        self._usage_label.setStyleSheet("color: #b0b0b0; font-size: 11px;")
-        self._usage_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        c.addWidget(self._usage_label)
 
         c.addLayout(self._build_mcp_row())
 
@@ -269,6 +265,20 @@ class WorkspaceDetailsPanel(QStackedWidget):
         layout.setSpacing(6)
 
         header = QHBoxLayout()
+        # Chevron clicável pra colapsar/expandir a lista de sessões.
+        # Estado persiste por sessão da app (não por workspace).
+        self._sessions_collapsed = False
+        self._sessions_toggle_btn = QPushButton("▾")
+        self._sessions_toggle_btn.setFixedWidth(20)
+        self._sessions_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sessions_toggle_btn.setToolTip("Colapsar/expandir lista de sessões")
+        self._sessions_toggle_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 0; color: #888;"
+            " font-size: 12px; padding: 0; }"
+            "QPushButton:hover { color: #6aa9e0; }"
+        )
+        self._sessions_toggle_btn.clicked.connect(self._toggle_sessions_collapsed)
+        header.addWidget(self._sessions_toggle_btn)
         header.addWidget(QLabel("<b>Sessões recentes do Claude</b>"))
         self._sessions_filter = QLineEdit()
         self._sessions_filter.setPlaceholderText("Filtrar sessões…")
@@ -314,6 +324,17 @@ class WorkspaceDetailsPanel(QStackedWidget):
         )
         layout.addWidget(self._sessions_list, stretch=1)
         return col
+
+    def _toggle_sessions_collapsed(self) -> None:
+        self._sessions_collapsed = not self._sessions_collapsed
+        collapsed = self._sessions_collapsed
+        self._sessions_toggle_btn.setText("▸" if collapsed else "▾")
+        # Esconde lista + filtro + botões juntos pra liberar espaço no
+        # painel central; o header com o chevron continua visível pra
+        # poder expandir de novo.
+        self._sessions_list.setVisible(not collapsed)
+        self._sessions_filter.setVisible(not collapsed)
+        self._only_starred_btn.setVisible(not collapsed)
 
     def _apply_sessions_filter(self, *_args) -> None:
         needle = self._sessions_filter.text().strip().lower()
@@ -361,55 +382,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._file_finder.set_folders(workspace.folders)
         self._refresh_sessions()
         self._refresh_mcp_status()
-        self._refresh_usage()
         # git_panel.set_workspace é chamado pela MainWindow via
         # _broadcast_workspace (panel está em DOCK_PANEL_SPECS)
 
         self.setCurrentWidget(self._content)
-
-    def _refresh_usage(self) -> None:
-        if not self.workspace or not self.workspace.folders:
-            self._usage_label.setVisible(False)
-            return
-        try:
-            from datetime import datetime, timedelta
-
-            from ..usage_telemetry import (
-                aggregate_usage_by_workspace,
-                format_tokens,
-            )
-            since = datetime.now(UTC) - timedelta(days=30)
-            all_usage = aggregate_usage_by_workspace(since=since)
-        except Exception:
-            log.debug("usage telemetry falhou no workspace %s",
-                      getattr(self.workspace, "id", "?"), exc_info=True)
-            self._usage_label.setVisible(False)
-            return
-        total_in = 0
-        total_out = 0
-        total_cache = 0
-        total_cost = 0.0
-        for folder in self.workspace.folders:
-            stats = all_usage.get(folder)
-            if not stats:
-                continue
-            total_in += stats.input_tokens
-            total_out += stats.output_tokens
-            total_cache += stats.cache_creation_tokens + stats.cache_read_tokens
-            total_cost += stats.cost_usd
-        if total_in + total_out + total_cache <= 0:
-            self._usage_label.setVisible(False)
-            return
-        parts = [
-            "<b>Uso (30d):</b>",
-            f"in {format_tokens(total_in)}",
-            f"out {format_tokens(total_out)}",
-            f"cache {format_tokens(total_cache)}",
-        ]
-        if total_cost > 0:
-            parts.append(f"≈ US$ {total_cost:.2f}")
-        self._usage_label.setText("  ·  ".join(parts))
-        self._usage_label.setVisible(True)
 
     def restore_columns_sizes(self, sizes: list[int]) -> None:
         if sizes and len(sizes) == self._columns_splitter.count():
