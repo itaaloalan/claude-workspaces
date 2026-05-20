@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.48.0] — 2026-05-20
+
+### Adicionado
+- **Aba do terminal espelha o nome da sidebar**
+  (`ui/terminal_area.py`): texto da aba do `QTabWidget` agora usa
+  `effective_title()` do widget (mesma fonte que sidebar consulta) com
+  prefixo `#N` baseado em ids ordenados (mais antigo = #1). Renomear
+  uma sessão pela sidebar (`set_custom_name`) reflete na aba na hora
+  porque o re-emit de `activity_changed` força `_emit_activity` a
+  reescrever o texto. Fechar uma aba renumera os irmãos restantes.
+
 ## [0.47.1] — 2026-05-20
 
 ### Adicionado

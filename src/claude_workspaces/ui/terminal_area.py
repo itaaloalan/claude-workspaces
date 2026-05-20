@@ -48,19 +48,39 @@ class TerminalArea(QWidget):
         idx = self.tabs.addTab(widget, title)
         self.tabs.setCurrentIndex(idx)
         widget.setProperty("_base_title", title)
+        # Texto inicial já com `#N` (mesmo formato do sidebar).
+        self.tabs.setTabText(idx, f"✓ {self._compute_tab_display(widget)}")
         # Emite estado inicial
         self.tab_activity_changed.emit(id(widget), title, "", False, False, False)
         return widget
+
+    def _compute_tab_display(self, widget: TerminalWidget) -> str:
+        """Mesmo formato `#N Title` usado no sidebar: N é a posição entre
+        os irmãos ordenados por `id(widget)` crescente (mais antigo = #1).
+        Title é o `effective_title()` do widget — espelha custom_name /
+        session_preview / base_title, então renomear via sidebar reflete
+        aqui imediatamente."""
+        sibling_ids: list[int] = []
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if w is not None:
+                sibling_ids.append(id(w))
+        sibling_ids.sort()
+        wid = id(widget)
+        if wid in sibling_ids:
+            position = sibling_ids.index(wid) + 1
+        else:
+            position = len(sibling_ids) + 1
+        title = widget.effective_title() or (widget.property("_base_title") or "")
+        return f"#{position} {title}".rstrip()
 
     def _mark_tab_state(self, widget: TerminalWidget, running: bool) -> None:
         idx = self.tabs.indexOf(widget)
         if idx < 0:
             return
-        base = widget.property("_base_title") or self.tabs.tabText(idx).lstrip("✓● ")
-        if running:
-            self.tabs.setTabText(idx, f"● {base}")
-        else:
-            self.tabs.setTabText(idx, f"✓ {base}")
+        display = self._compute_tab_display(widget)
+        prefix = "●" if running else "✓"
+        self.tabs.setTabText(idx, f"{prefix} {display}")
 
     def _emit_activity(
         self,
@@ -69,11 +89,17 @@ class TerminalArea(QWidget):
         is_working: bool,
         needs_decision: bool = False,
     ) -> None:
-        if self.tabs.indexOf(widget) < 0:
+        idx = self.tabs.indexOf(widget)
+        if idx < 0:
             return
         # Preferir o título da sessão Claude (primeiro user prompt) se
         # já tiver sido resolvido; fallback pro título base da aba
         title = widget.effective_title()
+        # Espelha o texto da aba: rename via sidebar (set_custom_name)
+        # dispara activity_changed → o tab passa a refletir o nome custom
+        # com prefixo `#N` igual ao sidebar.
+        prefix = "●" if widget.is_running() else "✓"
+        self.tabs.setTabText(idx, f"{prefix} {self._compute_tab_display(widget)}")
         self.tab_activity_changed.emit(
             id(widget),
             title,
@@ -105,6 +131,16 @@ class TerminalArea(QWidget):
         if widget is not None:
             widget.deleteLater()
             self.tab_removed.emit(tab_id)
+        # Renumera os tabs restantes: ao fechar #1, #2 vira #1, etc.
+        # Sem isso, posições ficariam "furadas" até a próxima atividade.
+        self._refresh_all_tab_texts()
+
+    def _refresh_all_tab_texts(self) -> None:
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, TerminalWidget):
+                prefix = "●" if w.is_running() else "✓"
+                self.tabs.setTabText(i, f"{prefix} {self._compute_tab_display(w)}")
 
     def close_all(self) -> None:
         while self.tabs.count():
