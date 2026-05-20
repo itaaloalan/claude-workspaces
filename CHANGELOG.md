@@ -8,6 +8,17 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
 
 ## [0.37.8] — 2026-05-20
 
+### Melhorado
+- **Sidebar — seleção como borda cinza ao redor e separador entre rows**
+  (`ui/builders/sidebar_builder.py`): a linha azul vertical à esquerda
+  do item selecionado foi trocada por uma borda 1px acinzentada (`BORDER`)
+  envolvendo todo o row, com fundo `BG_SURFACE` discreto. Itens não
+  selecionados ganharam um `border-bottom: 1px solid BORDER_SOFT` pra
+  funcionar de separador sutil entre consoles adjacentes — fica claro
+  onde um termina e outro começa sem chamar atenção. Hover usa cores
+  intermediárias. Border-space total é constante em todos os estados
+  (1px/lado) pra não shiftar o layout na transição idle → hover → selected.
+
 ### Adicionado
 - **Diagnóstico das janelas fantasmas** (`app.py`): `_log_ghost_window_diagnostics`
   dumpa no `app.log` em 3 fases (T=0, +500ms, +2000ms após `window.show()`):
