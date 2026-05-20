@@ -49,7 +49,6 @@ _CHIP_MODEL_QSS = (
     f"  border: 0;"
     f"  padding: 0px 4px 0px 0px;"
     f"  font-size: 10px;"
-    f"  font-weight: 600;"
     f"}}"
 )
 
@@ -88,18 +87,18 @@ class TerminalChildWidget(QWidget):
         self._title = title
         # Tamanho previsível pra não brigar com o QTreeWidget no resize
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        # 3 linhas: título / estado+ação / modelo+branch. Quem define a
+        # 3 linhas: título+ações / estado / modelo+branch. Quem define a
         # altura efetiva do row no QTreeWidget é o setSizeHint no
         # `_CHILD_HEIGHT` lá no main_window — manter sincronizado
         # (row = widget + 8px de border+padding do item).
-        self.setMinimumHeight(58)
-        self.setMaximumHeight(58)
+        self.setMinimumHeight(52)
+        self.setMaximumHeight(52)
 
         outer = QHBoxLayout(self)
         # 2px de margem à esquerda pra que o `_status_strip` (3px) fique
         # dentro da borda 1px do QTreeWidget::item — sem isso o strip
         # encosta no canto e visualmente "fura" o card.
-        outer.setContentsMargins(2, 1, 4, 1)
+        outer.setContentsMargins(2, 0, 4, 0)
         outer.setSpacing(6)
 
         # Faixa vertical 3px no canto esquerdo do row, pintada com a cor do
@@ -139,11 +138,11 @@ class TerminalChildWidget(QWidget):
 
         vbox = QVBoxLayout()
         vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setSpacing(1)
+        vbox.setSpacing(0)
 
-        # Title row: título + ações inline (▶ Continuar, ⚙ Modo).
-        # Ações ficam à direita; visibilidade controlada pelo toggle no
-        # header WORKSPACES (set_actions_visible). Callbacks são injetadas
+        # Title row: título + ações inline (✏ ▶ ⚙ ✖) à direita.
+        # Visibilidade das ações controlada pelo toggle no header
+        # WORKSPACES (set_actions_visible). Callbacks são injetadas
         # pelo MainWindow via set_action_callbacks.
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -160,7 +159,6 @@ class TerminalChildWidget(QWidget):
         )
         self._title_label.setMaximumHeight(16)
         title_row.addWidget(self._title_label, stretch=1)
-        vbox.addLayout(title_row)
 
         # Estado atual + elegibilidade pro ▶ continuar. O continue só faz
         # sentido em sessões restauradas no startup (--resume) que estão
@@ -184,12 +182,13 @@ class TerminalChildWidget(QWidget):
         # uma linha do card na sidebar.
         self._last_action: str = ""
 
-        # Bloco de ações vai à direita da row, vertical-center alinhado
-        # com a branch — mais coerente do que ficar grudado no título.
+        # Bloco de ações fica na própria title row, à direita do título —
+        # mantém o título com peso visual (bold) e libera a linha do estado
+        # pra ser uma faixa fina só de texto.
         self._actions_widget = QWidget()
         actions_layout = QHBoxLayout(self._actions_widget)
         actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(2)
+        actions_layout.setSpacing(0)
 
         self._rename_btn = QPushButton("✏")
         self._rename_btn.setFixedSize(20, 18)
@@ -252,28 +251,24 @@ class TerminalChildWidget(QWidget):
         )
         actions_layout.addWidget(self._close_btn)
 
-        sub_row = QHBoxLayout()
-        sub_row.setContentsMargins(0, 0, 0, 0)
-        sub_row.setSpacing(6)
+        title_row.addWidget(
+            self._actions_widget,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+        vbox.addLayout(title_row)
 
         self._state_label = QLabel(STATE_LABEL[STATE_IDLE])
         self._state_label.setStyleSheet(
             f"color: {STATE_COLOR[STATE_IDLE]};"
-            f" font-size: 10px; font-weight: 600;"
+            f" font-size: 10px;"
             f" letter-spacing: 0.3px;"
         )
         self._state_label.setWordWrap(False)
         self._state_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
-        self._state_label.setMaximumHeight(14)
-        sub_row.addWidget(self._state_label, stretch=1)
-        sub_row.addWidget(
-            self._actions_widget,
-            alignment=Qt.AlignmentFlag.AlignVCenter,
-        )
-
-        vbox.addLayout(sub_row)
+        self._state_label.setMaximumHeight(13)
+        vbox.addWidget(self._state_label)
 
         # 3a linha: chip do modelo + chip da branch lado a lado.
         # Antes a branch ficava num label solto vertical-centered no canto
@@ -362,7 +357,7 @@ class TerminalChildWidget(QWidget):
         self._state_label.setText(self._compose_state_text(state))
         self._state_label.setStyleSheet(
             f"color: {STATE_COLOR[state]};"
-            f" font-size: 10px; font-weight: 600;"
+            f" font-size: 10px;"
             f" letter-spacing: 0.3px;"
         )
         if last_action:
@@ -406,7 +401,7 @@ class TerminalChildWidget(QWidget):
         color = theme.TEXT_BRIGHT if self._awaiting_blink_on else theme.WAITING
         self._state_label.setStyleSheet(
             f"color: {color};"
-            f" font-size: 10px; font-weight: 600;"
+            f" font-size: 10px;"
             f" letter-spacing: 0.3px;"
         )
 

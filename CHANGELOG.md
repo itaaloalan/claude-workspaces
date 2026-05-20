@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.51.2] — 2026-05-20
+
+### Mudado
+- **Card do console mais compacto, ações sobem pra linha do título**
+  (`ui/terminal_child_widget.py`): bloco de ações inline (✏ ▶ ⚙ ✖) saiu
+  da row do estado e foi pra row do título, à direita. A linha do estado
+  fica fininha, só com texto (sem `font-weight: 600` e sem competir com
+  os botões por espaço vertical). Spacing entre rows zerado (`vbox`
+  spacing 0, outer margins top/bottom 0) e altura do widget cai de 58 →
+  52px (`_CHILD_HEIGHT` 66 → 60 no `main_window.py`). Chip do modelo
+  perde o bold pra deixar o título como único elemento em peso 600 na
+  row.
+
 ## [0.51.1] — 2026-05-20
 
 ### Mudado
