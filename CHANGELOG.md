@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.0] — 2026-05-20
+
+### Alterado
+- **Última ação (statusline do Claude) ganha linha própria na sidebar**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`): antes, o texto
+  capturado da statusline (ex.: `Context ▓▓▓ 7% · Usage …`) aparecia
+  colado ao "Ocioso · 12m 15s", poluindo a linha de estado. Agora ele
+  fica numa linha dedicada entre o estado e o nome do modelo
+  (`opus-4-7`). A altura do row da sidebar subiu de 58 → 71px pra caber
+  a 4a linha.
+
 ## [0.36.0] — 2026-05-20
 
 ### Adicionado

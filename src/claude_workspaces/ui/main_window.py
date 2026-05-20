@@ -6,6 +6,7 @@ from PySide6.QtGui import (
     QAction,
     QCloseEvent,
     QGuiApplication,
+    QIcon,
 )
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -2622,7 +2623,7 @@ class MainWindow(QMainWindow):
                     return
 
     # Altura fixa do TerminalChildWidget (sincronizado com a constante lá)
-    _CHILD_HEIGHT = 58
+    _CHILD_HEIGHT = 71
 
     def _wire_child_actions(
         self, widget: "TerminalChildWidget", tab_id: int
@@ -2664,12 +2665,17 @@ class MainWindow(QMainWindow):
             ) if running else (
                 f"Remover '{title}' da sidebar?"
             )
-            res = QMessageBox.question(
-                self, "Remover console", msg,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if res == QMessageBox.StandardButton.Yes:
+            box = QMessageBox(self)
+            box.setWindowTitle("Remover console")
+            box.setIcon(QMessageBox.Icon.Question)
+            box.setText(msg)
+            yes_btn = box.addButton("Sim", QMessageBox.ButtonRole.YesRole)
+            no_btn = box.addButton("Não", QMessageBox.ButtonRole.NoRole)
+            yes_btn.setIcon(QIcon())
+            no_btn.setIcon(QIcon())
+            box.setDefaultButton(no_btn)
+            box.exec()
+            if box.clickedButton() is yes_btn:
                 self._close_terminal_by_tab_id(tab_id)
 
         widget.set_action_callbacks(on_continue, on_open_mode_popup, on_close)

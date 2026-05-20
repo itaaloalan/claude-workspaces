@@ -69,15 +69,15 @@ class TerminalChildWidget(QWidget):
         # Altura aumentada pra caber a 3a linha de modelo + tokens. Quem
         # define a altura efetiva do row no QTreeWidget é o setSizeHint
         # no `_CHILD_HEIGHT` lá no main_window — manter sincronizado.
-        self.setMinimumHeight(58)
-        self.setMaximumHeight(58)
+        self.setMinimumHeight(71)
+        self.setMaximumHeight(71)
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(2, 2, 4, 2)
         outer.setSpacing(8)
 
         self._icon = QLabel("⠋")
-        self._icon.setFixedSize(QSize(14, 38))
+        self._icon.setFixedSize(QSize(14, 51))
         self._icon.setAlignment(
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
         )
@@ -204,14 +204,16 @@ class TerminalChildWidget(QWidget):
         self._state_label.setMaximumHeight(14)
         sub_row.addWidget(self._state_label)
 
+        vbox.addLayout(sub_row)
+
+        # Linha dedicada à "última ação" (ex.: texto da statusline do
+        # Claude — "Context ▓▓▓ 7% · Usage …"). Antes vinha na mesma
+        # linha do "Ocioso · 12m 15s", o que poluía o estado quando a
+        # statusline era longa. Agora fica numa linha própria entre o
+        # estado e o modelo, com o `_sep_dot` (·) mantido só por compat
+        # — escondido permanentemente (já não há vizinho à esquerda).
         self._sep_dot = QLabel("·")
-        self._sep_dot.setStyleSheet(
-            f"color: {theme.TEXT_DISABLED}; font-size: 10px;"
-        )
-        self._sep_dot.setSizePolicy(
-            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
-        )
-        sub_row.addWidget(self._sep_dot)
+        self._sep_dot.setVisible(False)
 
         self._action_label = QLabel("")
         self._action_label.setStyleSheet(
@@ -222,9 +224,7 @@ class TerminalChildWidget(QWidget):
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
         self._action_label.setMaximumHeight(14)
-        sub_row.addWidget(self._action_label, stretch=1)
-
-        vbox.addLayout(sub_row)
+        vbox.addWidget(self._action_label)
 
         # 3a linha: modelo + tokens da sessão Claude (in/out/cache).
         # Custo de propósito não vai aqui — informação cara de mostrar a
