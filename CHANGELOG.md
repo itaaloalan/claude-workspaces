@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.51.0] — 2026-05-20
+
+### Mudado
+- **Item do console na sidebar mais compacto** (`ui/terminal_child_widget.py`,
+  `ui/main_window.py`): fundida a linha da "última ação" (statusline) na
+  mesma linha do estado — agora aparece como `Trabalhando · (disabled))`
+  em vez de ocupar uma linha própria. Altura do card cai de 74→58px
+  (`_CHILD_HEIGHT` de 82→66) e as margens verticais do outer layout
+  passam de 2→1px. Mantém as 3 linhas essenciais: título / estado+ação /
+  modelo+branch.
+
 ## [0.50.5] — 2026-05-20
 
 ### Corrigido
