@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.2] — 2026-05-20
+
+### Corrigido
+- **Estado "Ocioso" voltou pra esquerda; ações inline na mesma linha à
+  direita** (`ui/terminal_child_widget.py`): após mover a statusline
+  pra linha própria (0.37.0), o `state_label` ficou centralizado
+  porque era o único item flutuante no row. Adicionado `addStretch`
+  e movido o bloco de ações (▶ ⚙ ✖) pro mesmo `sub_row` —
+  resultado: "Ocioso · 4s" colado na esquerda, ações empurradas pra
+  direita, sem mudar a altura do row.
+
 ## [0.37.1] — 2026-05-20
 
 ### Corrigido

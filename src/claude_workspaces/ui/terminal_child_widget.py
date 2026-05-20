@@ -203,6 +203,14 @@ class TerminalChildWidget(QWidget):
         )
         self._state_label.setMaximumHeight(14)
         sub_row.addWidget(self._state_label)
+        # Empurra as ações inline pro lado direito da MESMA linha do
+        # estado ("Ocioso · …"). Sem esse stretch o estado ficava
+        # centralizado no row porque era o único item flutuante.
+        sub_row.addStretch(1)
+        sub_row.addWidget(
+            self._actions_widget,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
 
         vbox.addLayout(sub_row)
 
@@ -244,16 +252,6 @@ class TerminalChildWidget(QWidget):
         vbox.addWidget(self._session_label)
 
         outer.addLayout(vbox, stretch=1)
-
-        # Ações inline (▶ ⚙) vão na faixa direita, vertical-center —
-        # alinhadas com a branch. Antes ficavam coladas no título e
-        # parecia que pertenciam à 1a linha; agora têm o mesmo eixo
-        # visual da info do repo, separando "estado da sessão" (esquerda)
-        # de "controles + repo" (direita).
-        outer.addWidget(
-            self._actions_widget,
-            alignment=Qt.AlignmentFlag.AlignVCenter,
-        )
 
         # Lado direito: branch + contagem de arquivos modificados do repo.
         # Atualizado em segundo plano pelo RepoStatusPoller (main_window).
