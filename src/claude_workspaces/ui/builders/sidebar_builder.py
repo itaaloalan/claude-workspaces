@@ -32,6 +32,42 @@ class _ClickableLabel(QLabel):
         super().mousePressEvent(event)
 
 
+class _StableTree(QTreeWidget):
+    """QTreeWidget que ignora drag de seleção. No comportamento padrão,
+    com botão esquerdo pressionado, o `currentItem` segue o cursor — qualquer
+    micro-arrasto entre rows muda a seleção. Mouse com chatter no switch
+    do botão esquerdo dispara press+move+release sobre múltiplos itens num
+    "clique único", fazendo a seleção pular pro último item sob o ponteiro
+    (sintoma reportado: clicar num console e cair em outro workspace).
+
+    Defesa: na MoveEvent com botão esquerdo segurado, NÃO propagamos o
+    evento — assim a seleção fica travada no item do press. No release,
+    se o ponteiro saiu do item original, restauramos a seleção pro
+    item onde o press começou.
+    """
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_item = self.itemAt(event.position().toPoint())
+        else:
+            self._press_item = None
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            press_item = getattr(self, "_press_item", None)
+            release_item = self.itemAt(event.position().toPoint())
+            if press_item is not None and release_item is not press_item:
+                self.setCurrentItem(press_item)
+                return
+        super().mouseReleaseEvent(event)
+
+
 _SECTION_HEADER_QSS = (
     f"QLabel {{"
     f"  color: {theme.TEXT_FAINT};"
@@ -211,7 +247,7 @@ class SidebarBuilder:
         header_layout.addWidget(self.actions_toggle_btn, 0, Qt.AlignmentFlag.AlignRight)
         layout.addWidget(header_row)
 
-        self.list_widget = QTreeWidget()
+        self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)
         self.list_widget.setRootIsDecorated(True)
         self.list_widget.setIndentation(12)

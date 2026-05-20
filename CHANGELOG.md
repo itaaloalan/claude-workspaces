@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.4] — 2026-05-20
+
+### Corrigido
+- **Seleção da sidebar pulando pra outro workspace ao clicar num
+  console** (`ui/builders/sidebar_builder.py`): subclass `_StableTree`
+  do `QTreeWidget` ignora drag de seleção. No comportamento padrão,
+  com o botão esquerdo pressionado, `currentItem` segue o cursor —
+  qualquer micro-arrasto entre rows muda a seleção. Mouse com chatter
+  no switch do botão esquerdo dispara press+move+release sobre
+  múltiplos itens num "clique único", fazendo a seleção pular pro
+  último item sob o ponteiro (sintoma reportado: clicar num console
+  e cair em outro workspace). Agora: na `MoveEvent` com botão
+  esquerdo segurado, o evento não é propagado pra base — seleção
+  trava no item do press; no `release`, se o ponteiro saiu do item
+  original, restauramos a seleção pro item onde o press começou.
+
 ## [0.37.3] — 2026-05-20
 
 ### Corrigido
