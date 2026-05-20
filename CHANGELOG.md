@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.30.2] — 2026-05-20
+
+### Mudado
+- **Sidebar mostra só o modelo na 3a linha do card**
+  (`ui/terminal_child_widget.py`): os números de `ctx %`, `in`, `out` e
+  `cache` que apareciam ao lado do modelo estavam fora do que realmente
+  reflete o estado da sessão e geravam confusão. Agora a linha exibe
+  apenas o modelo encurtado (ex.: `opus-4-7`); custo e detalhes continuam
+  acessíveis pelo menu de contexto.
+
 ## [0.30.1] — 2026-05-20
 
 ### Corrigido
