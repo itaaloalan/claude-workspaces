@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import sys
 
 # Sob KDE Plasma 6 Wayland, cada subprocesso do QtWebEngineProcess
@@ -10,8 +11,9 @@ import sys
 # renderers. Precisa ser setado ANTES de qualquer import do QtWebEngine.
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform=x11")
 
+from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QPalette  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 from .logging_setup import setup_logging  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
@@ -55,6 +57,71 @@ def _build_dark_palette() -> QPalette:
     return pal
 
 
+def _log_ghost_window_diagnostics(log: logging.Logger) -> None:
+    """Dump pra investigar 'janelas fantasmas' (retângulos vazios na
+    overview do Plasma Wayland). Loga: env vars relevantes, todos
+    QWidget top-level com tipo/título/visibilidade/parent, processos
+    QtWebEngineProcess do nosso PID, e o que o KWin enxerga como
+    janelas nossas via krunner WindowsRunner. Roda em 3 momentos:
+    logo após `window.show()`, +500ms, +2000ms — pra capturar
+    surfaces criadas lazy pelos renderers do Chromium."""
+    pid = os.getpid()
+    try:
+        log.warning(
+            "[GHOST-DIAG] env: XDG_SESSION_TYPE=%s WAYLAND_DISPLAY=%s "
+            "DISPLAY=%s QT_QPA_PLATFORM=%s QTWEBENGINE_CHROMIUM_FLAGS=%s "
+            "QTWEBENGINE_DISABLE_SANDBOX=%s",
+            os.environ.get("XDG_SESSION_TYPE"),
+            os.environ.get("WAYLAND_DISPLAY"),
+            os.environ.get("DISPLAY"),
+            os.environ.get("QT_QPA_PLATFORM"),
+            os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS"),
+            os.environ.get("QTWEBENGINE_DISABLE_SANDBOX"),
+        )
+
+        app = QApplication.instance()
+        if app is not None:
+            for i, w in enumerate(app.topLevelWidgets()):
+                cls = type(w).__name__
+                title = w.windowTitle() or "(sem título)"
+                geom = w.geometry()
+                flags = int(w.windowFlags())
+                log.warning(
+                    "[GHOST-DIAG] toplevel[%d] %s title=%r visible=%s "
+                    "geom=%dx%d@%d,%d flags=0x%x parent=%s",
+                    i, cls, title, w.isVisible(),
+                    geom.width(), geom.height(), geom.x(), geom.y(),
+                    flags, type(w.parent()).__name__ if w.parent() else None,
+                )
+
+        try:
+            ps = subprocess.run(
+                ["ps", "--ppid", str(pid), "-o", "pid,cmd"],
+                capture_output=True, text=True, timeout=2,
+            )
+            for line in ps.stdout.strip().splitlines():
+                if "QtWebEngine" in line or "webengine" in line.lower():
+                    log.warning("[GHOST-DIAG] webengine subproc: %s", line.strip())
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+        try:
+            r = subprocess.run(
+                ["qdbus6", "--literal", "org.kde.KWin", "/WindowsRunner",
+                 "org.kde.krunner1.Match", "claude"],
+                capture_output=True, text=True, timeout=2,
+            )
+            count = r.stdout.count("Claude Workspaces") if r.stdout else 0
+            log.warning(
+                "[GHOST-DIAG] KWin reporta %d janelas com 'Claude' no título",
+                count,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            log.warning("[GHOST-DIAG] qdbus6/KWin indisponível")
+    except Exception:
+        log.exception("[GHOST-DIAG] falhou")
+
+
 def main() -> int:
     setup_logging()
     log = logging.getLogger(__name__)
@@ -77,6 +144,13 @@ def main() -> int:
 
     window = MainWindow()
     window.show()
+
+    # Diagnóstico das janelas fantasmas em 3 fases — alguns surfaces
+    # do Chromium só aparecem depois que os renderers iniciam.
+    QTimer.singleShot(0, lambda: _log_ghost_window_diagnostics(log))
+    QTimer.singleShot(500, lambda: _log_ghost_window_diagnostics(log))
+    QTimer.singleShot(2000, lambda: _log_ghost_window_diagnostics(log))
+
     return app.exec()
 
 

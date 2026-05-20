@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.37.8] — 2026-05-20
+
+### Adicionado
+- **Diagnóstico das janelas fantasmas** (`app.py`): `_log_ghost_window_diagnostics`
+  dumpa no `app.log` em 3 fases (T=0, +500ms, +2000ms após `window.show()`):
+  env vars (`XDG_SESSION_TYPE`, `WAYLAND_DISPLAY`, `QT_QPA_PLATFORM`,
+  `QTWEBENGINE_CHROMIUM_FLAGS` etc), todos `QApplication.topLevelWidgets()`
+  com tipo/título/visibilidade/geom/flags/parent, subprocessos
+  `QtWebEngineProcess` filhos do nosso PID, e contagem de janelas com
+  "Claude" no título reportadas pelo `qdbus6 KWin WindowsRunner`. Linhas
+  prefixadas `[GHOST-DIAG]` em WARNING pra ficar fácil de filtrar.
+
 ## [0.37.7] — 2026-05-20
 
 ### Corrigido
