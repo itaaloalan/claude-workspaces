@@ -76,12 +76,22 @@ def _play_sound_async(sound_name: str) -> None:
                     [canberra, "-i", sound_name],
                     capture_output=True, text=True, timeout=5,
                 )
+                stderr = (r.stderr or "").strip()
                 if r.returncode == 0:
-                    log.debug("som tocado via canberra-gtk-play: %s", sound_name)
+                    # INFO (não DEBUG) pra deixar rastro no app.log; canberra
+                    # às vezes loga warnings em stderr mesmo retornando 0
+                    # (ex: cache do tema, sample faltando no tema atual).
+                    if stderr:
+                        log.info(
+                            "canberra-gtk-play rc=0 mas stderr=%r (sound=%s)",
+                            stderr[:200], sound_name,
+                        )
+                    else:
+                        log.info("som tocado via canberra-gtk-play: %s", sound_name)
                     return
                 log.warning(
                     "canberra-gtk-play falhou (rc=%s): stderr=%r",
-                    r.returncode, (r.stderr or "").strip()[:200],
+                    r.returncode, stderr[:200],
                 )
             except (OSError, subprocess.TimeoutExpired) as e:
                 log.warning("canberra-gtk-play erro: %s", e)
@@ -98,12 +108,16 @@ def _play_sound_async(sound_name: str) -> None:
                     [bin_path, sample],
                     capture_output=True, text=True, timeout=5,
                 )
+                stderr = (r.stderr or "").strip()
                 if r.returncode == 0:
-                    log.debug("som tocado via %s: %s", cmd, sample)
+                    if stderr:
+                        log.info("%s rc=0 mas stderr=%r (sample=%s)", cmd, stderr[:200], sample)
+                    else:
+                        log.info("som tocado via %s: %s", cmd, sample)
                     return
                 log.warning(
                     "%s falhou (rc=%s): stderr=%r",
-                    cmd, r.returncode, (r.stderr or "").strip()[:200],
+                    cmd, r.returncode, stderr[:200],
                 )
             except (OSError, subprocess.TimeoutExpired) as e:
                 log.warning("%s erro: %s", cmd, e)

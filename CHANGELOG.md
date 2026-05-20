@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.35.2] — 2026-05-20
+
+### Alterado
+- **Som de notificação — logging mais útil**
+  (`services/desktop_notifier.py`): sucesso do `canberra-gtk-play` /
+  `paplay` / `pw-play` agora loga em **INFO** (antes era DEBUG, então
+  não aparecia no `app.log` com root em INFO — não dava pra confirmar
+  se o som tinha sido disparado). Também capturamos `stderr` mesmo
+  quando `rc=0` e logamos se vier não-vazio, porque o canberra às
+  vezes alerta sobre cache do tema ou sample faltando sem falhar de
+  fato. Sem mudança de comportamento — só telemetria.
+
 ## [0.35.1] — 2026-05-20
 
 ### Alterado
