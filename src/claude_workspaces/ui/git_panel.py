@@ -236,24 +236,32 @@ class GitPanel(QWidget):
             "QPushButton:disabled { color: #444; }"
         )
 
-        def _btn(text: str, tooltip: str, slot) -> QPushButton:
-            b = QPushButton(text)
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic as _ic
+
+        def _icon_btn(qta_name: str, tooltip: str, slot, label: str = "") -> QPushButton:
+            b = QPushButton(f"  {label}" if label else "")
+            b.setIcon(_ic(qta_name, color="#aaa"))
+            b.setIconSize(_QS(13, 13))
             b.setToolTip(tooltip)
             b.setStyleSheet(btn_css)
             b.clicked.connect(slot)
             return b
 
-        layout.addWidget(_btn("↻", "Atualizar", self.refresh))
-        layout.addWidget(_btn("⇡⇣", "Fetch (todos os repos)", self._do_fetch_all))
-        layout.addWidget(_btn("⤓", "Pull ff-only (todos os repos)", self._do_pull_all))
+        layout.addWidget(_icon_btn("fa5s.sync-alt", "Atualizar", self.refresh))
+        layout.addWidget(_icon_btn("fa5s.exchange-alt", "Fetch (todos os repos)", self._do_fetch_all))
+        layout.addWidget(_icon_btn("fa5s.cloud-download-alt", "Pull ff-only (todos os repos)", self._do_pull_all))
         # PR button guardado em self pra poder desabilitar enquanto gh roda
-        self._pr_btn = _btn(
-            "⮏ PR",
+        self._pr_btn = _icon_btn(
+            "fa5s.code-branch",
             "Abrir Pull Request no GitHub (branch atual → base)",
             self._do_open_pr,
+            label="PR",
         )
         layout.addWidget(self._pr_btn)
-        self._toggle_diff_btn = _btn("👁", "Mostrar / esconder diff", self._toggle_diff)
+        self._toggle_diff_btn = _icon_btn(
+            "fa5s.eye", "Mostrar / esconder diff", self._toggle_diff
+        )
         layout.addWidget(self._toggle_diff_btn)
 
     def _build_commit_area(self) -> QWidget:

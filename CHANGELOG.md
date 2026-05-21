@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.1] — 2026-05-21
+
+### Mudado
+- **Toolbar do GitPanel com ícones SVG** (`ui/git_panel.py`):
+  - `↻` → `fa5s.sync-alt` (Atualizar)
+  - `⇡⇣` → `fa5s.exchange-alt` (Fetch)
+  - `⤓` → `fa5s.cloud-download-alt` (Pull ff-only)
+  - `⮏ PR` → `fa5s.code-branch` + label "PR"
+  - `👁` → `fa5s.eye` (Toggle diff)
+  Helper `_icon_btn(qta, tooltip, slot, label)` wraps a criação.
+
 ## [0.59.0] — 2026-05-21
 
 ### Mudado
