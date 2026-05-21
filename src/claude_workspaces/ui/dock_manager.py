@@ -18,6 +18,60 @@ from PySide6.QtCore import QByteArray, QObject
 from PySide6.QtWidgets import QMainWindow, QWidget
 
 
+# QSS dark pro QtAds — o default tem gradiente light nas title bars que
+# destoa do tema escuro. Cobre tab bar, area title bar, splitter handle
+# e dock widget. Cores alinhadas com ui/theme.py.
+_ADS_DARK_QSS = """
+ads--CDockContainerWidget,
+ads--CDockAreaWidget,
+ads--CDockWidget {
+    background: #181818;
+    color: #e6e6e6;
+}
+ads--CDockAreaTitleBar {
+    background: #181818;
+    border-bottom: 1px solid #2a2a2a;
+    padding: 0;
+}
+ads--CDockWidgetTab {
+    background: #1f1f1f;
+    color: #9aa0a6;
+    border: 0;
+    border-right: 1px solid #2a2a2a;
+    padding: 4px 12px;
+    min-height: 22px;
+}
+ads--CDockWidgetTab[activeTab="true"] {
+    background: #181818;
+    color: #e6e6e6;
+    border-bottom: 2px solid #3d6ea8;
+}
+ads--CDockWidgetTab QLabel {
+    color: inherit;
+}
+ads--CTitleBarButton {
+    background: transparent;
+    border: 0;
+    padding: 2px;
+    qproperty-iconSize: 12px 12px;
+}
+ads--CTitleBarButton:hover {
+    background: #2a2a2a;
+    border-radius: 3px;
+}
+ads--CDockSplitter::handle {
+    background: #2a2a2a;
+}
+ads--CDockSplitter::handle:hover {
+    background: #3d6ea8;
+}
+ads--CFloatingDockContainer {
+    background: #181818;
+    border: 1px solid #2a2a2a;
+}
+"""
+
+
 class WorkspaceDockManager(QObject):
     """Donos dos 3 docks do shell de workspaces."""
 
@@ -31,6 +85,7 @@ class WorkspaceDockManager(QObject):
         ads.CDockManager.setAutoHideConfigFlags(ads.CDockManager.DefaultAutoHideConfig)
 
         self._manager = ads.CDockManager(host)
+        self._manager.setStyleSheet(_ADS_DARK_QSS)
         self._docks: dict[str, ads.CDockWidget] = {}
 
     # ---------- API pública ----------

@@ -340,16 +340,31 @@ class MainWindow(QMainWindow):
         self.right_dock = self._build_right_dock()
         self.right_dock.setMinimumWidth(0)
 
-        # Monta os 3 docks. Ordem: center primeiro pra QtAds não promover
-        # left/right a center vazio.
-        self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
+        # Monta os 3 docks. ORDEM IMPORTA: center primeiro — se left/right
+        # entrarem antes, o QtAds não tem dock area pra ancorar e cria um
+        # segundo dock area no mesmo lado (sidebar duplicando, etc).
         self._center_dock = self.body_dock.add_center(self.right_splitter, "Workspace")
+        self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
         self._right_panel_dock = self.body_dock.add_right(self.right_dock, "Ferramentas")
 
         # Restaura layout salvo (tamanhos das colunas). Fallback: ~240/760/340.
-        if not self.body_dock.restore_state_b64(self.settings.body_dock_state):
+        # Schema=1: marca que a 0.54+ tem a ordem de criação correta
+        # (center antes de left/right) — descarta states de versões antigas.
+        _DOCK_SCHEMA = 1
+        saved_state = (
+            self.settings.body_dock_state
+            if self.settings.body_dock_state_schema >= _DOCK_SCHEMA
+            else ""
+        )
+        if not self.body_dock.restore_state_b64(saved_state):
             self._sidebar_dock.dockAreaWidget().resize(240, 600)
             self._right_panel_dock.dockAreaWidget().resize(340, 600)
+        if self.settings.body_dock_state_schema < _DOCK_SCHEMA:
+            self.settings.body_dock_state_schema = _DOCK_SCHEMA
+            try:
+                self.settings.save()
+            except OSError:
+                pass
 
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.

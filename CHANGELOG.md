@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.54.1] — 2026-05-21
+
+### Corrigido
+- **Sidebar duplicada e centro vazio** (`ui/main_window.py`): a ordem
+  de criação dos `CDockWidget`s estava errada — left antes de center
+  faz o QtAds criar um segundo dock area no lado esquerdo em vez de
+  ancorar ao centro. Agora cria center primeiro, depois left/right.
+- **Schema do `body_dock_state` bumpado pra 1** (`settings.py`): states
+  salvos pelas 0.52/0.53 (layout quebrado) são descartados na primeira
+  abertura da 0.54.1. Layout volta ao default e re-persiste correto.
+- **Gradiente branco nas title bars dos docks** (`ui/dock_manager.py`):
+  aplica QSS dark ao QtAds (tab bar, area title bar, splitter handle,
+  floating container) alinhado com o tema do app.
+
 ## [0.54.0] — 2026-05-21
 
 ### Mudado

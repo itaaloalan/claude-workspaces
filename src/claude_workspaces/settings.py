@@ -35,6 +35,10 @@ class Settings:
     # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
     body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, middle, right_dock] (legado pré-QtAds)
     body_dock_state: str = ""  # QtAds CDockManager.saveState() em base64
+    # Schema version do body_dock_state. Bump aqui descarta states salvos
+    # por versões anteriores (ex.: 0.52/0.53 salvaram layout com ordem de
+    # criação errada que duplicava sidebar).
+    body_dock_state_schema: int = 0
     right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]
     workspace_columns_sizes: list[int] = field(default_factory=list)  # legado, sem uso atual
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
