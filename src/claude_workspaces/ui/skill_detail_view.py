@@ -276,11 +276,8 @@ class SkillDetailView(QWidget):
         except LaunchError as e:
             QMessageBox.critical(self, "Falha ao instalar", str(e))
             return
-        QMessageBox.information(
-            self, "Instalado",
-            f"{self._item.name} instalado em:\n{target}\n\n"
-            "Reinicie o Claude no workspace pra ver o recurso disponível.",
-        )
+        from .persistent_toast import flash_toast
+        flash_toast(f"{self._item.name} instalado — reinicie o Claude no workspace")
 
     def _open_editor(self) -> None:
         if not self._item:

@@ -227,7 +227,8 @@ class SettingsPanel(QWidget):
             return
 
         self.settings_saved.emit()
-        QMessageBox.information(self, "Configurações salvas", "Pronto, configurações atualizadas.")
+        from .persistent_toast import flash_toast
+        flash_toast("Configurações salvas")
 
     def _on_reset(self) -> None:
         defaults = Settings()

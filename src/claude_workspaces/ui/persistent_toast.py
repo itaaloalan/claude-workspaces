@@ -325,4 +325,92 @@ def position_toasts(toasts: list[PersistentToast]) -> None:
         y += h + GAP
 
 
-__all__ = ["PersistentToast", "position_toasts"]
+FLASH_DURATION_MS = 2500
+_active_flash_toasts: list["FlashToast"] = []
+
+
+class FlashToast(QWidget):
+    """Toast slim de confirmação — uma linha, sem botões, auto-dismiss.
+
+    Substitui `QMessageBox.information` em casos de "salvou", "importado",
+    "concluído": confirmação rápida que não exige clique do usuário e não
+    deve roubar foco/bloquear a janela. Top-right da tela do cursor, mesma
+    política multi-monitor dos PersistentToasts (porém pilha independente).
+    """
+
+    def __init__(self, message: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent, Qt.WindowType.SplashScreen
+                         | Qt.WindowType.FramelessWindowHint
+                         | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        self.setFixedWidth(WIDTH)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        card = QFrame(self)
+        card.setObjectName("flashCard")
+        card.setStyleSheet(
+            "#flashCard {"
+            "  background: #2b2b2b;"
+            "  border: 1px solid #3878c4;"
+            "  border-left: 3px solid #3878c4;"
+            "  border-radius: 4px;"
+            "}"
+            "QLabel#flashMsg { color: #fff; font-size: 12px; }"
+        )
+        outer.addWidget(card)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(12, 8, 12, 8)
+        label = QLabel(message, card)
+        label.setObjectName("flashMsg")
+        label.setWordWrap(True)
+        lay.addWidget(label)
+
+        QTimer.singleShot(FLASH_DURATION_MS, self.close)
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        try:
+            _active_flash_toasts.remove(self)
+        except ValueError:
+            pass
+        _position_flash_toasts()
+        super().closeEvent(event)
+
+
+def _position_flash_toasts() -> None:
+    cursor_pos = QCursor.pos()
+    screen = QGuiApplication.screenAt(cursor_pos) or QGuiApplication.primaryScreen()
+    if screen is None:
+        return
+    geo = screen.availableGeometry()
+    # Empilha do canto inferior-direito pra cima — separa visualmente dos
+    # PersistentToasts (que vivem no canto superior-direito).
+    x = geo.right() - MARGIN - WIDTH
+    y = geo.bottom() - MARGIN
+    for toast in _active_flash_toasts:
+        lay = toast.layout()
+        if lay is not None:
+            lay.activate()
+        toast.adjustSize()
+        h = toast.sizeHint().height()
+        y -= h
+        toast.setGeometry(x, y, WIDTH, h)
+        y -= GAP
+
+
+def flash_toast(message: str) -> None:
+    """Mostra um toast slim de confirmação no canto inferior-direito.
+
+    Não bloqueia, não rouba foco, auto-dismiss em ~2.5s. Use pra
+    confirmações de ação ("Salvo", "Importado") em vez de `QMessageBox.information`.
+    """
+    toast = FlashToast(message)
+    _active_flash_toasts.append(toast)
+    _position_flash_toasts()
+    toast.show()
+    QTimer.singleShot(0, _position_flash_toasts)
+
+
+__all__ = ["PersistentToast", "position_toasts", "FlashToast", "flash_toast"]

@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.54.0] — 2026-05-21
+
+### Mudado
+- **Confirmações de ação viraram toast slim** em vez de
+  `QMessageBox.information` modal centralizado
+  (`ui/persistent_toast.py` — novo `FlashToast`/`flash_toast`):
+  "Configurações salvas" (`ui/settings_panel.py`), "Salvo" do skill
+  editor (`ui/skill_editor_dialog.py`), "Instalado" da skill
+  (`ui/skill_detail_view.py`, `ui/skill_detail_dialog.py`) e
+  "Rascunho importado / Cópia concluída / Importação concluída"
+  do runner area (`ui/runner_area.py`). O toast aparece no canto
+  inferior-direito da tela do cursor, não rouba foco, e some sozinho
+  em ~2.5s.
+
+### Por quê
+O modal "Pronto, configurações atualizadas." aparecia no centro da
+tela e bloqueava a janela — era a queixa principal: poluído, no
+centro, modal. Confirmações de sucesso não precisam de clique do
+usuário. Erros (`QMessageBox.critical/.warning`) e diálogos que
+mostram output útil (fetch/pull) continuam modais.
+
 ## [0.53.0] — 2026-05-21
 
 ### Adicionado

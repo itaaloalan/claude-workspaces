@@ -255,9 +255,6 @@ class SkillEditorDialog(QDialog):
             QMessageBox.critical(self, "Erro salvando", str(e))
             return
         log.info("Skill/agent salvo: %s", self._item.path)
-        QMessageBox.information(
-            self, "Salvo",
-            f"Conteúdo gravado em:\n{self._item.path}\n\n"
-            f"Backup: {self._item.path.with_suffix(self._item.path.suffix + '.bak')}",
-        )
+        from .persistent_toast import flash_toast
+        flash_toast(f"Salvo: {self._item.path.name}")
         self.accept()

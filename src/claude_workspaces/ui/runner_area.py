@@ -530,11 +530,8 @@ class RunnerArea(QWidget):
             return
         self.runners_changed.emit()
         self._refresh_from_workspace()
-        QMessageBox.information(
-            self,
-            "Rascunho importado",
-            f"Adicionados: {added}. Substituídos: {replaced}.",
-        )
+        from .persistent_toast import flash_toast
+        flash_toast(f"Rascunho importado — adicionados: {added}, substituídos: {replaced}")
 
     def _open_copy_from_workspace_menu(self) -> None:
         """Lista runners workspace-scoped num menu; clique copia pro console."""
@@ -589,11 +586,8 @@ class RunnerArea(QWidget):
                 added += 1
         self.runners_changed.emit()
         self._refresh_from_workspace()
-        QMessageBox.information(
-            self,
-            "Cópia concluída",
-            f"Adicionados: {added}. Substituídos: {replaced}.",
-        )
+        from .persistent_toast import flash_toast
+        flash_toast(f"Cópia concluída — adicionados: {added}, substituídos: {replaced}")
 
     def _import_runners(self) -> None:
         from ..runners_io import import_runners
@@ -612,8 +606,5 @@ class RunnerArea(QWidget):
             return
         self.runners_changed.emit()
         self._refresh_from_workspace()
-        QMessageBox.information(
-            self,
-            "Importação concluída",
-            f"Adicionados: {added}. Substituídos: {replaced}.",
-        )
+        from .persistent_toast import flash_toast
+        flash_toast(f"Importação concluída — adicionados: {added}, substituídos: {replaced}")
