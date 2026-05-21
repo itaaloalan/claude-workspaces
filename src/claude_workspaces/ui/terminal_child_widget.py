@@ -167,6 +167,12 @@ class TerminalChildWidget(QWidget):
         # no _state_label como "Trabalhando · …" pra economizar
         # uma linha do card na sidebar.
         self._last_action: str = ""
+        # Snapshot duplicado dos dados que o footer global também
+        # consome — guardados em campos próprios pra `status_info()`
+        # poder devolver sem reparsear o QLabel.
+        self._model: str = ""
+        self._branch: str = ""
+        self._modified: int = 0
 
         # Bloco de ações fica na própria title row, à direita do título —
         # mantém o título com peso visual (bold) e libera a linha do estado
@@ -474,6 +480,8 @@ class TerminalChildWidget(QWidget):
         arquivos modificados (working tree + staged + untracked).
         `branch` vazio = pasta não é repo git → esconde o label.
         """
+        self._branch = branch
+        self._modified = modified
         if not branch:
             self._git_label.setVisible(False)
             self._git_label.setText("")
@@ -504,6 +512,7 @@ class TerminalChildWidget(QWidget):
         (claude-opus-4-7 → opus-4-7). Os números de ctx/in/out/cache que
         antes apareciam aqui estavam errados na prática — custo e detalhes
         continuam no menu de contexto."""
+        self._model = model or ""
         if not model:
             self._session_label.setVisible(False)
             self._session_label.setText("")
@@ -512,6 +521,21 @@ class TerminalChildWidget(QWidget):
         self._session_label.setText(model_short)
         self._session_label.setToolTip(f"Modelo: {model}")
         self._session_label.setVisible(True)
+
+    def status_info(self) -> dict:
+        """Snapshot do estado dinâmico exposto na sidebar — consumido
+        pelo footer global pra refletir o console selecionado.
+        """
+        return {
+            "state": self._current_state,
+            "state_text": self._compose_state_text(self._current_state),
+            "state_color": STATE_COLOR[self._current_state],
+            "model": _shorten_model(self._model) if self._model else "",
+            "model_full": self._model,
+            "branch": self._branch,
+            "modified": self._modified,
+            "title": self._title,
+        }
 
 
 def _shorten_model(model: str) -> str:

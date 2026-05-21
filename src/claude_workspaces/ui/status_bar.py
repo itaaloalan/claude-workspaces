@@ -97,10 +97,29 @@ class StatusBarWidgets(QWidget):
         self.python = _IconSegment("fa5b.python", py_ver, f"Python interpretando o app — {sys.executable}")
         self.mcp = _IconSegment("fa5s.plug", "MCP: —", "MCPs configurados pra este workspace")
         self.runners = _IconSegment("mdi6.source-branch", "Runners: —", "Runners ativos no workspace")
+
+        # Segmentos do console selecionado — espelham as infos dinâmicas
+        # do card da sidebar: estado (com cor) · modelo · branch git.
+        # Ficam ocultos enquanto não há console selecionado.
+        self._console_sep = _separator()
+        self.console_state = QLabel("")
+        self.console_state.setTextFormat(Qt.TextFormat.RichText)
+        self.console_state.setStyleSheet(_SEG_QSS)
+        self.console_state.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.console_model = _IconSegment("fa5s.robot", "", "Modelo da sessão Claude selecionada")
+        self.console_branch = QLabel("")
+        self.console_branch.setTextFormat(Qt.TextFormat.RichText)
+        self.console_branch.setStyleSheet(_SEG_QSS)
+        self.console_branch.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
         for w in (self.workspace, _separator(), self.stack, _separator(),
                   self.python, _separator(),
-                  self.mcp, _separator(), self.runners):
+                  self.mcp, _separator(), self.runners,
+                  self._console_sep, self.console_state,
+                  self.console_model, self.console_branch):
             h.addWidget(w)
+
+        self._set_console_visible(False)
 
         h.addStretch(1)
 
@@ -129,6 +148,62 @@ class StatusBarWidgets(QWidget):
             self.runners.setText("Runners: —")
         else:
             self.runners.setText(f"Runners: {active}/{total} ativos")
+
+    def _set_console_visible(self, visible: bool) -> None:
+        self._console_sep.setVisible(visible)
+        self.console_state.setVisible(visible)
+        self.console_model.setVisible(visible)
+        self.console_branch.setVisible(visible)
+
+    def set_console_info(self, info: dict | None) -> None:
+        """Atualiza os segmentos do console selecionado.
+
+        `info` é o dict de `TerminalChildWidget.status_info()`; None
+        oculta todos os segmentos.
+        """
+        if info is None:
+            self._set_console_visible(False)
+            return
+        self._set_console_visible(True)
+        # Estado: dot colorido + texto composto (ex.: "Trabalhando · …").
+        color = info.get("state_color", "#9aa0a6")
+        state_text = info.get("state_text", "")
+        title = info.get("title", "")
+        prefix = f"<b>{title}</b> · " if title else ""
+        self.console_state.setText(
+            f"<span style='color:{color}'>●</span> {prefix}{state_text}"
+        )
+        self.console_state.setToolTip(
+            f"Console selecionado: {title}" if title else "Console selecionado"
+        )
+        # Modelo (já vem encurtado de status_info)
+        model = info.get("model", "")
+        self.console_model.setText(model)
+        self.console_model.setVisible(bool(model))
+        full = info.get("model_full") or ""
+        if full:
+            self.console_model.setToolTip(f"Modelo: {full}")
+        # Branch + dirty count
+        branch = info.get("branch", "")
+        modified = int(info.get("modified", 0) or 0)
+        if not branch:
+            self.console_branch.setText("")
+            self.console_branch.setVisible(False)
+        else:
+            short = branch if len(branch) <= 18 else branch[:17] + "…"
+            if modified > 0:
+                self.console_branch.setText(
+                    f"⎇ {short}  <span style='color:#e5b53b'>●{modified}</span>"
+                )
+                self.console_branch.setToolTip(
+                    f"Branch: {branch} — {modified} arquivo(s) modificado(s)"
+                )
+            else:
+                self.console_branch.setText(f"⎇ {short}")
+                self.console_branch.setToolTip(
+                    f"Branch: {branch} — working tree limpo"
+                )
+            self.console_branch.setVisible(True)
 
     def set_task(self, text: str, *, working: bool = False) -> None:
         """Atualiza o segmento da direita: tarefa IA atual.

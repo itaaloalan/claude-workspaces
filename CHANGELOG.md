@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.2] — 2026-05-21
+
+### Adicionado
+- **Footer mostra dados do console selecionado** (`ui/status_bar.py`,
+  `ui/terminal_child_widget.py`, `ui/main_window.py`):
+  - novos segmentos depois de `Runners:`: estado colorido (dot + texto
+    composto, ex.: "Trabalhando · editando arquivo" / "Ocioso · 2m 30s"),
+    modelo encurtado (`opus-4-7`) e branch git + contagem de dirty (`●N`)
+  - novo `TerminalChildWidget.status_info()` expõe snapshot consumido pelo
+    footer; `set_console_info(info|None)` no `StatusBarWidgets` aceita o
+    dict e atualiza/oculta os 3 segmentos
+  - `MainWindow._refresh_status_bar_console()` chamado em
+    `_on_selection_changed`, `_on_idle_tick` (1 Hz, atualiza cronômetro) e
+    `_update_terminal_child` (refresh imediato em transição de estado)
+
 ## [0.59.1] — 2026-05-21
 
 ### Mudado

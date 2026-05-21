@@ -1451,6 +1451,23 @@ class MainWindow(QMainWindow):
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
 
+    def _refresh_status_bar_console(self) -> None:
+        """Sincroniza os segmentos de console do footer com o item
+        selecionado atualmente na sidebar. Se o item selecionado não é
+        um console (ou nada selecionado), oculta os segmentos."""
+        if not hasattr(self, "status_widgets"):
+            return
+        item = self.list_widget.currentItem()
+        widget = self.list_widget.itemWidget(item, 0) if item is not None else None
+        if isinstance(widget, TerminalChildWidget):
+            try:
+                info = widget.status_info()
+            except Exception:
+                info = None
+            self.status_widgets.set_console_info(info)
+        else:
+            self.status_widgets.set_console_info(None)
+
     def _update_status_bar(self, ws: "Workspace | None") -> None:
         """Atualiza os segmentos da QStatusBar. Pode receber None pra
         zerar (workspace vazio)."""
@@ -2124,14 +2141,17 @@ class MainWindow(QMainWindow):
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             self._broadcast_workspace(None)
             self._update_status_bar(None)
+            self._refresh_status_bar_console()
             return
         ws = self._workspace_of_item(current)
         if ws is None:
+            self._refresh_status_bar_console()
             return
         self.details.show_workspace(ws)
         self._broadcast_workspace(ws)
         self._sync_terminal_for(ws)
         self._update_status_bar(ws)
+        self._refresh_status_bar_console()
         self.plugin_coord.dispatch_workspace_opened(ws.id)
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
@@ -2749,6 +2769,10 @@ class MainWindow(QMainWindow):
             if isinstance(widget, TerminalChildWidget):
                 widget.tick_idle()
                 widget.tick_awaiting()
+        # Footer reflete o console selecionado — re-renderiza a cada
+        # segundo pra atualizar cronômetro de ocioso e captar trocas
+        # de estado/branch sem precisar engatar callback em cada update.
+        self._refresh_status_bar_console()
 
     def _on_settings_saved(self) -> None:
         """Re-aplica configs que afetam coordinators / tray ao salvar."""
@@ -3456,6 +3480,8 @@ class MainWindow(QMainWindow):
         # Esconde na sidebar quando a tarefa termina; reaparece se o processo
         # voltar a rodar (raro, mas mantém consistência).
         item.setHidden(state == STATE_DONE)
+        if item is self.list_widget.currentItem():
+            self._refresh_status_bar_console()
         # Se o título base mudou, pode ter resolvido (ou criado) colisão
         # com siblings — re-desambigua o workspace inteiro.
         if previous_base != title:
