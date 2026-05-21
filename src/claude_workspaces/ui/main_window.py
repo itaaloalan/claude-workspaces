@@ -357,9 +357,11 @@ class MainWindow(QMainWindow):
         # Schema bumps:
         #  1 = ordem center→left→right corrigida (0.54.1)
         #  2 = título do center escondido + close button desabilitado +
-        #      garantia de que sidebar/ferramentas voltam visíveis (0.55.3).
-        #      State com Ferramentas closed do schema 1 entrava preso.
-        _DOCK_SCHEMA = 2
+        #      garantia de que sidebar/ferramentas voltam visíveis (0.55.3)
+        #  3 = força sidebar/ferramentas visíveis SEMPRE no startup,
+        #      mesmo após restoreState — o safety net da 0.55.3 não
+        #      funcionava quando o dock saía removido do container (0.55.5)
+        _DOCK_SCHEMA = 3
         saved_state = (
             self.settings.body_dock_state
             if self.settings.body_dock_state_schema >= _DOCK_SCHEMA
@@ -374,12 +376,16 @@ class MainWindow(QMainWindow):
                 self.settings.save()
             except OSError:
                 pass
-        # Safety net: se algum dock principal entrou closed do state restaurado,
-        # força reabrir — sem isso o user fica sem caminho de volta.
+        # Safety net AGRESSIVO: força sidebar e ferramentas visíveis SEMPRE
+        # ao subir, independente do que veio do state restaurado. Quando
+        # o user fecha pela title bar, o dock é removido do container e
+        # toggleView() condicional não traz de volta — chamar setVisible
+        # + toggleView garante o re-anexar.
         for key in ("sidebar", "ferramentas"):
             d = self.body_dock.dock(key)
-            if d is not None and d.isClosed():
+            if d is not None:
                 d.toggleView(True)
+                d.setAsCurrentTab()
 
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.

@@ -143,11 +143,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # ---------- 4 botões grandes ----------
         big_row = QHBoxLayout()
         big_row.setSpacing(8)
-        self._claude_btn = self._make_big_button("📦", "Abrir Claude", primary=True)
+        self._claude_btn = self._make_big_button("claude", "Abrir Claude", primary=True)
         self._claude_btn.clicked.connect(self._on_launch_claude)
         big_row.addWidget(self._claude_btn, stretch=1)
 
-        self._shell_btn = self._make_big_button("📺", "Abrir Terminal")
+        self._shell_btn = self._make_big_button("terminal", "Abrir Terminal")
         self._shell_btn.clicked.connect(self._on_launch_shell)
         big_row.addWidget(self._shell_btn, stretch=1)
 
@@ -281,8 +281,21 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _make_big_button(
         self, icon: str, label: str, *, primary: bool = False
     ) -> QPushButton:
-        """Botão grande estilo card pros 4 launchers do header."""
-        btn = QPushButton(f" {icon}  {label}")
+        """Botão grande estilo card pros 4 launchers do header.
+
+        `icon` é uma chave do dicionário `icons.ICONS` (ex.: 'claude',
+        'terminal', 'vscode') ou o nome qtawesome direto (ex.: 'fa5s.play').
+        """
+        from PySide6.QtCore import QSize
+
+        from .icons import ICONS, ic
+        btn = QPushButton(f"  {label}")
+        # Resolve icon: aceita chave do nosso catálogo ou nome qta direto.
+        qta_name = ICONS.get(icon, icon) if icon else None
+        if qta_name:
+            color = "#ffffff" if primary else "#e6e6e6"
+            btn.setIcon(ic(qta_name, color=color))
+            btn.setIconSize(QSize(16, 16))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setMinimumHeight(32)
         if primary:
@@ -495,17 +508,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def columns_sizes(self) -> list[int]:
         return list(self._columns_splitter.sizes())
 
-    _IDE_ICONS = {
-        "pycharm": "🟢",
-        "intellij": "🟢",
-        "vscode": "🆎",
-        "rider": "🟣",
-        "android_studio": "🤖",
-        "webstorm": "🟢",
-        "rubymine": "🔴",
-        "phpstorm": "🟪",
-    }
-
     def _rebuild_ide_buttons(self, stacks: set[str]) -> None:
         while self._ide_row.count():
             item = self._ide_row.takeAt(0)
@@ -519,13 +521,12 @@ class WorkspaceDetailsPanel(QStackedWidget):
             if not ide_key or ide_key in added:
                 continue
             added.add(ide_key)
-            icon = self._IDE_ICONS.get(ide_key, "🛠")
-            btn = self._make_big_button(icon, f"Abrir {IDE_LABEL[ide_key]}")
+            btn = self._make_big_button(ide_key, f"Abrir {IDE_LABEL[ide_key]}")
             btn.clicked.connect(lambda _, k=ide_key: self._launch_ide(k))
             self._ide_row.addWidget(btn, stretch=1)
 
         if "vscode" not in added:
-            btn = self._make_big_button("🆎", f"Abrir {IDE_LABEL['vscode']}")
+            btn = self._make_big_button("vscode", f"Abrir {IDE_LABEL['vscode']}")
             btn.clicked.connect(lambda: self._launch_ide("vscode"))
             self._ide_row.addWidget(btn, stretch=1)
 

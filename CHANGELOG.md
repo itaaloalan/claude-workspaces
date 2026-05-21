@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.5] — 2026-05-21
+
+### Adicionado
+- **qtawesome (FontAwesome + Material) como dependência** + módulo
+  `ui/icons.py` com catálogo central (`ICONS`) + helper `ic(name, color)`.
+  Pra trocar um ícone do app, só editar o dict `ICONS`.
+- Botões grandes do header (Abrir Claude / Terminal / IDEs) agora usam
+  ícones SVG vetoriais via qtawesome em vez dos emojis 📦📺🟢🆎 que
+  ficavam estranhos no tema dark.
+
+### Corrigido
+- **Ferramentas (right dock) sumia e não voltava no reinício**
+  (`ui/main_window.py`): o safety net da 0.55.3 só chamava
+  `toggleView(True)` se `isClosed()` retornasse True, mas quando o user
+  fecha pela title bar o dock é REMOVIDO do container, não só hidden —
+  e nesse caso `isClosed` era False mas o widget não aparecia.
+  Agora chama `toggleView(True) + setAsCurrentTab()` incondicionalmente
+  no startup pros 2 docks principais. Schema bumpado pra 3 pra invalidar
+  layouts salvos onde o Ferramentas tinha sumido de vez.
+
 ## [0.55.4] — 2026-05-21
 
 ### Adicionado
