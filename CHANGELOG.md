@@ -16,6 +16,19 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   `settings.sessoes_collapsed[ws_id]`. Estado é restaurado ao recriar
   o bucket (re-listagem da sidebar).
 
+## [0.58.10] — 2026-05-21
+
+### Corrigido
+- **Badge do bucket "Sessões Claude" não decrementava ao fechar sessão**
+  (`ui/coordinators/terminal_coordinator._on_tab_removed`): a ordem
+  estava `state.release_tab(tab_id)` ANTES de `tab_removed.emit(tab_id)`,
+  então quando `main_window._handle_tab_removed` ia ler
+  `state.tree_items[tab_id]` pra achar o `QTreeWidgetItem` e remover do
+  tree, encontrava `None` e bailava — sem `removeChild` + sem
+  `_refresh_sessoes_count`. Agora emite antes de liberar o state, então
+  o handler ainda consegue resolver o item, remover do tree e atualizar
+  o badge.
+
 ## [0.58.9] — 2026-05-21
 
 ### Adicionado

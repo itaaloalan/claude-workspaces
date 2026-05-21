@@ -230,6 +230,12 @@ class TerminalCoordinator(QObject):
         self._prev_needs_decision.pop(tab_id, None)
         self._working_started_at.pop(tab_id, None)
         was_in_inbox = tab_id in self.state.inbox
+        # Emite tab_removed ANTES de liberar o state — _handle_tab_removed
+        # em main_window precisa ler state.tree_items[tab_id] pra achar o
+        # QTreeWidgetItem e remover do tree + atualizar badge do bucket
+        # Sessões Claude. Se liberar antes, o lookup volta None e a UI
+        # fica dessincronizada (badge não decrementa).
+        self.tab_removed.emit(tab_id)
         inbox_changed = self.state.release_tab(tab_id)
         if inbox_changed:
             self.inbox_changed.emit(len(self.state.inbox))
@@ -239,7 +245,6 @@ class TerminalCoordinator(QObject):
             self._spinner_timer.stop()
         if not self.state.inbox and self._reminder_timer.isActive():
             self._reminder_timer.stop()
-        self.tab_removed.emit(tab_id)
 
     def _on_tab_focused(self, area: TerminalArea, idx: int) -> None:
         if idx < 0:
