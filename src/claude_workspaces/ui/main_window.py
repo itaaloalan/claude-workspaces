@@ -1707,7 +1707,7 @@ class MainWindow(QMainWindow):
                     w.set_collapsed(not g.isExpanded())
 
             header = RunnerGroupWidget(
-                "Runners workspace",
+                "Runners",
                 on_add_blank=lambda w=ws: self._open_runner_edit(w, None),
                 on_generate=lambda w=ws: self._generate_runner_with_claude(w),
                 on_toggle_collapse=_toggle,
@@ -1721,6 +1721,11 @@ class MainWindow(QMainWindow):
             group.setExpanded(not collapsed)
             header.set_collapsed(collapsed)
             self._runner_group_items[ws.id] = group
+
+        # Atualiza badge sempre — header pode existir desde refresh anterior.
+        existing_header = self.list_widget.itemWidget(group, 0)
+        if isinstance(existing_header, RunnerGroupWidget):
+            existing_header.set_count(len(scoped))
 
         self._runner_tree_items.setdefault(ws.id, {})
         for runner in scoped:

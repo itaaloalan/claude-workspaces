@@ -82,6 +82,17 @@ class RunnerGroupWidget(QWidget):
             f"color: {theme.TEXT_FAINT}; font-weight: 600;"
         )
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # Badge de contagem (escondido se 0/None) — mesmo visual do
+        # bucket Sessões Claude na sidebar.
+        self._count_badge = QLabel("")
+        self._count_badge.setStyleSheet(
+            "QLabel { background: #2a2a2a; color: #9aa0a6; font-size: 9px; "
+            "font-weight: 700; padding: 1px 6px; border-radius: 6px; }"
+        )
+        self._count_badge.setVisible(False)
+        row.addWidget(self._count_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
         row.addStretch(1)
 
         if on_restart_all is not None:
@@ -111,6 +122,14 @@ class RunnerGroupWidget(QWidget):
         self._on_generate = on_generate
         self._add_btn.clicked.connect(self._open_add_menu)
         row.addWidget(self._add_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def set_count(self, count: int | None) -> None:
+        """Mostra '[N]' à direita do label. None ou 0 esconde."""
+        if not count:
+            self._count_badge.setVisible(False)
+            return
+        self._count_badge.setText(str(count))
+        self._count_badge.setVisible(True)
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do chevron (› recolhido, ⌄ expandido)."""

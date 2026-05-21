@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.5] — 2026-05-21
+
+### Mudado
+- **"Runners workspace" → "Runners" com badge de contagem**
+  (`ui/runner_group_widget.py`, `ui/main_window.py`): label renomeado,
+  novo `set_count(N)` exibe badge `[N]` à direita do label, mesmo
+  visual do bucket "Sessões Claude (N)". Atualizado em
+  `_install_runner_children` independente de o header ser novo ou
+  já existir — count reflete o número de runners workspace-scope.
+
 ## [0.57.4] — 2026-05-21
 
 ### Removido
