@@ -787,14 +787,11 @@ class MainWindow(QMainWindow):
 
     # Spec dos panels do dock — adicionar um novo painel é só estender
     # essa lista. factory recebe MainWindow pra acessar dependencies.
+    # Ordem visual no splitter: do topo pro fim segue a ordem desta lista.
+    # Default: Git primeiro (topo, mais usado em PR/commit) → Skills →
+    # Arquivos → Memória. Match com mockup que tem Git acima de tabs
+    # Skills/Agents/Commands.
     DOCK_PANEL_SPECS: list[DockPanelSpec] = [
-        DockPanelSpec(
-            panel_id="files",
-            title="Arquivos",
-            icon="📁",
-            factory=lambda mw: mw._build_files_panel(),
-            default_open=True,
-        ),
         DockPanelSpec(
             panel_id="git",
             title="Git",
@@ -803,17 +800,24 @@ class MainWindow(QMainWindow):
             default_open=True,
         ),
         DockPanelSpec(
-            panel_id="memory",
-            title="Memória",
-            icon="❏",
-            factory=lambda mw: MemoryPanel(),
-            default_open=False,
-        ),
-        DockPanelSpec(
             panel_id="skills",
             title="Skills",
             icon="✦",
             factory=lambda mw: SkillsPanel(settings=mw.settings),
+            default_open=True,
+        ),
+        DockPanelSpec(
+            panel_id="files",
+            title="Arquivos",
+            icon="📁",
+            factory=lambda mw: mw._build_files_panel(),
+            default_open=True,
+        ),
+        DockPanelSpec(
+            panel_id="memory",
+            title="Memória",
+            icon="❏",
+            factory=lambda mw: MemoryPanel(),
             default_open=False,
         ),
     ]

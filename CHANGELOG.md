@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.0] — 2026-05-21
+
+### Mudado
+- **Right dock reordenado pra Git → Skills → Arquivos** (topo → base)
+  (`ui/main_window.DOCK_PANEL_SPECS`). Skills agora também
+  `default_open=True`. Layout final ao abrir o app:
+  - Git no topo (mais usado em PR/commit)
+  - Skills/Agentes/Comandos (com tabs internas, ver 0.58.13)
+  - Arquivos (file tree + busca)
+  - Memória (oculto por default — toggle via strip)
+  Match com mockup que mostra Git acima das tabs Skills/Agentes/Comandos.
+
 ## [0.58.13] — 2026-05-21
 
 ### Mudado
