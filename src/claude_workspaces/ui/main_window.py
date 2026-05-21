@@ -580,10 +580,25 @@ class MainWindow(QMainWindow):
         self._term_restore_btn.setEnabled(not (content_visible and terminal_full))
 
     def _launch_current_claude(self) -> None:
+        """Abre Claude novo no workspace selecionado. Tolera item-filho
+        (sobe pro parent) e cai pro details.workspace como último recurso
+        — botão ＋ da tab bar funciona mesmo sem seleção explícita na sidebar."""
+        ws: Workspace | None = None
         current = self.list_widget.currentItem()
-        if current is None:
+        if current is not None:
+            # Bug antigo: data() de QTreeWidgetItem precisa de (col, role) —
+            # `data(Qt.UserRole)` retorna o texto da coluna 0, não o ws.
+            data = current.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, Workspace):
+                ws = data
+            elif current.parent() is not None:
+                pdata = current.parent().data(0, Qt.ItemDataRole.UserRole)
+                if isinstance(pdata, Workspace):
+                    ws = pdata
+        if ws is None and self.details.workspace is not None:
+            ws = self.details.workspace
+        if ws is None:
             return
-        ws = current.data(Qt.ItemDataRole.UserRole)
         self._launch_claude_for(ws, "", "")
 
     def _toggle_right_dock(self) -> None:
@@ -849,19 +864,22 @@ class MainWindow(QMainWindow):
             "  border-bottom: 2px solid #3d6ea8; }"
             "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
         )
-        self._bottom_tabs.addTab(self.terminal_host, "📦  Claude console")
+        from .icons import ICONS, ic
+        idx_console = self._bottom_tabs.addTab(self.terminal_host, "Claude console")
+        self._bottom_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
 
         # Botão "+" no corner da tab bar — abre Claude no workspace ativo
+        from PySide6.QtCore import QSize
         from PySide6.QtWidgets import QPushButton as _QPB
-        new_session_btn = _QPB("＋")
+        new_session_btn = _QPB()
+        new_session_btn.setIcon(ic(ICONS["add"], color="#c8c8c8"))
+        new_session_btn.setIconSize(QSize(14, 14))
         new_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_session_btn.setFixedSize(28, 24)
+        new_session_btn.setFixedSize(32, 28)
         new_session_btn.setToolTip("Nova sessão Claude no workspace ativo (Ctrl+N)")
         new_session_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 0; font-size: 14px; }"
-            "QPushButton:hover { color: #e6e6e6; background: #2a2a2a; "
-            "border-radius: 4px; }"
+            "QPushButton { background: transparent; border: 0; padding: 0; margin: 0 6px; }"
+            "QPushButton:hover { background: #2a2a2a; border-radius: 4px; }"
         )
         new_session_btn.clicked.connect(self._launch_current_claude)
         self._bottom_tabs.setCornerWidget(new_session_btn, Qt.Corner.TopRightCorner)
@@ -875,7 +893,8 @@ class MainWindow(QMainWindow):
             "background: #0e0e0e; color: #555; padding: 28px;"
         )
         self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
-        self._bottom_tabs.addTab(self.runner_host, "🌳  Runners workspace")
+        idx_rw = self._bottom_tabs.addTab(self.runner_host, "Runners workspace")
+        self._bottom_tabs.setTabIcon(idx_rw, ic(ICONS["runners_workspace"], color="#9aa0a6"))
 
         # Terceira aba — runners de console (cada aba Claude tem seu próprio
         # painel; aqui aparece o painel do console ativo).
@@ -893,7 +912,8 @@ class MainWindow(QMainWindow):
         self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
             crh_empty
         )
-        self._bottom_tabs.addTab(self.console_runner_host, "📑  Runners (console)")
+        idx_rc = self._bottom_tabs.addTab(self.console_runner_host, "Runners (console)")
+        self._bottom_tabs.setTabIcon(idx_rc, ic(ICONS["runners_console"], color="#9aa0a6"))
 
         layout.addWidget(self._bottom_tabs, stretch=1)
         return pane

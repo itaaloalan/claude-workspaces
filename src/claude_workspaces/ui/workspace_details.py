@@ -120,9 +120,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # ---------- Chips row: Stack / Path / MCP ----------
         chips_row = QHBoxLayout()
         chips_row.setSpacing(8)
-        self._stack_chip = self._make_chip("⏷", "")
-        self._path_chip = self._make_chip("📁", "")
-        self._mcp_chip = self._make_chip("🔌", "")
+        self._stack_chip = self._make_chip("stack", "")
+        self._path_chip = self._make_chip("folder", "")
+        self._mcp_chip = self._make_chip("mcp", "")
         chips_row.addWidget(self._stack_chip)
         chips_row.addWidget(self._path_chip)
         chips_row.addWidget(self._mcp_chip)
@@ -260,22 +260,48 @@ class WorkspaceDetailsPanel(QStackedWidget):
             return
         self._refresh_mcp_status()
 
-    def _make_chip(self, icon: str, text: str) -> QLabel:
-        """Chip estilo pill com ícone unicode + texto. Usado pra Stack,
-        Path e MCP no cabeçalho do workspace."""
-        lbl = QLabel()
-        lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        lbl.setStyleSheet(
-            "QLabel { background: #1f1f1f; color: #c8c8c8; "
-            "border: 1px solid #2c2c2c; border-radius: 12px; "
-            "padding: 4px 12px; font-size: 11px; }"
-        )
-        lbl.setProperty("_icon", icon)
-        return lbl
+    def _make_chip(self, icon_key: str, text: str) -> QWidget:
+        """Chip estilo pill com ícone SVG (qtawesome) + texto. Usado pra
+        Stack, Path e MCP no cabeçalho do workspace.
 
-    def _set_chip(self, chip: QLabel, text: str, *, visible: bool = True) -> None:
-        icon = chip.property("_icon") or ""
-        chip.setText(f"{icon}  {text}" if icon else text)
+        Retorna um QWidget container (não QLabel) pra poder embutir um
+        QLabel-ícone + QLabel-texto lado a lado.
+        """
+        from PySide6.QtCore import QSize
+
+        from .icons import ICONS, ic
+        host = QWidget()
+        host.setStyleSheet(
+            "QWidget { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "border-radius: 12px; }"
+        )
+        h = QHBoxLayout(host)
+        h.setContentsMargins(10, 3, 12, 3)
+        h.setSpacing(6)
+
+        icon_lbl = QLabel()
+        qta_name = ICONS.get(icon_key, "")
+        if qta_name:
+            pix = ic(qta_name, color="#9aa0a6").pixmap(QSize(12, 12))
+            icon_lbl.setPixmap(pix)
+        h.addWidget(icon_lbl)
+
+        text_lbl = QLabel(text)
+        text_lbl.setStyleSheet(
+            "QLabel { background: transparent; border: 0; color: #c8c8c8; "
+            "font-size: 11px; }"
+        )
+        text_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        h.addWidget(text_lbl)
+
+        # Refs pra o _set_chip atualizar depois
+        host.setProperty("_text_lbl", text_lbl)
+        return host
+
+    def _set_chip(self, chip: QWidget, text: str, *, visible: bool = True) -> None:
+        text_lbl = chip.property("_text_lbl")
+        if isinstance(text_lbl, QLabel):
+            text_lbl.setText(text)
         chip.setVisible(visible)
 
     def _make_big_button(

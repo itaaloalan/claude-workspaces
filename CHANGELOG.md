@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.6] — 2026-05-21
+
+### Adicionado / Mudado
+- Tabs centrais (Claude console / Runners workspace / Runners console)
+  agora com **ícones SVG** via qtawesome em vez dos emojis no texto.
+- Chips do header (Stack / Path / MCP) viraram QWidget container com
+  ícone SVG + texto em vez de emoji no QLabel.
+- Botão `＋` no corner da tab bar com ícone SVG legível (era um glyph
+  diminuto antes).
+
+### Corrigido
+- **`_launch_current_claude` não fazia nada** ao clicar no `＋`
+  (`ui/main_window.py`): bug antigo no `current.data(Qt.UserRole)`
+  (faltava o argumento `col=0`), o que retornava o texto da coluna
+  em vez do `Workspace`. Agora trata corretamente, sobe pro parent
+  se for item-filho, e cai pro `details.workspace` como fallback.
+
 ## [0.55.5] — 2026-05-21
 
 ### Adicionado
