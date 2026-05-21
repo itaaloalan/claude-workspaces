@@ -14,8 +14,40 @@ from __future__ import annotations
 import base64
 
 import PySide6QtAds as ads
-from PySide6.QtCore import QByteArray, QObject
+from PySide6.QtCore import QByteArray, QObject, QRect, Qt
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMainWindow, QWidget
+
+
+def _glyph_icon(glyph: str, size: int = 14, color: str = "#c8c8c8") -> QIcon:
+    """Renderiza um glyph unicode numa QPixmap transparente. Usado pros
+    botões de title bar do QtAds — os ícones default são pretos e somem
+    no tema dark."""
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+    p.setPen(QPen(QColor(color)))
+    font = QFont()
+    font.setPixelSize(size - 2)
+    font.setBold(True)
+    p.setFont(font)
+    p.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, glyph)
+    p.end()
+    return QIcon(pm)
+
+
+def _install_dark_icons() -> None:
+    """Substitui os ícones default do QtAds por glyphs unicode claros.
+    Chamado uma vez quando o primeiro CDockManager é criado."""
+    ip = ads.CDockManager.iconProvider()
+    ip.registerCustomIcon(ads.TabCloseIcon, _glyph_icon("✕"))
+    ip.registerCustomIcon(ads.DockAreaCloseIcon, _glyph_icon("✕"))
+    ip.registerCustomIcon(ads.DockAreaMenuIcon, _glyph_icon("⋮"))
+    ip.registerCustomIcon(ads.DockAreaUndockIcon, _glyph_icon("⧉"))
+    ip.registerCustomIcon(ads.DockAreaMinimizeIcon, _glyph_icon("—"))
+    ip.registerCustomIcon(ads.AutoHideIcon, _glyph_icon("📌"))
 
 
 # QSS dark pro QtAds — o default tem gradiente light nas title bars que
@@ -52,8 +84,9 @@ ads--CDockWidgetTab QLabel {
 ads--CTitleBarButton {
     background: transparent;
     border: 0;
-    padding: 2px;
-    qproperty-iconSize: 12px 12px;
+    padding: 3px;
+    min-width: 18px;
+    min-height: 18px;
 }
 ads--CTitleBarButton:hover {
     background: #2a2a2a;
@@ -85,6 +118,7 @@ class WorkspaceDockManager(QObject):
         ads.CDockManager.setAutoHideConfigFlags(ads.CDockManager.DefaultAutoHideConfig)
 
         self._manager = ads.CDockManager(host)
+        _install_dark_icons()
         self._manager.setStyleSheet(_ADS_DARK_QSS)
         self._docks: dict[str, ads.CDockWidget] = {}
 

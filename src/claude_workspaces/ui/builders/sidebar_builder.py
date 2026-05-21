@@ -270,7 +270,13 @@ class SidebarBuilder:
             "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
             "border-radius: 4px; padding: 5px 8px; color: #e6e6e6; font-size: 11px; }"
             "QLineEdit:focus { border-color: #3d6ea8; }"
+            "QLineEdit { selection-background-color: #3d6ea8; }"
         )
+        # Placeholder mais visível (default fica quase invisível em tema escuro)
+        pal = self.search_input.palette()
+        from PySide6.QtGui import QColor
+        pal.setColor(pal.ColorRole.PlaceholderText, QColor("#888"))
+        self.search_input.setPalette(pal)
         if self._on_search_workspaces is not None:
             self.search_input.textChanged.connect(self._on_search_workspaces)
         layout.addWidget(self.search_input)

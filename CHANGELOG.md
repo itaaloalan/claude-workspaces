@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.54.3] — 2026-05-21
+
+### Corrigido
+- **Botões da title bar dos docks invisíveis/clicáveis sem efeito**
+  (`ui/dock_manager.py`): os ícones default do QtAds são pretos
+  sem alpha e somem no tema dark. Agora `_install_dark_icons` registra
+  glyphs unicode claros (✕ ⋮ ⧉ — 📌) via `CIconProvider.registerCustomIcon`
+  pros 6 tipos de ícone (TabClose, DockAreaClose, Menu, Undock,
+  Minimize, AutoHide).
+- Removido `qproperty-iconSize: 12px 12px` que restringia o hit area
+  dos botões; usa `min-width/min-height: 18px` em vez.
+- Placeholder do input "Buscar workspaces" usa palette explícita pra
+  ficar visível em fundo escuro (antes ficava quase imperceptível).
+
 ## [0.54.2] — 2026-05-21
 
 ### Corrigido
