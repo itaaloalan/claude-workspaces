@@ -6,6 +6,28 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.1] — 2026-05-21
+
+### Corrigido
+- **Click numa sessão Claude na sidebar não focava workspace no centro**
+  (`ui/main_window.py`): handlers `_on_selection_changed`,
+  `_on_tree_item_clicked`, `_on_tree_item_activated` só subiam 1 nível
+  procurando o Workspace, mas agora o terminal vive dentro do bucket
+  Sessões Claude — parent é o bucket. Novo helper
+  `_workspace_of_item(item)` sobe TODOS os pais até achar.
+- **Sidebar (esquerda) voltou com title bar "Sidebar"**
+  (`ui/main_window.py`): `titleBar().setVisible(False)` rodava ANTES
+  do safety net `toggleView(True)`, que recria o `dockAreaWidget` e
+  perde a visibility. Movido pra DEPOIS do safety net.
+- **Botão `＋` no corner da tab bar quebrado**
+  (`ui/main_window.py`): `QPushButton` com `setFixedSize(32,28)`
+  destoava da altura da tab bar e ficava com hit area inconsistente.
+  Trocado por `QToolButton` com `setAutoRaise(True)` que casa
+  naturalmente com a altura nativa do tab bar.
+- **Badge "Sessões Claude (N)" não atualizava ao fechar sessão**
+  (`ui/main_window._handle_tab_removed`): agora detecta se parent_item
+  é o bucket, sobe pro workspace real e chama `_refresh_sessoes_count`.
+
 ## [0.57.0] — 2026-05-21
 
 ### Adicionado

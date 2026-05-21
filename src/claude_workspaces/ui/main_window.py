@@ -347,11 +347,9 @@ class MainWindow(QMainWindow):
         self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
         self._right_panel_dock = self.body_dock.add_right(self.right_dock, "Ferramentas")
 
-        # Dock central e sidebar não precisam de title bar — o conteúdo já
-        # tem cabeçalho próprio. Só o "Ferramentas" (direita) mantém a barra
-        # do QtAds com pin/float/menu, igual ao mockup.
-        self._center_dock.dockAreaWidget().titleBar().setVisible(False)
-        self._sidebar_dock.dockAreaWidget().titleBar().setVisible(False)
+        # NOTA: hide das title bars (sidebar/center) acontece DEPOIS do
+        # safety net abaixo — o toggleView recria o dockAreaWidget e
+        # apaga o setVisible(False).
 
         # Restaura layout salvo (tamanhos das colunas). Fallback: ~240/760/340.
         # Schema bumps:
@@ -386,6 +384,13 @@ class MainWindow(QMainWindow):
             if d is not None:
                 d.toggleView(True)
                 d.setAsCurrentTab()
+
+        # AGORA esconde as title bars (precisa ser após o toggleView,
+        # senão o area recriado restaura a barra visível).
+        for d in (self._center_dock, self._sidebar_dock):
+            area = d.dockAreaWidget()
+            if area is not None:
+                area.titleBar().setVisible(False)
 
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.
@@ -888,18 +893,20 @@ class MainWindow(QMainWindow):
         idx_console = self._bottom_tabs.addTab(self.terminal_host, "Claude console")
         self._bottom_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
 
-        # Botão "+" no corner da tab bar — abre Claude no workspace ativo
+        # Botão "+" no corner da tab bar — abre Claude no workspace ativo.
+        # QToolButton + AutoRaise + fixedHeight casa naturalmente com a
+        # altura da tab bar (sem o quadrado destacado do QPushButton).
         from PySide6.QtCore import QSize
-        from PySide6.QtWidgets import QPushButton as _QPB
-        new_session_btn = _QPB()
+        from PySide6.QtWidgets import QToolButton
+        new_session_btn = QToolButton()
         new_session_btn.setIcon(ic(ICONS["add"], color="#c8c8c8"))
-        new_session_btn.setIconSize(QSize(14, 14))
+        new_session_btn.setIconSize(QSize(13, 13))
+        new_session_btn.setAutoRaise(True)
         new_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_session_btn.setFixedSize(32, 28)
         new_session_btn.setToolTip("Nova sessão Claude no workspace ativo (Ctrl+N)")
         new_session_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: 0; padding: 0; margin: 0 6px; }"
-            "QPushButton:hover { background: #2a2a2a; border-radius: 4px; }"
+            "QToolButton { background: transparent; border: 0; padding: 0 8px; }"
+            "QToolButton:hover { background: #2a2a2a; }"
         )
         new_session_btn.clicked.connect(self._launch_current_claude)
         self._bottom_tabs.setCornerWidget(new_session_btn, Qt.Corner.TopRightCorner)
@@ -1983,6 +1990,17 @@ class MainWindow(QMainWindow):
 
     # ---------- seleção / settings ----------
 
+    def _workspace_of_item(self, item) -> "Workspace | None":
+        """Sobe pelos pais até achar um Workspace. Lida com o bucket
+        Sessões Claude que fica entre o terminal e o workspace."""
+        node = item
+        while node is not None:
+            data = node.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, Workspace):
+                return data
+            node = node.parent()
+        return None
+
     def _on_selection_changed(self, current, _previous) -> None:
         # Atualiza a barra branca de seleção dos consoles: zera a do
         # item anterior, liga a do novo. Só TerminalChildWidget tem
@@ -2003,14 +2021,7 @@ class MainWindow(QMainWindow):
             self._broadcast_workspace(None)
             self._update_status_bar(None)
             return
-        data = current.data(0, Qt.ItemDataRole.UserRole)
-        ws: Workspace | None = None
-        if isinstance(data, Workspace):
-            ws = data
-        elif current.parent() is not None:
-            pdata = current.parent().data(0, Qt.ItemDataRole.UserRole)
-            if isinstance(pdata, Workspace):
-                ws = pdata
+        ws = self._workspace_of_item(current)
         if ws is None:
             return
         self.details.show_workspace(ws)
@@ -2036,18 +2047,20 @@ class MainWindow(QMainWindow):
             return
         if not isinstance(data, int):  # só tab_id de aba viva
             return
-        pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
-        if not isinstance(pdata, Workspace):
+        # Sobe pelos pais até achar o workspace (terminal agora vive
+        # dentro do bucket Sessões Claude, que fica entre).
+        ws = self._workspace_of_item(item)
+        if ws is None:
             return
-        self._focus_terminal_tab(pdata, data)
+        self._focus_terminal_tab(ws, data)
 
     def _on_tree_item_activated(self, item: QTreeWidgetItem, _col: int) -> None:
         # Double-click ou Enter numa aba viva foca a aba existente.
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
-        pdata = item.parent().data(0, Qt.ItemDataRole.UserRole)
-        if not isinstance(pdata, Workspace):
+        ws = self._workspace_of_item(item)
+        if ws is None:
             return
         # Linha de runner ("footer") → abre aba Runners + foca o runner
         if (
@@ -2055,11 +2068,11 @@ class MainWindow(QMainWindow):
             and len(data) == 3
             and data[0] == "runner"
         ):
-            self._open_runner_from_sidebar(pdata, data[2])
+            self._open_runner_from_sidebar(ws, data[2])
             return
         if not isinstance(data, int):  # tab_id
             return
-        self._focus_terminal_tab(pdata, data)
+        self._focus_terminal_tab(ws, data)
 
     def _open_runner_from_sidebar(self, workspace: Workspace, runner_id: str) -> None:
         """Switch pro bottom tab "Runners" e foca a aba do runner.
@@ -2592,12 +2605,20 @@ class MainWindow(QMainWindow):
                 self._console_runner_group_items.pop(gk, None)
             parent_item.removeChild(item)
         self._tab_base_titles.pop(tab_id, None)
-        # Aba que saiu pode ter sido a única causa de colisão — re-disambigua
+        # Aba que saiu pode ter sido a única causa de colisão — re-disambigua.
+        # parent_item agora é o bucket Sessões Claude (não o workspace);
+        # _refresh_workspace_child_titles tolera, e _refresh_empty_placeholder
+        # precisa receber o workspace real → sobe um nível se for bucket.
         if parent_item is not None:
             self._refresh_workspace_child_titles(parent_item)
+            ws_real = parent_item
+            if parent_item.data(0, Qt.ItemDataRole.UserRole) == self._SESSOES_BUCKET_ROLE:
+                ws_real = parent_item.parent() or parent_item
+                # Atualiza badge de contagem do bucket
+                self._refresh_sessoes_count(ws_real)
             # Se o workspace ficou sem nenhum console, restaura o placeholder
             # com botão "Nova sessão do claude…" pra dar uma ação visível.
-            self._refresh_empty_placeholder(parent_item)
+            self._refresh_empty_placeholder(ws_real)
         # Limpa o RunnerArea do console fechado: agora o painel mora no
         # top tab "Runners (console)" (não mais embutido no terminal),
         # então é responsabilidade nossa remover do QStackedWidget.
