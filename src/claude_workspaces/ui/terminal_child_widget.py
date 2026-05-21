@@ -95,38 +95,24 @@ class TerminalChildWidget(QWidget):
         self.setMaximumHeight(38)
 
         outer = QHBoxLayout(self)
-        # 2px de margem à esquerda pra que o `_status_strip` (3px) fique
-        # dentro da borda 1px do QTreeWidget::item — sem isso o strip
-        # encosta no canto e visualmente "fura" o card.
-        outer.setContentsMargins(2, 0, 4, 0)
+        outer.setContentsMargins(6, 0, 4, 0)
         outer.setSpacing(6)
 
-        # Faixa vertical 3px no canto esquerdo do row, pintada com a cor do
-        # estado atual (ocioso=vermelho, trabalhando=âmbar, aguardando=laranja,
-        # concluído=verde). Substitui a "linha de seleção" monocromática por
-        # uma pista visual permanente do estado de cada console.
-        # Barra branca de seleção — fica encostada do lado esquerdo do
-        # `_status_strip`, mesma altura, escondida por padrão. O
-        # `MainWindow._on_selection_changed` chama `set_selected(bool)`
-        # pra mostrar/esconder. É a única pista visual de "este é o
-        # console selecionado" — o bg do row é transparente.
-        # Mantida sempre no layout (mesmo quando não selecionada) pra não
-        # deslocar 2+spacing px de todo o conteúdo do card ao selecionar —
-        # isso fazia a linha de estado desalinhar entre consoles. Alterna
-        # só a cor (transparente ↔ branca) via `set_selected`.
+        # Seleção: em vez de barra vertical à esquerda, usa um tint
+        # sutil no bg do widget inteiro (set_selected pinta um RGBA
+        # discreto). Estado continua sinalizado pelo texto colorido em
+        # _state_label ("Trabalhando · …" em âmbar) + status bar global.
+        # Mantemos os atributos pra preservar API (`set_selected` etc),
+        # mas eles ficam escondidos / com width 0.
         self._selection_strip = QFrame()
-        self._selection_strip.setFixedWidth(2)
-        self._selection_strip.setStyleSheet(
-            "background: transparent; border: 0;"
-        )
-        outer.addWidget(self._selection_strip)
-
+        self._selection_strip.setVisible(False)
         self._status_strip = QFrame()
-        self._status_strip.setFixedWidth(3)
-        self._status_strip.setStyleSheet(
-            f"background: {STATE_COLOR[STATE_IDLE]}; border: 0;"
+        self._status_strip.setVisible(False)
+        # Auto-render: setAutoFillBackground pra QSS pegar no widget pai.
+        self.setAutoFillBackground(False)
+        self.setStyleSheet(
+            "TerminalChildWidget { background: transparent; border-radius: 4px; }"
         )
-        outer.addWidget(self._status_strip)
 
         # Coluna do ícone (spinner ‖/⠋) foi removida do layout — a faixa
         # vertical de estado (`_status_strip`) já cumpre o papel de mostrar
@@ -436,14 +422,19 @@ class TerminalChildWidget(QWidget):
             self._rename_btn.clicked.connect(lambda _=False: on_rename())
 
     def set_selected(self, selected: bool) -> None:
-        """Mostra/esconde a barra branca de seleção encostada do lado
-        direito do `_status_strip`. A strip fica sempre no layout
-        (largura fixa reservada) — alterna só a cor pra não deslocar o
-        conteúdo do card ao selecionar."""
-        color = "#ffffff" if selected else "transparent"
-        self._selection_strip.setStyleSheet(
-            f"background: {color}; border: 0;"
-        )
+        """Pinta o background do card com tint discreto quando selecionado.
+        Sem barras laterais (anteriormente _selection_strip + _status_strip)
+        pra reduzir poluição visual da sidebar. Estado do console continua
+        sinalizado pelo texto colorido em `_state_label` + status bar global."""
+        if selected:
+            self.setStyleSheet(
+                "TerminalChildWidget { background: rgba(61, 110, 168, 38); "
+                "border-radius: 4px; border-left: 2px solid #3d6ea8; }"
+            )
+        else:
+            self.setStyleSheet(
+                "TerminalChildWidget { background: transparent; border-radius: 4px; }"
+            )
 
     def set_actions_visible(self, visible: bool) -> None:
         """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do

@@ -85,17 +85,33 @@ class SkillsPanel(QWidget):
         # antes da hora)
         self._kind_chips: list[QPushButton] = []
         self._source_chips: list[QPushButton] = []
-        outer.addLayout(self._build_chip_row(
-            "Tipo:",
-            [
-                (self.KIND_FILTER_ALL, "Todos"),
-                (KIND_SKILL, "Skills"),
-                (KIND_AGENT, "Agentes"),
-                (KIND_COMMAND, "Comandos"),
-            ],
-            self._set_kind_filter,
-            self._kind_chips,
-        ))
+
+        # Tabs de tipo (Tudo / Skills / Agentes / Comandos) — visual de
+        # tabs verticais com underline na ativa, em vez de chips.
+        # Match com mockup que separa tipo (tabs) de fonte (chips).
+        from PySide6.QtWidgets import QTabBar
+        self._kind_tabs = QTabBar()
+        self._kind_tabs.setDrawBase(False)
+        self._kind_tabs.setExpanding(False)
+        self._kind_tabs.setStyleSheet(
+            "QTabBar { background: transparent; }"
+            "QTabBar::tab { background: transparent; color: #9aa0a6; "
+            "  padding: 5px 14px; border: 0; border-bottom: 2px solid transparent;"
+            "  font-size: 11px; min-height: 16px; }"
+            "QTabBar::tab:selected { color: #e6e6e6; "
+            "  border-bottom: 2px solid #3d6ea8; }"
+            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
+        )
+        self._kind_tab_values = [
+            self.KIND_FILTER_ALL, KIND_SKILL, KIND_AGENT, KIND_COMMAND,
+        ]
+        for label in ("Todos", "Skills", "Agentes", "Comandos"):
+            self._kind_tabs.addTab(label)
+        self._kind_tabs.currentChanged.connect(
+            lambda idx: self._set_kind_filter(self._kind_tab_values[idx])
+        )
+        outer.addWidget(self._kind_tabs)
+
         outer.addLayout(self._build_chip_row(
             "Fonte:",
             [

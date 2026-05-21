@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.13] — 2026-05-21
+
+### Mudado
+- **Strips verticais (seleção + estado) removidos do card do console**
+  (`ui/terminal_child_widget.py`): a barra branca de seleção e a faixa
+  colorida de estado (ocioso/trabalhando/etc) à esquerda do card
+  poluíam a sidebar. Agora:
+  - Seleção: tint discreto de bg azul + border-left azul de 2px no
+    card inteiro.
+  - Estado: continua sinalizado pelo texto colorido em `_state_label`
+    ("Trabalhando · …") + status bar global (tarefa em execução).
+- `_selection_strip` e `_status_strip` mantidos como atributos
+  escondidos pra preservar a API de `update_state`/`set_selected`.
+
 ## [0.58.12] — 2026-05-21
 
 ### Adicionado
