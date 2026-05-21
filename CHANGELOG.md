@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.4] — 2026-05-21
+
+### Adicionado
+- **Status bar permanente** (`ui/status_bar.py`, `ui/main_window.py`):
+  workspace ativo · stack · MCP · runners ativos · ··· · encoding (UTF-8)
+  · line ending (LF) · indent (Spaces:4) · tarefa IA atual.
+  Wirada em `_on_selection_changed` e `_refresh_item_label`.
+
+### Mudado
+- Title bar do dock "Sidebar" também escondida — só "Ferramentas"
+  (direita) mantém title bar do QtAds (pin/float/menu).
+
 ## [0.55.3] — 2026-05-21
 
 ### Corrigido

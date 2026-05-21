@@ -347,10 +347,11 @@ class MainWindow(QMainWindow):
         self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
         self._right_panel_dock = self.body_dock.add_right(self.right_dock, "Ferramentas")
 
-        # O dock central já tem cabeçalho próprio (nome+chips+botões dentro
-        # do WorkspaceDetailsPanel). A title bar do QtAds duplica visualmente
-        # e ainda cria botões — esconde.
+        # Dock central e sidebar não precisam de title bar — o conteúdo já
+        # tem cabeçalho próprio. Só o "Ferramentas" (direita) mantém a barra
+        # do QtAds com pin/float/menu, igual ao mockup.
         self._center_dock.dockAreaWidget().titleBar().setVisible(False)
+        self._sidebar_dock.dockAreaWidget().titleBar().setVisible(False)
 
         # Restaura layout salvo (tamanhos das colunas). Fallback: ~240/760/340.
         # Schema bumps:
@@ -412,6 +413,14 @@ class MainWindow(QMainWindow):
 
         outer.addLayout(shell_row, stretch=1)
         self.setCentralWidget(central)
+
+        # ---------- Status bar ----------
+        from .status_bar import StatusBarWidgets
+        self.status_widgets = StatusBarWidgets()
+        sb = self.statusBar()
+        sb.setStyleSheet("QStatusBar { background: #161616; border-top: 1px solid #2a2a2a; }")
+        sb.setSizeGripEnabled(False)
+        sb.addPermanentWidget(self.status_widgets, stretch=1)
 
         # Restaurar tamanhos das colunas internas dos details
         if self.settings.workspace_columns_sizes:
@@ -1275,6 +1284,7 @@ class MainWindow(QMainWindow):
                 return
 
         self.details.show_empty()
+        self._update_status_bar(None)
 
     def _find_workspace_item(self, workspace_id: str) -> QTreeWidgetItem | None:
         for i in range(self.list_widget.topLevelItemCount()):
@@ -1345,6 +1355,38 @@ class MainWindow(QMainWindow):
         # estamos olhando este workspace.
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
+            self._update_status_bar(ws)
+
+    def _update_status_bar(self, ws: "Workspace | None") -> None:
+        """Atualiza os segmentos da QStatusBar. Pode receber None pra
+        zerar (workspace vazio)."""
+        if not hasattr(self, "status_widgets"):
+            return
+        if ws is None:
+            self.status_widgets.set_workspace(None)
+            self.status_widgets.set_stack("")
+            self.status_widgets.set_mcp(0)
+            self.status_widgets.set_runners(0, 0)
+            self.status_widgets.set_task("Nenhuma tarefa em execução")
+            return
+        self.status_widgets.set_workspace(ws.name)
+        # Stack
+        from ..stacks import STACK_LABEL, detect_stacks
+        stacks = detect_stacks(ws.folders)
+        stack_label = ", ".join(sorted(STACK_LABEL.get(s, s) for s in stacks))
+        self.status_widgets.set_stack(stack_label)
+        # MCP — exists pra este workspace?
+        from ..mcp_manager import mcp_exists
+        self.status_widgets.set_mcp(1 if mcp_exists(ws.name) else 0)
+        # Runners
+        active = self.terminals_coord.state.running_counts.get(ws.id, 0)
+        total = len(ws.runners)
+        self.status_widgets.set_runners(active, total)
+        # Tarefa atual — placeholder simples (Fase 4 polimento depois)
+        if active > 0:
+            self.status_widgets.set_task(f"{active} console(s) Claude ativos", working=True)
+        else:
+            self.status_widgets.set_task("Nenhuma tarefa em execução")
 
     _SECTION_HEADER_ROLE = "__section_header__"
 
@@ -1782,6 +1824,7 @@ class MainWindow(QMainWindow):
             self.details.show_empty()
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             self._broadcast_workspace(None)
+            self._update_status_bar(None)
             return
         data = current.data(0, Qt.ItemDataRole.UserRole)
         ws: Workspace | None = None
@@ -1796,6 +1839,7 @@ class MainWindow(QMainWindow):
         self.details.show_workspace(ws)
         self._broadcast_workspace(ws)
         self._sync_terminal_for(ws)
+        self._update_status_bar(ws)
         self.plugin_coord.dispatch_workspace_opened(ws.id)
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
