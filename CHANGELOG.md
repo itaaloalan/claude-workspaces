@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.1] — 2026-05-21
+
+### Adicionado
+- **Trio de ações no canto direito do header workspace**
+  (`ui/workspace_details.py`): pin (📌), refresh (↻), e ⋯ — match com
+  o mockup. Pin pintado azul quando ws.pinned=True, cinza quando False.
+  Refresh recarrega sessões + status MCP. ⋯ continua com menu Editar /
+  Configurar MCP / Remover. Novo signal `pin_toggle_requested` wirado
+  no `_toggle_pin_workspace` da MainWindow.
+
 ## [0.58.0] — 2026-05-21
 
 ### Adicionado

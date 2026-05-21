@@ -288,6 +288,7 @@ class MainWindow(QMainWindow):
         self.details = WorkspaceDetailsPanel(self.settings)
         self.details.edit_requested.connect(self.edit_workspace)
         self.details.delete_requested.connect(self.delete_workspace)
+        self.details.pin_toggle_requested.connect(self._toggle_pin_workspace)
         self.details.launch_claude_requested.connect(self._launch_claude_for)
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.open_file_requested.connect(self._open_file_in_editor)

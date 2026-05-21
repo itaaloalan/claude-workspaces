@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 class WorkspaceDetailsPanel(QStackedWidget):
     edit_requested = Signal(Workspace)
     delete_requested = Signal(Workspace)
+    pin_toggle_requested = Signal(Workspace)
     launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
     launch_shell_requested = Signal(Workspace)
     handoff_requested = Signal(Workspace, ClaudeSession)
@@ -102,15 +103,36 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         header_row.addStretch(1)
 
-        # Botão ⋯ → menu (Editar / Remover) — substitui os botões soltos
-        more_btn = QPushButton("⋯")
-        more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        more_btn.setFixedSize(28, 28)
-        more_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #c8c8c8; "
-            "border: 0; border-radius: 4px; font-size: 16px; }"
-            "QPushButton:hover { background: #2a2a2a; color: #fff; }"
-        )
+        # ---------- Trio de ações no canto direito: pin / refresh / ⋯ ----------
+        from PySide6.QtCore import QSize
+        from .icons import ICONS, ic
+
+        def _icon_btn(qta_name: str, tooltip: str, color: str = "#c8c8c8") -> QPushButton:
+            btn = QPushButton()
+            btn.setIcon(ic(qta_name, color=color))
+            btn.setIconSize(QSize(14, 14))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedSize(28, 28)
+            btn.setToolTip(tooltip)
+            btn.setStyleSheet(
+                "QPushButton { background: transparent; border: 0; "
+                "border-radius: 4px; }"
+                "QPushButton:hover { background: #2a2a2a; }"
+            )
+            return btn
+
+        # Pin/Unpin workspace — espelha o menu de contexto da sidebar
+        self._pin_btn = _icon_btn(ICONS["pin"], "Fixar/desafixar workspace")
+        self._pin_btn.clicked.connect(self._on_pin_clicked)
+        header_row.addWidget(self._pin_btn)
+
+        # Refresh: re-carrega sessões + git + MCP do workspace atual
+        refresh_btn = _icon_btn("fa5s.sync-alt", "Recarregar workspace")
+        refresh_btn.clicked.connect(self._on_refresh_clicked)
+        header_row.addWidget(refresh_btn)
+
+        # ⋯ menu (Editar / MCP / Remover)
+        more_btn = _icon_btn(ICONS["more"], "Mais ações")
         more_btn.clicked.connect(self._show_workspace_actions_menu)
         self._more_btn = more_btn
         header_row.addWidget(more_btn)
@@ -369,6 +391,29 @@ class WorkspaceDetailsPanel(QStackedWidget):
         menu.addAction(del_act)
         menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
 
+    def _on_pin_clicked(self) -> None:
+        if self.workspace is not None:
+            self.pin_toggle_requested.emit(self.workspace)
+
+    def _on_refresh_clicked(self) -> None:
+        if self.workspace is not None:
+            self._refresh_sessions()
+            self._refresh_mcp_status()
+
+    def _refresh_pin_visual(self) -> None:
+        """Pinta o ícone do botão de pin de acordo com ws.pinned."""
+        from PySide6.QtCore import QSize
+
+        from .icons import ICONS, ic
+        if self.workspace is None:
+            return
+        color = "#3d6ea8" if self.workspace.pinned else "#c8c8c8"
+        self._pin_btn.setIcon(ic(ICONS["pin"], color=color))
+        self._pin_btn.setIconSize(QSize(14, 14))
+        self._pin_btn.setToolTip(
+            "Desafixar workspace" if self.workspace.pinned else "Fixar workspace"
+        )
+
     def set_active_status(self, active: bool) -> None:
         """Atualiza o dot verde + badge 'Ativo' no header. Chamado pela
         MainWindow quando muda o running count do workspace atual."""
@@ -526,6 +571,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # Inicializa status (caller real é o MainWindow via set_active_status,
         # mas aqui evitamos flash de "Ativo" residual do workspace anterior)
         self.set_active_status(False)
+        self._refresh_pin_visual()
 
     def restore_columns_sizes(self, sizes: list[int]) -> None:
         if sizes and len(sizes) == self._columns_splitter.count():
