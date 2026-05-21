@@ -1480,18 +1480,40 @@ class MainWindow(QMainWindow):
 
     _SECTION_HEADER_ROLE = "__section_header__"
 
+    _SECTION_ICONS = {
+        "FIXADOS": "fa5s.thumbtack",
+        "WORKSPACES": "fa5s.layer-group",
+    }
+
     def _add_section_header(self, label: str) -> None:
-        """Insere um item-cabeçalho não-selecionável (FIXADOS / WORKSPACES)."""
+        """Insere um item-cabeçalho não-selecionável (FIXADOS / WORKSPACES)
+        com ícone SVG discreto à esquerda."""
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ic as _ic
         item = QTreeWidgetItem([""])
         item.setData(0, Qt.ItemDataRole.UserRole, self._SECTION_HEADER_ROLE)
         item.setFlags(Qt.ItemFlag.NoItemFlags)
         self.list_widget.addTopLevelItem(item)
-        lbl = QLabel(label)
-        lbl.setStyleSheet(
+
+        host = QWidget()
+        host.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(host)
+        h.setContentsMargins(4, 8, 4, 4)
+        h.setSpacing(6)
+        icon_name = self._SECTION_ICONS.get(label)
+        if icon_name:
+            ic_lbl = QLabel()
+            ic_lbl.setPixmap(_ic(icon_name, color="#707070").pixmap(_QS(9, 9)))
+            h.addWidget(ic_lbl)
+        text_lbl = QLabel(label)
+        text_lbl.setStyleSheet(
             "QLabel { color: #707070; font-size: 10px; font-weight: 700; "
-            "letter-spacing: 1.4px; padding: 8px 4px 4px 4px; }"
+            "letter-spacing: 1.4px; background: transparent; }"
         )
-        self.list_widget.setItemWidget(item, 0, lbl)
+        h.addWidget(text_lbl)
+        h.addStretch(1)
+        self.list_widget.setItemWidget(item, 0, host)
 
     def _is_section_header(self, item: "QTreeWidgetItem | None") -> bool:
         if item is None:

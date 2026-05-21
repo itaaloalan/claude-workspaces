@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.12] — 2026-05-21
+
+### Adicionado
+- **Ícone discreto nos section headers "FIXADOS" e "WORKSPACES"**
+  (`ui/main_window._add_section_header`): pequeno SVG 9px (`fa5s.thumbtack`
+  pra FIXADOS, `fa5s.layer-group` pra WORKSPACES) à esquerda do label.
+  Refator: header agora é QWidget container com QHBoxLayout (icon + label)
+  em vez de QLabel solto.
+
 ## [0.58.11] — 2026-05-21
 
 ### Adicionado
