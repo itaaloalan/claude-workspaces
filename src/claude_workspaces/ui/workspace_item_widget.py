@@ -110,6 +110,19 @@ class WorkspaceItemWidget(QWidget):
         self._badge.hide()
         row.addWidget(self._badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # Pin indicator — aparece à direita do nome quando pinned=True.
+        # Empurra os botões de ação pro fim, junto da borda direita.
+        from PySide6.QtCore import QSize
+        from .icons import ICONS, ic
+        self._pin_icon = QLabel()
+        self._pin_icon.setFixedSize(14, 14)
+        self._pin_icon.setPixmap(
+            ic(ICONS["pin"], color="#9aa0a6").pixmap(QSize(12, 12))
+        )
+        self._pin_icon.setToolTip("Workspace fixado")
+        self._pin_icon.hide()
+        row.addWidget(self._pin_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+
         row.addStretch(1)
 
         self._add_btn = QPushButton("＋")
@@ -147,6 +160,10 @@ class WorkspaceItemWidget(QWidget):
             self._badge.show()
         else:
             self._badge.hide()
+
+    def set_pinned(self, pinned: bool) -> None:
+        """Mostra/esconde o indicador 📌 ao lado do nome."""
+        self._pin_icon.setVisible(pinned)
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do botão de colapsar pra refletir o estado

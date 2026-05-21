@@ -1456,6 +1456,7 @@ class MainWindow(QMainWindow):
 
         widget = WorkspaceItemWidget(ws.name, on_add, on_toggle)
         widget.set_collapsed(not item.isExpanded())
+        widget.set_pinned(ws.pinned)
         widget.set_running_count(
             self.terminals_coord.state.running_counts.get(ws.id, 0)
         )

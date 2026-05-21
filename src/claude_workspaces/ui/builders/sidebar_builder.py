@@ -259,6 +259,25 @@ class SidebarBuilder:
             " console. As ações continuam acessíveis no menu de contexto."
         )
         header_layout.addWidget(self.actions_toggle_btn, 0, Qt.AlignmentFlag.AlignRight)
+
+        # Botão + (novo workspace) e filtro funnel na row do header
+        # WORKSPACES — espelha o mockup, dá ações 1-clique sem precisar
+        # do botão grande no rodapé.
+        from PySide6.QtCore import QSize
+        from ..icons import ICONS, ic as _ic
+        self.header_add_btn = QPushButton()
+        self.header_add_btn.setIcon(_ic(ICONS["add"], color="#9aa0a6"))
+        self.header_add_btn.setIconSize(QSize(11, 11))
+        self.header_add_btn.setFixedSize(20, 18)
+        self.header_add_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.header_add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
+        self.header_add_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 0; padding: 0; }"
+            "QPushButton:hover { background: #2a2a2a; border-radius: 3px; }"
+        )
+        self.header_add_btn.clicked.connect(self._on_add_clicked)
+        header_layout.addWidget(self.header_add_btn, 0, Qt.AlignmentFlag.AlignRight)
+
         layout.addWidget(header_row)
 
         # Input local de busca workspaces (espelha o filtro do top bar
@@ -279,7 +298,24 @@ class SidebarBuilder:
         self.search_input.setPalette(pal)
         if self._on_search_workspaces is not None:
             self.search_input.textChanged.connect(self._on_search_workspaces)
-        layout.addWidget(self.search_input)
+
+        # Wrappa o input num row com filtro funnel à direita (mockup).
+        search_row = QHBoxLayout()
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_row.setSpacing(4)
+        search_row.addWidget(self.search_input, stretch=1)
+        self.filter_btn = QPushButton()
+        self.filter_btn.setIcon(_ic(ICONS["filter"], color="#9aa0a6"))
+        self.filter_btn.setIconSize(QSize(12, 12))
+        self.filter_btn.setFixedSize(28, 26)
+        self.filter_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.filter_btn.setToolTip("Filtros avançados (em breve)")
+        self.filter_btn.setStyleSheet(
+            "QPushButton { background: #1f1f1f; border: 1px solid #2c2c2c; border-radius: 4px; }"
+            "QPushButton:hover { border-color: #3d6ea8; }"
+        )
+        search_row.addWidget(self.filter_btn)
+        layout.addLayout(search_row)
 
         self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)

@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.7] — 2026-05-21
+
+### Adicionado
+- **Pin 📌 visível nos workspaces fixados** (`ui/workspace_item_widget.py`):
+  ícone SVG ao lado do nome quando `ws.pinned=True`. Método `set_pinned`
+  é chamado pelo `_install_workspace_item_widget` durante `refresh_list`.
+- **Botão + na row "WORKSPACES"** da sidebar (`builders/sidebar_builder.py`):
+  cria workspace novo direto do header, sem precisar do botão grande no
+  rodapé. Match com mockup.
+- **Filtro funnel ao lado do input "Buscar workspaces"** — placeholder
+  pra filtros avançados (Tag/Stack/Status — futuro). Visual presente.
+
 ## [0.55.6] — 2026-05-21
 
 ### Adicionado / Mudado
