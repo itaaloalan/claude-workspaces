@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.4] — 2026-05-21
+
+### Mudado
+- **Top bar com ícones SVG (qtawesome)** (`ui/top_bar.py`):
+  - `☰` (toggle sidebar) → `fa5s.bars`
+  - Logo "Claude Workspaces" agora com ícone `fa5s.robot` em azul antes
+    do título
+  - `🔔` (bell de inbox) → `fa5s.bell`. Quando há alerta, repinta branco
+    no fundo laranja. Quando vazio, cinza no fundo escuro.
+  - `⚙ Configurar` → ícone `fa5s.cog` + label
+- `set_inbox_count` agora controla só o texto (número); ícone vem do
+  `setIcon` no `_refresh_inbox_btn_style`.
+
 ## [0.58.3] — 2026-05-21
 
 ### Removido

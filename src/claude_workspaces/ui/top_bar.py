@@ -29,24 +29,35 @@ class TopBar(QWidget):
         row.setContentsMargins(8, 8, 12, 8)
         row.setSpacing(10)
 
-        toggle_btn = QPushButton("☰")
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ic as _ic
+
+        toggle_btn = QPushButton()
+        toggle_btn.setIcon(_ic("fa5s.bars", color="#c8c8c8"))
+        toggle_btn.setIconSize(_QS(16, 16))
         toggle_btn.setFlat(True)
-        toggle_btn.setFixedWidth(32)
+        toggle_btn.setFixedSize(32, 32)
         toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle_btn.setToolTip("Esconder / mostrar a barra lateral (Ctrl+B)")
         toggle_btn.setStyleSheet(
-            "QPushButton { color: #c8c8c8; font-size: 16px; padding: 4px; }"
-            "QPushButton:hover { color: #6aa9e0; }"
+            "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
+            "QPushButton:hover { background: #2a2a2a; }"
         )
         toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)
         row.addWidget(toggle_btn)
 
-        logo = QPushButton("Claude Workspaces")
+        # Logo Claude (robô) + título — clicáveis pra voltar à home.
+        logo = QPushButton("  Claude Workspaces")
+        logo.setIcon(_ic("fa5s.robot", color="#6aa9e0"))
+        logo.setIconSize(_QS(16, 16))
         logo.setFlat(True)
         logo.setCursor(Qt.CursorShape.PointingHandCursor)
         logo.setStyleSheet(
-            "QPushButton { font-weight: 700; color: #e6e6e6; font-size: 13px; padding: 4px 0; }"
-            "QPushButton:hover { color: #6aa9e0; }"
+            "QPushButton { font-weight: 700; color: #e6e6e6; font-size: 13px; "
+            "padding: 4px 6px; background: transparent; border: 0; border-radius: 4px; "
+            "text-align: left; }"
+            "QPushButton:hover { color: #6aa9e0; background: #2a2a2a; }"
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
@@ -67,7 +78,9 @@ class TopBar(QWidget):
         row.addStretch()
 
         # Bell de inbox — destaca quando há console aguardando atenção
-        self._inbox_btn = QPushButton("🔔")
+        self._inbox_btn = QPushButton()
+        self._inbox_btn.setIcon(_ic("fa5s.bell", color="#c8c8c8"))
+        self._inbox_btn.setIconSize(_QS(15, 15))
         self._inbox_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._inbox_btn.setToolTip("Consoles aguardando atenção")
         self._inbox_count = 0
@@ -75,7 +88,9 @@ class TopBar(QWidget):
         self._inbox_btn.clicked.connect(self.inbox_clicked.emit)
         row.addWidget(self._inbox_btn)
 
-        settings_btn = QPushButton("⚙ Configurar")
+        settings_btn = QPushButton("  Configurar")
+        settings_btn.setIcon(_ic("fa5s.cog", color="#c8c8c8"))
+        settings_btn.setIconSize(_QS(14, 14))
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.setToolTip("Configurações (Ctrl+,)")
         settings_btn.setStyleSheet(
@@ -92,14 +107,17 @@ class TopBar(QWidget):
 
     def set_inbox_count(self, count: int) -> None:
         self._inbox_count = count
-        if count > 0:
-            self._inbox_btn.setText(f"🔔 {count}")
-        else:
-            self._inbox_btn.setText("🔔")
+        # Texto só com o número quando há alerta — ícone vem do qtawesome
+        self._inbox_btn.setText(f"  {count}" if count > 0 else "")
         self._refresh_inbox_btn_style()
 
     def _refresh_inbox_btn_style(self) -> None:
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ic as _ic
         if self._inbox_count > 0:
+            self._inbox_btn.setIcon(_ic("fa5s.bell", color="#fff"))
+            self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
                 "  background: #c9772d; color: #fff; font-weight: 600;"
@@ -109,6 +127,8 @@ class TopBar(QWidget):
                 "QPushButton:hover { background: #e0892f; border-color: #e0892f; }"
             )
         else:
+            self._inbox_btn.setIcon(_ic("fa5s.bell", color="#c8c8c8"))
+            self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
                 "  background: #1f1f1f; color: #c8c8c8;"
