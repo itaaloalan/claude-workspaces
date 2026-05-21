@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.2] — 2026-05-21
+
+### Mudado
+- **Modelo + branch agora na mesma linha do estado, alinhados à direita**
+  (`ui/terminal_child_widget.py`): card de sessão passou de 3 rows
+  (título / estado / modelo+branch) pra 2 (título / estado+chips). Os
+  chips de modelo e branch ficam à direita da row do estado, leitura
+  mais compacta.
+- `_CHILD_HEIGHT` 60→44px, `setMinimumHeight/setMaximumHeight` no
+  widget 52→38px — economiza 16px de altura por console na sidebar.
+
 ## [0.57.1] — 2026-05-21
 
 ### Corrigido

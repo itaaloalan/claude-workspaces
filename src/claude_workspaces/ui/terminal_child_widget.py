@@ -87,12 +87,12 @@ class TerminalChildWidget(QWidget):
         self._title = title
         # Tamanho previsível pra não brigar com o QTreeWidget no resize
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        # 3 linhas: título+ações / estado / modelo+branch. Quem define a
+        # 2 linhas: título+ações / estado+modelo+branch. Quem define a
         # altura efetiva do row no QTreeWidget é o setSizeHint no
         # `_CHILD_HEIGHT` lá no main_window — manter sincronizado
         # (row = widget + 8px de border+padding do item).
-        self.setMinimumHeight(52)
-        self.setMaximumHeight(52)
+        self.setMinimumHeight(38)
+        self.setMaximumHeight(38)
 
         outer = QHBoxLayout(self)
         # 2px de margem à esquerda pra que o `_status_strip` (3px) fique
@@ -257,6 +257,13 @@ class TerminalChildWidget(QWidget):
         )
         vbox.addLayout(title_row)
 
+        # 2a linha: estado à esquerda, chips de modelo + branch à direita.
+        # Antes eram 3 linhas (título / estado / modelo+branch) — agora 2,
+        # com modelo/branch alinhados pela direita na mesma row do estado.
+        state_row = QHBoxLayout()
+        state_row.setContentsMargins(0, 0, 0, 0)
+        state_row.setSpacing(6)
+
         self._state_label = QLabel(STATE_LABEL[STATE_IDLE])
         self._state_label.setStyleSheet(
             f"color: {STATE_COLOR[STATE_IDLE]};"
@@ -267,16 +274,8 @@ class TerminalChildWidget(QWidget):
         self._state_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
-        self._state_label.setMaximumHeight(13)
-        vbox.addWidget(self._state_label)
-
-        # 3a linha: chip do modelo + chip da branch lado a lado.
-        # Antes a branch ficava num label solto vertical-centered no canto
-        # direito do card (desalinhada com o modelo). Agora os dois são
-        # chips na mesma row pra leitura linear.
-        model_row = QHBoxLayout()
-        model_row.setContentsMargins(0, 0, 0, 0)
-        model_row.setSpacing(4)
+        self._state_label.setMaximumHeight(16)
+        state_row.addWidget(self._state_label, stretch=1)
 
         self._session_label = QLabel("")
         self._session_label.setTextFormat(Qt.TextFormat.RichText)
@@ -287,7 +286,7 @@ class TerminalChildWidget(QWidget):
         )
         self._session_label.setMaximumHeight(16)
         self._session_label.setVisible(False)
-        model_row.addWidget(self._session_label)
+        state_row.addWidget(self._session_label, 0, Qt.AlignmentFlag.AlignRight)
 
         self._git_label = QLabel("")
         self._git_label.setTextFormat(Qt.TextFormat.RichText)
@@ -297,10 +296,9 @@ class TerminalChildWidget(QWidget):
         )
         self._git_label.setMaximumHeight(16)
         self._git_label.setVisible(False)
-        model_row.addWidget(self._git_label)
-        model_row.addStretch(1)
+        state_row.addWidget(self._git_label, 0, Qt.AlignmentFlag.AlignRight)
 
-        vbox.addLayout(model_row)
+        vbox.addLayout(state_row)
 
         outer.addLayout(vbox, stretch=1)
 
