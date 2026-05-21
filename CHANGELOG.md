@@ -16,6 +16,19 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   `settings.sessoes_collapsed[ws_id]`. Estado é restaurado ao recriar
   o bucket (re-listagem da sidebar).
 
+## [0.58.9] — 2026-05-21
+
+### Adicionado
+- **Ícone SVG no header "Runners (N)"** (`ui/runner_group_widget.py`):
+  `mdi6.source-branch` à esquerda do label — simetria com bucket
+  "Sessões Claude" que já tinha `fa5s.comments`.
+- **Badge "Ativa"/"Concluída" nos cards de sessão**
+  (`ui/session_card.py`): heurística simples — sessão modificada nos
+  últimos 5 min é "Ativa" (verde), senão "Concluída" (cinza).
+- Botão "Retomar" vs "Reabrir": sessão ativa mostra "Retomar" em azul
+  forte (font-weight 600); concluída mostra "Reabrir" em azul discreto.
+  Match com o mockup.
+
 ## [0.58.7] — 2026-05-21
 
 ### Adicionado

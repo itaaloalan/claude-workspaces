@@ -74,6 +74,16 @@ class RunnerGroupWidget(QWidget):
             self._collapse_btn.clicked.connect(on_toggle_collapse)
         row.addWidget(self._collapse_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # Ícone SVG (mdi6.source-branch) à esquerda do label — simetria
+        # com o bucket Sessões Claude que já tem ícone fa5s.comments.
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic as _ic
+        self._icon_lbl = QLabel()
+        self._icon_lbl.setPixmap(
+            _ic("mdi6.source-branch", color="#9aa0a6").pixmap(_QS(12, 12))
+        )
+        row.addWidget(self._icon_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self._label = QLabel(label)
         font = QFont(self._label.font())
         font.setPointSizeF(font.pointSizeF() - 0.5)

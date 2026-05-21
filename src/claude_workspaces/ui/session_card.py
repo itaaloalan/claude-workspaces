@@ -72,6 +72,25 @@ class SessionCard(QFrame):
         title.setWordWrap(True)
         header.addWidget(title, stretch=1)
 
+        # Badge Ativa (verde) / Concluída (cinza) — heurística:
+        # sessão modificada nos últimos 5 minutos é "Ativa".
+        import time
+        is_active = (time.time() - session.mtime) < 300  # 5min
+        badge = QLabel("Ativa" if is_active else "Concluída")
+        if is_active:
+            badge.setStyleSheet(
+                "QLabel { background: rgba(90, 195, 90, 38); color: #5ac35a; "
+                "font-size: 9px; font-weight: 700; padding: 2px 8px; "
+                "border-radius: 8px; }"
+            )
+        else:
+            badge.setStyleSheet(
+                "QLabel { background: #2a2a2a; color: #9aa0a6; "
+                "font-size: 9px; font-weight: 700; padding: 2px 8px; "
+                "border-radius: 8px; }"
+            )
+        header.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
         when = QLabel(self._when_text())
         when.setStyleSheet("color: #8a8a8a; font-size: 10px;")
         when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
@@ -118,16 +137,28 @@ class SessionCard(QFrame):
         handoff_btn.clicked.connect(lambda: self.handoff_requested.emit(self.session))
         actions.addWidget(handoff_btn)
 
-        resume_btn = QPushButton("Retomar")
+        # Label "Retomar" pra sessão ativa (azul mais forte), "Reabrir"
+        # pra concluída (azul mais discreto). Match com mockup.
+        resume_btn = QPushButton("Retomar" if is_active else "Reabrir")
         resume_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        resume_btn.setStyleSheet(
-            "QPushButton {"
-            "  background: #2d4a6e; color: #e6e6e6;"
-            "  border: 0; border-radius: 3px;"
-            "  padding: 2px 10px; font-size: 11px;"
-            "}"
-            "QPushButton:hover { background: #3d6ea8; }"
-        )
+        if is_active:
+            resume_btn.setStyleSheet(
+                "QPushButton {"
+                "  background: #3d6ea8; color: #fff; font-weight: 600;"
+                "  border: 0; border-radius: 3px;"
+                "  padding: 2px 12px; font-size: 11px;"
+                "}"
+                "QPushButton:hover { background: #4a82c5; }"
+            )
+        else:
+            resume_btn.setStyleSheet(
+                "QPushButton {"
+                "  background: #2d4a6e; color: #e6e6e6;"
+                "  border: 0; border-radius: 3px;"
+                "  padding: 2px 10px; font-size: 11px;"
+                "}"
+                "QPushButton:hover { background: #3d6ea8; }"
+            )
         resume_btn.clicked.connect(lambda: self.resume_requested.emit(self.session))
         actions.addWidget(resume_btn)
         outer.addLayout(actions)
