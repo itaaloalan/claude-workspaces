@@ -303,8 +303,9 @@ class GitPanel(QWidget):
         v.addWidget(self._msg)
 
         bottom = QHBoxLayout()
-        self._commit_btn = QPushButton("Commit")
-        self._commit_btn.setStyleSheet(
+        bottom.setSpacing(4)
+
+        primary_qss = (
             "QPushButton {"
             "  background: #3d6ea8; color: #fff;"
             "  border: 0; border-radius: 4px; padding: 4px 14px; font-weight: 600;"
@@ -312,8 +313,31 @@ class GitPanel(QWidget):
             "QPushButton:hover { background: #4a82c5; }"
             "QPushButton:disabled { background: #2a2a2a; color: #555; }"
         )
+        ghost_qss = (
+            "QPushButton {"
+            "  background: #1f1f1f; color: #c8c8c8;"
+            "  border: 1px solid #2c2c2c; border-radius: 4px;"
+            "  padding: 4px 12px;"
+            "}"
+            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+            "QPushButton:disabled { color: #555; border-color: #2a2a2a; }"
+        )
+
+        self._commit_btn = QPushButton("Commit")
+        self._commit_btn.setStyleSheet(primary_qss)
         self._commit_btn.clicked.connect(self._do_commit)
         bottom.addWidget(self._commit_btn)
+
+        # Botão "Commit + Push" — commita e em seguida faz push da branch
+        # atual (com upstream automático se faltar).
+        self._commit_push_btn = QPushButton("Commit + Push")
+        self._commit_push_btn.setStyleSheet(ghost_qss)
+        self._commit_push_btn.setToolTip(
+            "Commit + push da branch atual (cria upstream se necessário)"
+        )
+        self._commit_push_btn.clicked.connect(self._do_commit_and_push)
+        bottom.addWidget(self._commit_push_btn)
+
         bottom.addStretch()
         v.addLayout(bottom)
         return box
@@ -636,10 +660,13 @@ class GitPanel(QWidget):
     def _update_commit_button(self) -> None:
         checked = self._collect_checked_files()
         total = sum(len(v) for v in checked.values())
-        self._commit_btn.setEnabled(total > 0)
+        enabled = total > 0
+        self._commit_btn.setEnabled(enabled)
         self._commit_btn.setText(
             "Commit" if total == 0 else f"Commit ({total})"
         )
+        if hasattr(self, "_commit_push_btn"):
+            self._commit_push_btn.setEnabled(enabled)
 
     # ---------- context menu ----------
 
@@ -945,10 +972,12 @@ class GitPanel(QWidget):
 
     # ---------- ações git ----------
 
-    def _do_commit(self) -> None:
+    def _do_commit(self) -> tuple[bool, list[str]]:
+        """Commit atual. Retorna (sucesso, folders_que_commitaram_ok)
+        pra permitir encadear push depois."""
         checked = self._collect_checked_files()
         if not checked:
-            return
+            return (False, [])
         message = self._msg.toPlainText().strip()
         if not message:
             QMessageBox.warning(
@@ -957,7 +986,7 @@ class GitPanel(QWidget):
                 "Escreva uma mensagem de commit antes.",
             )
             self._msg.setFocus()
-            return
+            return (False, [])
 
         if len(checked) > 1:
             reply = QMessageBox.question(
@@ -966,9 +995,10 @@ class GitPanel(QWidget):
                 f"Vai commitar em {len(checked)} repos com a mesma mensagem. Confirma?",
             )
             if reply != QMessageBox.StandardButton.Yes:
-                return
+                return (False, [])
 
         errors: list[str] = []
+        committed_folders: list[str] = []
         for folder, files in checked.items():
             # 1. Reset staging area pro estado limpo
             unstage_all(folder)
@@ -986,14 +1016,46 @@ class GitPanel(QWidget):
             ok, out = git_commit(folder, message)
             if not ok:
                 errors.append(f"{Path(folder).name}: commit falhou — {out}")
-            elif self.workspace is not None:
-                sha = head_sha(folder)
-                self.commit_created.emit(self.workspace.id, folder, sha, message)
+            else:
+                committed_folders.append(folder)
+                if self.workspace is not None:
+                    sha = head_sha(folder)
+                    self.commit_created.emit(self.workspace.id, folder, sha, message)
 
         if errors:
             QMessageBox.warning(self, "Erros no commit", "\n\n".join(errors)[:2000])
         else:
             self._msg.clear()
+        self.refresh()
+        return (not errors, committed_folders)
+
+    def _do_commit_and_push(self) -> None:
+        """Faz commit e em seguida push da branch atual em cada folder
+        que recebeu commit. Cria upstream automaticamente se faltar."""
+        ok, folders = self._do_commit()
+        if not folders:
+            return
+        from ..git_actions import push_with_upstream
+        # Re-fetch status pra pegar a branch atual (que pode ter mudado
+        # entre commit e push).
+        self._statuses = {}
+        for f in folders:
+            from ..git_status import get_status
+            self._statuses[f] = get_status(f)
+        push_errors: list[str] = []
+        for folder in folders:
+            status = self._statuses.get(folder)
+            branch = status.branch if status else ""
+            if not branch:
+                push_errors.append(f"{Path(folder).name}: branch indefinida")
+                continue
+            ok_push, out = push_with_upstream(folder, branch)
+            if not ok_push:
+                push_errors.append(f"{Path(folder).name}: push falhou — {out}")
+        if push_errors:
+            QMessageBox.warning(
+                self, "Erros no push", "\n\n".join(push_errors)[:2000]
+            )
         self.refresh()
 
     def _do_fetch_all(self) -> None:

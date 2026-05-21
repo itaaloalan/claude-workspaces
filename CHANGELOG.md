@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.4] — 2026-05-21
+
+### Adicionado
+- **Botão "Commit + Push" ao lado do Commit no GitPanel**
+  (`ui/git_panel.py`): faz commit e em seguida `push_with_upstream`
+  da branch atual em cada folder que recebeu commit. Estilo
+  ghost (border-only) pra dar destaque ao Commit primário (azul).
+- `_do_commit` refatorado pra retornar `(sucesso, folders_committed)`
+  permitindo encadear push.
+- `_update_commit_button` agora enable/disable os 2 botões juntos.
+
 ## [0.59.3] — 2026-05-21
 
 ### Adicionado
