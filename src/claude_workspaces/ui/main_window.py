@@ -1299,6 +1299,9 @@ class MainWindow(QMainWindow):
                     tab_id = sib.data(0, Qt.ItemDataRole.UserRole)
                     if isinstance(tab_id, int):
                         self._install_console_runner_children(sib, ws_data, tab_id)
+                # Re-instala Arquivos por último — runner group também é
+                # inserido em pos 0 e empurraria nosso bucket pra baixo.
+                self._install_arquivos_bucket(it, ws_data)
                 self._refresh_empty_placeholder(it)
 
         if current_id:
@@ -1465,9 +1468,59 @@ class MainWindow(QMainWindow):
             self.terminals_coord.state.running_counts.get(ws.id, 0)
         )
         self.list_widget.setItemWidget(item, 0, widget)
+        # Bucket "Arquivos" como primeiro filho (clicável → file finder).
+        # Idempotente — chamado também em _refresh_list pra ws já existentes.
+        self._install_arquivos_bucket(item, ws)
         self._refresh_empty_placeholder(item)
 
     _EMPTY_PLACEHOLDER_ROLE = "__empty_workspace_placeholder__"
+    _BUCKET_ROLE = "__bucket__"
+
+    def _install_arquivos_bucket(self, ws_item: "QTreeWidgetItem", ws: Workspace) -> None:
+        """Cria item 'Arquivos' como primeiro filho do workspace. Clicar
+        abre o file finder filtrando pelas pastas do workspace.
+
+        Marcado com `_BUCKET_ROLE` pra iteradores que checam Workspace/int
+        já filtrarem naturalmente (esses já fazem isinstance check antes
+        de processar)."""
+        from PySide6.QtCore import QSize as _QS
+        from PySide6.QtWidgets import QPushButton as _QPB
+
+        from .icons import ICONS, ic as _ic
+
+        # Idempotente: se já existe em qualquer posição, só remove e
+        # re-insere no topo (Runner group é inserido em 0 depois e
+        # empurraria nosso bucket pra baixo).
+        for i in range(ws_item.childCount()):
+            c = ws_item.child(i)
+            if c.data(0, Qt.ItemDataRole.UserRole) == self._BUCKET_ROLE:
+                ws_item.takeChild(i)
+                break
+
+        bucket = QTreeWidgetItem()
+        bucket.setData(0, Qt.ItemDataRole.UserRole, self._BUCKET_ROLE)
+        bucket.setSizeHint(0, _QS(0, 26))
+        ws_item.insertChild(0, bucket)
+
+        btn = _QPB("  Arquivos")
+        btn.setIcon(_ic(ICONS["folder"], color="#9aa0a6"))
+        btn.setIconSize(_QS(13, 13))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip("Buscar arquivos neste workspace (Ctrl+P)")
+        btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #c8c8c8; "
+            "border: 0; text-align: left; padding: 3px 6px; font-size: 12px; }"
+            "QPushButton:hover { color: #fff; background: #1f1f1f; "
+            "border-radius: 3px; }"
+        )
+
+        def _open_files(_=False, w=ws):
+            # Foca o workspace antes (file finder lê o current_workspace).
+            self.list_widget.setCurrentItem(ws_item)
+            self._open_file_finder_dialog("")
+
+        btn.clicked.connect(_open_files)
+        self.list_widget.setItemWidget(bucket, 0, btn)
 
     def _refresh_empty_placeholder(self, ws_item: "QTreeWidgetItem") -> None:
         """Garante 1 placeholder com botão 'Nova sessão do claude…' quando o
@@ -1484,8 +1537,14 @@ class MainWindow(QMainWindow):
         real_count = 0
         for i in range(ws_item.childCount()):
             child = ws_item.child(i)
-            if child.data(0, Qt.ItemDataRole.UserRole) == self._EMPTY_PLACEHOLDER_ROLE:
+            role = child.data(0, Qt.ItemDataRole.UserRole)
+            if role == self._EMPTY_PLACEHOLDER_ROLE:
                 placeholder_idx = i
+            elif role == self._BUCKET_ROLE:
+                # Bucket 'Arquivos' não conta como conteúdo real do ws —
+                # o placeholder 'Nova sessão' continua aparecendo quando
+                # não há consoles/runners.
+                pass
             else:
                 real_count += 1
 

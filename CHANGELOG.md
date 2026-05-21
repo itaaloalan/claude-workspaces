@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.56.0] — 2026-05-21
+
+### Adicionado
+- **Bucket "Arquivos" como primeiro filho de cada workspace na sidebar**
+  (`ui/main_window._install_arquivos_bucket`): ícone 📁 SVG + label
+  "Arquivos", clicável → abre o file finder com as pastas do workspace.
+  Match parcial com o mockup (que tem Arquivos / Sessões Claude N /
+  Runners N — Sessões/Runners ficam pra Fase 2b/v2).
+- `_BUCKET_ROLE` marca o item; `_refresh_empty_placeholder` ignora pra
+  não pular o "Nova sessão" quando só tem bucket.
+- Re-instalado por último em `refresh_list` pra ficar no topo mesmo
+  após `_install_runner_children` (que também insere em pos 0).
+
+### Fase 2b da remodelagem IDE-like (parcial)
+"Sessões Claude (N)" e "Runners (N)" como buckets agrupadores reais
+ficam pra continuação — toca muitos iteradores e tem risco médio-alto.
+
 ## [0.55.8] — 2026-05-21
 
 ### Corrigido
