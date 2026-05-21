@@ -1,13 +1,15 @@
 """StatusBar fina inspirada em IDEs (VSCode/JetBrains).
 
 Segmentos da esquerda pra direita:
-  workspace ativo · stack · MCPs configurados · runners ativos · ...
+  workspace ativo · stack · python ver · MCPs · runners ativos · ...
   ... · encoding · line ending · indent · tarefa IA atual
 
 Os segmentos são atualizados pela MainWindow via setters explícitos.
 """
 
 from __future__ import annotations
+
+import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
@@ -52,9 +54,13 @@ class StatusBarWidgets(QWidget):
 
         self.workspace = _segment("—", "Workspace ativo")
         self.stack = _segment("", "Stack detectado")
+        # Versão real do Python que está rodando o app — útil pra debug.
+        py_ver = f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        self.python = _segment(py_ver, f"Python interpretando o app — {sys.executable}")
         self.mcp = _segment("MCP: —", "MCPs configurados pra este workspace")
         self.runners = _segment("Runners: —", "Runners ativos no workspace")
         for w in (self.workspace, _separator(), self.stack, _separator(),
+                  self.python, _separator(),
                   self.mcp, _separator(), self.runners):
             h.addWidget(w)
 

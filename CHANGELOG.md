@@ -6,6 +6,13 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.6] — 2026-05-21
+
+### Adicionado
+- **Versão real do Python na status bar** (`ui/status_bar.py`):
+  segmento `Python 3.x.y` lido de `sys.version_info`. Tooltip mostra
+  o `sys.executable`. Útil pra debug.
+
 ## [0.57.5] — 2026-05-21
 
 ### Mudado
