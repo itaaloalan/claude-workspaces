@@ -2878,58 +2878,15 @@ class MainWindow(QMainWindow):
     def _show_persistent_toast(
         self, tab_id: int, workspace_id: str, title: str, body: str
     ) -> None:
-        """Cria (ou atualiza) o toast in-app pro tab_id e reposiciona a pilha.
-
-        Toca o som de alerta junto. Som NÃO toca em atualização (update) pra
-        não bipar de novo a cada re-lembrete — só na primeira aparição.
-
-        Só dispara com a MainWindow visível e não-minimizada: se o app está
-        no tray ou minimizado, o usuário não vê esse overlay frameless mesmo,
-        e o toast acaba aparecendo centralizado em outro monitor/desktop;
-        nesse caso a notificação do S.O. (desktop_notifier) já cobre o aviso.
-        """
-        if not self.isVisible() or self.isMinimized():
-            return
-        existing = self._active_toasts.get(tab_id)
-        if existing is not None:
-            existing.update_content(title, body)
-            QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
-            return
+        """Apenas toca o som de alerta — toast in-app foi removido a pedido."""
+        del tab_id, workspace_id, title, body
         sound_name = (
             self.settings.notify_sound_name.strip()
             if self.settings.notify_sound_enabled else ""
         )
         if sound_name:
-            # Reusa o player do desktop_notifier — mesma lógica de fallback
-            # pw-play/paplay/canberra, role "music" que não fica mutado.
             from ..services.desktop_notifier import _play_sound_async
             _play_sound_async(sound_name)
-        toast = PersistentToast(title, body)
-        toast.action_clicked.connect(
-            lambda _tid=tab_id, _wid=workspace_id:
-                self._handle_toast_action(_tid, _wid)
-        )
-        toast.snoozed.connect(
-            lambda _tid=tab_id, _wid=workspace_id:
-                self._handle_notification_action(_tid, _wid, "snooze5")
-        )
-        toast.seen.connect(
-            lambda _tid=tab_id, _wid=workspace_id:
-                self._handle_notification_action(_tid, _wid, "seen")
-        )
-        toast.dismissed.connect(
-            lambda _tid=tab_id: self._on_toast_dismissed(_tid)
-        )
-        self._active_toasts[tab_id] = toast
-        # Posiciona ANTES e DEPOIS do show. Antes: o WM já recebe a
-        # posição no mapping (importa em X11). Depois (via singleShot 0):
-        # no Wayland o setGeometry pré-show é frequentemente ignorado e
-        # só vale uma chamada depois que o surface foi criado. Sem o
-        # segundo reposicionamento, toasts apareciam centralizados na
-        # tela em vez do canto top-right.
-        position_toasts(list(self._active_toasts.values()))
-        toast.show()
-        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
 
     def _handle_toast_action(self, tab_id: int, workspace_id: str) -> None:
         """Clique em 'Abrir console' no toast — mesma rota da action D-Bus.

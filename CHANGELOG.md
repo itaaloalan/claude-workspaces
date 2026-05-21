@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.3] — 2026-05-21
+
+### Removido
+- **Toast in-app de alerta de console pronto**
+  (`ui/main_window._show_persistent_toast`): a notificação overlay que
+  aparecia dentro do app foi removida. Agora `_show_persistent_toast`
+  apenas toca o som configurado (`notify_sound_name`). A notificação
+  D-Bus do sistema continua, e nada mais é exibido pelo próprio app.
+
 ## [0.58.2] — 2026-05-21
 
 ### Adicionado
