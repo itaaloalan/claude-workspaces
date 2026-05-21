@@ -6,6 +6,32 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.0] — 2026-05-21
+
+### Adicionado
+- **FilesPanel no right dock** (`ui/files_panel.py`): árvore de arquivos
+  do workspace ativo via `QFileSystemModel` + `QTreeView`. Clique duplo
+  num arquivo abre no editor configurado (VSCode). Botão refresh ↻
+  recarrega a árvore. Adicionado em `DOCK_PANEL_SPECS` como
+  `default_open=True`. ("Abrir no centro" via viewer interno fica pra
+  passo separado — hoje delega ao editor externo.)
+- **Bucket "Sessões Claude (N)" na sidebar** aninhando os terminais
+  Claude de cada workspace (`ui/main_window`):
+  - `_ensure_sessoes_bucket` cria o item header (com ícone 💬 SVG +
+    label "Sessões Claude" + badge de contagem).
+  - `_add_terminal_child` agora adiciona dentro do bucket, não direto
+    no workspace.
+  - `_refresh_sessoes_count` atualiza badge + esconde bucket quando 0.
+  - `_iter_terminal_items` (generator) substitui os call sites antigos
+    que faziam `ws_item.child(i)` esperando terminais flat.
+- Iteradores migrados pro novo helper: `_toggle_child_actions`,
+  `_focus_terminal_tab` (notif click), `_refresh_runners_after_change`,
+  `_refresh_workspace_child_titles`, `_compute_disambiguated_title`.
+
+### Removido
+- **Bucket "Arquivos" dentro de cada workspace** (sidebar): poluía a
+  árvore. Migrado pro right dock como painel dedicado.
+
 ## [0.56.0] — 2026-05-21
 
 ### Adicionado

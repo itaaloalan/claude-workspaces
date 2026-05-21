@@ -783,6 +783,13 @@ class MainWindow(QMainWindow):
     # essa lista. factory recebe MainWindow pra acessar dependencies.
     DOCK_PANEL_SPECS: list[DockPanelSpec] = [
         DockPanelSpec(
+            panel_id="files",
+            title="Arquivos",
+            icon="📁",
+            factory=lambda mw: mw._build_files_panel(),
+            default_open=True,
+        ),
+        DockPanelSpec(
             panel_id="git",
             title="Git",
             icon="⎇",
@@ -804,6 +811,15 @@ class MainWindow(QMainWindow):
             default_open=False,
         ),
     ]
+
+    def _build_files_panel(self) -> QWidget:
+        """Factory pro FilesPanel no right dock. Wirado pra abrir arquivos
+        no editor configurado (VSCode) — abrir no centro do app requer
+        viewer interno, próximo passo."""
+        from .files_panel import FilesPanel
+        panel = FilesPanel()
+        panel.open_file_requested.connect(self._open_file_in_editor)
+        return panel
 
     def _build_right_dock(self) -> QWidget:
         self.dock_coord = DockCoordinator(
@@ -1001,8 +1017,8 @@ class MainWindow(QMainWindow):
         from .terminal_child_widget import TerminalChildWidget
         for i in range(self.list_widget.topLevelItemCount()):
             ws_item = self.list_widget.topLevelItem(i)
-            for j in range(ws_item.childCount()):
-                child = ws_item.child(j)
+            # Terminais vivem no bucket "Sessões Claude" — usa o iterator.
+            for child in self._iter_terminal_items(ws_item):
                 widget = self.list_widget.itemWidget(child, 0)
                 if isinstance(widget, TerminalChildWidget):
                     widget.set_actions_visible(new_visible)
@@ -1294,14 +1310,13 @@ class MainWindow(QMainWindow):
             ws_data = it.data(0, Qt.ItemDataRole.UserRole)
             if isinstance(ws_data, Workspace):
                 self._install_runner_children(it, ws_data)
-                for j in range(it.childCount()):
-                    sib = it.child(j)
-                    tab_id = sib.data(0, Qt.ItemDataRole.UserRole)
+                # Terminais agora vivem dentro do bucket Sessões Claude —
+                # desce um nível pra achar os tab_ids.
+                for term_item in self._iter_terminal_items(it):
+                    tab_id = term_item.data(0, Qt.ItemDataRole.UserRole)
                     if isinstance(tab_id, int):
-                        self._install_console_runner_children(sib, ws_data, tab_id)
-                # Re-instala Arquivos por último — runner group também é
-                # inserido em pos 0 e empurraria nosso bucket pra baixo.
-                self._install_arquivos_bucket(it, ws_data)
+                        self._install_console_runner_children(term_item, ws_data, tab_id)
+                self._refresh_sessoes_count(it)
                 self._refresh_empty_placeholder(it)
 
         if current_id:
@@ -1468,13 +1483,85 @@ class MainWindow(QMainWindow):
             self.terminals_coord.state.running_counts.get(ws.id, 0)
         )
         self.list_widget.setItemWidget(item, 0, widget)
-        # Bucket "Arquivos" como primeiro filho (clicável → file finder).
-        # Idempotente — chamado também em _refresh_list pra ws já existentes.
-        self._install_arquivos_bucket(item, ws)
         self._refresh_empty_placeholder(item)
 
     _EMPTY_PLACEHOLDER_ROLE = "__empty_workspace_placeholder__"
     _BUCKET_ROLE = "__bucket__"
+    _SESSOES_BUCKET_ROLE = "__bucket_sessoes__"
+
+    def _ensure_sessoes_bucket(self, ws_item: "QTreeWidgetItem") -> "QTreeWidgetItem":
+        """Devolve o bucket 'Sessões Claude (N)' do workspace, criando
+        se ainda não existe. Posiciona depois do runner_group (que fica
+        no topo) e antes do placeholder/outros."""
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ICONS, ic as _ic
+        # Procura existente
+        for i in range(ws_item.childCount()):
+            c = ws_item.child(i)
+            if c.data(0, Qt.ItemDataRole.UserRole) == self._SESSOES_BUCKET_ROLE:
+                return c
+        # Cria
+        bucket = QTreeWidgetItem()
+        bucket.setData(0, Qt.ItemDataRole.UserRole, self._SESSOES_BUCKET_ROLE)
+        bucket.setSizeHint(0, _QS(0, 24))
+        ws_item.addChild(bucket)
+        bucket.setExpanded(True)
+
+        # Widget do header do bucket: ícone + label + contagem
+        host = QWidget()
+        host.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(host)
+        h.setContentsMargins(4, 2, 6, 2)
+        h.setSpacing(6)
+        icon_lbl = QLabel()
+        icon_lbl.setPixmap(_ic("fa5s.comments", color="#9aa0a6").pixmap(_QS(12, 12)))
+        h.addWidget(icon_lbl)
+        text_lbl = QLabel("Sessões Claude")
+        text_lbl.setStyleSheet(
+            "color: #c8c8c8; font-size: 11px; font-weight: 600;"
+        )
+        h.addWidget(text_lbl)
+        count_lbl = QLabel("0")
+        count_lbl.setStyleSheet(
+            "background: #2a2a2a; color: #9aa0a6; font-size: 9px; "
+            "font-weight: 700; padding: 1px 6px; border-radius: 6px;"
+        )
+        h.addWidget(count_lbl)
+        h.addStretch(1)
+        host.setProperty("_count_lbl", count_lbl)
+        self.list_widget.setItemWidget(bucket, 0, host)
+        return bucket
+
+    def _iter_terminal_items(self, ws_item: "QTreeWidgetItem"):
+        """Itera os QTreeWidgetItem dos consoles dentro do bucket Sessões
+        Claude. Generator pra simplificar todos os call sites antigos que
+        faziam `ws_item.child(i)` assumindo terminais como filhos diretos."""
+        for i in range(ws_item.childCount()):
+            c = ws_item.child(i)
+            if c.data(0, Qt.ItemDataRole.UserRole) != self._SESSOES_BUCKET_ROLE:
+                continue
+            for j in range(c.childCount()):
+                yield c.child(j)
+
+    def _refresh_sessoes_count(self, ws_item: "QTreeWidgetItem") -> None:
+        """Atualiza o badge de contagem do bucket Sessões Claude. Se 0,
+        esconde o bucket pra não poluir o workspace sem sessões."""
+        bucket = None
+        for i in range(ws_item.childCount()):
+            c = ws_item.child(i)
+            if c.data(0, Qt.ItemDataRole.UserRole) == self._SESSOES_BUCKET_ROLE:
+                bucket = c
+                break
+        if bucket is None:
+            return
+        count = bucket.childCount()
+        bucket.setHidden(count == 0)
+        host = self.list_widget.itemWidget(bucket, 0)
+        if host is not None:
+            count_lbl = host.property("_count_lbl")
+            if count_lbl is not None:
+                count_lbl.setText(str(count))
 
     def _install_arquivos_bucket(self, ws_item: "QTreeWidgetItem", ws: Workspace) -> None:
         """Cria item 'Arquivos' como primeiro filho do workspace. Clicar
@@ -1810,9 +1897,9 @@ class MainWindow(QMainWindow):
         if not isinstance(ws, Workspace):
             return
         self._install_runner_children(ws_item, ws)
-        # Cada console também tem seus runners — refaz para todos.
-        for i in range(ws_item.childCount()):
-            sib = ws_item.child(i)
+        # Cada console também tem seus runners — refaz para todos
+        # (consoles vivem no bucket Sessões Claude).
+        for sib in self._iter_terminal_items(ws_item):
             tab_id = sib.data(0, Qt.ItemDataRole.UserRole)
             if isinstance(tab_id, int):
                 self._install_console_runner_children(sib, ws, tab_id)
@@ -3047,8 +3134,7 @@ class MainWindow(QMainWindow):
         if ws_item is not None:
             if not ws_item.isExpanded():
                 ws_item.setExpanded(True)
-            for j in range(ws_item.childCount()):
-                child = ws_item.child(j)
+            for child in self._iter_terminal_items(ws_item):
                 if child.data(0, Qt.ItemDataRole.UserRole) == tab_id:
                     target_item = child
                     break
@@ -3213,11 +3299,14 @@ class MainWindow(QMainWindow):
             status,
             spinner_char=self.terminals_coord.current_spinner_char(),
         )
-        # Layout do workspace na sidebar: "Runners workspace" no topo,
-        # depois a lista de consoles. O group de runners (quando existe)
-        # é inserido em index 0; consoles vão sempre ao final.
-        ws_item.addChild(child)
+        # Layout: terminais Claude ficam dentro do bucket "Sessões Claude (N)".
+        # Runners (groups) ficam como filhos diretos do workspace acima
+        # do bucket. Console-scoped runners continuam aninhados no próprio
+        # term_item (não afetado aqui).
+        bucket = self._ensure_sessoes_bucket(ws_item)
+        bucket.addChild(child)
         self.list_widget.setItemWidget(child, 0, widget)
+        self._refresh_sessoes_count(ws_item)
         # Conecta os botões inline (▶ ⚙) à TerminalWidget correspondente.
         # Visibilidade respeita o toggle do header WORKSPACES.
         self._wire_child_actions(widget, tab_id)
@@ -3299,9 +3388,15 @@ class MainWindow(QMainWindow):
         forma independente e sempre sequencial."""
         if not base_title or ws_item is None:
             return base_title
+        # Aceita workspace OU bucket. Se for bucket, sobe pro workspace
+        # antes de iterar terminal_items (que volta a descer).
+        if ws_item.data(0, Qt.ItemDataRole.UserRole) == self._SESSOES_BUCKET_ROLE:
+            real_ws = ws_item.parent()
+            if real_ws is None:
+                return base_title
+            ws_item = real_ws
         sibling_ids: list[int] = []
-        for i in range(ws_item.childCount()):
-            sib = ws_item.child(i)
+        for sib in self._iter_terminal_items(ws_item):
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
             if isinstance(sib_id, int):
                 sibling_ids.append(sib_id)
@@ -3315,11 +3410,19 @@ class MainWindow(QMainWindow):
         self, ws_item: QTreeWidgetItem | None
     ) -> None:
         """Reaplica display title de cada child com a lógica de
-        desambiguação. Barato — só N children por workspace."""
+        desambiguação. Barato — só N children por workspace.
+
+        Tolera ser chamado tanto com o workspace quanto com o bucket
+        (Sessões Claude) como argumento — sobe pro workspace se for bucket.
+        """
         if ws_item is None:
             return
-        for i in range(ws_item.childCount()):
-            sib = ws_item.child(i)
+        # Se chamarem com o bucket, sobe pro workspace.
+        if ws_item.data(0, Qt.ItemDataRole.UserRole) == self._SESSOES_BUCKET_ROLE:
+            ws_item = ws_item.parent()
+            if ws_item is None:
+                return
+        for sib in self._iter_terminal_items(ws_item):
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
             if not isinstance(sib_id, int):
                 continue
