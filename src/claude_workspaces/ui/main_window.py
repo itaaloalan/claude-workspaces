@@ -1548,14 +1548,25 @@ class MainWindow(QMainWindow):
         bucket.setData(0, Qt.ItemDataRole.UserRole, self._SESSOES_BUCKET_ROLE)
         bucket.setSizeHint(0, _QS(0, 24))
         ws_item.addChild(bucket)
-        bucket.setExpanded(True)
+        ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
+        ws_id = ws_data.id if isinstance(ws_data, Workspace) else ""
+        collapsed = bool(self.settings.sessoes_collapsed.get(ws_id, False))
+        bucket.setExpanded(not collapsed)
 
-        # Widget do header do bucket: ícone + label + contagem
+        # Widget do header do bucket: chevron + ícone + label + contagem.
+        # Chevron pra dar affordance visual de colapsar (igual aos outros
+        # grupos da sidebar). Clique no header alterna expandido/colapsado
+        # e persiste em settings.sessoes_collapsed[ws_id].
         host = QWidget()
         host.setStyleSheet("background: transparent;")
+        host.setCursor(Qt.CursorShape.PointingHandCursor)
         h = QHBoxLayout(host)
         h.setContentsMargins(4, 2, 6, 2)
         h.setSpacing(6)
+        chevron_lbl = QLabel()
+        chevron_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
+        chevron_lbl.setPixmap(_ic(chevron_name, color="#9aa0a6").pixmap(_QS(8, 8)))
+        h.addWidget(chevron_lbl)
         icon_lbl = QLabel()
         icon_lbl.setPixmap(_ic("fa5s.comments", color="#9aa0a6").pixmap(_QS(12, 12)))
         h.addWidget(icon_lbl)
@@ -1572,6 +1583,17 @@ class MainWindow(QMainWindow):
         h.addWidget(count_lbl)
         h.addStretch(1)
         host.setProperty("_count_lbl", count_lbl)
+        host.setProperty("_chevron_lbl", chevron_lbl)
+
+        def _toggle(_ev=None, b=bucket, wid=ws_id, ch=chevron_lbl) -> None:
+            new_expanded = not b.isExpanded()
+            b.setExpanded(new_expanded)
+            self.settings.sessoes_collapsed[wid] = not new_expanded
+            self.settings.save()
+            name = "fa5s.chevron-down" if new_expanded else "fa5s.chevron-right"
+            ch.setPixmap(_ic(name, color="#9aa0a6").pixmap(_QS(8, 8)))
+
+        host.mousePressEvent = _toggle  # type: ignore[method-assign]
         self.list_widget.setItemWidget(bucket, 0, host)
         return bucket
 

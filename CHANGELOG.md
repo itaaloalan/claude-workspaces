@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.8] — 2026-05-21
+
+### Adicionado
+- **Minimizar bucket "Sessões Claude" na sidebar**
+  (`ui/main_window._ensure_sessoes_bucket`, `settings.sessoes_collapsed`):
+  o header do bucket agora tem chevron (▶/▼) e é clicável — alterna
+  expandido/colapsado e persiste o estado por workspace em
+  `settings.sessoes_collapsed[ws_id]`. Estado é restaurado ao recriar
+  o bucket (re-listagem da sidebar).
+
 ## [0.58.7] — 2026-05-21
 
 ### Adicionado

@@ -48,6 +48,8 @@ class Settings:
     workspace_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado do submenu "Runners workspace" por workspace.
     runner_group_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
+    # Estado colapsado do bucket "Sessões Claude" por workspace.
+    sessoes_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Defaults pro LaunchClaudeDialog
     default_isolate_worktree: bool = False
     default_create_new_branch: bool = True
