@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.8] — 2026-05-21
+
+### Corrigido
+- **Header "Terminal" + min/max/close duplicava acima das tabs**
+  (`ui/main_window.py`): o `terminal_header` (com label "Terminal" e
+  botões `— □ ❐`) era do pré-QtAds — controlava o resize vertical do
+  pane. Com QtAds o usuário redimensiona livremente, e o título
+  duplicava com a tab "Claude console". Escondido (`setVisible(False)`).
+  Handlers permanecem ligados aos atalhos de teclado (Ctrl+J etc).
+- Sem o header pesado, o botão `＋` no corner da tab bar fica
+  naturalmente alinhado com as tabs em vez de "flutuar".
+
 ## [0.55.7] — 2026-05-21
 
 ### Adicionado

@@ -832,6 +832,10 @@ class MainWindow(QMainWindow):
             on_header_click=on_header_click,
         ).build()
         self._terminal_header = builder.header
+        # Header "Terminal" com min/max/close era do pré-QtAds (controlava
+        # o resize vertical do pane). Com QtAds o user redimensiona livre,
+        # e o título "Terminal" duplica com a tab "Claude console" — sumir.
+        self._terminal_header.setVisible(False)
         self._term_min_btn = builder.min_btn
         self._term_max_btn = builder.max_btn
         self._term_restore_btn = builder.restore_btn
