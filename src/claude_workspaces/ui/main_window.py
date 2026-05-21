@@ -264,17 +264,16 @@ class MainWindow(QMainWindow):
             "QSplitter::handle:pressed { background: #4a82c5; }"
         )
 
-        # Splitter horizontal: sidebar full-height | painel direito
-        self.body_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.body_splitter.setChildrenCollapsible(True)
-        self.body_splitter.setHandleWidth(SPLITTER_HANDLE_W)
-        self.body_splitter.setStyleSheet(splitter_css)
+        # Body dock manager (QtAds): sidebar | conteúdo+terminal | right_dock.
+        # O right_splitter interno (vertical: content / terminal) continua
+        # sendo QSplitter pra preservar toda a lógica de min/max do terminal.
+        from .dock_manager import WorkspaceDockManager
+        self.body_dock = WorkspaceDockManager(self)
 
         self._sidebar = self._build_sidebar()
         self._sidebar.setMinimumWidth(0)
-        self.body_splitter.addWidget(self._sidebar)
 
-        # Splitter vertical interno ao painel direito:
+        # Splitter vertical interno ao painel central:
         # conteúdo (details / settings) em cima, terminal embaixo —
         # terminal nunca passa por baixo do sidebar
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -337,21 +336,20 @@ class MainWindow(QMainWindow):
         else:
             self.right_splitter.setSizes([380, 520])
 
-        self.body_splitter.addWidget(self.right_splitter)
-
         # Dock direito (3ª coluna): Tarefas + Git + Skills colapsáveis
         self.right_dock = self._build_right_dock()
         self.right_dock.setMinimumWidth(0)
-        self.body_splitter.addWidget(self.right_dock)
 
-        self.body_splitter.setStretchFactor(0, 0)
-        self.body_splitter.setStretchFactor(1, 1)
-        self.body_splitter.setStretchFactor(2, 0)
-        sizes = self.settings.body_splitter_sizes
-        if sizes and len(sizes) == 3:
-            self.body_splitter.setSizes(sizes)
-        else:
-            self.body_splitter.setSizes([240, 760, 340])
+        # Monta os 3 docks. Ordem: center primeiro pra QtAds não promover
+        # left/right a center vazio.
+        self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
+        self._center_dock = self.body_dock.add_center(self.right_splitter, "Workspace")
+        self._right_panel_dock = self.body_dock.add_right(self.right_dock, "Ferramentas")
+
+        # Restaura layout salvo (tamanhos das colunas). Fallback: ~240/760/340.
+        if not self.body_dock.restore_state_b64(self.settings.body_dock_state):
+            self._sidebar_dock.dockAreaWidget().resize(240, 600)
+            self._right_panel_dock.dockAreaWidget().resize(340, 600)
 
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.
@@ -369,7 +367,9 @@ class MainWindow(QMainWindow):
         shell_row.addWidget(self.activity_bar)
 
         self.main_stack = QStackedWidget()
-        self.main_stack.addWidget(self.body_splitter)            # 0: workspaces+settings
+        # body_dock.widget = CDockManager — root da view de workspaces
+        self.body_view = self.body_dock.widget
+        self.main_stack.addWidget(self.body_view)                # 0: workspaces+settings
         self.catalog_view = CatalogView(settings=self.settings)
         self.main_stack.addWidget(self.catalog_view)             # 1: catálogo
         self.hooks_view = HooksView()
@@ -395,7 +395,12 @@ class MainWindow(QMainWindow):
         self._layout_save_timer.setInterval(LAYOUT_SAVE_DEBOUNCE_MS)
         self._layout_save_timer.timeout.connect(self._persist_layout)
 
-        self.body_splitter.splitterMoved.connect(self._schedule_layout_save)
+        # QtAds não tem signal único pra splitter interno; cobrimos os
+        # eventos que importam (flutuar, fechar área) + resizeEvent já dispara
+        self.body_dock.widget.floatingWidgetCreated.connect(
+            lambda *_: self._schedule_layout_save()
+        )
+        self.body_dock.widget.dockAreasRemoved.connect(self._schedule_layout_save)
         self.right_splitter.splitterMoved.connect(self._schedule_layout_save)
         self.details.columns_splitter_moved.connect(self._schedule_layout_save)
 
@@ -409,7 +414,7 @@ class MainWindow(QMainWindow):
 
     @log_exceptions(message="Falha ao persistir layout ao vivo")
     def _persist_layout(self) -> None:
-        self.settings.body_splitter_sizes = list(self.body_splitter.sizes())
+        self.settings.body_dock_state = self.body_dock.save_state_b64()
         self.settings.right_splitter_sizes = list(self.right_splitter.sizes())
         self.settings.workspace_columns_sizes = self.details.columns_sizes()
         g = self.geometry()
@@ -459,15 +464,7 @@ class MainWindow(QMainWindow):
         self.list_widget.setCurrentItem(self.list_widget.topLevelItem(rows[next_pos]))
 
     def _toggle_sidebar(self) -> None:
-        sizes = self.body_splitter.sizes()
-        if not sizes:
-            return
-        if sizes[0] > 0:
-            self._sidebar_last_size = sizes[0]
-            self.body_splitter.setSizes([0, sum(sizes)])
-        else:
-            target = self._sidebar_last_size or SIDEBAR_DEFAULT_W
-            self.body_splitter.setSizes([target, max(sum(sizes) - target, 200)])
+        self.body_dock.toggle("sidebar")
         self._schedule_layout_save()
 
     def _terminal_header_height(self) -> int:
@@ -545,17 +542,7 @@ class MainWindow(QMainWindow):
         self._launch_claude_for(ws, "", "")
 
     def _toggle_right_dock(self) -> None:
-        sizes = self.body_splitter.sizes()
-        if not sizes or len(sizes) < 3:
-            return
-        if sizes[2] > 0:
-            self._right_dock_last_size = sizes[2]
-            self.body_splitter.setSizes([sizes[0], sizes[1] + sizes[2], 0])
-        else:
-            target = getattr(self, "_right_dock_last_size", 340) or 340
-            self.body_splitter.setSizes(
-                [sizes[0], max(sizes[1] - target, 200), target]
-            )
+        self.body_dock.toggle("ferramentas")
         self._schedule_layout_save()
 
     def _current_workspace(self) -> Workspace | None:
@@ -576,10 +563,10 @@ class MainWindow(QMainWindow):
     def _on_activity_view_changed(self, view_id: str) -> None:
         """Activity bar trocou a view top-level. Carrega lazy."""
         if view_id == VIEW_WORKSPACES:
-            self.main_stack.setCurrentWidget(self.body_splitter)
+            self.main_stack.setCurrentWidget(self.body_view)
             self.content_stack.setCurrentIndex(0)
         elif view_id == VIEW_SETTINGS:
-            self.main_stack.setCurrentWidget(self.body_splitter)
+            self.main_stack.setCurrentWidget(self.body_view)
             self.content_stack.setCurrentWidget(self._settings_scroll)
         elif view_id == VIEW_CATALOG:
             self.main_stack.setCurrentWidget(self.catalog_view)
@@ -1791,12 +1778,12 @@ class MainWindow(QMainWindow):
     def _show_settings(self) -> None:
         # Garante que estamos na view de workspaces (settings vive no
         # content_stack interno do body_splitter)
-        self.main_stack.setCurrentWidget(self.body_splitter)
+        self.main_stack.setCurrentWidget(self.body_view)
         self.activity_bar.set_active(VIEW_SETTINGS)
         self.content_stack.setCurrentWidget(self._settings_scroll)
 
     def _show_workspaces(self) -> None:
-        self.main_stack.setCurrentWidget(self.body_splitter)
+        self.main_stack.setCurrentWidget(self.body_view)
         self.activity_bar.set_active(VIEW_WORKSPACES)
         self.content_stack.setCurrentIndex(0)
         current = self.list_widget.currentItem()

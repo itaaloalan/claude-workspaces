@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.52.0] — 2026-05-21
+
+### Adicionado
+- **Sistema de docking IDE-like com PySide6-QtAds** (`ui/dock_manager.py`,
+  `ui/main_window.py`): substitui o `body_splitter` externo (3 colunas:
+  sidebar / centro+terminal / right_dock) por `CDockManager`. Cada coluna
+  vira um `CDockWidget` que pode ser fechado, flutuado, auto-hide ou
+  movido por drag-and-drop estilo VSCode/Qt Creator.
+- Persistência de layout via `body_dock_state` (base64 do `saveState()`)
+  no `settings.json`. `body_splitter_sizes` mantido como legado.
+
+### Mudado
+- `_toggle_sidebar` e `_toggle_right_dock` agora delegam pro
+  `WorkspaceDockManager.toggle()` (hide/show do CDockWidget) em vez de
+  manipular tamanhos de splitter na mão.
+- Dependência nova: `PySide6-QtAds>=4.4`. PySide6 alinhado pra 6.11.0
+  (versão suportada pelo binding).
+
+### Fase 1 da remodelagem IDE-like
+Primeira de 6 fases planejadas. As próximas vão substituir a sidebar
+por `QTreeView` real, trazer cabeçalho com chips no centro, abas no
+console, status bar permanente, ícones via qtawesome etc.
+
 ## [0.51.2] — 2026-05-20
 
 ### Mudado

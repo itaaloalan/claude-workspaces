@@ -33,7 +33,8 @@ class Settings:
     # rápidos (Vite/Next). 0 = abre imediato.
     browser_open_delay_ms: int = 5000
     # Tamanhos persistidos dos splitters (largura/altura em px). [] = usar defaults.
-    body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, middle, right_dock]
+    body_splitter_sizes: list[int] = field(default_factory=list)  # [sidebar, middle, right_dock] (legado pré-QtAds)
+    body_dock_state: str = ""  # QtAds CDockManager.saveState() em base64
     right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]
     workspace_columns_sizes: list[int] = field(default_factory=list)  # legado, sem uso atual
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]

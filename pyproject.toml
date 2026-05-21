@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-workspaces"
-version = "0.51.2"
+version = "0.52.0"
 description = "Workspace manager for launching Claude Code with per-project context"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ authors = [{ name = "Italo Alan", email = "italoalanw3@gmail.com" }]
 license = { text = "MIT" }
 dependencies = [
     "PySide6>=6.6",
+    "PySide6-QtAds>=4.4",
     "PyYAML>=6.0",
 ]
 
