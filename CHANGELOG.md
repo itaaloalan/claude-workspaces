@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.54.2] — 2026-05-21
+
+### Corrigido
+- **Notificação suprimida quando o console alertante já está em foco**
+  (`ui/main_window.py` — `_on_inbox_alert`): se a `MainWindow` está
+  ativa, não-minimizada, e o tab visível no `terminal_host` é
+  exatamente o que disparou o alerta, o evento é descartado antes do
+  toast/D-Bus/tray. Reminders também ficam silenciados nesse caso. Se
+  o usuário troca de tab, vai pra outra janela ou minimiza, o
+  comportamento normal de notificação volta.
+
+### Por quê
+Ficar avisando "Pronto" pra um console que o próprio usuário já tá
+olhando é puro ruído visual — ele acabou de ver o prompt aparecer.
+
 ## [0.54.1] — 2026-05-21
 
 ### Corrigido

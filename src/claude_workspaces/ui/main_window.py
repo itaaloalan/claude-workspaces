@@ -2449,6 +2449,23 @@ class MainWindow(QMainWindow):
         Tenta D-Bus com botões; cai pro tray.showMessage se indisponível."""
         if not self.settings.notify_native_enabled:
             return
+        # Se o usuário já tá olhando pra esse console (janela ativa + tab
+        # visível), não notifica — ele acabou de ver o "Pronto" na própria
+        # tela. Reminders também ficam silenciados nesse caso, senão o
+        # timer fica disparando popup sobre uma janela já focada. Demais
+        # casos (outra janela, outro tab, app no tray) continuam alertando.
+        if (
+            self.isActiveWindow()
+            and not self.isMinimized()
+            and self.terminal_host is not None
+        ):
+            current = self.terminal_host.currentWidget()
+            if current is not None and id(current) == tab_id:
+                log.debug(
+                    "inbox_alert suprimido — console %s já está visível e em foco",
+                    tab_id,
+                )
+                return
         # Debounce do "Pronto": se o mesmo tab disparou working→idle nos
         # últimos 60s, suprime esse alerta. Console oscila com Claude
         # rodando hooks/sub-passos entre working↔idle várias vezes e o
