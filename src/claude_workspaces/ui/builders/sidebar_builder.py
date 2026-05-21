@@ -221,6 +221,7 @@ class SidebarBuilder:
         on_add_clicked: Callable[[], None],
         on_version_clicked: Callable[[], None] | None = None,
         on_find_file: Callable[[str], None] | None = None,
+        on_search_workspaces: Callable[[str], None] | None = None,
     ) -> None:
         self._on_current_changed = on_current_changed
         self._on_item_clicked = on_item_clicked
@@ -228,6 +229,7 @@ class SidebarBuilder:
         self._on_add_clicked = on_add_clicked
         self._on_version_clicked = on_version_clicked
         self._on_find_file = on_find_file
+        self._on_search_workspaces = on_search_workspaces
 
     def build(self) -> SidebarBuilder:
         self.wrapper = QWidget()
@@ -258,6 +260,20 @@ class SidebarBuilder:
         )
         header_layout.addWidget(self.actions_toggle_btn, 0, Qt.AlignmentFlag.AlignRight)
         layout.addWidget(header_row)
+
+        # Input local de busca workspaces (espelha o filtro do top bar
+        # mas fica colado na lista, igual VSCode/JetBrains).
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar workspaces…")
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.setStyleSheet(
+            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "border-radius: 4px; padding: 5px 8px; color: #e6e6e6; font-size: 11px; }"
+            "QLineEdit:focus { border-color: #3d6ea8; }"
+        )
+        if self._on_search_workspaces is not None:
+            self.search_input.textChanged.connect(self._on_search_workspaces)
+        layout.addWidget(self.search_input)
 
         self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)

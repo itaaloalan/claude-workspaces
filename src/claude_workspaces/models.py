@@ -86,6 +86,9 @@ class Workspace:
     default_isolate_worktree: bool | None = None
     default_create_new_branch: bool | None = None
     runners: list[RunnerConfig] = field(default_factory=list)
+    # Workspaces fixados aparecem na seção "FIXADOS" no topo da sidebar
+    # (saem da lista principal pra não duplicar visualmente).
+    pinned: bool = False
 
     @property
     def primary_folder(self) -> str | None:
@@ -138,4 +141,5 @@ class Workspace:
             default_isolate_worktree=isolate,
             default_create_new_branch=create_branch,
             runners=runners,
+            pinned=bool(data.get("pinned", False)),
         )

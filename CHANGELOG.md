@@ -6,6 +6,28 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.53.0] — 2026-05-21
+
+### Adicionado
+- **Seção "FIXADOS" na sidebar com pin/unpin** (`models.py`,
+  `ui/coordinators/workspace_coordinator.py`, `ui/main_window.py`):
+  campo `pinned: bool` no `Workspace` (default False, retrocompatível).
+  Click direito num workspace mostra "📌 Fixar/Desafixar workspace".
+  Fixados saem da lista principal e vão pra seção "FIXADOS" no topo.
+- **Input de busca local de workspaces** na sidebar
+  (`ui/builders/sidebar_builder.py`): filtra a lista por nome igual o
+  search do top bar, mas colado na própria sidebar (estilo
+  VSCode/JetBrains). Os dois inputs convergem pro mesmo `_apply_filter`.
+- Header items não-selecionáveis dentro do tree (`_add_section_header`)
+  pra delimitar "FIXADOS" e "WORKSPACES".
+
+### Mudado
+- `_visible_rows` e fallbacks de seleção pulam os header items.
+
+### Fase 2a da remodelagem IDE-like
+Sub-fase da Fase 2. Próximas: buckets (Arquivos / Sessões Claude N /
+Runners N) e migração Model/View.
+
 ## [0.52.0] — 2026-05-21
 
 ### Adicionado

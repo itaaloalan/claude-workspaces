@@ -438,6 +438,7 @@ class MainWindow(QMainWindow):
         return [
             i for i in range(self.list_widget.topLevelItemCount())
             if not self.list_widget.topLevelItem(i).isHidden()
+            and not self._is_section_header(self.list_widget.topLevelItem(i))
         ]
 
     def _jump_to_workspace(self, index: int) -> None:
@@ -858,7 +859,9 @@ class MainWindow(QMainWindow):
             on_add_clicked=self.add_workspace,
             on_version_clicked=self._show_release_notes,
             on_find_file=self._open_file_finder_dialog,
+            on_search_workspaces=self._apply_filter,
         ).build()
+        self._sidebar_search_input = builder.search_input
         self._find_file_input = builder.find_file_input
         self.list_widget = builder.list_widget
         self.version_label = builder.version_label
@@ -962,6 +965,11 @@ class MainWindow(QMainWindow):
         elif isinstance(widget, RunnerGroupWidget):
             widget.set_collapsed(collapsed)
 
+    def _toggle_pin_workspace(self, ws: "Workspace") -> None:
+        """Inverte ws.pinned e re-renderiza a sidebar (refresh_list é
+        disparado via workspaces_coord.workspaces_changed)."""
+        self.workspaces_coord.set_pinned(ws.id, not ws.pinned)
+
     def _on_sidebar_context_menu(self, pos) -> None:
         """Menu de contexto da sidebar — atalhos pra retomar trabalho do
         Claude sem precisar focar a aba e digitar 'continue' manualmente.
@@ -1020,23 +1028,31 @@ class MainWindow(QMainWindow):
             )
             menu.addAction(close_act)
         elif isinstance(data, Workspace):
-            terms = self._running_terminals_for_workspace(data.id)
-            if not terms:
-                return
-            count = len(terms)
-            label = (
-                "▶ Continuar todos os consoles deste workspace"
-                if count > 1
-                else "▶ Continuar o console deste workspace"
+            ws = data
+            pin_label = "📌 Desafixar workspace" if ws.pinned else "📌 Fixar workspace"
+            pin_act = QAction(pin_label, menu)
+            pin_act.setToolTip(
+                "Move pra/de seção FIXADOS no topo da sidebar."
             )
-            continue_all_act = QAction(label, menu)
-            continue_all_act.setToolTip(
-                f"Manda 'continue' pra {count} console(s) Claude rodando neste workspace"
-            )
-            continue_all_act.triggered.connect(
-                lambda _c=False, ts=terms: [t.send_continue() for t in ts]
-            )
-            menu.addAction(continue_all_act)
+            pin_act.triggered.connect(lambda _c=False, w=ws: self._toggle_pin_workspace(w))
+            menu.addAction(pin_act)
+            terms = self._running_terminals_for_workspace(ws.id)
+            if terms:
+                menu.addSeparator()
+                count = len(terms)
+                label = (
+                    "▶ Continuar todos os consoles deste workspace"
+                    if count > 1
+                    else "▶ Continuar o console deste workspace"
+                )
+                continue_all_act = QAction(label, menu)
+                continue_all_act.setToolTip(
+                    f"Manda 'continue' pra {count} console(s) Claude rodando neste workspace"
+                )
+                continue_all_act.triggered.connect(
+                    lambda _c=False, ts=terms: [t.send_continue() for t in ts]
+                )
+                menu.addAction(continue_all_act)
         else:
             return
         if menu.isEmpty():
@@ -1123,7 +1139,12 @@ class MainWindow(QMainWindow):
         ws_font = QFont(self.list_widget.font())
         ws_font.setBold(True)
 
-        for ws in self.workspaces:
+        # Particiona: workspaces fixados aparecem em "FIXADOS" no topo,
+        # fora da lista principal (não duplica).
+        pinned = [ws for ws in self.workspaces if ws.pinned]
+        regular = [ws for ws in self.workspaces if not ws.pinned]
+
+        def _add_workspace(ws: Workspace) -> None:
             item = QTreeWidgetItem([""])
             item.setData(0, Qt.ItemDataRole.UserRole, ws)
             item.setFont(0, ws_font)
@@ -1137,6 +1158,14 @@ class MainWindow(QMainWindow):
             collapsed = bool(self.settings.workspace_collapsed.get(ws.id, False))
             item.setExpanded(not collapsed)
             self._install_workspace_item_widget(item, ws)
+
+        if pinned:
+            self._add_section_header("FIXADOS")
+            for ws in pinned:
+                _add_workspace(ws)
+            self._add_section_header("WORKSPACES")
+        for ws in regular:
+            _add_workspace(ws)
 
         self._apply_filter(
             self.top_bar.search.text() if hasattr(self, "top_bar") else ""
@@ -1185,7 +1214,7 @@ class MainWindow(QMainWindow):
 
         for i in range(self.list_widget.topLevelItemCount()):
             it = self.list_widget.topLevelItem(i)
-            if not it.isHidden():
+            if not it.isHidden() and not self._is_section_header(it):
                 self.list_widget.setCurrentItem(it)
                 return
 
@@ -1222,7 +1251,7 @@ class MainWindow(QMainWindow):
         if current and current.isHidden():
             for i in range(self.list_widget.topLevelItemCount()):
                 it = self.list_widget.topLevelItem(i)
-                if not it.isHidden():
+                if not it.isHidden() and not self._is_section_header(it):
                     self.list_widget.setCurrentItem(it)
                     return
 
@@ -1256,6 +1285,26 @@ class MainWindow(QMainWindow):
             widget.set_running_count(count)
         else:
             item.setText(0, self._item_label(ws))
+
+    _SECTION_HEADER_ROLE = "__section_header__"
+
+    def _add_section_header(self, label: str) -> None:
+        """Insere um item-cabeçalho não-selecionável (FIXADOS / WORKSPACES)."""
+        item = QTreeWidgetItem([""])
+        item.setData(0, Qt.ItemDataRole.UserRole, self._SECTION_HEADER_ROLE)
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+        self.list_widget.addTopLevelItem(item)
+        lbl = QLabel(label)
+        lbl.setStyleSheet(
+            "QLabel { color: #707070; font-size: 10px; font-weight: 700; "
+            "letter-spacing: 1.4px; padding: 8px 4px 4px 4px; }"
+        )
+        self.list_widget.setItemWidget(item, 0, lbl)
+
+    def _is_section_header(self, item: "QTreeWidgetItem | None") -> bool:
+        if item is None:
+            return False
+        return item.data(0, Qt.ItemDataRole.UserRole) == self._SECTION_HEADER_ROLE
 
     def _install_workspace_item_widget(
         self, item: "QTreeWidgetItem", ws: Workspace
