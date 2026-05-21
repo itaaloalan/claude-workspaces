@@ -818,13 +818,47 @@ class MainWindow(QMainWindow):
     ]
 
     def _build_files_panel(self) -> QWidget:
-        """Factory pro FilesPanel no right dock. Wirado pra abrir arquivos
-        no editor configurado (VSCode) — abrir no centro do app requer
-        viewer interno, próximo passo."""
+        """Factory pro FilesPanel no right dock. Duplo-click num arquivo
+        abre como aba central (EditorTab dentro do _bottom_tabs)."""
         from .files_panel import FilesPanel
         panel = FilesPanel()
-        panel.open_file_requested.connect(self._open_file_in_editor)
+        panel.open_file_requested.connect(self._open_file_as_central_tab)
         return panel
+
+    def _on_central_tab_close(self, idx: int) -> None:
+        """Fecha a aba SE for um EditorTab. Abas fixas (Claude console /
+        Runners workspace / Runners console) ignoram o close request."""
+        from .editor_tab import EditorTab
+        w = self._bottom_tabs.widget(idx)
+        if isinstance(w, EditorTab):
+            self._bottom_tabs.removeTab(idx)
+            w.deleteLater()
+
+    def _open_file_as_central_tab(self, abs_path: str) -> None:
+        """Abre `abs_path` como nova aba no `_bottom_tabs`. Se já estiver
+        aberto, só foca a aba existente (idempotente)."""
+        from pathlib import Path
+
+        from .editor_tab import EditorTab
+
+        # Idempotente: se já está aberto, só foca
+        for i in range(self._bottom_tabs.count()):
+            w = self._bottom_tabs.widget(i)
+            if isinstance(w, EditorTab) and w.path == abs_path:
+                self._bottom_tabs.setCurrentIndex(i)
+                return
+
+        editor = EditorTab(abs_path)
+        title = Path(abs_path).name
+        from PySide6.QtCore import QSize
+
+        from .icons import ic
+        idx = self._bottom_tabs.addTab(editor, title)
+        self._bottom_tabs.setTabIcon(idx, ic("fa5s.file-alt", color="#9aa0a6"))
+        self._bottom_tabs.setTabToolTip(idx, abs_path)
+        self._bottom_tabs.setCurrentIndex(idx)
+        # Garante que tabsClosable está ON pra essa aba poder fechar
+        self._bottom_tabs.setTabsClosable(True)
 
     def _build_right_dock(self) -> QWidget:
         self.dock_coord = DockCoordinator(
@@ -878,6 +912,9 @@ class MainWindow(QMainWindow):
         self._bottom_tabs = QTabWidget(pane)
         self._bottom_tabs.setDocumentMode(True)
         self._bottom_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        # Tabs fixas (Claude console / Runners / Runners console) não
+        # podem fechar; só EditorTabs abertas via FilesPanel.
+        self._bottom_tabs.tabCloseRequested.connect(self._on_central_tab_close)
         # QSS estilo IDE: tab ativa com underline azul, sem borda esquerda
         self._bottom_tabs.setStyleSheet(
             "QTabWidget::pane { border: 0; }"
@@ -929,6 +966,15 @@ class MainWindow(QMainWindow):
         )
         idx_rc = self._bottom_tabs.addTab(self.console_runner_host, "Runners (console)")
         self._bottom_tabs.setTabIcon(idx_rc, ic(ICONS["runners_console"], color="#9aa0a6"))
+
+        # Liga o close button MAS remove ele das 3 abas fixas (só EditorTabs
+        # abertas via FilesPanel devem ter ✕). Tab abertas depois pegam o
+        # botão default (visível) — gerenciamento via _on_central_tab_close.
+        self._bottom_tabs.setTabsClosable(True)
+        from PySide6.QtWidgets import QTabBar
+        for fixed_idx in (idx_console, idx_rw, idx_rc):
+            for side in (QTabBar.ButtonPosition.RightSide, QTabBar.ButtonPosition.LeftSide):
+                self._bottom_tabs.tabBar().setTabButton(fixed_idx, side, None)
 
         layout.addWidget(self._bottom_tabs, stretch=1)
         return pane

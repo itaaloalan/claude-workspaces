@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.0] — 2026-05-21
+
+### Adicionado
+- **Arquivo abre como aba central** (`ui/editor_tab.py`, `ui/main_window.py`):
+  duplo-click num arquivo no `FilesPanel` abre como nova aba dentro do
+  `_bottom_tabs` (ao lado de Claude console / Runners). Cada aba é um
+  `EditorTab` com `QPlainTextEdit` read-only, fonte monospace, ícone
+  de arquivo. Limite de 2 MiB por arquivo (acima disso só mostra aviso).
+  Idempotente: reopen do mesmo arquivo só foca a aba existente.
+- **`✕` por aba pra fechar EditorTabs** — `setTabsClosable(True)` no
+  `_bottom_tabs`. As 3 abas fixas (Claude console / Runners workspace /
+  Runners console) têm o botão removido via `setTabButton(idx, side, None)`.
+  Handler `_on_central_tab_close` só fecha se for `EditorTab`.
+- **Input "Localizar em arquivos…"** no `FilesPanel` filtra a árvore
+  via `QSortFilterProxyModel` (recursive, case-insensitive). Limita ao
+  que o `QFileSystemModel` já carregou (lazy). Pra busca profunda,
+  continua usando o file finder dialog.
+- **Botão minimize `—` em cada painel do Ferramentas**
+  (`ui/right_dock.py`): novo `PanelFrame` envelopa cada painel com um
+  header (título + botão minimize). Click chama `set_panel_open(False)`
+  — espelha o toggle do strip vertical. Funciona pros 4 painéis
+  (Files, Git, Memória, Skills).
+
 ## [0.57.6] — 2026-05-21
 
 ### Adicionado

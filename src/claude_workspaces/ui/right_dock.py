@@ -79,6 +79,64 @@ _COLLAPSE_BTN_QSS = (
 )
 
 
+class PanelFrame(QWidget):
+    """Wrapper visual em volta do conteúdo de cada painel no dock direito.
+
+    Layout: header row (título + minimize) + content abaixo. Click no
+    minimize emite `minimize_requested` que o RightDock conecta no
+    `set_panel_open(panel_id, False)`.
+    """
+
+    minimize_requested = Signal()
+
+    def __init__(self, label: str, content: QWidget, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setStyleSheet(f"background: {theme.BG_DARKEST};")
+        self._content = content
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Header — title + minimize
+        header = QWidget()
+        header.setObjectName("PanelFrameHeader")
+        header.setStyleSheet(
+            f"QWidget#PanelFrameHeader {{"
+            f"  background: {theme.BG_DARKER};"
+            f"  border-bottom: 1px solid {theme.BORDER};"
+            f"}}"
+        )
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(10, 4, 4, 4)
+        hl.setSpacing(4)
+
+        title_lbl = QLabel(label)
+        title_lbl.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 10px; "
+            f"font-weight: 700; letter-spacing: 0.5px;"
+        )
+        hl.addWidget(title_lbl, stretch=1)
+
+        self._minimize_btn = QPushButton("—")
+        self._minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._minimize_btn.setFixedSize(20, 18)
+        self._minimize_btn.setToolTip(f"Minimizar {label}")
+        self._minimize_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: transparent; color: {theme.TEXT_FAINT};"
+            f"  border: 0; border-radius: 3px; font-size: 14px; padding: 0;"
+            f"}}"
+            f"QPushButton:hover {{ background: {theme.BG_SURFACE}; "
+            f"  color: {theme.TEXT_PRIMARY}; }}"
+        )
+        self._minimize_btn.clicked.connect(self.minimize_requested.emit)
+        hl.addWidget(self._minimize_btn, 0, Qt.AlignmentFlag.AlignRight)
+
+        outer.addWidget(header)
+        outer.addWidget(content, stretch=1)
+
+
 class PanelStripButton(QPushButton):
     """Botão glyph no strip vertical do RightDock. Tooltip mostra o
     nome completo do painel. `checked` indica painel aberto."""
@@ -171,12 +229,20 @@ class RightDock(QWidget):
         idx = self._strip_layout.count() - 1
         self._strip_layout.insertWidget(idx, btn)
 
-        self._panels[panel_id] = (btn, content)
+        # Wrappa o content num PanelFrame com header (título + minimize).
+        # O minimize clica em set_panel_open(False) — espelho do botão
+        # no strip vertical.
+        frame = PanelFrame(label, content)
+        frame.minimize_requested.connect(
+            lambda pid=panel_id: self.set_panel_open(pid, False)
+        )
+
+        self._panels[panel_id] = (btn, frame)
         self._panel_order.append(panel_id)
 
-        # Pre-adiciona o widget ao splitter (escondido)
-        self._content.addWidget(content)
-        content.setVisible(False)
+        # Pre-adiciona o frame ao splitter (escondido)
+        self._content.addWidget(frame)
+        frame.setVisible(False)
 
         if open_:
             btn.setChecked(True)  # dispara _on_btn_toggled

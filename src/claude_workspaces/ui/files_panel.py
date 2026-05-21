@@ -8,13 +8,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QDir, QModelIndex, QSize, Qt, Signal
+from PySide6.QtCore import (
+    QDir,
+    QModelIndex,
+    QSize,
+    QSortFilterProxyModel,
+    Qt,
+    Signal,
+)
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QFileSystemModel,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTreeView,
     QVBoxLayout,
@@ -68,6 +76,21 @@ class FilesPanel(QWidget):
 
         layout.addWidget(header)
 
+        # Search input — filtra itens visíveis por nome. Limita ao que já
+        # foi carregado pelo QFileSystemModel (que é lazy); pra busca
+        # recursiva profunda, usar o file_finder dialog (Ctrl+P).
+        self._search_input = QLineEdit()
+        self._search_input.setPlaceholderText("Localizar em arquivos…")
+        self._search_input.setClearButtonEnabled(True)
+        self._search_input.setStyleSheet(
+            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "border-radius: 4px; padding: 4px 8px; color: #e6e6e6; "
+            "font-size: 11px; margin: 4px 6px 4px 6px; }"
+            "QLineEdit:focus { border-color: #3d6ea8; }"
+        )
+        self._search_input.textChanged.connect(self._on_search_changed)
+        layout.addWidget(self._search_input)
+
         # Árvore de arquivos
         self._model = QFileSystemModel()
         self._model.setFilter(
@@ -77,8 +100,16 @@ class FilesPanel(QWidget):
             | QDir.Filter.Hidden
         )
 
+        # Proxy pra filtrar por nome via search_input. Recursive: True
+        # faz pais aparecerem se algum descendente match. Note: só pega
+        # nós já carregados pelo FileSystemModel (que é lazy).
+        self._proxy = QSortFilterProxyModel()
+        self._proxy.setSourceModel(self._model)
+        self._proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._proxy.setRecursiveFilteringEnabled(True)
+
         self._tree = QTreeView()
-        self._tree.setModel(self._model)
+        self._tree.setModel(self._proxy)
         self._tree.setHeaderHidden(True)
         self._tree.setAnimated(True)
         self._tree.setIndentation(16)
@@ -109,14 +140,23 @@ class FilesPanel(QWidget):
         root = workspace.folders[0]
         self._root_label.setText(Path(root).name)
         self._root_label.setToolTip(root)
-        idx = self._model.setRootPath(root)
-        self._tree.setRootIndex(idx)
+        src_idx = self._model.setRootPath(root)
+        self._tree.setRootIndex(self._proxy.mapFromSource(src_idx))
 
     def _reload(self) -> None:
         # Re-aponta pra mesma pasta — força refresh do filesystem
         self.set_workspace(self._workspace)
 
+    def _on_search_changed(self, text: str) -> None:
+        # Filtro recursivo case-insensitive; vazio = mostra tudo
+        self._proxy.setFilterFixedString(text)
+        # Expande tudo ao filtrar pra mostrar matches em subpastas
+        if text:
+            self._tree.expandAll()
+
     def _on_double_click(self, index: QModelIndex) -> None:
-        path = self._model.filePath(index)
-        if path and not self._model.isDir(index):
+        # index vem do proxy — mapeia pra source antes de pegar o path
+        src_idx = self._proxy.mapToSource(index)
+        path = self._model.filePath(src_idx)
+        if path and not self._model.isDir(src_idx):
             self.open_file_requested.emit(path)
