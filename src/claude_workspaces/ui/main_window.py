@@ -1719,16 +1719,22 @@ class MainWindow(QMainWindow):
         from .runner_child_widget import RunnerChildWidget
         from .runner_group_widget import RunnerGroupWidget
 
-        # Remove rows antigos de runners workspace-scope (estavam sob o
-        # group item antigo, se existia; ou direto sob ws_item em versões
-        # anteriores). Limpa nos dois lugares pra ser idempotente.
-        existing = self._runner_tree_items.get(ws.id, {})
+        # Remove rows antigos de runners workspace-scope. Limpa direto pelo
+        # parent em vez de iterar `_runner_tree_items[ws.id]` — esse dict
+        # pode ficar fora de fase (item removido do dict mas ainda na tree,
+        # ou vice-versa) e causa duplicação ao re-instalar. Pega tudo que
+        # estiver pendurado no group antigo + qualquer runner-row solto
+        # direto sob ws_item (layout pré-grupo).
         group_old = self._runner_group_items.get(ws.id)
-        for rid, item in list(existing.items()):
-            parent = item.parent()
-            if parent is ws_item or (group_old is not None and parent is group_old):
-                parent.removeChild(item)
-                self._runner_tree_items[ws.id].pop(rid, None)
+        if group_old is not None:
+            while group_old.childCount() > 0:
+                group_old.removeChild(group_old.child(0))
+        for i in range(ws_item.childCount() - 1, -1, -1):
+            child_item = ws_item.child(i)
+            data = child_item.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, tuple) and data and data[0] == "runner":
+                ws_item.removeChild(child_item)
+        self._runner_tree_items[ws.id] = {}
 
         scoped = [r for r in ws.runners if not (r.console_session_id or "")]
         if not scoped:
@@ -1812,14 +1818,24 @@ class MainWindow(QMainWindow):
         gk = (ws.id, tab_id)
         group_old = self._console_runner_group_items.get(gk)
 
-        # Remove rows antigos vinculados a esse console (sob term_item ou
-        # sob o group_old). Preserva os de outros consoles e workspace-scope.
-        existing = self._runner_tree_items.get(ws.id, {})
-        for rid, item in list(existing.items()):
-            parent = item.parent()
-            if parent is term_item or (group_old is not None and parent is group_old):
-                parent.removeChild(item)
-                self._runner_tree_items[ws.id].pop(rid, None)
+        # Remove rows antigos vinculados a esse console. Limpa pelo parent
+        # (não confia no `_runner_tree_items` que pode dessincronizar e
+        # causar duplicação) — preserva runner-rows de outros consoles
+        # porque só varremos os filhos de group_old/term_item desse `gk`.
+        if group_old is not None:
+            while group_old.childCount() > 0:
+                child_item = group_old.child(0)
+                data = child_item.data(0, Qt.ItemDataRole.UserRole)
+                if isinstance(data, tuple) and len(data) >= 3:
+                    self._runner_tree_items.get(ws.id, {}).pop(data[2], None)
+                group_old.removeChild(child_item)
+        for i in range(term_item.childCount() - 1, -1, -1):
+            child_item = term_item.child(i)
+            data = child_item.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, tuple) and data and data[0] == "runner":
+                if len(data) >= 3:
+                    self._runner_tree_items.get(ws.id, {}).pop(data[2], None)
+                term_item.removeChild(child_item)
 
         term = self._terminal_widget_for(tab_id)
         if term is None:

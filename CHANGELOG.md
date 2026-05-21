@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.5] — 2026-05-21
+
+### Corrigido
+- **Runners duplicados na sidebar ao clicar "Reiniciar todos"**
+  (`ui/main_window._install_runner_children`,
+  `_install_console_runner_children`): a limpeza dos runner-rows antigos
+  dependia do dicionário `_runner_tree_items[ws.id]`; quando esse dict
+  ficava fora de fase com a árvore (item removido do dict mas ainda
+  visível, ou vice-versa), o re-install adicionava filhos novos sem
+  apagar os anteriores e a sidebar mostrava o dobro de linhas. Agora a
+  limpeza varre os filhos diretamente pelo parent (`group_old` /
+  `ws_item` / `term_item`), removendo qualquer row com `data[0] ==
+  "runner"`, e só depois reinsere.
+
 ## [0.58.4] — 2026-05-21
 
 ### Mudado
