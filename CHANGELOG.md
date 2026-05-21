@@ -6,6 +6,14 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.6] — 2026-05-21
+
+### Removido
+- **Botão ✏ Renomear inline do card do console** (`ui/terminal_child_widget.py`):
+  reduz poluição visual da linha de ações. Ação continua acessível via
+  clique direito no console → "Renomear sessão…". Widget mantido escondido
+  pra preservar a API de `_wire_child_actions`.
+
 ## [0.58.5] — 2026-05-21
 
 ### Corrigido

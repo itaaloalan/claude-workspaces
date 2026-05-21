@@ -190,15 +190,12 @@ class TerminalChildWidget(QWidget):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setSpacing(0)
 
+        # Botão Renomear (✏) removido do layout inline pra reduzir poluição
+        # visual — ação continua disponível via clique direito → "Renomear
+        # sessão…" no menu de contexto. Widget mantido (escondido) pra
+        # preservar a API de _wire_child_actions/disconnects.
         self._rename_btn = QPushButton("✏")
-        self._rename_btn.setFixedSize(20, 18)
-        self._rename_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._rename_btn.setStyleSheet(_INLINE_BTN_QSS)
-        self._rename_btn.setToolTip(
-            "Renomear sessão — define um nome custom pra esse console"
-            " (aparece na sidebar e nas notificações)"
-        )
-        actions_layout.addWidget(self._rename_btn)
+        self._rename_btn.setVisible(False)
 
         self._continue_btn = QPushButton("▶")
         self._continue_btn.setFixedSize(20, 18)
