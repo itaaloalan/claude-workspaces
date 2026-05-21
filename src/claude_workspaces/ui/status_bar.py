@@ -35,6 +35,44 @@ def _segment(text: str = "", tooltip: str = "") -> QLabel:
     return lbl
 
 
+class _IconSegment(QWidget):
+    """Segmento da status bar com ícone SVG (qtawesome) + texto.
+
+    Expõe `setText` / `setVisible` / `setToolTip` pra ter a mesma API
+    do `_segment` (QLabel) — os setters externos do StatusBarWidgets
+    funcionam sem mudar.
+    """
+
+    def __init__(self, qta_name: str, text: str = "", tooltip: str = "") -> None:
+        super().__init__()
+        from PySide6.QtCore import QSize
+
+        from .icons import ic
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        if tooltip:
+            self.setToolTip(tooltip)
+        self.setStyleSheet(
+            "QWidget { background: transparent; }"
+            "QWidget:hover { background: #2a2a2a; }"
+        )
+        h = QHBoxLayout(self)
+        h.setContentsMargins(8, 0, 8, 0)
+        h.setSpacing(4)
+        self._icon = QLabel()
+        pix = ic(qta_name, color="#9aa0a6").pixmap(QSize(11, 11))
+        self._icon.setPixmap(pix)
+        h.addWidget(self._icon)
+        self._text = QLabel(text)
+        self._text.setStyleSheet("QLabel { color: #c8c8c8; font-size: 11px; background: transparent; }")
+        h.addWidget(self._text)
+
+    def setText(self, text: str) -> None:
+        self._text.setText(text)
+
+    def setToolTip(self, text: str) -> None:  # type: ignore[override]
+        super().setToolTip(text)
+
+
 def _separator() -> QFrame:
     f = QFrame()
     f.setFrameShape(QFrame.Shape.VLine)
@@ -52,13 +90,13 @@ class StatusBarWidgets(QWidget):
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(0)
 
-        self.workspace = _segment("—", "Workspace ativo")
-        self.stack = _segment("", "Stack detectado")
+        self.workspace = _IconSegment("fa5s.folder-open", "—", "Workspace ativo")
+        self.stack = _IconSegment("fa5s.cube", "", "Stack detectado")
         # Versão real do Python que está rodando o app — útil pra debug.
         py_ver = f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-        self.python = _segment(py_ver, f"Python interpretando o app — {sys.executable}")
-        self.mcp = _segment("MCP: —", "MCPs configurados pra este workspace")
-        self.runners = _segment("Runners: —", "Runners ativos no workspace")
+        self.python = _IconSegment("fa5b.python", py_ver, f"Python interpretando o app — {sys.executable}")
+        self.mcp = _IconSegment("fa5s.plug", "MCP: —", "MCPs configurados pra este workspace")
+        self.runners = _IconSegment("mdi6.source-branch", "Runners: —", "Runners ativos no workspace")
         for w in (self.workspace, _separator(), self.stack, _separator(),
                   self.python, _separator(),
                   self.mcp, _separator(), self.runners):

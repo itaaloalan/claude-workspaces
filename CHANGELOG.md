@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.7] — 2026-05-21
+
+### Adicionado
+- **Ícones SVG nos segmentos da status bar** (`ui/status_bar.py`):
+  novo `_IconSegment(qta_name, text, tooltip)` wraps ícone + label;
+  expõe `setText/setVisible/setToolTip` pra preservar a API dos
+  setters do `StatusBarWidgets`. Aplicado em:
+  - workspace → `fa5s.folder-open`
+  - stack → `fa5s.cube`
+  - python → `fa5b.python`
+  - mcp → `fa5s.plug`
+  - runners → `mdi6.source-branch`
+- Segmentos da direita (encoding/LF/spaces/task) seguem text-only.
+
 ## [0.58.6] — 2026-05-21
 
 ### Removido
