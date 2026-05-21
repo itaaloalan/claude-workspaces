@@ -6,6 +6,33 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.2] — 2026-05-21
+
+### Adicionado
+- **Picker de pasta ao abrir terminal em workspace com >1 pasta**
+  (`ui/main_window._launch_shell_for`,
+  `ui/coordinators/launch_coordinator.launch_shell`): quando o workspace
+  tem múltiplas pastas configuradas, abre `QInputDialog.getItem` pedindo
+  qual abrir o shell. Cancelar não abre. Workspace com 1 pasta segue
+  direto (sem prompt).
+- `launch_shell` ganha `cwd_override` opcional.
+
+### Mudado
+- **Activity bar com ícones SVG (qtawesome)** em vez de glyphs unicode
+  (`ui/activity_bar.py`):
+  - `▦` → `fa5s.layer-group` (Workspaces)
+  - `☰` → `fa5s.book` (Catálogo)
+  - `⚓` → `fa5s.anchor` (Hooks)
+  - `⌬` → `fa5s.plug` (MCP)
+  - `◆` → `fa5s.puzzle-piece` (Plugins)
+  - `▣` → `fa5s.th-large` (Apps)
+  - `›_` → `fa5s.terminal` (Terminal)
+  - `✦` → `fa5s.robot` (Claude)
+  - `🔧` → `fa5s.wrench` (Hack)
+  - `⚙` → `fa5s.cog` (Settings)
+  - `_NavButton` detecta nome qta pelo "." e renderiza via QPixmap;
+    repinta ao mudar checked (cinza claro / azul ativo).
+
 ## [0.58.1] — 2026-05-21
 
 ### Adicionado

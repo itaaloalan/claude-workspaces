@@ -3844,7 +3844,23 @@ class MainWindow(QMainWindow):
         self.launch_coord.handoff_session(workspace, session)
 
     def _launch_shell_for(self, workspace: Workspace) -> None:
-        terminal = self.launch_coord.launch_shell(workspace)
+        # Workspace com >1 pasta: pergunta em qual abrir o shell. Único
+        # → vai direto. Cancelado → não abre.
+        cwd_override: str | None = None
+        if workspace.folders and len(workspace.folders) > 1:
+            from PySide6.QtWidgets import QInputDialog
+            chosen, ok = QInputDialog.getItem(
+                self,
+                "Abrir terminal",
+                f"Em qual pasta de '{workspace.name}'?",
+                workspace.folders,
+                0,
+                False,
+            )
+            if not ok or not chosen:
+                return
+            cwd_override = chosen
+        terminal = self.launch_coord.launch_shell(workspace, cwd_override=cwd_override)
         if terminal is not None:
             area = self.terminals_coord.area_for(workspace.id)
             if area is not None:

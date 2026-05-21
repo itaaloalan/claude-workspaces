@@ -124,9 +124,23 @@ class _NavButton(QFrame):
         icon_row.setContentsMargins(0, 0, 0, 0)
         icon_row.setSpacing(3)
         icon_row.addStretch(1)
-        self._icon_label = QLabel(icon + _VS15)
+        self._icon_label = QLabel()
         self._icon_label.setObjectName("NavIcon")
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # `icon` pode ser:
+        #  - nome qtawesome ("fa5s.layer-group", "mdi6.cog") → SVG vetorial
+        #  - glyph unicode ("▦", "⚙") → fallback texto
+        # Detecta pelo ponto (qtawesome usa prefixo.nome).
+        if "." in icon:
+            from PySide6.QtCore import QSize as _QS
+            from .icons import ic as _ic
+            pix = _ic(icon, color="#9aa0a6").pixmap(_QS(18, 18))
+            self._icon_label.setPixmap(pix)
+            self._icon_label.setFixedSize(20, 20)
+            self._icon_qta_name = icon
+        else:
+            self._icon_label.setText(icon + _VS15)
+            self._icon_qta_name = None
         icon_row.addWidget(self._icon_label, 0, Qt.AlignmentFlag.AlignVCenter)
         self._badge_label = QLabel("")
         self._badge_label.setObjectName("NavBadge")
@@ -158,6 +172,12 @@ class _NavButton(QFrame):
         # Força re-aplicação do stylesheet
         self.style().unpolish(self)
         self.style().polish(self)
+        # Repinta o ícone qtawesome com cor matching o estado
+        if self._icon_qta_name is not None:
+            from PySide6.QtCore import QSize as _QS
+            from .icons import ic as _ic
+            color = "#6aa9e0" if value else "#9aa0a6"
+            self._icon_label.setPixmap(_ic(self._icon_qta_name, color=color).pixmap(_QS(18, 18)))
 
     def set_badge(self, text: str, tooltip: str | None = None) -> None:
         if not text:
@@ -202,13 +222,13 @@ class ActivityBar(QWidget):
         #   ▣  quadrado preenchido   → Apps (tile)
         #   ⚙  engrenagem            → Settings
         for icon, view_id, label, tooltip in (
-            ("▦", VIEW_WORKSPACES, "Workspaces", "Workspaces (Ctrl+Shift+1)"),
-            ("☰", VIEW_CATALOG, "Catálogo",
+            ("fa5s.layer-group", VIEW_WORKSPACES, "Workspaces", "Workspaces (Ctrl+Shift+1)"),
+            ("fa5s.book", VIEW_CATALOG, "Catálogo",
                 "Catálogo de skills/agents/commands (Ctrl+Shift+2)"),
-            ("⚓", VIEW_HOOKS, "Hooks", "Hooks (Ctrl+Shift+3)"),
-            ("⌬", VIEW_MCP, "MCP", "MCP servers (Ctrl+Shift+4)"),
-            ("◆", VIEW_PLUGINS, "Plugins", "Plugins (Ctrl+Shift+5)"),
-            ("▣", VIEW_APPS, "Apps", "Apps auxiliares (Ctrl+Shift+6)"),
+            ("fa5s.anchor", VIEW_HOOKS, "Hooks", "Hooks (Ctrl+Shift+3)"),
+            ("fa5s.plug", VIEW_MCP, "MCP", "MCP servers (Ctrl+Shift+4)"),
+            ("fa5s.puzzle-piece", VIEW_PLUGINS, "Plugins", "Plugins (Ctrl+Shift+5)"),
+            ("fa5s.th-large", VIEW_APPS, "Apps", "Apps auxiliares (Ctrl+Shift+6)"),
         ):
             btn = self._make_button(icon, label, view_id, tooltip)
             layout.addWidget(btn)
@@ -224,21 +244,21 @@ class ActivityBar(QWidget):
         layout.addWidget(sep_actions)
 
         self._open_terminal_btn = _NavButton(
-            "›_", "Terminal",
+            "fa5s.terminal", "Terminal",
             "Abre um shell embutido em $HOME numa aba nova (sem workspace)",
         )
         self._open_terminal_btn.clicked.connect(self.open_terminal_clicked)
         layout.addWidget(self._open_terminal_btn)
 
         self._open_claude_btn = _NavButton(
-            "✦", "Claude",
+            "fa5s.robot", "Claude",
             "Abre o Claude embutido numa aba nova, sem workspace (cwd = $HOME)",
         )
         self._open_claude_btn.clicked.connect(self.open_claude_no_ctx_clicked)
         layout.addWidget(self._open_claude_btn)
 
         self._hack_btn = _NavButton(
-            "🔧", "Hack",
+            "fa5s.wrench", "Hack",
             "Abre o Claude no diretório do próprio claude-workspaces pra iterar nele",
         )
         self._hack_btn.clicked.connect(self.hack_app_clicked)
@@ -250,7 +270,7 @@ class ActivityBar(QWidget):
         layout.addWidget(sep)
 
         settings_btn = self._make_button(
-            "⚙", "Settings", VIEW_SETTINGS, "Settings"
+            "fa5s.cog", "Settings", VIEW_SETTINGS, "Settings"
         )
         layout.addWidget(settings_btn)
         self._buttons[VIEW_SETTINGS] = settings_btn

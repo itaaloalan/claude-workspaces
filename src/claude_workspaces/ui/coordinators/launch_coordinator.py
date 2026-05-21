@@ -125,10 +125,12 @@ class LaunchCoordinator(QObject):
         self.sessions_refresh_requested.emit()
         return terminal
 
-    def launch_shell(self, workspace: Workspace) -> TerminalWidget | None:
+    def launch_shell(
+        self, workspace: Workspace, cwd_override: str | None = None
+    ) -> TerminalWidget | None:
         if not workspace.folders:
             return None
-        cwd, _ = workspace.launch_paths()
+        cwd = cwd_override or workspace.launch_paths()[0]
         area = self.terminals.get_or_create_area(workspace)
         terminal = area.add_terminal(f"shell #{area.count() + 1}")
         try:
