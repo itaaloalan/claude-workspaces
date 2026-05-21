@@ -347,10 +347,18 @@ class MainWindow(QMainWindow):
         self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
         self._right_panel_dock = self.body_dock.add_right(self.right_dock, "Ferramentas")
 
+        # O dock central já tem cabeçalho próprio (nome+chips+botões dentro
+        # do WorkspaceDetailsPanel). A title bar do QtAds duplica visualmente
+        # e ainda cria botões — esconde.
+        self._center_dock.dockAreaWidget().titleBar().setVisible(False)
+
         # Restaura layout salvo (tamanhos das colunas). Fallback: ~240/760/340.
-        # Schema=1: marca que a 0.54+ tem a ordem de criação correta
-        # (center antes de left/right) — descarta states de versões antigas.
-        _DOCK_SCHEMA = 1
+        # Schema bumps:
+        #  1 = ordem center→left→right corrigida (0.54.1)
+        #  2 = título do center escondido + close button desabilitado +
+        #      garantia de que sidebar/ferramentas voltam visíveis (0.55.3).
+        #      State com Ferramentas closed do schema 1 entrava preso.
+        _DOCK_SCHEMA = 2
         saved_state = (
             self.settings.body_dock_state
             if self.settings.body_dock_state_schema >= _DOCK_SCHEMA
@@ -365,6 +373,12 @@ class MainWindow(QMainWindow):
                 self.settings.save()
             except OSError:
                 pass
+        # Safety net: se algum dock principal entrou closed do state restaurado,
+        # força reabrir — sem isso o user fica sem caminho de volta.
+        for key in ("sidebar", "ferramentas"):
+            d = self.body_dock.dock(key)
+            if d is not None and d.isClosed():
+                d.toggleView(True)
 
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.

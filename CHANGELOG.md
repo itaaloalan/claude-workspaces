@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.3] — 2026-05-21
+
+### Corrigido
+- **Título "Workspace" preto sobre preto** (`ui/dock_manager.py`):
+  o QSS aplicava `color` direto no `CDockWidgetTab` mas o texto vive
+  num `CElidingLabel` interno que ignora `color: inherit`. Agora o QSS
+  alveja `QLabel`/`CElidingLabel` aninhados explicitamente.
+- **Ferramentas fechado sem caminho de volta** (`ui/main_window.py`,
+  `dock_manager.py`): adicionado `DockAreaHasCloseButton=False` no
+  config flag global do `CDockManager` (sem botão `✕` no dock area).
+  Bumpou `body_dock_state_schema` pra 2 — usuários que ficaram com
+  Ferramentas closed no state salvo voltam ao default. Safety net no
+  startup também força `toggleView(True)` se algum dock principal
+  vier closed do restoreState.
+- **Botões duplicados no canto top-right do centro** (`ui/main_window.py`):
+  o dock central tinha title bar do QtAds com botões `— ⧉ ✕`, MAIS o
+  header próprio do `terminal_pane` com `min/max/restore`. Escondida a
+  title bar do dock central (`titleBar().setVisible(False)`) — o
+  conteúdo já tem seu próprio cabeçalho.
+
 ## [0.55.2] — 2026-05-21
 
 ### Adicionado / Mudado

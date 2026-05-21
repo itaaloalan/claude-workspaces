@@ -67,19 +67,23 @@ ads--CDockAreaTitleBar {
 }
 ads--CDockWidgetTab {
     background: #1f1f1f;
-    color: #9aa0a6;
     border: 0;
     border-right: 1px solid #2a2a2a;
     padding: 4px 12px;
     min-height: 22px;
 }
+ads--CDockWidgetTab QLabel,
+ads--CDockWidgetTab ads--CElidingLabel {
+    color: #9aa0a6;
+    background: transparent;
+}
 ads--CDockWidgetTab[activeTab="true"] {
     background: #181818;
-    color: #e6e6e6;
     border-bottom: 2px solid #3d6ea8;
 }
-ads--CDockWidgetTab QLabel {
-    color: inherit;
+ads--CDockWidgetTab[activeTab="true"] QLabel,
+ads--CDockWidgetTab[activeTab="true"] ads--CElidingLabel {
+    color: #f2f2f2;
 }
 ads--CTitleBarButton {
     background: transparent;
@@ -115,6 +119,10 @@ class WorkspaceDockManager(QObject):
         ads.CDockManager.setConfigFlag(ads.CDockManager.OpaqueSplitterResize, True)
         ads.CDockManager.setConfigFlag(ads.CDockManager.XmlAutoFormattingEnabled, True)
         ads.CDockManager.setConfigFlag(ads.CDockManager.FocusHighlighting, False)
+        # Desliga botão de fechar no dock area (independe das features do
+        # CDockWidget — o area sempre desenha close se isso for True).
+        # Manter undock/menu — auto-hide vem via toggle externo.
+        ads.CDockManager.setConfigFlag(ads.CDockManager.DockAreaHasCloseButton, False)
         ads.CDockManager.setAutoHideConfigFlags(ads.CDockManager.DefaultAutoHideConfig)
 
         self._manager = ads.CDockManager(host)
