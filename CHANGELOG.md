@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.2] — 2026-05-21
+
+### Adicionado / Mudado
+- **Abas centrais com ícones + botão "+"** (`ui/main_window._build_terminal_pane`):
+  - "Terminal" → "📦  Claude console"
+  - "Runners workspace" → "🌳  Runners workspace"
+  - "Runners (console)" → "📑  Runners (console)"
+  - Botão `＋` no corner top-right da tab bar — abre Claude novo no
+    workspace ativo (mesmo atalho do Ctrl+N).
+- QSS estilo IDE pra tab bar: underline azul na ativa, hover claro,
+  border-right entre tabs.
+
+### Fase 3b da remodelagem IDE-like
+Próximo: status bar permanente (Fase 4).
+
 ## [0.55.1] — 2026-05-21
 
 ### Mudado

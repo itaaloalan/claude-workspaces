@@ -809,7 +809,34 @@ class MainWindow(QMainWindow):
         self._bottom_tabs = QTabWidget(pane)
         self._bottom_tabs.setDocumentMode(True)
         self._bottom_tabs.setTabPosition(QTabWidget.TabPosition.North)
-        self._bottom_tabs.addTab(self.terminal_host, "Terminal")
+        # QSS estilo IDE: tab ativa com underline azul, sem borda esquerda
+        self._bottom_tabs.setStyleSheet(
+            "QTabWidget::pane { border: 0; }"
+            "QTabBar { background: #161616; }"
+            "QTabBar::tab { background: #161616; color: #9aa0a6; "
+            "  padding: 6px 14px; border: 0; "
+            "  border-right: 1px solid #2a2a2a; min-height: 22px; }"
+            "QTabBar::tab:selected { background: #181818; color: #e6e6e6; "
+            "  border-bottom: 2px solid #3d6ea8; }"
+            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
+        )
+        self._bottom_tabs.addTab(self.terminal_host, "📦  Claude console")
+
+        # Botão "+" no corner da tab bar — abre Claude no workspace ativo
+        from PySide6.QtWidgets import QPushButton as _QPB
+        new_session_btn = _QPB("＋")
+        new_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        new_session_btn.setFixedSize(28, 24)
+        new_session_btn.setToolTip("Nova sessão Claude no workspace ativo (Ctrl+N)")
+        new_session_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 0; font-size: 14px; }"
+            "QPushButton:hover { color: #e6e6e6; background: #2a2a2a; "
+            "border-radius: 4px; }"
+        )
+        new_session_btn.clicked.connect(self._launch_current_claude)
+        self._bottom_tabs.setCornerWidget(new_session_btn, Qt.Corner.TopRightCorner)
+        self._new_session_corner_btn = new_session_btn
 
         self.runner_host = QStackedWidget()
         self.runner_host.setMinimumHeight(0)
@@ -819,7 +846,7 @@ class MainWindow(QMainWindow):
             "background: #0e0e0e; color: #555; padding: 28px;"
         )
         self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
-        self._bottom_tabs.addTab(self.runner_host, "Runners workspace")
+        self._bottom_tabs.addTab(self.runner_host, "🌳  Runners workspace")
 
         # Terceira aba — runners de console (cada aba Claude tem seu próprio
         # painel; aqui aparece o painel do console ativo).
@@ -837,7 +864,7 @@ class MainWindow(QMainWindow):
         self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
             crh_empty
         )
-        self._bottom_tabs.addTab(self.console_runner_host, "Runners (console)")
+        self._bottom_tabs.addTab(self.console_runner_host, "📑  Runners (console)")
 
         layout.addWidget(self._bottom_tabs, stretch=1)
         return pane
