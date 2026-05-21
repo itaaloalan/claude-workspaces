@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.54.4] — 2026-05-21
+
+### Corrigido
+- **Supressão de notificação do console em foco agora funciona de fato**
+  (`ui/main_window.py` — `_on_inbox_alert`): a 0.54.2 comparava
+  `id(terminal_host.currentWidget())` com `tab_id`, mas
+  `terminal_host.currentWidget()` retorna a `TerminalArea` do workspace
+  (uma por workspace), não o `TerminalChildWidget` (um por console) —
+  então o `id()` nunca batia e a supressão nunca disparava. Agora desce
+  até `area.tabs.currentWidget()`, que é o widget cujo `id()` é o
+  `tab_id` emitido pelo `terminal_coordinator`.
+
 ## [0.54.3] — 2026-05-21
 
 ### Corrigido

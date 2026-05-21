@@ -2449,17 +2449,23 @@ class MainWindow(QMainWindow):
         Tenta D-Bus com botões; cai pro tray.showMessage se indisponível."""
         if not self.settings.notify_native_enabled:
             return
-        # Se o usuário já tá olhando pra esse console (janela ativa + tab
-        # visível), não notifica — ele acabou de ver o "Pronto" na própria
-        # tela. Reminders também ficam silenciados nesse caso, senão o
-        # timer fica disparando popup sobre uma janela já focada. Demais
-        # casos (outra janela, outro tab, app no tray) continuam alertando.
+        # Se o usuário já tá olhando pra esse console (janela ativa + área
+        # do workspace selecionada + aba específica do console visível),
+        # não notifica — ele acabou de ver o "Pronto" na própria tela.
+        # `terminal_host.currentWidget()` é a `TerminalArea` do workspace
+        # ativo; o `TerminalChildWidget` (cujo `id()` é o tab_id) fica em
+        # `area.tabs.currentWidget()`. Reminders também ficam silenciados
+        # nesse caso, senão o timer fica disparando popup sobre uma janela
+        # já focada. Outras janelas, outro tab ou app no tray continuam
+        # alertando normal.
         if (
             self.isActiveWindow()
             and not self.isMinimized()
             and self.terminal_host is not None
         ):
-            current = self.terminal_host.currentWidget()
+            area = self.terminal_host.currentWidget()
+            tabs = getattr(area, "tabs", None) if area is not None else None
+            current = tabs.currentWidget() if tabs is not None else None
             if current is not None and id(current) == tab_id:
                 log.debug(
                     "inbox_alert suprimido — console %s já está visível e em foco",
