@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.4] — 2026-05-21
+
+### Removido
+- **Botão `＋` do canto direito da tab bar central** (`ui/main_window.py`):
+  todas as tentativas de alinhar via `setCornerWidget` ficaram quebradas
+  em algum tema/DPI. Caminhos alternativos pra abrir nova sessão Claude:
+  `Ctrl+N`, botão `＋` no card de cada workspace na sidebar, botão `＋`
+  na row "WORKSPACES" do header da sidebar.
+
 ## [0.57.3] — 2026-05-21
 
 ### Corrigido
