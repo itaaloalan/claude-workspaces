@@ -151,8 +151,8 @@ class GitPanel(QWidget):
 
         # Toolbar topo
         toolbar = QHBoxLayout()
-        toolbar.setContentsMargins(2, 2, 2, 2)
-        toolbar.setSpacing(2)
+        toolbar.setContentsMargins(4, 4, 4, 4)
+        toolbar.setSpacing(6)
         self._make_toolbar(toolbar)
         outer.addLayout(toolbar)
 
@@ -224,6 +224,26 @@ class GitPanel(QWidget):
     # ---------- construção ----------
 
     def _make_toolbar(self, layout: QHBoxLayout) -> None:
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ic as _ic
+
+        # Branch picker inline — mostra a branch atual (ou "(multi)") com
+        # ícone code-branch. Click abre o branch picker do primeiro repo.
+        self._branch_btn = QPushButton("  —")
+        self._branch_btn.setIcon(_ic("fa5s.code-branch", color="#9aa0a6"))
+        self._branch_btn.setIconSize(_QS(11, 11))
+        self._branch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._branch_btn.setToolTip("Trocar branch do primeiro repo deste workspace")
+        self._branch_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #c8c8c8; "
+            "border: 1px solid #2c2c2c; border-radius: 4px; "
+            "padding: 2px 8px; font-size: 11px; }"
+            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+        )
+        self._branch_btn.clicked.connect(self._on_branch_btn_clicked)
+        layout.addWidget(self._branch_btn)
+
         self._counter = QLabel()
         self._counter.setStyleSheet("color: #b0b0b0; font-size: 11px;")
         layout.addWidget(self._counter)
@@ -372,11 +392,29 @@ class GitPanel(QWidget):
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             self._tree.addTopLevelItem(placeholder)
             self._counter.setText("")
+            self._branch_btn.setText("  —")
+            self._branch_btn.setEnabled(False)
             self._poll_timer.stop()
         else:
             self._counter.setText(
                 "limpo" if total_files == 0 else f"{total_files} alteração(ões)"
             )
+            # Atualiza label do branch picker: 1 repo → mostra branch;
+            # >1 repos com mesma branch → idem; senão → "(multi)".
+            branches = {s.branch for s in self._statuses.values() if s.is_repo and s.branch}
+            if not branches:
+                self._branch_btn.setText("  —")
+                self._branch_btn.setEnabled(False)
+            elif len(branches) == 1:
+                br = next(iter(branches))
+                self._branch_btn.setText(f"  {br[:24]}")
+                self._branch_btn.setEnabled(True)
+            else:
+                self._branch_btn.setText("  (multi)")
+                self._branch_btn.setToolTip(
+                    "Multi-repo com branches diferentes — click pra escolher repo"
+                )
+                self._branch_btn.setEnabled(True)
             if not self._poll_timer.isActive():
                 self._poll_timer.start()
 
@@ -766,6 +804,16 @@ class GitPanel(QWidget):
                 lambda: self._open_branch_picker(folder),
             )
         )
+
+    def _on_branch_btn_clicked(self) -> None:
+        """Click no badge da branch: abre branch picker do 1º repo do
+        workspace. Multi-repo precisaria de um picker de repo antes."""
+        repo_folders = [
+            f for f, s in self._statuses.items() if s.is_repo
+        ]
+        if not repo_folders:
+            return
+        self._open_branch_picker(repo_folders[0])
 
     def _open_branch_picker(self, folder: str) -> None:
         from .branch_picker_dialog import BranchPickerDialog

@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.3] — 2026-05-21
+
+### Adicionado
+- **Branch picker inline na toolbar do Git** (`ui/git_panel.py`):
+  pill `⎇ <branch>` à esquerda da toolbar mostra a branch atual.
+  Click abre o branch picker do primeiro repo do workspace.
+  Multi-repo com branches diferentes mostra "(multi)".
+- Toolbar do GitPanel ganha mais espaçamento (margin 4px, spacing 6px).
+
 ## [0.59.2] — 2026-05-21
 
 ### Adicionado
