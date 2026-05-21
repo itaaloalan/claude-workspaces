@@ -128,7 +128,40 @@ class FilesPanel(QWidget):
         self._tree.header().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
-        layout.addWidget(self._tree, stretch=1)
+        # Stack: empty placeholder vs tree. Switch baseado em ter workspace.
+        from PySide6.QtWidgets import QStackedWidget as _QSW
+        self._stack = _QSW()
+        self._stack.addWidget(self._tree)
+
+        # Empty state: ícone grande + texto explicativo, centralizado.
+        empty = QWidget()
+        ev = QVBoxLayout(empty)
+        ev.setContentsMargins(20, 40, 20, 20)
+        ev.setSpacing(10)
+        ev.addStretch(1)
+        big_icon = QLabel()
+        big_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        big_icon.setPixmap(
+            ic("fa5s.folder-open", color="#3a3a3a").pixmap(QSize(48, 48))
+        )
+        ev.addWidget(big_icon)
+        title = QLabel("Nenhum workspace selecionado")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("color: #9aa0a6; font-size: 12px; font-weight: 600;")
+        ev.addWidget(title)
+        hint = QLabel(
+            "Escolha um workspace na barra lateral pra navegar seus arquivos."
+        )
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #707070; font-size: 11px;")
+        ev.addWidget(hint)
+        ev.addStretch(2)
+        self._empty = empty
+        self._stack.addWidget(empty)
+        layout.addWidget(self._stack, stretch=1)
+        # Inicia em empty (sem workspace)
+        self._stack.setCurrentWidget(empty)
 
     def set_workspace(self, workspace: Workspace | None) -> None:
         """Aponta a árvore pra primeira pasta do workspace."""
@@ -136,12 +169,14 @@ class FilesPanel(QWidget):
         if workspace is None or not workspace.folders:
             self._root_label.setText("(nenhum workspace selecionado)")
             self._model.setRootPath("")
+            self._stack.setCurrentWidget(self._empty)
             return
         root = workspace.folders[0]
         self._root_label.setText(Path(root).name)
         self._root_label.setToolTip(root)
         src_idx = self._model.setRootPath(root)
         self._tree.setRootIndex(self._proxy.mapFromSource(src_idx))
+        self._stack.setCurrentWidget(self._tree)
 
     def _reload(self) -> None:
         # Re-aponta pra mesma pasta — força refresh do filesystem

@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.7] — 2026-05-21
+
+### Adicionado
+- **Estado vazio do FilesPanel** (`ui/files_panel.py`): quando não há
+  workspace selecionado, mostra placeholder centralizado com ícone
+  `📁` 48px + título "Nenhum workspace selecionado" + hint. Vira a
+  árvore real quando `set_workspace(ws)` é chamado com pastas.
+  Switch via QStackedWidget interno.
+
 ## [0.59.6] — 2026-05-21
 
 ### Adicionado
