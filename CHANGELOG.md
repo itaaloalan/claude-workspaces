@@ -6,6 +6,14 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.58.11] — 2026-05-21
+
+### Adicionado
+- **Ícone 📁 antes do nome do workspace na sidebar**
+  (`ui/workspace_item_widget.py`): pequeno SVG `fa5s.folder` (azul) à
+  esquerda do nome — match com o mockup que tem avatar/logo por item.
+  Tamanho 14px pra não competir com o nome (bold +1.5pt).
+
 ## [0.58.8] — 2026-05-21
 
 ### Adicionado

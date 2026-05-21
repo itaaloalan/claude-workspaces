@@ -86,7 +86,18 @@ class WorkspaceItemWidget(QWidget):
 
         row = QHBoxLayout(self)
         row.setContentsMargins(2, 4, 2, 8)
-        row.setSpacing(4)
+        row.setSpacing(6)
+
+        # Ícone do workspace antes do nome — match com mockup que mostra
+        # um pequeno avatar/logo. fa5s.folder é o default; podia ser
+        # detectado pelo stack (fa5b.git-alt se é repo git, etc) mas
+        # pra evitar complexidade fica no folder por enquanto.
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic as _ic
+        self._ws_icon = QLabel()
+        self._ws_icon.setPixmap(_ic("fa5s.folder", color="#6aa9e0").pixmap(_QS(14, 14)))
+        self._ws_icon.setFixedSize(16, 16)
+        row.addWidget(self._ws_icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._label = QLabel(name)
         label_font = QFont(self._label.font())
