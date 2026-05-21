@@ -325,6 +325,18 @@ class SkillsPanel(QWidget):
                     desc = desc[:119] + "…"
                 label += f"\n{desc}"
             li = QListWidgetItem(label)
+            # Ícone por tipo: skill=⚡, agent=🤖, command=▶ (vetorial via
+            # qtawesome). Cor do ícone segue KIND_COLOR pra reforçar a
+            # categoria visualmente.
+            from .icons import ic as _ic
+            kind_icon_map = {
+                KIND_SKILL: "fa5s.bolt",
+                KIND_AGENT: "fa5s.robot",
+                KIND_COMMAND: "fa5s.terminal",
+            }
+            qta_name = kind_icon_map.get(item.kind)
+            if qta_name:
+                li.setIcon(_ic(qta_name, color=KIND_COLOR.get(item.kind, "#9aa0a6")))
             li.setData(Qt.ItemDataRole.UserRole, item)
             tooltip_parts = [
                 str(item.path),

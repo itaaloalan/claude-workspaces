@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.6] — 2026-05-21
+
+### Adicionado
+- **Ícones por tipo nos cards do SkillsPanel** (`ui/skills_panel.py`):
+  - Skill → `fa5s.bolt`
+  - Agent → `fa5s.robot`
+  - Command → `fa5s.terminal`
+  Cor do ícone segue `KIND_COLOR` (azul/verde/roxo) pra reforçar a
+  categoria além do label.
+
 ## [0.59.5] — 2026-05-21
 
 ### Mudado
