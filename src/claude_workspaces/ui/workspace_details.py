@@ -282,13 +282,13 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self, icon: str, label: str, *, primary: bool = False
     ) -> QPushButton:
         """Botão grande estilo card pros 4 launchers do header."""
-        btn = QPushButton(f"  {icon}   {label}")
+        btn = QPushButton(f" {icon}  {label}")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setMinimumHeight(44)
+        btn.setMinimumHeight(32)
         if primary:
             btn.setStyleSheet(
                 "QPushButton { background: #3d6ea8; color: #fff; border: 0; "
-                "border-radius: 8px; padding: 8px 16px; font-size: 13px; "
+                "border-radius: 6px; padding: 5px 14px; font-size: 12px; "
                 "font-weight: 600; text-align: center; }"
                 "QPushButton:hover { background: #4a82c5; }"
                 "QPushButton:pressed { background: #325a8c; }"
@@ -296,8 +296,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
         else:
             btn.setStyleSheet(
                 "QPushButton { background: #1f1f1f; color: #e6e6e6; "
-                "border: 1px solid #2c2c2c; border-radius: 8px; "
-                "padding: 8px 16px; font-size: 13px; text-align: center; }"
+                "border: 1px solid #2c2c2c; border-radius: 6px; "
+                "padding: 5px 14px; font-size: 12px; text-align: center; }"
                 "QPushButton:hover { border-color: #3d6ea8; color: #fff; }"
                 "QPushButton:pressed { background: #181818; }"
             )

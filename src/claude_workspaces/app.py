@@ -19,6 +19,46 @@ from .logging_setup import setup_logging  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
 
 
+_GLOBAL_DARK_QSS = """
+QMenu {
+    background: #1f1f1f;
+    color: #e6e6e6;
+    border: 1px solid #2c2c2c;
+    padding: 4px 0;
+}
+QMenu::item {
+    padding: 6px 22px 6px 18px;
+    background: transparent;
+}
+QMenu::item:selected {
+    background: #3d6ea8;
+    color: #fff;
+}
+QMenu::item:disabled {
+    color: #777;
+}
+QMenu::separator {
+    height: 1px;
+    background: #2c2c2c;
+    margin: 4px 8px;
+}
+QToolTip {
+    background: #1f1f1f;
+    color: #e6e6e6;
+    border: 1px solid #2c2c2c;
+    padding: 4px 6px;
+}
+QMessageBox, QInputDialog, QFileDialog {
+    background: #181818;
+    color: #e6e6e6;
+}
+QMessageBox QLabel, QInputDialog QLabel {
+    color: #e6e6e6;
+    background: transparent;
+}
+"""
+
+
 def _build_dark_palette() -> QPalette:
     """Palette dark consistente — sobrescreve o tema do desktop (KDE)
     que estava deixando QListWidget items quase invisíveis. Define
@@ -141,6 +181,9 @@ def main() -> int:
     # cinza-escuro em fundo cinza-escuro.
     app.setStyle("Fusion")
     app.setPalette(_build_dark_palette())
+    # QSS global pra widgets que o Fusion + palette não cobrem direito
+    # (QMenu vinha branco em algumas distros, QToolTip idem).
+    app.setStyleSheet(_GLOBAL_DARK_QSS)
 
     window = MainWindow()
     window.show()

@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.1] — 2026-05-21
+
+### Mudado
+- Botões grandes do header diminuíram (44→32px altura, padding/fonte
+  reduzidos) — antes ocupavam muito espaço vertical.
+
+### Corrigido
+- **QMenu/QToolTip/QMessageBox brancos em algumas distros** (`app.py`):
+  Fusion + palette não cobre QMenu direito; adicionado `_GLOBAL_DARK_QSS`
+  aplicado no QApplication com regras pra QMenu (item/selected/separator),
+  QToolTip, QMessageBox e QInputDialog.
+
 ## [0.55.0] — 2026-05-21
 
 ### Adicionado
