@@ -21,25 +21,34 @@ from PySide6.QtWidgets import (
 
 from . import theme
 
-# Estados visíveis na UI
-STATE_WORKING = "working"
-STATE_AWAITING = "awaiting"  # Claude pediu decisão (permission prompt)
-STATE_IDLE = "idle"          # Claude terminou turno, no prompt principal
-STATE_DONE = "done"
+# Estados visíveis na UI — labels padronizados de acordo com o pedido
+# do usuário (Rodando/Aguardando/Parado/Erro/Concluído).
+STATE_WORKING = "working"      # rodando (trabalhando)
+STATE_AWAITING = "awaiting"    # aguardando decisão (permission prompt)
+STATE_IDLE = "idle"            # parado no prompt principal (sem ação ativa)
+STATE_DONE = "done"            # concluído sem erro
+STATE_ERROR = "error"          # processo falhou / saiu com erro
 
 
 STATE_LABEL = {
-    STATE_WORKING: "Trabalhando",
+    STATE_WORKING: "Rodando",
     STATE_AWAITING: "Aguardando",
-    STATE_IDLE: "Ocioso",
+    STATE_IDLE: "Parado",
     STATE_DONE: "Concluído",
+    STATE_ERROR: "Erro",
 }
 
 STATE_COLOR = {
+    # Rodando = amber (trabalho em curso)
     STATE_WORKING: theme.WARNING,
+    # Aguardando = laranja forte (decisão pendente)
     STATE_AWAITING: theme.WAITING,
-    STATE_IDLE: theme.DANGER,
+    # Parado = cinza neutro (não é erro — só ocioso)
+    STATE_IDLE: theme.TEXT_FAINT,
+    # Concluído = verde
     STATE_DONE: theme.SUCCESS,
+    # Erro = vermelho
+    STATE_ERROR: theme.DANGER,
 }
 
 _CHIP_MODEL_QSS = (

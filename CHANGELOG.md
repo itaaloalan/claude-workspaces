@@ -6,6 +6,22 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.5] — 2026-05-21
+
+### Mudado
+- **Status do console padronizados em 5 labels** (`ui/terminal_child_widget.py`):
+  - "Trabalhando" → **Rodando** (amber)
+  - "Aguardando" — mantido (laranja, decisão pendente)
+  - "Ocioso" → **Parado** (cinza neutro — não é erro)
+  - "Concluído" — mantido (verde)
+  - **Erro** — novo state com cor vermelha (DANGER)
+- Label "Parado" agora cinza neutro em vez de vermelho — match com
+  semântica de ocioso vs erro.
+
+### Adicionado
+- `STATE_ERROR = "error"` no enum de estados pra usar quando processo
+  do Claude/runner sair com código != 0.
+
 ## [0.59.4] — 2026-05-21
 
 ### Adicionado
