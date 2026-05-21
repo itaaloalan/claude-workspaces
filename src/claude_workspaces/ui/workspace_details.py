@@ -69,64 +69,97 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         w = QWidget()
         c = QVBoxLayout(w)
-        c.setContentsMargins(20, 16, 20, 12)
-        c.setSpacing(10)
+        c.setContentsMargins(24, 18, 24, 14)
+        c.setSpacing(12)
 
-        # Cabeçalho
+        # ---------- Header row: nome + status dot + badge + ações ⋯ ----------
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+
         self._name = QLabel()
-        self._name.setStyleSheet("font-size: 22px; font-weight: 700; color: #e6e6e6;")
-        c.addWidget(self._name)
+        self._name.setStyleSheet(
+            "font-size: 24px; font-weight: 700; color: #f2f2f2;"
+        )
+        header_row.addWidget(self._name)
 
-        self._stacks = QLabel()
-        self._stacks.setStyleSheet("color: #b0b0b0;")
-        c.addWidget(self._stacks)
+        # Status dot (verde = tem terminal rodando). Atualizado externamente.
+        self._status_dot = QLabel()
+        self._status_dot.setFixedSize(10, 10)
+        self._status_dot.setStyleSheet(
+            "background: #5ac35a; border-radius: 5px;"
+        )
+        self._status_dot.setVisible(False)
+        header_row.addWidget(self._status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._desc = QLabel()
-        self._desc.setWordWrap(True)
-        self._desc.setStyleSheet("color: #d0d0d0;")
-        c.addWidget(self._desc)
+        self._active_badge = QLabel("Ativo")
+        self._active_badge.setStyleSheet(
+            "background: rgba(90, 195, 90, 38); color: #5ac35a; "
+            "font-size: 10px; font-weight: 700; padding: 3px 10px; "
+            "border-radius: 9px;"
+        )
+        self._active_badge.setVisible(False)
+        header_row.addWidget(self._active_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._folders = QLabel()
-        self._folders.setWordWrap(True)
-        self._folders.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._folders.setStyleSheet("color: #b0b0b0; font-family: monospace; font-size: 11px;")
-        c.addWidget(self._folders)
+        header_row.addStretch(1)
 
+        # Botão ⋯ → menu (Editar / Remover) — substitui os botões soltos
+        more_btn = QPushButton("⋯")
+        more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        more_btn.setFixedSize(28, 28)
+        more_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #c8c8c8; "
+            "border: 0; border-radius: 4px; font-size: 16px; }"
+            "QPushButton:hover { background: #2a2a2a; color: #fff; }"
+        )
+        more_btn.clicked.connect(self._show_workspace_actions_menu)
+        self._more_btn = more_btn
+        header_row.addWidget(more_btn)
 
-        c.addLayout(self._build_mcp_row())
+        c.addLayout(header_row)
 
-        # Linha única de ações principais
-        actions_row = QHBoxLayout()
-        actions_row.setSpacing(6)
+        # ---------- Chips row: Stack / Path / MCP ----------
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(8)
+        self._stack_chip = self._make_chip("⏷", "")
+        self._path_chip = self._make_chip("📁", "")
+        self._mcp_chip = self._make_chip("🔌", "")
+        chips_row.addWidget(self._stack_chip)
+        chips_row.addWidget(self._path_chip)
+        chips_row.addWidget(self._mcp_chip)
+        chips_row.addStretch(1)
+        c.addLayout(chips_row)
 
-        self._claude_btn = self._make_action_button("Abrir Claude", primary=True)
+        # Mantidos pra compatibilidade interna (usados em _refresh_mcp_status,
+        # show_workspace). Ficam invisíveis — o conteúdo agora vai pros chips.
+        self._stacks = QLabel(); self._stacks.setVisible(False)
+        self._desc = QLabel(); self._desc.setVisible(False)
+        self._folders = QLabel(); self._folders.setVisible(False)
+        self._mcp_label = QLabel(); self._mcp_label.setVisible(False)
+        self._mcp_edit_btn = QPushButton(); self._mcp_edit_btn.setVisible(False)
+        self._mcp_remove_btn = QPushButton(); self._mcp_remove_btn.setVisible(False)
+        self._mcp_edit_btn.clicked.connect(self._on_edit_mcp)
+        self._mcp_remove_btn.clicked.connect(self._on_remove_mcp)
+
+        # ---------- 4 botões grandes ----------
+        big_row = QHBoxLayout()
+        big_row.setSpacing(8)
+        self._claude_btn = self._make_big_button("📦", "Abrir Claude", primary=True)
         self._claude_btn.clicked.connect(self._on_launch_claude)
-        actions_row.addWidget(self._claude_btn)
+        big_row.addWidget(self._claude_btn, stretch=1)
 
-        self._shell_btn = self._make_action_button("Abrir Terminal")
+        self._shell_btn = self._make_big_button("📺", "Abrir Terminal")
         self._shell_btn.clicked.connect(self._on_launch_shell)
-        actions_row.addWidget(self._shell_btn)
+        big_row.addWidget(self._shell_btn, stretch=1)
 
+        # Botões de IDE detectados (PyCharm/IntelliJ/...) + VS Code default.
+        # Cada um vira big_button, alinhado com o mockup.
         self._ide_row_host = QWidget()
         self._ide_row = QHBoxLayout(self._ide_row_host)
         self._ide_row.setContentsMargins(0, 0, 0, 0)
-        self._ide_row.setSpacing(6)
-        actions_row.addWidget(self._ide_row_host)
+        self._ide_row.setSpacing(8)
+        big_row.addWidget(self._ide_row_host, stretch=2)
 
-        actions_row.addStretch()
-
-        edit_btn = self._make_action_button("Editar")
-        edit_btn.clicked.connect(
-            lambda: self.workspace and self.edit_requested.emit(self.workspace)
-        )
-        actions_row.addWidget(edit_btn)
-        del_btn = self._make_action_button("Remover")
-        del_btn.clicked.connect(
-            lambda: self.workspace and self.delete_requested.emit(self.workspace)
-        )
-        actions_row.addWidget(del_btn)
-
-        c.addLayout(actions_row)
+        c.addLayout(big_row)
 
         # Git mora no dock direito da MainWindow; aqui fica só a coluna
         # de Sessões. O widget de Git é criado mesmo assim — MainWindow
@@ -187,28 +220,14 @@ class WorkspaceDetailsPanel(QStackedWidget):
             return
         name = self.workspace.name
         if not mcp_exists(name):
-            self._mcp_label.setText(
-                f"<b>MCP:</b> nenhum servidor configurado pro nome "
-                f"<code>{name}</code>"
-            )
-            self._mcp_edit_btn.setText("Criar MCP")
-            self._mcp_remove_btn.setVisible(False)
+            self._set_chip(self._mcp_chip, f"MCP: nenhum servidor pra '{name}'")
+            self._mcp_label.setText("")
             return
         if not is_postgres_mcp(name):
-            self._mcp_label.setText(
-                f"<b>MCP:</b> existe <code>{name}</code> mas não é postgres "
-                f"(não dá pra editar daqui)"
-            )
-            self._mcp_edit_btn.setEnabled(False)
-            self._mcp_remove_btn.setVisible(True)
+            self._set_chip(self._mcp_chip, f"MCP: {name} (não postgres)")
             return
         url = get_postgres_url(name) or ""
-        self._mcp_label.setText(
-            f"<b>MCP:</b> <code>{name}</code> → {mask_password(url)}"
-        )
-        self._mcp_edit_btn.setEnabled(True)
-        self._mcp_edit_btn.setText("Editar MCP")
-        self._mcp_remove_btn.setVisible(True)
+        self._set_chip(self._mcp_chip, f"MCP: {name} → {mask_password(url)}")
 
     def _on_edit_mcp(self) -> None:
         if not self.workspace:
@@ -240,6 +259,82 @@ class WorkspaceDetailsPanel(QStackedWidget):
             QMessageBox.critical(self, "Falha ao remover", str(e))
             return
         self._refresh_mcp_status()
+
+    def _make_chip(self, icon: str, text: str) -> QLabel:
+        """Chip estilo pill com ícone unicode + texto. Usado pra Stack,
+        Path e MCP no cabeçalho do workspace."""
+        lbl = QLabel()
+        lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lbl.setStyleSheet(
+            "QLabel { background: #1f1f1f; color: #c8c8c8; "
+            "border: 1px solid #2c2c2c; border-radius: 12px; "
+            "padding: 4px 12px; font-size: 11px; }"
+        )
+        lbl.setProperty("_icon", icon)
+        return lbl
+
+    def _set_chip(self, chip: QLabel, text: str, *, visible: bool = True) -> None:
+        icon = chip.property("_icon") or ""
+        chip.setText(f"{icon}  {text}" if icon else text)
+        chip.setVisible(visible)
+
+    def _make_big_button(
+        self, icon: str, label: str, *, primary: bool = False
+    ) -> QPushButton:
+        """Botão grande estilo card pros 4 launchers do header."""
+        btn = QPushButton(f"  {icon}   {label}")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setMinimumHeight(44)
+        if primary:
+            btn.setStyleSheet(
+                "QPushButton { background: #3d6ea8; color: #fff; border: 0; "
+                "border-radius: 8px; padding: 8px 16px; font-size: 13px; "
+                "font-weight: 600; text-align: center; }"
+                "QPushButton:hover { background: #4a82c5; }"
+                "QPushButton:pressed { background: #325a8c; }"
+            )
+        else:
+            btn.setStyleSheet(
+                "QPushButton { background: #1f1f1f; color: #e6e6e6; "
+                "border: 1px solid #2c2c2c; border-radius: 8px; "
+                "padding: 8px 16px; font-size: 13px; text-align: center; }"
+                "QPushButton:hover { border-color: #3d6ea8; color: #fff; }"
+                "QPushButton:pressed { background: #181818; }"
+            )
+        return btn
+
+    def _show_workspace_actions_menu(self) -> None:
+        """Menu do botão ⋯ no header: Editar / Configurar MCP / Remover."""
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMenu
+        if self.workspace is None:
+            return
+        menu = QMenu(self)
+        edit_act = QAction("✏ Editar workspace", menu)
+        edit_act.triggered.connect(
+            lambda: self.edit_requested.emit(self.workspace)
+        )
+        menu.addAction(edit_act)
+        mcp_act = QAction("🔌 Configurar MCP…", menu)
+        mcp_act.triggered.connect(self._on_edit_mcp)
+        menu.addAction(mcp_act)
+        if mcp_exists(self.workspace.name):
+            mcp_rm_act = QAction("🗑 Remover MCP", menu)
+            mcp_rm_act.triggered.connect(self._on_remove_mcp)
+            menu.addAction(mcp_rm_act)
+        menu.addSeparator()
+        del_act = QAction("✖ Remover workspace", menu)
+        del_act.triggered.connect(
+            lambda: self.delete_requested.emit(self.workspace)
+        )
+        menu.addAction(del_act)
+        menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
+
+    def set_active_status(self, active: bool) -> None:
+        """Atualiza o dot verde + badge 'Ativo' no header. Chamado pela
+        MainWindow quando muda o running count do workspace atual."""
+        self._status_dot.setVisible(active)
+        self._active_badge.setVisible(active)
 
     def _make_action_button(self, label: str, primary: bool = False) -> QPushButton:
         btn = QPushButton(label)
@@ -361,22 +456,25 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def show_workspace(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self._name.setText(workspace.name)
-        self._desc.setText(workspace.description or "")
-        self._desc.setVisible(bool(workspace.description))
 
-        if workspace.folders:
-            self._folders.setText(" · ".join(workspace.folders))
-            self._folders.setVisible(True)
-        else:
-            self._folders.setVisible(False)
-
+        # Chips: Stack | Path | MCP. Substitui os labels separados do
+        # cabeçalho antigo (mantidos invisíveis pra compatibilidade interna).
         stacks = detect_stacks(workspace.folders)
         if stacks:
             labels = sorted(STACK_LABEL.get(s, s) for s in stacks)
-            self._stacks.setText(f"Stack: {', '.join(labels)}")
-            self._stacks.setVisible(True)
+            self._set_chip(self._stack_chip, f"Stack: {', '.join(labels)}")
         else:
-            self._stacks.setVisible(False)
+            self._set_chip(self._stack_chip, "", visible=False)
+
+        if workspace.folders:
+            # Mostra só a primeira pasta no chip (paths longos viram tooltip)
+            path_text = workspace.folders[0]
+            if len(workspace.folders) > 1:
+                path_text += f"  (+{len(workspace.folders) - 1})"
+            self._set_chip(self._path_chip, path_text)
+            self._path_chip.setToolTip("\n".join(workspace.folders))
+        else:
+            self._set_chip(self._path_chip, "", visible=False)
 
         self._rebuild_ide_buttons(stacks)
         self._file_finder.set_folders(workspace.folders)
@@ -386,6 +484,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # _broadcast_workspace (panel está em DOCK_PANEL_SPECS)
 
         self.setCurrentWidget(self._content)
+        # Inicializa status (caller real é o MainWindow via set_active_status,
+        # mas aqui evitamos flash de "Ativo" residual do workspace anterior)
+        self.set_active_status(False)
 
     def restore_columns_sizes(self, sizes: list[int]) -> None:
         if sizes and len(sizes) == self._columns_splitter.count():
@@ -393,6 +494,17 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
     def columns_sizes(self) -> list[int]:
         return list(self._columns_splitter.sizes())
+
+    _IDE_ICONS = {
+        "pycharm": "🟢",
+        "intellij": "🟢",
+        "vscode": "🆎",
+        "rider": "🟣",
+        "android_studio": "🤖",
+        "webstorm": "🟢",
+        "rubymine": "🔴",
+        "phpstorm": "🟪",
+    }
 
     def _rebuild_ide_buttons(self, stacks: set[str]) -> None:
         while self._ide_row.count():
@@ -407,14 +519,15 @@ class WorkspaceDetailsPanel(QStackedWidget):
             if not ide_key or ide_key in added:
                 continue
             added.add(ide_key)
-            btn = self._make_action_button(f"Abrir {IDE_LABEL[ide_key]}")
+            icon = self._IDE_ICONS.get(ide_key, "🛠")
+            btn = self._make_big_button(icon, f"Abrir {IDE_LABEL[ide_key]}")
             btn.clicked.connect(lambda _, k=ide_key: self._launch_ide(k))
-            self._ide_row.addWidget(btn)
+            self._ide_row.addWidget(btn, stretch=1)
 
         if "vscode" not in added:
-            btn = self._make_action_button(f"Abrir {IDE_LABEL['vscode']}")
+            btn = self._make_big_button("🆎", f"Abrir {IDE_LABEL['vscode']}")
             btn.clicked.connect(lambda: self._launch_ide("vscode"))
-            self._ide_row.addWidget(btn)
+            self._ide_row.addWidget(btn, stretch=1)
 
     def _refresh_sessions(self) -> None:
         self._sessions_list.clear()

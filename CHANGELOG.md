@@ -6,6 +6,32 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.55.0] — 2026-05-21
+
+### Adicionado
+- **Header de workspace estilo IDE** (`ui/workspace_details.py`):
+  - Nome em fonte 24px bold + status dot verde + badge "Ativo"
+    (visíveis quando há terminal Claude rodando no workspace).
+  - Linha de chips estilo pill: Stack (⏷), Path (📁), MCP (🔌) —
+    substitui os labels separados antigos.
+  - Linha de 4 botões grandes (44px altura) com ícone:
+    📦 Abrir Claude (primary azul) | 📺 Abrir Terminal |
+    🟢 Abrir <IDE detectada> | 🆎 Abrir VS Code.
+  - Botão ⋯ no canto superior direito abre menu com Editar /
+    Configurar MCP / Remover MCP / Remover workspace.
+- `WorkspaceDetailsPanel.set_active_status(active)` — chamado pela
+  `MainWindow` no `_refresh_item_label` pra sincronizar o dot com o
+  running_count do workspace ativo.
+
+### Mudado
+- `_refresh_mcp_status` agora escreve no chip MCP em vez do label antigo.
+- IDE buttons (PyCharm/IntelliJ/VS Code/Rider/etc.) viraram big_buttons
+  com ícone unicode por IDE.
+
+### Fase 3a da remodelagem IDE-like
+Próximas: abas no centro (Claude console / Runners workspace / Runners
+console / +) e status bar permanente.
+
 ## [0.54.4] — 2026-05-21
 
 ### Corrigido

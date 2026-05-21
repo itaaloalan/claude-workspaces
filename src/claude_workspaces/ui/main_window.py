@@ -1300,6 +1300,10 @@ class MainWindow(QMainWindow):
             widget.set_running_count(count)
         else:
             item.setText(0, self._item_label(ws))
+        # Atualiza o status dot no header do painel de detalhes se
+        # estamos olhando este workspace.
+        if self.details.workspace and self.details.workspace.id == ws.id:
+            self.details.set_active_status(count > 0)
 
     _SECTION_HEADER_ROLE = "__section_header__"
 
