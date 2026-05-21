@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.57.3] — 2026-05-21
+
+### Corrigido
+- **Botão `＋` no canto direito das tabs centrais flutuando abaixo da
+  row dos tabs** (`ui/main_window.py`): `setCornerWidget` posiciona o
+  widget no canto top-right do QTabWidget, mas se a altura natural do
+  widget não bate com o `tabBar().height()`, ele aparece deslocado.
+  Agora o botão tem `setFixedSize(34, 34)` matching a altura real do
+  tab bar (36px com nosso padding 6+22+6). Também fundo `#161616`
+  pra fundir com a tab bar e border-bottom matching as tabs.
+
 ## [0.57.2] — 2026-05-21
 
 ### Mudado

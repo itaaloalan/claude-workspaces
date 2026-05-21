@@ -893,19 +893,24 @@ class MainWindow(QMainWindow):
         idx_console = self._bottom_tabs.addTab(self.terminal_host, "Claude console")
         self._bottom_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
 
-        # Botão "+" no corner da tab bar — abre Claude no workspace ativo.
-        # QToolButton + AutoRaise + fixedHeight casa naturalmente com a
-        # altura da tab bar (sem o quadrado destacado do QPushButton).
+        # Botão "+" no canto direito da tab bar. Wrapping num QWidget
+        # explícito com altura fixada e add via setCornerWidget — sem
+        # altura explícita o QToolButton fica desalinhado abaixo da row
+        # dos tabs (sintoma: + aparecia "flutuando" depois da linha).
         from PySide6.QtCore import QSize
         from PySide6.QtWidgets import QToolButton
         new_session_btn = QToolButton()
         new_session_btn.setIcon(ic(ICONS["add"], color="#c8c8c8"))
-        new_session_btn.setIconSize(QSize(13, 13))
+        new_session_btn.setIconSize(QSize(14, 14))
         new_session_btn.setAutoRaise(True)
+        # Altura precisa casar com o tabBar real (tabs têm padding 6+22+6=34).
+        # Setando explicitamente garante alinhamento independente do tema.
+        new_session_btn.setFixedSize(34, 34)
         new_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         new_session_btn.setToolTip("Nova sessão Claude no workspace ativo (Ctrl+N)")
         new_session_btn.setStyleSheet(
-            "QToolButton { background: transparent; border: 0; padding: 0 8px; }"
+            "QToolButton { background: #161616; border: 0; "
+            "border-bottom: 1px solid #2a2a2a; }"
             "QToolButton:hover { background: #2a2a2a; }"
         )
         new_session_btn.clicked.connect(self._launch_current_claude)
