@@ -3828,6 +3828,29 @@ class MainWindow(QMainWindow):
         self._tray.messageClicked.connect(self._on_tray_message_clicked)
         self._tray.show()
         self._last_alert_tab_id: int | None = None
+        # TrayNotifier sincroniza tooltip + menu com o NotificationService.
+        # Criado depois do service (no __init__) e depois do tray; idempotente.
+        try:
+            from ..notifications.tray import TrayNotifier
+            self._tray_notifier = TrayNotifier(
+                self.notif_service,
+                self._tray,
+                app_name=self.settings.notify_app_name or "Claude Workspaces",
+                parent=self,
+            )
+            self._tray_notifier.open_target_requested.connect(
+                self._on_notif_open_target
+            )
+            self._tray_notifier.show_window_requested.connect(self._show_and_focus)
+            from PySide6.QtWidgets import QApplication
+            self._tray_notifier.quit_requested.connect(QApplication.quit)
+        except Exception:
+            log.exception("falha ao inicializar TrayNotifier")
+
+    def _show_and_focus(self) -> None:
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -3864,6 +3887,21 @@ class MainWindow(QMainWindow):
             # com as actions internas do inbox alert ("open"/"snooze5"/"seen").
             notifier.action_invoked.connect(self._on_global_dbus_action)
             log.info("Notificador D-Bus com ações ativo (caps=%s)", notifier.capabilities)
+            # DesktopNotifierAdapter: escuta NotificationService e despacha
+            # popup automático respeitando preferências (mute, app em foco).
+            try:
+                from ..notifications.desktop import DesktopNotifierAdapter
+                self._desktop_adapter = DesktopNotifierAdapter(
+                    self.notif_service,
+                    notifier,
+                    is_app_focused=self._is_app_in_foreground,
+                    parent=self,
+                )
+                self._desktop_adapter.open_target_requested.connect(
+                    self._on_notif_open_target
+                )
+            except Exception:
+                log.exception("falha ao montar DesktopNotifierAdapter")
         else:
             self._desktop_notifier = None
             log.info(
@@ -3871,6 +3909,13 @@ class MainWindow(QMainWindow):
                 "caindo pro tray.showMessage",
                 notifier.available, notifier.supports_actions,
             )
+
+    def _is_app_in_foreground(self) -> bool:
+        """True se a MainWindow está ativa e visível."""
+        try:
+            return self.isActiveWindow() and not self.isMinimized() and self.isVisible()
+        except Exception:
+            return False
 
     def _on_inbox_alert(
         self, tab_id: int, info: dict, is_reminder: bool
@@ -3963,35 +4008,16 @@ class MainWindow(QMainWindow):
                 "is_reminder": bool(is_reminder),
             },
         )
-        # Toast in-app top-most (independente do KDE) — garante visibilidade
-        # mesmo com Plasma matando o popup D-Bus. Notif do KDE continua
-        # também, pra caso a janela esteja em outro virtual desktop.
+        # Toast in-app top-most: continua só pro som (a função foi reduzida
+        # antes a "só toca som"; mantemos por enquanto).
         self._show_persistent_toast(tab_id, workspace_id, title, body)
 
+        # Despacho do popup D-Bus agora é responsabilidade do
+        # DesktopNotifierAdapter (escuta notification_added do service e
+        # respeita "app em foco", muted_kinds, etc.). O `notify()` acima já
+        # disparou notification_added — adapter cuida do resto.
         if self._desktop_notifier is not None:
-            # Divisão de responsabilidades:
-            # - Notif D-Bus: SEM action, SEM som, urgency=normal e timeout
-            #   configurável (~10s) → aparece, fica visível um instante e
-            #   some sozinha pra não ficar acumulando popup velho. Quem
-            #   carrega a persistência é o toast in-app.
-            # - Toast in-app (`_show_persistent_toast`): tem os botões
-            #   (Abrir/Adiar/Já vi) + som + auto-dismiss com barra de
-            #   progresso. Lifecycle 100% nosso.
-            prev_nid = self._active_notifications.get(tab_id, 0)
-            nid = self._desktop_notifier.notify(
-                title=title,
-                body=body,
-                actions=[],
-                timeout_ms=int(self.settings.notify_timeout_ms),
-                replaces_id=prev_nid,
-                urgency=1,
-                desktop_entry="claude-workspaces",
-                sound_name=None,
-            )
-            if nid is not None:
-                self._active_notifications[tab_id] = nid
-                return
-            log.debug("D-Bus notify falhou — fallback pro tray.showMessage")
+            return
 
         if self._tray is None:
             return

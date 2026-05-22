@@ -6,6 +6,37 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.67.0] — 2026-05-22
+
+### Adicionado
+- **TrayNotifier sincroniza QSystemTrayIcon com o NotificationService**
+  (`notifications/tray.py`, `ui/main_window.py`): tooltip do tray vira
+  `"Claude Workspaces · 3 pendências (1 crítica)"`, e o menu de contexto
+  lista até 5 pendências (truncadas, marcadas com `⚠` se críticas).
+  Cliques no item emitem `open_target_requested(Notification)` → o
+  MainWindow foca o console. Menu também tem "Mostrar janela", "Marcar
+  todas como vistas" e "Sair". `_init_tray` instancia o TrayNotifier
+  logo depois de criar o `QSystemTrayIcon`.
+- **DesktopNotifierAdapter escuta o service e despacha popup nativo**
+  (`notifications/desktop.py`): conectado em `notification_added`/
+  `notification_changed`/`notification_removed`. Suprime quando o app
+  está em foco (`MainWindow.isActiveWindow() and not isMinimized()`),
+  quando `preferences.desktop_enabled=False`, quando a notif já está
+  `seen`/`dismissed`, e reaproveita `replaces_id` por `dedup_key` pra
+  evitar empilhar banner. Notificações HIGH/CRITICAL são `resident=true`
+  com `timeout=0` (sticky); ações no banner ("Abrir"/"Adiar 5m"/"Já
+  vi") chamam direto `service.mark_seen`/`snooze` ou emitem
+  `open_target_requested` consumido pelo MainWindow.
+
+### Alterado
+- **`_on_inbox_alert` não chama mais `_desktop_notifier.notify()`
+  diretamente** (`ui/main_window.py`): o despacho do popup virou
+  responsabilidade do `DesktopNotifierAdapter`, que reage ao
+  `notification_added` que o próprio `_on_inbox_alert` já emitia via
+  `notif_service.notify(...)`. Resultado: uma única fonte de verdade pro
+  desktop notify, dedup centralizado, e supressão automática quando o
+  console já está em foco.
+
 ## [0.66.0] — 2026-05-22
 
 ### Adicionado
