@@ -563,6 +563,10 @@ class TerminalChildWidget(QWidget):
             f"  border-left: 3px solid {accent};"
             f"  border-radius: 6px;"
             f"}}"
+            # Filhos transparentes pra QPalette.Window não vazar bg cinza
+            # sobre o card e criar ilusão de "dois backgrounds" (ícone
+            # do robot tem stylesheet próprio que sobrepõe esse).
+            f"#ConsoleCard QLabel {{ background: transparent; }}"
         )
 
     def set_selected(self, selected: bool) -> None:

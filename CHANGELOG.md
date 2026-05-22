@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.76.11] — 2026-05-22
+
+### Corrigido — Duplo background nos cards (workspace/runner/console)
+Os QLabels filhos dos cards estavam caindo no `QPalette.Window`
+default (cinza ligeiramente diferente do `#232323` do card), o que
+criava ilusão de "dois backgrounds sobrepostos". Fix: forçar
+`background: transparent` em filhos via QSS escopado por `#ObjectName`
+em **`workspace_item_widget.py`**, **`runner_child_widget.py`** e
+**`terminal_child_widget.py`**.
+
+### Adicionado — Workspace expandido com efeito "card contínuo"
+- **`ui/workspace_item_widget.py`**: novo método
+  `set_expanded_visual(bool)`. Quando expandido, o card achata a borda
+  + raio inferior (border-bottom: 0; border-bottom-left/right-radius:
+  0) — visualmente continua descendo pros children em vez de cortar
+  abruptamente.
+- **`ui/main_window.py`**: chama `set_expanded_visual()` em
+  `_install_workspace_item_widget`, no callback `on_toggle` e em
+  `_update_workspace_collapsed_icon` (cobre toggle pelo botão do
+  widget E pelo chevron nativo da tree).
+
 ## [0.76.10] — 2026-05-22
 
 ### Melhorado — Notificação do S.O. focada no que importa

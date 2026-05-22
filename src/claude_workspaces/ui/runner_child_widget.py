@@ -59,6 +59,10 @@ _CARD_QSS = (
     f"  border: 1px solid #333333;"
     f"  border-radius: {theme.RADIUS_MD}px;"
     f"}}"
+    # Filhos transparentes — evita QPalette.Window dos QLabels vazar
+    # bg cinza escuro sobre o card e criar ilusão de "dois backgrounds".
+    f"#RunnerCard QLabel {{ background: transparent; }}"
+    f"#RunnerCard > QPushButton {{ background: transparent; }}"
 )
 
 

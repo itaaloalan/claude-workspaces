@@ -1636,6 +1636,7 @@ class MainWindow(QMainWindow):
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, WorkspaceItemWidget):
             widget.set_collapsed(collapsed)
+            widget.set_expanded_visual(not collapsed)
         elif isinstance(widget, RunnerGroupWidget):
             widget.set_collapsed(collapsed)
 
@@ -2359,11 +2360,13 @@ class MainWindow(QMainWindow):
             widget = self.list_widget.itemWidget(item, 0)
             if isinstance(widget, WorkspaceItemWidget):
                 widget.set_collapsed(not item.isExpanded())
+                widget.set_expanded_visual(item.isExpanded())
 
         from PySide6.QtCore import QSize as _QS
 
         widget = WorkspaceItemWidget(ws.name, on_add, on_toggle)
         widget.set_collapsed(not item.isExpanded())
+        widget.set_expanded_visual(item.isExpanded())
         widget.set_pinned(ws.pinned)
         widget.set_running_count(
             self.terminals_coord.state.running_counts.get(ws.id, 0)

@@ -245,26 +245,57 @@ class WorkspaceItemWidget(QWidget):
 
     def _apply_card_qss(self) -> None:
         """Renderiza o widget como card (bg + borda + radius), igual
-        mockup. Cores levemente mais claras pra o card sobressair contra
-        o BG_PANEL (#1a1a1a) — sem isso a borda some no tema escuro."""
+        mockup. Quando expandido, achata o canto inferior + remove a
+        borda de baixo — assim o card visualmente "continua" descendo
+        pra englobar os children (Sessões Claude, Runners, etc)."""
         if self._selected:
             bg = "rgba(61, 110, 168, 38)"
             border = theme.PRIMARY
         else:
             bg = "#232323"
             border = "#333333"
-        # #WorkspaceCard scope: limita o QSS ao próprio widget (não cascateia
-        # bg pra QLabel/QPushButton internos, que são transparentes).
+        expanded = getattr(self, "_expanded", False)
+        # Quando expandido, zera raio + borda inferior → ilusão de card
+        # contínuo descendo pros children. Quando colapsado, card fechado
+        # nas 4 quinas.
+        if expanded:
+            border_radius = (
+                "border-top-left-radius: 6px;"
+                "border-top-right-radius: 6px;"
+                "border-bottom-left-radius: 0px;"
+                "border-bottom-right-radius: 0px;"
+            )
+            border_qss = (
+                f"border-top: 1px solid {border};"
+                f"border-left: 1px solid {border};"
+                f"border-right: 1px solid {border};"
+                f"border-bottom: 0;"
+            )
+        else:
+            border_radius = "border-radius: 6px;"
+            border_qss = f"border: 1px solid {border};"
         self.setStyleSheet(
             f"#WorkspaceCard {{"
             f"  background: {bg};"
-            f"  border: 1px solid {border};"
-            f"  border-radius: 6px;"
+            f"  {border_qss}"
+            f"  {border_radius}"
             f"}}"
             f"#WorkspaceCard:hover {{"
             f"  border-color: {theme.PRIMARY_HOVER if self._selected else '#404040'};"
             f"}}"
+            # Filhos transparentes — sem isso QLabel/QPushButton caem em
+            # QPalette.Window e criam ilusão de "dois backgrounds" sobre
+            # o bg do card.
+            f"#WorkspaceCard QLabel {{ background: transparent; }}"
         )
+
+    def set_expanded_visual(self, expanded: bool) -> None:
+        """Avisa o card que o workspace está expandido/colapsado pra ele
+        ajustar a borda inferior — efeito 'card contínuo' quando expandido."""
+        if getattr(self, "_expanded", False) == expanded:
+            return
+        self._expanded = expanded
+        self._apply_card_qss()
 
     def _apply_label_color(self) -> None:
         from .icons import ic as _ic
