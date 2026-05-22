@@ -6,6 +6,24 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.11] — 2026-05-22
+
+### Corrigido
+- **Lentidão visível ao clicar runner/console no sidebar**
+  (`ui/main_window.py`): 3 mudanças combinadas que removem trabalho
+  redundante a cada click:
+  - `_on_tree_item_clicked` não dispara mais `_open_runner_from_sidebar`
+    pra runners — o handler agora vive só no `_on_selection_changed`
+    (safety net). Antes, em alguns casos os 2 signals disparavam e
+    `_focus_pane_from_sidebar` rodava 2x.
+  - Cache de QIcons em `_focus_pane_from_sidebar` —
+    `ic("fa5s.window-minimize"|"-maximize")` virou 1 chamada por
+    sessão. qtawesome renderiza SVG via paint, e 4 chamadas por
+    click somavam ~dezenas de ms.
+  - `_sync_terminal_for` curtocircuita se o workspace é o mesmo do
+    último sync — clicks entre filhos do mesmo ws não re-rodam
+    `_get_or_create_runner_area` + `_refresh_runner_children`.
+
 ## [0.61.10] — 2026-05-22
 
 ### Adicionado

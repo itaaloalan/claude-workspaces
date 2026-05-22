@@ -2499,11 +2499,11 @@ class MainWindow(QMainWindow):
         if item.parent() is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
-        # Clique num runner-child → abre o console/log daquele runner.
+        # Runner click é tratado em `_on_selection_changed` (safety net).
+        # Não duplicar aqui — evita 2x `_open_runner_from_sidebar`
+        # (com `_focus_pane_from_sidebar` chamado 2x), que era a causa
+        # da lentidão visível em cada click.
         if isinstance(data, tuple) and len(data) == 3 and data[0] == "runner":
-            ws = self.workspaces_coord.find_by_id(data[1])
-            if ws is not None:
-                self._open_runner_from_sidebar(ws, data[2])
             return
         if not isinstance(data, int):  # só tab_id de aba viva
             return
@@ -2547,6 +2547,19 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QSize as _QS
         from .icons import ic
 
+        # Cache dos QIcons usados aqui — qtawesome renderiza SVG via
+        # paint, cada `ic(...)` é caro o suficiente pra dar travada
+        # perceptível em sequência (2 ícones * 2 panes * cada click).
+        cache = getattr(self, "_focus_icon_cache", None)
+        if cache is None:
+            cache = {
+                "min": ic("fa5s.window-minimize", color="#c8c8c8"),
+                "max": ic("fa5s.window-maximize", color="#c8c8c8"),
+            }
+            self._focus_icon_cache = cache
+        icon_min = cache["min"]
+        icon_max = cache["max"]
+
         # Garante que os panes podem colapsar pra 0 — caso ainda
         # tenham minimum size herdado de algum sizeHint do conteúdo.
         self._terminal_pane_widget.setMinimumHeight(0)
@@ -2580,14 +2593,10 @@ class MainWindow(QMainWindow):
                 self._minimize_tray.add_chip(
                     "terminal_pane", "Terminal", "fa5s.terminal"
                 )
-            self._runners_minimize_btn.setIcon(
-                ic("fa5s.window-minimize", color="#c8c8c8")
-            )
+            self._runners_minimize_btn.setIcon(icon_min)
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Minimizar área de runners")
-            self._terminal_pane_minimize_btn.setIcon(
-                ic("fa5s.window-maximize", color="#c8c8c8")
-            )
+            self._terminal_pane_minimize_btn.setIcon(icon_max)
             self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
             self._terminal_pane_minimize_btn.setToolTip("Restaurar terminal")
         elif pane == "terminal":
@@ -2603,14 +2612,10 @@ class MainWindow(QMainWindow):
                 self._minimize_tray.add_chip(
                     "runners", "Runners", "mdi6.source-branch"
                 )
-            self._terminal_pane_minimize_btn.setIcon(
-                ic("fa5s.window-minimize", color="#c8c8c8")
-            )
+            self._terminal_pane_minimize_btn.setIcon(icon_min)
             self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
             self._terminal_pane_minimize_btn.setToolTip("Minimizar terminal")
-            self._runners_minimize_btn.setIcon(
-                ic("fa5s.window-maximize", color="#c8c8c8")
-            )
+            self._runners_minimize_btn.setIcon(icon_max)
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Restaurar área de runners")
 
@@ -2714,6 +2719,15 @@ class MainWindow(QMainWindow):
     # ---------- terminal ----------
 
     def _sync_terminal_for(self, workspace: Workspace) -> None:
+        # Curtocircuita se já estamos exibindo este workspace — clicks
+        # entre filhos do mesmo ws (consoles, runners) não precisam
+        # re-rodar `_get_or_create_runner_area` nem
+        # `_refresh_runner_children` (caros e responsáveis pela
+        # lentidão visível em cada click do sidebar).
+        last_id = getattr(self, "_last_synced_ws_id", None)
+        if last_id == workspace.id:
+            return
+        self._last_synced_ws_id = workspace.id
         area = self.terminals_coord._areas.get(workspace.id)
         if area is not None:
             self.terminal_host.setCurrentWidget(area)
