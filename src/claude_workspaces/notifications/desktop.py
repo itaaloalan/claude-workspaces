@@ -147,9 +147,10 @@ class DesktopNotifierAdapter(QObject):
                 replaces_id=prev,
                 urgency=urgency,
                 desktop_entry="claude-workspaces",
+                sound_name="message-new-instant",
                 resident=False,
-                transient=True,
-                suppress_sound=True,
+                transient=False,
+                suppress_sound=False,
             )
         except Exception:
             log.exception("DesktopNotifier.notify falhou")

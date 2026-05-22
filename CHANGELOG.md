@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.14] — 2026-05-22
+
+### Corrigido — Notificações S.O. com som e fixadas na central
+- **`notifications/desktop.py`**: popup nativo agora vai com `transient=False`,
+  `suppress_sound=False` e `sound_name="message-new-instant"`. Antes saía como
+  transient/silencioso e o Plasma 6 não guardava na central de notificações
+  depois que o banner expirava — usuário tinha 10s pra ver, depois sumia sem
+  rastro. Agora toca som ao aparecer e fica acumulado na central até ser
+  lido/dispensado.
+
 ## [0.76.13] — 2026-05-22
 
 ### Adicionado — Bordas laterais + base no workspace expandido
