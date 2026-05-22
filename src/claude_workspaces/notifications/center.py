@@ -231,8 +231,8 @@ class NotificationCenter(QFrame):
             "QLabel { background: transparent; }"
         )
         self.setFixedWidth(420)
-        self.setMinimumHeight(180)
-        self.setMaximumHeight(560)
+        self.setMinimumHeight(280)
+        self.setMaximumHeight(820)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 10, 12, 10)
