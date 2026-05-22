@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.9] — 2026-05-22
+
+### Adicionado
+- **Logs de debug nos handlers do sidebar** (`ui/main_window.py`):
+  `_open_runner_from_sidebar`, `_focus_terminal_tab`,
+  `_focus_pane_from_sidebar` e `_refresh_terminal_pane_title` agora
+  emitem `log.info` com prefixos `[SIDEBAR]`, `[FOCUS]` e
+  `[HEADER]` mostrando workspace_id, tab_id, sizes antes/depois,
+  qual aba/runner foi resolvido, etc. Logs ficam em
+  `~/.local/state/claude-workspaces/app.log` + stderr — facilita
+  validar o comportamento de focus reportado pelo user.
+
 ## [0.61.8] — 2026-05-22
 
 ### Corrigido

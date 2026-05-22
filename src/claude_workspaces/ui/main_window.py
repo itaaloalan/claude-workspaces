@@ -2508,6 +2508,7 @@ class MainWindow(QMainWindow):
         causava lentidão visível em cada click). Aplica setSizes
         sincrono e atualiza chips/ícones inline."""
         if not hasattr(self, "_bottom_sub_splitter"):
+            log.info("[FOCUS] _bottom_sub_splitter ainda não existe, abort")
             return
         from PySide6.QtCore import QSize as _QS
         from .icons import ic
@@ -2524,11 +2525,22 @@ class MainWindow(QMainWindow):
             total = h
         if total < 200:
             total = 600
+        log.info(
+            "[FOCUS] pane=%s cur_sizes=%s sub_splitter.height=%d total=%d "
+            "terminal_visible=%s runners_visible=%s",
+            pane, cur, h, total,
+            self._terminal_pane_widget.isVisible(),
+            self._runners_pane.isVisible(),
+        )
 
         if pane == "runners":
             if cur and cur[0] > 4:
                 self._terminal_pane_last_size = cur[0]
             self._bottom_sub_splitter.setSizes([0, total])
+            log.info(
+                "[FOCUS] após setSizes([0,%d]) → real_sizes=%s",
+                total, self._bottom_sub_splitter.sizes(),
+            )
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.remove_chip("runners")
                 self._minimize_tray.add_chip(
@@ -2548,6 +2560,10 @@ class MainWindow(QMainWindow):
             if cur and cur[1] > 4:
                 self._runners_last_size = cur[1]
             self._bottom_sub_splitter.setSizes([total, 0])
+            log.info(
+                "[FOCUS] após setSizes([%d,0]) → real_sizes=%s",
+                total, self._bottom_sub_splitter.sizes(),
+            )
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.remove_chip("terminal_pane")
                 self._minimize_tray.add_chip(
@@ -2578,12 +2594,20 @@ class MainWindow(QMainWindow):
         Resolve o escopo automaticamente: runners workspace-scope abrem
         no painel "Runners workspace"; runners de console abrem no painel
         "Runners (console)" do console dono."""
+        log.info(
+            "[SIDEBAR] _open_runner_from_sidebar ws=%s runner=%s",
+            workspace.id, runner_id,
+        )
         # Antes de focar: se o runners pane está minimizado, restaura e
         # minimiza o terminal pane (mesmo gesto que o user pediu).
         self._ensure_runners_pane_visible()
         # Identifica o escopo procurando o runner no workspace.
         runner = next((r for r in workspace.runners if r.id == runner_id), None)
         sid = (runner.console_session_id or "") if runner is not None else ""
+        log.info(
+            "[SIDEBAR] runner encontrado=%s sid=%r",
+            runner is not None, sid,
+        )
         if sid:
             # Console-scope: localiza a RunnerArea do console dono.
             for area in self._console_runner_areas.get(workspace.id, {}).values():
@@ -2603,20 +2627,33 @@ class MainWindow(QMainWindow):
                     area.focus_runner(runner_id)
                     return
             # Não achou console dono (foi encerrado?) — fallback pro workspace.
+        log.info("[SIDEBAR] usando workspace-scope runner area (fallback)")
         area = self._get_or_create_runner_area(workspace)
         self.runner_host.setCurrentWidget(area)
         self._runners_tabs.setCurrentWidget(self.runner_host)
+        log.info(
+            "[SIDEBAR] chamando area.focus_runner(%s) — area_id=%s "
+            "runners_tabs_current=%s",
+            runner_id, id(area),
+            self._runners_tabs.currentWidget().__class__.__name__,
+        )
         area.focus_runner(runner_id)
 
     def _focus_terminal_tab(self, workspace: Workspace, tab_id: int) -> None:
+        log.info(
+            "[SIDEBAR] _focus_terminal_tab ws=%s tab_id=%s",
+            workspace.id, tab_id,
+        )
         # Antes de focar: se o terminal pane está minimizado, restaura e
         # minimiza o runners pane no mesmo gesto.
         self._ensure_terminal_pane_visible()
         area = self.terminals_coord._areas.get(workspace.id)
         if area is None:
+            log.info("[SIDEBAR] sem TerminalArea pra workspace=%s", workspace.id)
             return
         for i in range(area.tabs.count()):
             if id(area.tabs.widget(i)) == tab_id:
+                log.info("[SIDEBAR] foco aba idx=%d", i)
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
@@ -2679,6 +2716,12 @@ class MainWindow(QMainWindow):
                 if a is area:
                     ws = self.workspaces_coord.find_by_id(ws_id)
                     break
+        log.info(
+            "[HEADER] refresh: ws=%s area=%s term=%s",
+            ws.id if ws else None,
+            id(area) if area else None,
+            term.__class__.__name__ if term else None,
+        )
         if ws is None or term is None or not isinstance(term, TerminalWidget):
             self._terminal_pane_title.setText(
                 "<span style='color:#666'>Claude console — "
