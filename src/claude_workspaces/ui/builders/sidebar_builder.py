@@ -8,7 +8,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPalette
+from PySide6.QtGui import (
+    QColor,
+    QCursor,
+    QMouseEvent,
+    QPainter,
+    QPalette,
+    QPen,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -16,6 +23,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -81,6 +89,110 @@ class _StableTree(QTreeWidget):
                 self.setCurrentItem(press_item)
                 return
         super().mouseReleaseEvent(event)
+
+    # --- Overlay de bordas pra fechar workspaces expandidos visualmente.
+    # WorkspaceItemWidget achata bordas inferiores no estado expandido;
+    # essa pintura conecta as laterais e fecha o bottom englobando todos
+    # os descendentes visíveis (Sessões Claude, Runners, etc).
+
+    def setup_card_overlay(self) -> None:
+        """Instala overlay child da viewport que pinta as bordas
+        laterais+base de cada workspace expandido. Idempotente."""
+        if getattr(self, "_card_overlay", None) is not None:
+            return
+        self._card_overlay = _WorkspaceBorderOverlay(self)
+        self._card_overlay.setGeometry(self.viewport().rect())
+        self._card_overlay.show()
+        self._card_overlay.raise_()
+        # Repinta quando expand/collapse/scroll/resize muda a geometria.
+        self.itemExpanded.connect(lambda _i: self._card_overlay.update())
+        self.itemCollapsed.connect(lambda _i: self._card_overlay.update())
+        self.verticalScrollBar().valueChanged.connect(
+            lambda _v: self._card_overlay.update()
+        )
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        ov = getattr(self, "_card_overlay", None)
+        if ov is not None:
+            ov.setGeometry(self.viewport().rect())
+
+    def _last_visible_descendant(
+        self, item: QTreeWidgetItem
+    ) -> QTreeWidgetItem | None:
+        """Walk down expanded children pra achar o último item visível
+        (recursivo). Itens hidden são pulados — eles não ocupam rect."""
+        last = item
+        cur = item
+        while cur.isExpanded() and cur.childCount() > 0:
+            found = None
+            for i in range(cur.childCount() - 1, -1, -1):
+                ch = cur.child(i)
+                if not ch.isHidden():
+                    found = ch
+                    break
+            if found is None:
+                break
+            last = found
+            cur = found
+        return last if last is not item else (item if item.isExpanded() else None)
+
+
+class _WorkspaceBorderOverlay(QWidget):
+    """Pinta laterais + base do "card contínuo" de cada workspace
+    expandido. Fica em cima da viewport mas é transparente pra mouse,
+    então não atrapalha cliques/scroll."""
+
+    _BORDER_COLOR = QColor("#333333")
+    _BORDER_RADIUS = 6
+
+    def __init__(self, tree: _StableTree) -> None:
+        super().__init__(tree.viewport())
+        self._tree = tree
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        tree = self._tree
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(self._BORDER_COLOR)
+        pen.setWidth(1)
+        painter.setPen(pen)
+        for i in range(tree.topLevelItemCount()):
+            top = tree.topLevelItem(i)
+            if not top.isExpanded():
+                continue
+            top_rect = tree.visualItemRect(top)
+            if not top_rect.isValid() or top_rect.height() == 0:
+                continue
+            last = tree._last_visible_descendant(top)
+            if last is None:
+                continue
+            last_rect = tree.visualItemRect(last)
+            if not last_rect.isValid():
+                continue
+            x_left = top_rect.left()
+            x_right = top_rect.right()
+            y_top = top_rect.bottom()  # logo abaixo do header do workspace
+            y_bottom = last_rect.bottom()
+            if y_bottom <= y_top:
+                continue
+            r = self._BORDER_RADIUS
+            # Laterais verticais (até onde começa o arco do canto inferior).
+            painter.drawLine(x_left, y_top, x_left, y_bottom - r)
+            painter.drawLine(x_right, y_top, x_right, y_bottom - r)
+            # Base com cantos arredondados — desenhamos a curva inferior +
+            # a linha horizontal central como um path.
+            from PySide6.QtGui import QPainterPath
+            path = QPainterPath()
+            path.moveTo(x_left, y_bottom - r)
+            path.quadTo(x_left, y_bottom, x_left + r, y_bottom)
+            path.lineTo(x_right - r, y_bottom)
+            path.quadTo(x_right, y_bottom, x_right, y_bottom - r)
+            painter.drawPath(path)
+        painter.end()
 
 
 _SECTION_HEADER_QSS = (
@@ -370,6 +482,9 @@ class SidebarBuilder:
             pal.setColor(grp, QPalette.ColorRole.Highlight, QColor(0, 0, 0, 0))
         self.list_widget.setPalette(pal)
         layout.addWidget(self.list_widget, stretch=1)
+        # Overlay que pinta laterais + base dos workspaces expandidos,
+        # fechando visualmente o "card contínuo".
+        self.list_widget.setup_card_overlay()
 
         # Status do contexto da sessão Claude ativa (apenas % da janela
         # de contexto + tokens absolutos). Atualizado pela MainWindow no

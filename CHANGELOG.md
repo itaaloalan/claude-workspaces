@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.13] — 2026-05-22
+
+### Adicionado — Bordas laterais + base no workspace expandido
+- **`ui/builders/sidebar_builder.py`**: novo `_WorkspaceBorderOverlay`
+  — QWidget transparente (mouse-through) anexado à viewport da tree
+  que pinta as **laterais e a base com cantos arredondados** de cada
+  workspace expandido. Combina com o achatamento de borda inferior do
+  `WorkspaceItemWidget` que já existia desde 0.76.11 — agora o card
+  fecha visualmente englobando todos os children (Sessões Claude,
+  Runners, runners individuais, etc).
+- Repaint disparado em `itemExpanded`/`itemCollapsed`/scroll/resize
+  pra manter sincronizado com a geometria dos items.
+
 ## [0.76.12] — 2026-05-22
 
 ### Modificado — Runner card mais compacto
