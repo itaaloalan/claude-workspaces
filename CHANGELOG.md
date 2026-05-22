@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.8] — 2026-05-22
+
+### Mudado
+- **Header "Runners" alinhado com "Sessões Claude" na sidebar**
+  (`ui/runner_group_widget.py`): o cabeçalho do grupo Runners agora
+  usa as mesmas margens (4,2,6,2), o mesmo chevron pequeno (8x8) via
+  ícone, mesma cor de label (#c8c8c8) e mesmo `font-size: 11px` do
+  bucket Sessões Claude. Resultado: os dois grupos começam na mesma
+  posição X e têm a mesma altura/peso visual.
+
 ## [0.60.7] — 2026-05-22
 
 ### Corrigido

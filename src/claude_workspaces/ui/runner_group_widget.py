@@ -14,7 +14,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -58,17 +57,31 @@ class RunnerGroupWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(22)
-        self.setMaximumHeight(24)
+        self.setMinimumHeight(24)
+        self.setMaximumHeight(26)
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(2, 2, 4, 2)
+        # Margens/spacing iguais ao header do bucket "Sessões Claude" pra os
+        # dois grupos ficarem alinhados verticalmente na sidebar.
+        row.setContentsMargins(4, 2, 6, 2)
         row.setSpacing(6)
 
-        self._collapse_btn = QPushButton("⌄")
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic as _ic
+
+        # Chevron como pixmap pequeno (8x8) — mesmo visual do header
+        # Sessões Claude. Embrulhado num QPushButton flat pra manter
+        # clique de toggle/expandir.
+        self._collapse_btn = QPushButton()
         self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._collapse_btn.setFixedSize(18, 18)
-        self._collapse_btn.setStyleSheet(_BTN_QSS)
+        self._collapse_btn.setFlat(True)
+        self._collapse_btn.setFixedSize(14, 14)
+        self._collapse_btn.setIconSize(_QS(8, 8))
+        self._collapse_btn.setIcon(_ic("fa5s.chevron-down", color="#9aa0a6"))
+        self._collapse_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 0; padding: 0; }"
+            "QPushButton:hover { background: #2a2a2a; border-radius: 3px; }"
+        )
         self._collapse_btn.setToolTip("Recolher / expandir runners")
         if on_toggle_collapse is not None:
             self._collapse_btn.clicked.connect(on_toggle_collapse)
@@ -76,8 +89,6 @@ class RunnerGroupWidget(QWidget):
 
         # Ícone SVG (mdi6.source-branch) à esquerda do label — simetria
         # com o bucket Sessões Claude que já tem ícone fa5s.comments.
-        from PySide6.QtCore import QSize as _QS
-        from .icons import ic as _ic
         self._icon_lbl = QLabel()
         self._icon_lbl.setPixmap(
             _ic("mdi6.source-branch", color="#9aa0a6").pixmap(_QS(12, 12))
@@ -85,11 +96,9 @@ class RunnerGroupWidget(QWidget):
         row.addWidget(self._icon_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._label = QLabel(label)
-        font = QFont(self._label.font())
-        font.setPointSizeF(font.pointSizeF() - 0.5)
-        self._label.setFont(font)
+        # Mesma cor/tamanho do header "Sessões Claude" pra paridade visual.
         self._label.setStyleSheet(
-            f"color: {theme.TEXT_FAINT}; font-weight: 600;"
+            "color: #c8c8c8; font-size: 11px; font-weight: 600;"
         )
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -97,8 +106,8 @@ class RunnerGroupWidget(QWidget):
         # bucket Sessões Claude na sidebar.
         self._count_badge = QLabel("")
         self._count_badge.setStyleSheet(
-            "QLabel { background: #2a2a2a; color: #9aa0a6; font-size: 9px; "
-            "font-weight: 700; padding: 1px 6px; border-radius: 6px; }"
+            "background: #2a2a2a; color: #9aa0a6; font-size: 9px; "
+            "font-weight: 700; padding: 1px 6px; border-radius: 6px;"
         )
         self._count_badge.setVisible(False)
         row.addWidget(self._count_badge, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -142,8 +151,10 @@ class RunnerGroupWidget(QWidget):
         self._count_badge.setVisible(True)
 
     def set_collapsed(self, collapsed: bool) -> None:
-        """Atualiza o ícone do chevron (› recolhido, ⌄ expandido)."""
-        self._collapse_btn.setText("›" if collapsed else "⌄")
+        """Atualiza o ícone do chevron (right recolhido, down expandido)."""
+        from .icons import ic as _ic
+        name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
+        self._collapse_btn.setIcon(_ic(name, color="#9aa0a6"))
 
     def _open_add_menu(self) -> None:
         # Se não tem gerador (escopo console-pending sem area), abre direto.
