@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.2] — 2026-05-21
+
+### Adicionado
+- **MinimizeTray — faixa fixa na base do center pra painéis minimizados**
+  (`ui/minimize_tray.py`, `ui/main_window.py`):
+  - QWidget horizontal escondido (height 0) quando vazio; aparece (26px)
+    com chips pra cada painel minimizado.
+  - Cada chip tem ícone + label + tooltip "Restaurar X". Click emite
+    `restore_requested(panel_id)`.
+- 3 painéis agora minimizam pra tray:
+  - **Workspace** (`_toggle_content_minimized`): chip `📁 Workspace`
+  - **Terminal** (`_toggle_terminal`): chip `›_ Terminal`
+  - **Runners** (`_toggle_runners_minimized`): chip `🌿 Runners`
+- Minimizar agora colapsa pra **0** (em vez de deixar header 40px) —
+  o chip na tray serve como o handle de restauração visível.
+
+### Comportamento
+- Múltiplos painéis podem estar minimizados ao mesmo tempo.
+- Click no chip restaura o painel pro último tamanho conhecido.
+- Tray some quando todos restauram.
+
 ## [0.60.1] — 2026-05-21
 
 ### Mudado

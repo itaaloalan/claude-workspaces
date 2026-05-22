@@ -342,10 +342,23 @@ class MainWindow(QMainWindow):
         self.right_dock = self._build_right_dock()
         self.right_dock.setMinimumWidth(0)
 
+        # Container do center: right_splitter (painéis verticais) +
+        # MinimizeTray fixa na base. Cada painel minimizado vira chip
+        # na tray; click no chip restaura.
+        from .minimize_tray import MinimizeTray
+        center_host = QWidget()
+        ch_layout = QVBoxLayout(center_host)
+        ch_layout.setContentsMargins(0, 0, 0, 0)
+        ch_layout.setSpacing(0)
+        ch_layout.addWidget(self.right_splitter, stretch=1)
+        self._minimize_tray = MinimizeTray()
+        self._minimize_tray.restore_requested.connect(self._on_minimize_tray_restore)
+        ch_layout.addWidget(self._minimize_tray)
+
         # Monta os 3 docks. ORDEM IMPORTA: center primeiro — se left/right
         # entrarem antes, o QtAds não tem dock area pra ancorar e cria um
         # segundo dock area no mesmo lado (sidebar duplicando, etc).
-        self._center_dock = self.body_dock.add_center(self.right_splitter, "Workspace")
+        self._center_dock = self.body_dock.add_center(center_host, "Workspace")
         self._sidebar_dock = self.body_dock.add_left(self._sidebar, "Sidebar")
         self._right_panel_dock = self.body_dock.add_right(self.right_dock, "Ferramentas")
 
@@ -530,27 +543,29 @@ class MainWindow(QMainWindow):
         sizes = self.right_splitter.sizes()
         if not sizes or len(sizes) < 2:
             return False
-        return sizes[1] <= self._terminal_header_height() + 4
+        return sizes[1] <= 4  # colapsado (com chip na MinimizeTray)
 
     def _toggle_terminal(self) -> None:
         sizes = self.right_splitter.sizes()
         if not sizes or len(sizes) < 2:
             return
-        header_h = self._terminal_header_height()
         if not self._terminal_is_minimized():
-            # Minimizar: terminal_host some, mas o header continua
-            # visível (clicável pra restaurar)
-            self._terminal_last_size = sizes[1]
+            # Minimizar: colapsa o pane inteiro pra 0 + chip na tray
+            self._terminal_last_size = sizes[1] if sizes[1] > 50 else 420
             self.terminal_host.setVisible(False)
-            self.right_splitter.setSizes(
-                [max(sum(sizes) - header_h, 200), header_h]
-            )
+            self.right_splitter.setSizes([sum(sizes), 0])
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.add_chip(
+                    "terminal", "Terminal", "fa5s.terminal"
+                )
         else:
             target = self._terminal_last_size or 420
             self.terminal_host.setVisible(True)
             self.right_splitter.setSizes(
                 [max(sum(sizes) - target, 200), target]
             )
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.remove_chip("terminal")
         self._refresh_terminal_btns()
         self._schedule_layout_save()
 
@@ -584,17 +599,23 @@ class MainWindow(QMainWindow):
 
     def _toggle_content_minimized(self) -> None:
         """Alterna entre upper minimizado (terminal full) e tamanho normal.
-        Quando minimizado, deixa ~40px do upper visível pra mostrar o
-        botão de expand de volta."""
+        Quando minimizado, colapsa pra 0 e adiciona chip na MinimizeTray
+        pra restaurar."""
         sizes = self.right_splitter.sizes()
         total = sum(sizes) or 800
         if not self._content_is_minimized():
-            # Minimizar: guarda tamanho atual + colapsa pra faixa do header
+            # Minimizar: guarda tamanho atual + colapsa pra 0 + chip na tray
             self._content_last_size = sizes[0] if sizes[0] > 50 else 400
-            self.right_splitter.setSizes([40, max(total - 40, 200)])
+            self.right_splitter.setSizes([0, total])
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.add_chip(
+                    "workspace", "Workspace", "fa5s.folder-open"
+                )
         else:
             target = getattr(self, "_content_last_size", 400) or 400
             self.right_splitter.setSizes([target, max(total - target, 200)])
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.remove_chip("workspace")
         self._refresh_terminal_btns()
         # Atualiza o ícone do botão de minimize no header dos details
         if hasattr(self, "details"):
@@ -1056,6 +1077,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._bottom_sub_splitter, stretch=1)
         return pane
 
+    def _on_minimize_tray_restore(self, panel_id: str) -> None:
+        """Click num chip da MinimizeTray → restaura o painel correspondente."""
+        if panel_id == "workspace":
+            if self._content_is_minimized():
+                self._toggle_content_minimized()
+        elif panel_id == "runners":
+            sizes = self._bottom_sub_splitter.sizes() if hasattr(self, "_bottom_sub_splitter") else []
+            # Runners considerado minimizado quando sizes[1] <= 4
+            if len(sizes) >= 2 and sizes[1] <= 4:
+                self._toggle_runners_minimized()
+        elif panel_id == "terminal":
+            if self._terminal_is_minimized():
+                self._toggle_terminal()
+
     def _toggle_runners_minimized(self) -> None:
         """Alterna entre runners pane normal vs minimizado (só header
         visível). Espelha o min/max do terminal."""
@@ -1069,21 +1104,28 @@ class MainWindow(QMainWindow):
         # Header runners tem ~28px (3+font+3+border)
         header_h = 28
         if sizes[1] > header_h + 4:
-            # Minimizar — ícone vira ▢ (restaurar / maximize)
+            # Minimizar — colapsa pra 0 + chip na tray pra restaurar
             self._runners_last_size = sizes[1]
-            self._runners_tabs.setVisible(False)
-            self._bottom_sub_splitter.setSizes([total - header_h, header_h])
+            self._runners_pane.setVisible(False)
+            self._bottom_sub_splitter.setSizes([total, 0])
             self._runners_minimize_btn.setIcon(ic("fa5s.window-maximize", color="#c8c8c8"))
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Restaurar área de runners")
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.add_chip(
+                    "runners", "Runners", "mdi6.source-branch"
+                )
         else:
-            # Restaurar — ícone volta pra — (minimize)
+            # Restaurar
             target = getattr(self, "_runners_last_size", 300) or 300
+            self._runners_pane.setVisible(True)
             self._runners_tabs.setVisible(True)
             self._bottom_sub_splitter.setSizes([max(total - target, 200), target])
             self._runners_minimize_btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Minimizar área de runners")
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.remove_chip("runners")
         self._schedule_layout_save()
 
     def _open_file_finder_dialog(self, initial_query: str = "") -> None:
