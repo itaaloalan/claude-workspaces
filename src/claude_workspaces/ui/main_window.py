@@ -2504,32 +2504,75 @@ class MainWindow(QMainWindow):
         """Click pelo sidebar = "focar" o pane escolhido: maximiza ele e
         minimiza os outros dois. `pane` ∈ {"runners", "terminal"}.
 
-        Workspace upper (details + sessions list) é sempre minimizado
-        nesse modo focus — o user já tem o sidebar como caminho pra
-        voltar pro workspace.
-
-        Pelo centro (botões de minimizar) o user pode abrir vários
-        panes e dividir a tela manualmente; o focus só dispara pelo
-        sidebar."""
+        Aplica o estado final direto (sem passar pelos toggles em
+        sequência) — chamar toggles encadeados sofria com sizes
+        intermediários do `_bottom_sub_splitter` antes do Qt propagar
+        a expansão do `right_splitter` após o workspace minimizar."""
         if not hasattr(self, "_bottom_sub_splitter"):
             return
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic
 
-        # Workspace upper sempre minimizado em focus mode
+        # 1) Workspace upper sempre minimizado em focus mode
         if not self._content_is_minimized():
             self._toggle_content_minimized()
 
+        # 2) Total disponível pro bottom sub-splitter — usa height() pra
+        #    pegar a área real depois do workspace colapsar (sum(sizes)
+        #    pode estar stale antes do event loop propagar resize).
+        cur = self._bottom_sub_splitter.sizes()
+        total = sum(cur)
+        h = self._bottom_sub_splitter.height()
+        if h > total:
+            total = h
+        if total < 200:
+            total = 600
+
         if pane == "runners":
-            # Garante runners visível
-            if self._runners_pane_is_minimized():
-                self._toggle_runners_minimized()
-            # E terminal pane minimizado
-            if not self._terminal_pane_is_minimized():
-                self._toggle_terminal_pane_minimized()
+            # Guarda último tamanho do terminal antes de colapsar
+            if cur and cur[0] > 4:
+                self._terminal_pane_last_size = cur[0]
+            self._runners_pane.setVisible(True)
+            self._terminal_pane_widget.setVisible(False)
+            self._bottom_sub_splitter.setSizes([0, total])
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.remove_chip("runners")
+                self._minimize_tray.add_chip(
+                    "terminal_pane", "Terminal", "fa5s.terminal"
+                )
+            self._runners_minimize_btn.setIcon(
+                ic("fa5s.window-minimize", color="#c8c8c8")
+            )
+            self._runners_minimize_btn.setIconSize(_QS(11, 11))
+            self._runners_minimize_btn.setToolTip("Minimizar área de runners")
+            self._terminal_pane_minimize_btn.setIcon(
+                ic("fa5s.window-maximize", color="#c8c8c8")
+            )
+            self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
+            self._terminal_pane_minimize_btn.setToolTip("Restaurar terminal")
         elif pane == "terminal":
-            if self._terminal_pane_is_minimized():
-                self._toggle_terminal_pane_minimized()
-            if not self._runners_pane_is_minimized():
-                self._toggle_runners_minimized()
+            if cur and cur[1] > 4:
+                self._runners_last_size = cur[1]
+            self._terminal_pane_widget.setVisible(True)
+            self._runners_pane.setVisible(False)
+            self._bottom_sub_splitter.setSizes([total, 0])
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.remove_chip("terminal_pane")
+                self._minimize_tray.add_chip(
+                    "runners", "Runners", "mdi6.source-branch"
+                )
+            self._terminal_pane_minimize_btn.setIcon(
+                ic("fa5s.window-minimize", color="#c8c8c8")
+            )
+            self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
+            self._terminal_pane_minimize_btn.setToolTip("Minimizar terminal")
+            self._runners_minimize_btn.setIcon(
+                ic("fa5s.window-maximize", color="#c8c8c8")
+            )
+            self._runners_minimize_btn.setIconSize(_QS(11, 11))
+            self._runners_minimize_btn.setToolTip("Restaurar área de runners")
+
+        self._schedule_layout_save()
 
     def _ensure_runners_pane_visible(self) -> None:
         self._focus_pane_from_sidebar("runners")

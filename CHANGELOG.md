@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.5] — 2026-05-22
+
+### Corrigido
+- **Click em runner pelo sidebar não maximizava corretamente**
+  (`ui/main_window.py`): `_focus_pane_from_sidebar` antes chamava
+  `_toggle_runners_minimized` + `_toggle_terminal_pane_minimized`
+  em sequência. O 1º toggle lia `_bottom_sub_splitter.sizes()` stale
+  (antes do Qt propagar a expansão do `right_splitter` depois do
+  workspace minimizar), aplicava sizes errados e o 2º toggle não
+  conseguia colapsar o terminal direito. Reescrito pra aplicar o
+  estado final direto: `setVisible` + `setSizes([0, total])` com
+  `total = max(sum, _bottom_sub_splitter.height())` — sem depender
+  dos sizes intermediários. Atualiza ícones dos botões de minimizar
+  e chips da MinimizeTray inline.
+
 ## [0.61.4] — 2026-05-22
 
 ### Mudado
