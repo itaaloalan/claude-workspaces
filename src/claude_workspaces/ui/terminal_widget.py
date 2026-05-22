@@ -165,12 +165,12 @@ class TerminalWidget(QWidget):
         outer.setSpacing(0)
 
         # Toolbar fica num QWidget próprio pra poder setar bg sem
-        # afetar o resto.
+        # afetar o resto. Sem border-bottom pra não duplicar com a
+        # underline azul da tab ativa acima dele.
         toolbar_host = QWidget()
         toolbar_host.setObjectName("TerminalToolbar")
         toolbar_host.setStyleSheet(
-            "QWidget#TerminalToolbar { background: #161616; "
-            "border-bottom: 1px solid #2a2a2a; }"
+            "QWidget#TerminalToolbar { background: #0e0e0e; border: 0; }"
         )
         toolbar = QHBoxLayout(toolbar_host)
         toolbar.setContentsMargins(8, 4, 8, 4)

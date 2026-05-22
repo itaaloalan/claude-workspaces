@@ -6,6 +6,25 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.4] — 2026-05-22
+
+### Adicionado
+- **Chip de workspace ativo no top bar** (`ui/top_bar.py`,
+  `ui/main_window.py`): pill verde proeminente ao lado do logo
+  "Claude Workspaces" com `📂 <ws.name>`. Atualizado por
+  `set_active_workspace(name)` chamado em `_update_status_bar`.
+  Escondido quando nenhum workspace selecionado.
+
+### Corrigido
+- **Linhas brancas/transições estranhas na área do terminal**
+  remodeladas:
+  - `TerminalArea.tabs` agora com bg `#0e0e0e` (mesma cor do pane),
+    eliminando o "salto" de cor entre tab bar e conteúdo.
+  - Tab ativa também `#0e0e0e` (era `#181818`) — só o underline azul
+    sinaliza.
+  - `TerminalToolbar` (claude — workspace + buttons) sem border-bottom
+    pra não duplicar com a underline da tab.
+
 ## [0.60.3] — 2026-05-22
 
 ### Mudado / Corrigido

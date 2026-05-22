@@ -62,6 +62,25 @@ class TopBar(QWidget):
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
 
+        # Workspace ativo: chip proeminente ao lado do logo. Atualizado
+        # via set_active_workspace(name). Escondido quando não há ws.
+        self._ws_chip = QPushButton()
+        self._ws_chip.setIcon(_ic("fa5s.folder-open", color="#5ac35a"))
+        self._ws_chip.setIconSize(_QS(13, 13))
+        self._ws_chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ws_chip.setToolTip("Workspace selecionado — click pra ir pra home")
+        self._ws_chip.setStyleSheet(
+            "QPushButton { background: rgba(90, 195, 90, 28); "
+            "color: #e6e6e6; font-weight: 600; font-size: 12px; "
+            "border: 1px solid rgba(90, 195, 90, 60); border-radius: 12px; "
+            "padding: 4px 12px; }"
+            "QPushButton:hover { background: rgba(90, 195, 90, 50); "
+            "border-color: #5ac35a; }"
+        )
+        self._ws_chip.clicked.connect(self.home_clicked.emit)
+        self._ws_chip.setVisible(False)
+        row.addWidget(self._ws_chip)
+
         self.search = QLineEdit()
         self.search.setPlaceholderText("Filtrar por nome, pasta ou sessão… (Ctrl+F)")
         self.search.setClearButtonEnabled(True)
@@ -104,6 +123,14 @@ class TopBar(QWidget):
         # Atalho Ctrl+F foca a busca da topbar
         QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
         QShortcut(QKeySequence("Ctrl+L"), self, self._focus_search)
+
+    def set_active_workspace(self, name: str | None) -> None:
+        """Atualiza o chip de workspace ativo. None oculta."""
+        if not name:
+            self._ws_chip.setVisible(False)
+            return
+        self._ws_chip.setText(f"  {name}")
+        self._ws_chip.setVisible(True)
 
     def set_inbox_count(self, count: int) -> None:
         self._inbox_count = count

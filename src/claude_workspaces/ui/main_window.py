@@ -599,14 +599,17 @@ class MainWindow(QMainWindow):
 
     def _toggle_content_minimized(self) -> None:
         """Alterna entre upper minimizado (terminal full) e tamanho normal.
-        Quando minimizado, colapsa pra 0 e adiciona chip na MinimizeTray
-        pra restaurar."""
+        Quando minimizado, deixa ~50px visíveis (nome+chevron) pra dar
+        caminho de restauração via o próprio header — mesmo padrão do
+        runners pane. Chip na MinimizeTray como caminho alternativo."""
         sizes = self.right_splitter.sizes()
         total = sum(sizes) or 800
+        # Altura mínima do header com botão de restaurar visível
+        HEADER_H = 50
         if not self._content_is_minimized():
-            # Minimizar: guarda tamanho atual + colapsa pra 0 + chip na tray
-            self._content_last_size = sizes[0] if sizes[0] > 50 else 400
-            self.right_splitter.setSizes([0, total])
+            # Minimizar: guarda tamanho atual + colapsa pro header
+            self._content_last_size = sizes[0] if sizes[0] > HEADER_H else 400
+            self.right_splitter.setSizes([HEADER_H, max(total - HEADER_H, 200)])
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.add_chip(
                     "workspace", "Workspace", "fa5s.folder-open"
@@ -1613,6 +1616,10 @@ class MainWindow(QMainWindow):
             self.status_widgets.set_console_info(None)
 
     def _update_status_bar(self, ws: "Workspace | None") -> None:
+        # Top bar chip de workspace ativo (proeminente, ao lado do logo)
+        if hasattr(self, "top_bar"):
+            self.top_bar.set_active_workspace(ws.name if ws else None)
+
         """Atualiza os segmentos da QStatusBar. Pode receber None pra
         zerar (workspace vazio)."""
         if not hasattr(self, "status_widgets"):

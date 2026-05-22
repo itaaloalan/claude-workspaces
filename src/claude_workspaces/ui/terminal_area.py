@@ -32,12 +32,12 @@ class TerminalArea(QWidget):
         # antes de renderizar.
         self.tabs.setStyleSheet(
             "QTabWidget::pane { border: 0; background: #0e0e0e; }"
-            "QTabBar { background: #161616; }"
-            "QTabBar::tab { background: #161616; color: #9aa0a6; "
+            "QTabBar { background: #0e0e0e; }"
+            "QTabBar::tab { background: #0e0e0e; color: #9aa0a6; "
             "  padding: 4px 12px; border: 0; "
             "  border-right: 1px solid #2a2a2a; "
             "  font-size: 11px; min-height: 18px; }"
-            "QTabBar::tab:selected { background: #181818; color: #e6e6e6; "
+            "QTabBar::tab:selected { background: #0e0e0e; color: #e6e6e6; "
             "  border-bottom: 2px solid #3d6ea8; }"
             "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
         )
