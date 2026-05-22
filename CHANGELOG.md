@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.8] — 2026-05-22
+
+### Corrigido — Notificação do S.O. ficando "presa" na central
+- **`notifications/desktop.py`**: urgência do popup nativo agora é
+  clampada em `NORMAL` (1). Antes, `HIGH`/`CRITICAL` mapeavam pra
+  urgency=2, que no KDE Plasma 6 / GNOME Shell ignora o timeout e
+  deixa o banner sticky — daí a sensação de "presa". A prioridade
+  real continua refletida na central in-app via cor/destaque; o
+  popup do S.O. é só um aviso transiente que sempre auto-dismiss.
+- **`notifications/desktop.py`**: clamp de `timeout_ms<=0` pra
+  10000ms — no protocolo FDO, `0` = "use server default" que em
+  alguns servidores significa nunca expirar.
+
 ## [0.76.7] — 2026-05-22
 
 ### Corrigido — Runner com aparência de "dois backgrounds"

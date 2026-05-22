@@ -110,7 +110,12 @@ class DesktopNotifierAdapter(QObject):
             except Exception:
                 log.debug("checagem de foco falhou", exc_info=True)
 
-        urgency = NotificationPriority.to_urgency(n.priority)
+        # Urgency forçada em NORMAL (1) no popup do S.O. — urgency=2 (critical)
+        # faz KDE/GNOME ignorarem timeout e deixarem o banner sticky, e o
+        # usuário relatou notificações "presas". A prioridade real (HIGH/
+        # CRITICAL) continua refletida na central in-app via cor/destaque;
+        # o popup nativo é só um aviso transiente.
+        urgency = min(1, NotificationPriority.to_urgency(n.priority))
         # Popup do S.O. fica sem botões e sem som — botões/som ficam só na
         # central in-app. Alguns servidores deixavam de exibir o popup quando
         # tinha action buttons, então tirar as actions destrava a entrega.
@@ -127,6 +132,11 @@ class DesktopNotifierAdapter(QObject):
                 timeout_ms = int(self._timeout_ms_provider())
             except Exception:
                 log.debug("timeout_ms_provider falhou", exc_info=True)
+        # Clamp: timeout_ms<=0 significa "use server default" no protocolo FDO,
+        # e em alguns servidores isso = nunca expira. Forçamos pelo menos 3s
+        # pra garantir o auto-dismiss do banner do S.O.
+        if timeout_ms <= 0:
+            timeout_ms = 10000
         try:
             nid = self._desktop.notify(
                 title=n.title,
