@@ -1,10 +1,12 @@
 """Widget custom pros children da sidebar tree — mostra o estado de um
-console do Claude rodando num workspace, no estilo IntelliJ:
+console do Claude rodando num workspace, no estilo card moderno:
 
-    [icon]  Console #N — claude       [▶] [⚙]   ← ações inline (toggle via header)
-            Trabalhando · última ação do Claude
+    ┃ [icon]  #2 oi                          [▶] [⋯]
+    ┃         ⏸ Aguardando permissão
+    ┃         opus-4.7  ·  italo/branch  ·  2K
 """
 
+import re
 import time
 from collections.abc import Callable
 
@@ -20,6 +22,29 @@ from PySide6.QtWidgets import (
 )
 
 from . import theme
+
+# Strip patterns que o statusline do Claude joga e poluem a sidebar
+# (ex.: "Context · ▒▒░░░░ 12%"). Mantém só texto utilizável como
+# "última ação". Aplicado em _compose_state_text.
+_NOISE_PATTERNS = [
+    re.compile(r"Context\s*[·:]?\s*[▒░▓█▏▎▍▌▋▊▉|\-_=]+\s*\d+\s*%", re.IGNORECASE),
+    re.compile(r"\bContext\s+\d+\s*%", re.IGNORECASE),
+    re.compile(r"[▒░▓█▏▎▍▌▋▊▉]+\s*\d+\s*%"),
+]
+
+
+def _strip_noise(text: str) -> str:
+    """Remove segmentos visualmente poluentes (progress bars do
+    statusline) sem mexer no resto da última ação reportada."""
+    if not text:
+        return ""
+    out = text
+    for pat in _NOISE_PATTERNS:
+        out = pat.sub("", out)
+    # Limpa separadores '·' que sobraram pendurados.
+    out = re.sub(r"\s*·\s*·\s*", " · ", out)
+    out = out.strip(" ·\t")
+    return out
 
 # Estados visíveis na UI — labels padronizados de acordo com o pedido
 # do usuário (Trabalhando/Aguardando/Ocioso/Erro/Concluído).
@@ -38,15 +63,16 @@ STATE_LABEL = {
     STATE_ERROR: "Erro",
 }
 
-# Cor do título do console por estado — pra dar um sinal extra de
-# "tem trabalho rolando aqui" só batendo o olho na lista. Idle/Done
-# ficam num cinza mais discreto pra contrastar com os ativos.
+# Título sempre em branco/claro (TEXT_PRIMARY) — estado é sinalizado
+# pela barra lateral colorida + linha de estado abaixo. Mantemos a
+# constante pra compat, mas todos os valores apontam pra TEXT_PRIMARY
+# (callers existentes não quebram).
 STATE_TITLE_COLOR = {
-    STATE_WORKING: theme.WARNING,
-    STATE_AWAITING: theme.WAITING,
-    STATE_IDLE: theme.TEXT_FAINT,
+    STATE_WORKING: theme.TEXT_PRIMARY,
+    STATE_AWAITING: theme.TEXT_PRIMARY,
+    STATE_IDLE: theme.TEXT_PRIMARY,
     STATE_DONE: theme.TEXT_PRIMARY,
-    STATE_ERROR: theme.DANGER,
+    STATE_ERROR: theme.TEXT_PRIMARY,
 }
 
 STATE_COLOR = {
@@ -111,12 +137,12 @@ class TerminalChildWidget(QWidget):
         # altura efetiva do row no QTreeWidget é o setSizeHint no
         # `_CHILD_HEIGHT` lá no main_window — manter sincronizado
         # (row = widget + 8px de border+padding do item).
-        self.setMinimumHeight(34)
-        self.setMaximumHeight(34)
+        self.setMinimumHeight(44)
+        self.setMaximumHeight(44)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(2, 0, 4, 0)
-        outer.setSpacing(4)
+        outer.setContentsMargins(8, 4, 8, 4)
+        outer.setSpacing(6)
 
         # Seleção: em vez de barra vertical à esquerda, usa um tint
         # sutil no bg do widget inteiro (set_selected pinta um RGBA
@@ -128,11 +154,11 @@ class TerminalChildWidget(QWidget):
         self._selection_strip.setVisible(False)
         self._status_strip = QFrame()
         self._status_strip.setVisible(False)
-        # Auto-render: setAutoFillBackground pra QSS pegar no widget pai.
+        # Card visual: bg sólido + borda lateral colorida pelo estado.
+        # set_selected ajusta o tint do bg quando esta sessão é a current.
         self.setAutoFillBackground(False)
-        self.setStyleSheet(
-            "TerminalChildWidget { background: transparent; border-radius: 4px; }"
-        )
+        self._selected = False
+        self._apply_card_qss()
 
         # Coluna do ícone (spinner ‖/⠋) foi removida do layout — a faixa
         # vertical de estado (`_status_strip`) já cumpre o papel de mostrar
@@ -426,6 +452,8 @@ class TerminalChildWidget(QWidget):
         # em sessão restaurada+ociosa.
         self._current_state = state
         self._refresh_continue_visibility()
+        # Atualiza a borda lateral colorida (state-driven).
+        self._apply_card_qss()
 
     def _compose_state_text(self, state: str) -> str:
         base = STATE_LABEL[state]
@@ -433,8 +461,9 @@ class TerminalChildWidget(QWidget):
             elapsed = int(time.monotonic() - self._idle_since)
             if elapsed >= 1:
                 base = f"{base} · {_fmt_elapsed(elapsed)}"
-        if self._last_action:
-            return f"{base} · {self._last_action}"
+        clean = _strip_noise(self._last_action) if self._last_action else ""
+        if clean:
+            return f"{base} · {clean}"
         return base
 
     def tick_idle(self) -> None:
@@ -497,21 +526,43 @@ class TerminalChildWidget(QWidget):
         if on_rename is not None:
             self._rename_btn.clicked.connect(lambda _=False: on_rename())
 
+    def _apply_card_qss(self) -> None:
+        """Renderiza o card com borda lateral colorida pelo estado atual.
+        Estados que pedem atenção (awaiting/error) tintam o bg também
+        — match com o mockup onde a sessão 'Waiting for permission'
+        ganha tom avermelhado."""
+        state = getattr(self, "_current_state", STATE_IDLE)
+        accent = STATE_COLOR.get(state, theme.TEXT_FAINT)
+        if self._selected:
+            bg = "rgba(61, 110, 168, 38)"
+            border = theme.PRIMARY
+        elif state == STATE_AWAITING:
+            bg = "rgba(224, 144, 96, 26)"
+            border = "rgba(224, 144, 96, 70)"
+        elif state == STATE_ERROR:
+            bg = "rgba(213, 114, 114, 26)"
+            border = "rgba(213, 114, 114, 70)"
+        else:
+            bg = theme.BG_SURFACE
+            border = theme.BORDER_INPUT
+        self.setStyleSheet(
+            f"TerminalChildWidget {{"
+            f"  background: {bg};"
+            f"  border: 1px solid {border};"
+            f"  border-left: 3px solid {accent};"
+            f"  border-radius: 6px;"
+            f"}}"
+        )
+
     def set_selected(self, selected: bool) -> None:
         """Pinta o background do card com tint discreto quando selecionado.
-        Sem barras laterais (anteriormente _selection_strip + _status_strip)
-        pra reduzir poluição visual da sidebar. Estado do console continua
-        sinalizado pelo texto colorido em `_state_label` + status bar global."""
+        Mantém a barra lateral colorida pelo estado — seleção vira só
+        diferença de bg/borda externa."""
+        self._selected = selected
+        self._apply_card_qss()
         if selected:
-            self.setStyleSheet(
-                "TerminalChildWidget { background: rgba(61, 110, 168, 38); "
-                "border-radius: 4px; border-left: 2px solid #3d6ea8; }"
-            )
             self._claude_icon.setPixmap(self._claude_icon_selected_pix)
         else:
-            self.setStyleSheet(
-                "TerminalChildWidget { background: transparent; border-radius: 4px; }"
-            )
             self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
 
     def set_actions_visible(self, visible: bool) -> None:

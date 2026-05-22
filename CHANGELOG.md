@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.76.1] — 2026-05-22
+
+### Modificado — Card de sessão (TerminalChildWidget) repaginado
+- **`ui/terminal_child_widget.py`**: agora renderiza como **card** com
+  bg sólido + **borda lateral colorida de 3px** pelo estado
+  (working/awaiting/idle/done/error). Estados que pedem atenção
+  (`awaiting`, `error`) ganham tom avermelhado/alaranjado no bg
+  inteiro do card — match com o mockup onde a sessão "Waiting for
+  permission" fica destacada.
+- **Título sempre em branco** (`TEXT_PRIMARY`) — antes era tintado pela
+  cor do estado, o que poluía a leitura. O sinal de estado fica todo
+  no acento lateral + na linha de estado abaixo.
+- **Strip de ruído na linha de estado**: regex que remove
+  `Context · ▒▒░░ 12%` e variações do statusline do Claude (antes
+  eram concatenadas no `_last_action`, ficavam ilegíveis no card
+  pequeno da sidebar).
+- **Card mais alto** (44px interno, `_CHILD_HEIGHT` 38→50 no
+  `main_window`) pra dar respiro vertical e padding 8px lateral
+  (antes 2px).
+
 ## [0.76.0] — 2026-05-22
 
 ### Modificado — Repaginação visual da sidebar
