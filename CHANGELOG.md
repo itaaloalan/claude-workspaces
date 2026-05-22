@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.65.1] — 2026-05-22
+
+### Alterado
+- **Footer reflete alerta do console selecionado**
+  (`ui/status_bar.py`): o texto do estado no segmento `console_state`
+  agora herda a cor do estado (assim como na sidebar), em vez de ficar
+  só o dot ● colorido. Faz com que alertas embutidos no statusline do
+  Claude — ex.: `⚠ Limit reached (resets in 23m)` no estado AWAITING —
+  apareçam destacados no footer com a mesma cor que aparecem na sidebar.
+
 ## [0.65.0] — 2026-05-22
 
 ### Adicionado

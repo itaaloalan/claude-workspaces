@@ -209,8 +209,14 @@ class StatusBarWidgets(QWidget):
         state_text = info.get("state_text", "")
         title = info.get("title", "")
         prefix = f"<b>{title}</b> · " if title else ""
+        # Espelha a mesma linguagem visual da sidebar: lá, o texto do
+        # estado herda a cor do `_state_label` (amarelo no Aguardando,
+        # etc.), o que faz alertas embutidos no statusline do Claude
+        # (ex.: "⚠ Limit reached") se destacarem. Aqui aplicamos a cor
+        # do estado ao texto inteiro também, em vez de só ao dot.
         self.console_state.setText(
-            f"<span style='color:{color}'>●</span> {prefix}{state_text}"
+            f"<span style='color:{color}'>●</span> "
+            f"<span style='color:{color}'>{prefix}{state_text}</span>"
         )
         self.console_state.setToolTip(
             f"Console selecionado: {title}" if title else "Console selecionado"
