@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.76.3] — 2026-05-22
+
+### Corrigido — Popup do SO suprimido indevidamente quando o app está focado
+- **`notifications/desktop.py`** + **`ui/main_window.py`**: o
+  `DesktopNotifierAdapter` suprimia o popup nativo sempre que o app
+  estava em foco, mesmo quando a notificação era de um console em
+  background (ex.: estava olhando o `claude-workspaces` e o `ogpms`
+  ficou "Pronto" — popup do ogpms não aparecia). Agora o adapter
+  recebe um `is_target_visible(notification)` que só suprime se o tab
+  do alvo é EXATAMENTE o visível. Notif sem `tab_id` ainda cai no
+  comportamento clássico (app focado = suprime).
+
 ## [0.76.2] — 2026-05-22
 
 ### Corrigido — Banner de notificação do SO sumindo muito rápido

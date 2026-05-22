@@ -4115,6 +4115,7 @@ class MainWindow(QMainWindow):
                     notifier,
                     is_app_focused=self._is_app_in_foreground,
                     timeout_ms_provider=lambda: self.settings.notify_timeout_ms,
+                    is_target_visible=self._is_notification_target_visible,
                     parent=self,
                 )
                 self._desktop_adapter.open_target_requested.connect(
@@ -4134,6 +4135,29 @@ class MainWindow(QMainWindow):
         """True se a MainWindow está ativa e visível."""
         try:
             return self.isActiveWindow() and not self.isMinimized() and self.isVisible()
+        except Exception:
+            return False
+
+    def _is_notification_target_visible(self, n) -> bool:
+        """True só se o tab/console alvo da notificação é EXATAMENTE o que o
+        usuário está vendo agora. Usado pelo DesktopNotifierAdapter pra
+        decidir se suprime o popup nativo. Sem `tab_id` (notif genérica),
+        cai pro critério clássico de "app em foco" — não dá pra afirmar que
+        o usuário "já viu" sem saber de qual console é o alerta.
+        """
+        if not self._is_app_in_foreground():
+            return False
+        tab_id = getattr(n, "tab_id", None)
+        if tab_id is None:
+            # Sem alvo específico: se o app inteiro está focado, assume visto.
+            return True
+        if self.terminal_host is None:
+            return False
+        try:
+            area = self.terminal_host.currentWidget()
+            tabs = getattr(area, "tabs", None) if area is not None else None
+            current = tabs.currentWidget() if tabs is not None else None
+            return current is not None and id(current) == int(tab_id)
         except Exception:
             return False
 

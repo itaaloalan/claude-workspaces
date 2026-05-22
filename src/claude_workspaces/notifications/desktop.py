@@ -39,6 +39,7 @@ class DesktopNotifierAdapter(QObject):
         *,
         is_app_focused: callable,
         timeout_ms_provider: callable | None = None,
+        is_target_visible: callable | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -46,6 +47,12 @@ class DesktopNotifierAdapter(QObject):
         self._desktop = desktop
         self._is_app_focused = is_app_focused
         self._timeout_ms_provider = timeout_ms_provider
+        # Callable[[Notification], bool] — quando fornecida, decide a
+        # supressão por foco baseada no alvo específico da notificação
+        # (workspace/sessão/aba visível) em vez do app inteiro. Se a
+        # notif é de um console em background, popup aparece mesmo com
+        # o app focado.
+        self._is_target_visible = is_target_visible
         # dedup_key → note_id D-Bus ativo (pra replaces_id).
         self._active: dict[str, int] = {}
 
@@ -88,12 +95,20 @@ class DesktopNotifierAdapter(QObject):
         if n.seen or n.dismissed:
             return
         if not allow_when_focused:
+            # Preferimos a checagem alvo-específica: só suprime se o tab/console
+            # da notif EXATAMENTE for o que o usuário está vendo. Sem alvo
+            # específico (ou callable não fornecido) cai pro is_app_focused —
+            # comportamento anterior, mais conservador.
             try:
-                if self._is_app_focused():
+                if self._is_target_visible is not None:
+                    if self._is_target_visible(n):
+                        log.debug("popup suprimido — alvo já visível (notif=%s)", n.id)
+                        return
+                elif self._is_app_focused():
                     log.debug("popup suprimido — app em foco (notif=%s)", n.id)
                     return
             except Exception:
-                log.debug("is_app_focused falhou", exc_info=True)
+                log.debug("checagem de foco falhou", exc_info=True)
 
         urgency = NotificationPriority.to_urgency(n.priority)
         # CRITICAL e HIGH ganham timeout longo (sticky) e action "Abrir".
