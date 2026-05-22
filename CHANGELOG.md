@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.75.0] — 2026-05-22
+
+### Adicionado
+- **Emissor `cost_warning` automático no Plan Usage** (`ui/main_window.py`):
+  `_refresh_plan_usage_status` (chamado a cada 30s pelo timer) agora
+  chama `_maybe_emit_cost_warning(snap)` que itera 5h/7d/7d-sonnet e
+  emite `notif_service.notify(COST_WARNING)` ao cruzar 80%
+  (`priority=HIGH`) ou 95% (`priority=CRITICAL`). `dedup_key` estável
+  por janela+nível (`cost_warning:5h:alto` etc.) — combina com o
+  cooldown do service pra não acumular popup com o refresh periódico,
+  mas re-notifica quando passa de alto pra crítico.
+- **Helper público `emit_workspace_error`** (`ui/main_window.py`):
+  método centralizado que qualquer callsite usa pra emitir
+  `WORKSPACE_ERROR` sem precisar saber do service.
+  `priority=HIGH` por default ou `CRITICAL` quando o caller passa
+  `critical=True`. Plugado em três caminhos de erro existentes:
+  `_open_folder_in_file_manager` (LaunchError ao abrir pasta),
+  "Não foi possível abrir o Claude" (launch crítico) e
+  "Falha ao abrir terminal sem contexto embutido".
+
 ## [0.74.0] — 2026-05-22
 
 ### Adicionado

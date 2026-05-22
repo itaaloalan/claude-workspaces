@@ -890,6 +890,11 @@ class MainWindow(QMainWindow):
             open_in_file_manager(ws.folders[0])
         except LaunchError as e:
             QMessageBox.warning(self, "Falha ao abrir pasta", str(e))
+            self.emit_workspace_error(
+                "Falha ao abrir pasta",
+                workspace_id=ws.id,
+                body=str(e),
+            )
 
     def _copy_primary_folder(self) -> None:
         ws = self._current_workspace()
@@ -1971,6 +1976,59 @@ class MainWindow(QMainWindow):
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
+
+    def _maybe_emit_cost_warning(self, snap) -> None:
+        """Olha o snapshot do plan_usage_api e emite cost_warning quando
+        uma janela cruza 80% (high) ou 95% (critical). Dedup por janela —
+        a mesma janela só re-notifica depois do cooldown do service ou
+        quando passa de high pra critical."""
+        from ..notifications import NotificationPriority
+        thresholds = [
+            ("5h", getattr(snap, "five_hour", None)),
+            ("7d", getattr(snap, "seven_day", None)),
+            ("7d-sonnet", getattr(snap, "seven_day_sonnet", None)),
+        ]
+        for window_label, window in thresholds:
+            if window is None:
+                continue
+            pct = float(getattr(window, "utilization_pct", 0) or 0)
+            if pct < 80.0:
+                continue
+            priority = (
+                NotificationPriority.CRITICAL if pct >= 95.0
+                else NotificationPriority.HIGH
+            )
+            level = "crítico" if pct >= 95.0 else "alto"
+            self.notif_service.notify(
+                NotificationKind.COST_WARNING,
+                title=f"💰 Uso do plano {level} — janela {window_label}",
+                body=f"{pct:.0f}% consumido na janela {window_label}.",
+                priority=priority,
+                dedup_key=f"cost_warning:{window_label}:{level}",
+                data={"window": window_label, "percent": pct},
+            )
+
+    def emit_workspace_error(
+        self,
+        message: str,
+        *,
+        workspace_id: str | None = None,
+        body: str = "",
+        critical: bool = False,
+    ) -> None:
+        """Helper público pra qualquer callsite emitir um erro de workspace
+        como notificação. Usado por handlers de launch/git/etc. Centralizado
+        aqui pra evitar que cada caller tenha que conhecer o service."""
+        from ..notifications import NotificationPriority
+        ws = self.workspaces_coord.find_by_id(workspace_id) if workspace_id else None
+        ws_name = ws.name if ws else "Workspace"
+        self.notif_service.notify(
+            NotificationKind.WORKSPACE_ERROR,
+            title=f"⚠ {message} — {ws_name}" if workspace_id else f"⚠ {message}",
+            body=body,
+            workspace_id=workspace_id,
+            priority=NotificationPriority.CRITICAL if critical else NotificationPriority.HIGH,
+        )
 
     def _on_tab_session_exited(
         self, tab_id: int, exit_code: int, workspace_id: str
@@ -3726,6 +3784,13 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+            ws = self._current_workspace()
+            self.emit_workspace_error(
+                "Falha ao abrir o Claude",
+                workspace_id=ws.id if ws else None,
+                body=str(e),
+                critical=True,
+            )
             return
         self._bottom_tabs.setCurrentWidget(self.terminal_host)
         self.terminal_host.setCurrentWidget(area)
@@ -4912,6 +4977,11 @@ class MainWindow(QMainWindow):
             or snap.seven_day is not None
             or snap.seven_day_sonnet is not None
         ):
+            # Emite cost_warning quando qualquer janela passa do threshold
+            # (80% pra avisar, 95% pra crítica). dedup_key estável por
+            # janela; service cuida do cooldown — não acumula popup mesmo
+            # com o refresh rodando a cada 30s.
+            self._maybe_emit_cost_warning(snap)
             chips: list[str] = []
             tooltip_lines: list[str] = ["Plan usage limits (via /api/oauth/usage)"]
 
@@ -5250,6 +5320,12 @@ class MainWindow(QMainWindow):
         except Exception as e:
             log.exception("Falha ao abrir terminal sem contexto embutido")
             QMessageBox.warning(self, "Falha ao abrir terminal", str(e))
+            ws = self._current_workspace()
+            self.emit_workspace_error(
+                "Falha ao abrir terminal",
+                workspace_id=ws.id if ws else None,
+                body=str(e),
+            )
             return
         self._bottom_tabs.setCurrentWidget(self.terminal_host)
         self.terminal_host.setCurrentWidget(area)
