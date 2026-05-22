@@ -567,6 +567,11 @@ class TerminalChildWidget(QWidget):
             # sobre o card e criar ilusão de "dois backgrounds" (ícone
             # do robot tem stylesheet próprio que sobrepõe esse).
             f"#ConsoleCard QLabel {{ background: transparent; }}"
+            # Mesmo fix pros botões inline (▶ ⚙ ✖) e widgets-container
+            # — sem isso o QPalette.Window vaza atrás dos botões e cria
+            # quadradinhos de bg diferente do card.
+            f"#ConsoleCard QPushButton {{ background: transparent; }}"
+            f"#ConsoleCard QWidget {{ background: transparent; }}"
         )
 
     def set_selected(self, selected: bool) -> None:

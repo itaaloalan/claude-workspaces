@@ -62,7 +62,8 @@ _CARD_QSS = (
     # Filhos transparentes — evita QPalette.Window dos QLabels vazar
     # bg cinza escuro sobre o card e criar ilusão de "dois backgrounds".
     f"#RunnerCard QLabel {{ background: transparent; }}"
-    f"#RunnerCard > QPushButton {{ background: transparent; }}"
+    f"#RunnerCard QPushButton {{ background: transparent; }}"
+    f"#RunnerCard QWidget {{ background: transparent; }}"
 )
 
 

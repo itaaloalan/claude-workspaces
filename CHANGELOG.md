@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.76.15] — 2026-05-22
+
+### Corrigido — Sidebar polish (indentação, seleção, botões transparentes)
+- **`ui/builders/sidebar_builder.py`**: `setIndentation(0)` na tree — os
+  filhos (sessões/runners) ficam alinhados nas duas laterais com o
+  workspace. Antes a indentação de 6px deixava os cards de console
+  "colados na direita".
+- **`_WorkspaceBorderOverlay`**: a borda do card expandido agora muda
+  pra **azul (PRIMARY)** quando o workspace está selecionado — antes
+  só o header ficava com a borda azul, o overlay continuava cinza.
+  Reaproveita o flag `_selected` do `WorkspaceItemWidget`.
+- **`workspace_item_widget.py`** + **`runner_child_widget.py`** +
+  **`terminal_child_widget.py`**: QSS escopado por `#ObjectName` agora
+  também força `background: transparent` em `QPushButton` e `QWidget`
+  filhos dos cards — antes os botões inline (▶ ⚙ ✖) e o container
+  `_actions_widget` pegavam `QPalette.Window` e criavam quadradinhos
+  com bg diferente do card.
+
 ## [0.76.14] — 2026-05-22
 
 ### Corrigido — Notificações S.O. com som e fixadas na central

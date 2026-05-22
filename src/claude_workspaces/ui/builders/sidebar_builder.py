@@ -141,9 +141,12 @@ class _StableTree(QTreeWidget):
 class _WorkspaceBorderOverlay(QWidget):
     """Pinta laterais + base do "card contínuo" de cada workspace
     expandido. Fica em cima da viewport mas é transparente pra mouse,
-    então não atrapalha cliques/scroll."""
+    então não atrapalha cliques/scroll. Cor da borda acompanha o
+    estado de seleção do workspace — azul (PRIMARY) quando selecionado,
+    cinza neutro caso contrário."""
 
     _BORDER_COLOR = QColor("#333333")
+    _BORDER_COLOR_SELECTED = QColor(theme.PRIMARY)
     _BORDER_RADIUS = 6
 
     def __init__(self, tree: _StableTree) -> None:
@@ -153,13 +156,28 @@ class _WorkspaceBorderOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
+    # `_TREE_QSS` aplica `QTreeWidget::item { padding: 1px 2px; }` —
+    # então o widget (e sua borda) fica inset 2px nas laterais e 1px
+    # vertical em relação ao rect do item. Compensar pra borda do
+    # overlay alinhar com a borda do card e dos children.
+    _PAD_X = 2
+    _PAD_Y = 1
+
+    def _workspace_selected(self, top: QTreeWidgetItem) -> bool:
+        """Verifica se o workspace está no estado 'selected' lendo direto
+        do WorkspaceItemWidget — assim a borda do overlay acompanha a
+        mesma regra de seleção que já é aplicada no header (que segue
+        seleção do workspace OU de qualquer descendant)."""
+        from ..workspace_item_widget import WorkspaceItemWidget
+        w = self._tree.itemWidget(top, 0)
+        if isinstance(w, WorkspaceItemWidget):
+            return getattr(w, "_selected", False)
+        return False
+
     def paintEvent(self, event) -> None:  # type: ignore[override]
         tree = self._tree
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(self._BORDER_COLOR)
-        pen.setWidth(1)
-        painter.setPen(pen)
         for i in range(tree.topLevelItemCount()):
             top = tree.topLevelItem(i)
             if not top.isExpanded():
@@ -173,10 +191,19 @@ class _WorkspaceBorderOverlay(QWidget):
             last_rect = tree.visualItemRect(last)
             if not last_rect.isValid():
                 continue
-            x_left = top_rect.left()
-            x_right = top_rect.right()
-            y_top = top_rect.bottom()  # logo abaixo do header do workspace
-            y_bottom = last_rect.bottom()
+            selected = self._workspace_selected(top)
+            pen = QPen(
+                self._BORDER_COLOR_SELECTED if selected else self._BORDER_COLOR
+            )
+            pen.setWidth(1)
+            painter.setPen(pen)
+            # Compensa padding do item — borda do widget está inset.
+            x_left = top_rect.left() + self._PAD_X
+            x_right = top_rect.right() - self._PAD_X
+            # Começa LOGO antes do bottom do widget do header pra cobrir
+            # a junção e não deixar gap visível.
+            y_top = top_rect.bottom() - self._PAD_Y
+            y_bottom = last_rect.bottom() - self._PAD_Y
             if y_bottom <= y_top:
                 continue
             r = self._BORDER_RADIUS
@@ -463,7 +490,11 @@ class SidebarBuilder:
         self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)
         self.list_widget.setRootIsDecorated(True)
-        self.list_widget.setIndentation(6)
+        # Indentação 0 — os filhos (sessões, runners, etc) ficam alinhados
+        # nas duas laterais com o workspace, dando a sensação de "tudo
+        # dentro do mesmo card". A hierarquia já está clara pelo card
+        # visual + estado de expansão.
+        self.list_widget.setIndentation(0)
         self.list_widget.setUniformRowHeights(False)
         self.list_widget.setAnimated(True)
         self.list_widget.setExpandsOnDoubleClick(False)

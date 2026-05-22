@@ -283,10 +283,12 @@ class WorkspaceItemWidget(QWidget):
             f"#WorkspaceCard:hover {{"
             f"  border-color: {theme.PRIMARY_HOVER if self._selected else '#404040'};"
             f"}}"
-            # Filhos transparentes — sem isso QLabel/QPushButton caem em
-            # QPalette.Window e criam ilusão de "dois backgrounds" sobre
-            # o bg do card.
+            # Filhos transparentes — sem isso QLabel/QPushButton/QWidget
+            # filhos caem em QPalette.Window e criam quadradinhos de bg
+            # diferente sobre o card.
             f"#WorkspaceCard QLabel {{ background: transparent; }}"
+            f"#WorkspaceCard QPushButton {{ background: transparent; }}"
+            f"#WorkspaceCard QWidget {{ background: transparent; }}"
         )
 
     def set_expanded_visual(self, expanded: bool) -> None:
