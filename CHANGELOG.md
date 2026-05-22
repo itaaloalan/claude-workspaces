@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.17] — 2026-05-22
+
+### Corrigido
+- **Texto "FIXADOS"/"WORKSPACES" cortando na coluna estreita do sidebar**
+  (`ui/main_window.py`): `_add_section_header` agora reduz
+  `letter-spacing` (1.4→1.2px), margens (4→2px laterais) e força
+  `setMinimumWidth(sizeHint().width())` no QLabel. QTreeWidgetItem
+  estreito estava espremendo o label abaixo do sizeHint e cortando
+  o "S" final.
+
 ## [0.61.16] — 2026-05-22
 
 ### Corrigido

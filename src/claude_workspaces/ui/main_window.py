@@ -1885,8 +1885,11 @@ class MainWindow(QMainWindow):
         host = QWidget()
         host.setStyleSheet("background: transparent;")
         h = QHBoxLayout(host)
-        h.setContentsMargins(4, 8, 4, 4)
-        h.setSpacing(6)
+        # Margens menores + spacing menor pra dar espaço pro texto
+        # com letter-spacing — antes o label era espremido pela coluna
+        # estreita do sidebar e cortava o "S" final de WORKSPACES.
+        h.setContentsMargins(2, 8, 2, 4)
+        h.setSpacing(4)
         icon_name = self._SECTION_ICONS.get(label)
         if icon_name:
             ic_lbl = QLabel()
@@ -1895,8 +1898,13 @@ class MainWindow(QMainWindow):
         text_lbl = QLabel(label)
         text_lbl.setStyleSheet(
             "QLabel { color: #707070; font-size: 10px; font-weight: 700; "
-            "letter-spacing: 1.4px; background: transparent; }"
+            "letter-spacing: 1.2px; background: transparent; }"
         )
+        # Garante que o label fica com tamanho mínimo igual ao texto
+        # completo — QLabel default pode encolher abaixo do sizeHint
+        # quando o parent é estreito (QTreeWidgetItem column 0).
+        text_lbl.adjustSize()
+        text_lbl.setMinimumWidth(text_lbl.sizeHint().width())
         h.addWidget(text_lbl)
         h.addStretch(1)
         self.list_widget.setItemWidget(item, 0, host)
