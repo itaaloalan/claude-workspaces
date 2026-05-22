@@ -6,7 +6,32 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
-## [0.64.0] — 2026-05-22
+## [0.65.0] — 2026-05-22
+
+### Adicionado
+- **Núcleo do novo sistema de notificações**
+  (`notifications/`): pacote `notifications` com `Notification`
+  (dataclass), `NotificationKind` (8 tipos: `permission_required`,
+  `agent_waiting`, `task_completed`, `task_failed`, `agent_idle`,
+  `long_running`, `cost_warning`, `workspace_error`),
+  `NotificationPriority` (low/normal/high/critical),
+  `NotificationStore` (estado em memória puro, sem Qt) e
+  `NotificationService` (QObject com sinais
+  `notification_added/changed/removed`, `unread_count_changed`,
+  `reminder_due`). Política de dedup por `dedup_key`, cooldown
+  anti-spam, mute por tipo/workspace, snooze, mark-seen, dismiss e
+  relembrete por timer das pendências `actionable`. Persistência JSON
+  atômica (`notifications.json` em `~/.config/claude-workspaces/`)
+  com escrita via `tmp + os.replace`; se o JSON estiver corrompido,
+  faz backup `notifications.json.corrupt-<ts>` e segue com estado
+  default sem quebrar o app. Coberto por `tests/test_notifications.py`
+  (22 testes: criação, dedup dentro/fora do cooldown, mark_seen,
+  snooze, dismiss, filtros, mute, contadores por workspace/sessão,
+  roundtrip de persistência, JSON ausente, JSON inválido e schema
+  errado). Esse commit entrega só o núcleo + testes — wiring com
+  `main_window`, sino com contador real, UI da inbox
+  (`NotificationCenter`), tray e badges por workspace/sessão virão
+  nos próximos commits.
 
 ### Corrigido
 - **Colapso de FIXADOS/WORKSPACES agora persiste no reinício**
