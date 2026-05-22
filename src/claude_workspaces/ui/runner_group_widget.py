@@ -102,7 +102,7 @@ class RunnerGroupWidget(QWidget):
         )
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Badge de contagem (escondido se 0/None) — mesmo visual do
+        # Badge de contagem total (escondido se 0/None) — mesmo visual do
         # bucket Sessões Claude na sidebar.
         self._count_badge = QLabel("")
         self._count_badge.setStyleSheet(
@@ -111,6 +111,18 @@ class RunnerGroupWidget(QWidget):
         )
         self._count_badge.setVisible(False)
         row.addWidget(self._count_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # Badge de runners em execução (verde) — fica do lado do total
+        # quando há ao menos 1 runner rodando. Ajuda a ver de relance
+        # quantos estão de fato online sem precisar abrir a lista.
+        self._running_badge = QLabel("")
+        self._running_badge.setStyleSheet(
+            "background: rgba(90,195,90,0.18); color: #7ad97a; font-size: 9px; "
+            "font-weight: 700; padding: 1px 6px; border-radius: 6px;"
+        )
+        self._running_badge.setToolTip("Runners em execução")
+        self._running_badge.setVisible(False)
+        row.addWidget(self._running_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
         row.addStretch(1)
 
@@ -149,6 +161,19 @@ class RunnerGroupWidget(QWidget):
             return
         self._count_badge.setText(str(count))
         self._count_badge.setVisible(True)
+
+    def set_running_count(self, count: int | None) -> None:
+        """Mostra badge verde com a contagem de runners em execução.
+        None ou 0 esconde — assim em workspace ocioso só aparece o
+        badge cinza do total."""
+        if not count:
+            self._running_badge.setVisible(False)
+            return
+        # `●` antes do número deixa o pulso "ligado" visual mesmo a
+        # 9px, em paridade com os dots verdes das linhas de runner.
+        self._running_badge.setText(f"● {count}")
+        self._running_badge.setToolTip(f"{count} runner(s) em execução")
+        self._running_badge.setVisible(True)
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do chevron (right recolhido, down expandido)."""

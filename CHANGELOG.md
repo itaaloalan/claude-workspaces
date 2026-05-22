@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.9] — 2026-05-22
+
+### Adicionado
+- **Badge verde de runners em execução no header do grupo Runners**
+  (`ui/runner_group_widget.py`, `ui/main_window.py`):
+  ao lado do badge cinza com o total agora aparece um badge verde
+  `● N` com a contagem de runners rodando agora. Esconde quando 0
+  pra não poluir workspace ocioso. Atualiza em tempo real via
+  `_on_runner_state_changed` (mesmo hook que pinta o dot do
+  RunnerChildWidget).
+
 ## [0.60.8] — 2026-05-22
 
 ### Mudado

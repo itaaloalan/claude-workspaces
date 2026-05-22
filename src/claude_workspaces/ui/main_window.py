@@ -1995,6 +1995,7 @@ class MainWindow(QMainWindow):
         existing_header = self.list_widget.itemWidget(group, 0)
         if isinstance(existing_header, RunnerGroupWidget):
             existing_header.set_count(len(scoped))
+            existing_header.set_running_count(self._running_runner_count(ws.id))
 
         self._runner_tree_items.setdefault(ws.id, {})
         for runner in scoped:
@@ -2183,6 +2184,31 @@ class MainWindow(QMainWindow):
             if isinstance(tab_id, int):
                 self._install_console_runner_children(sib, ws, tab_id)
 
+    def _running_runner_count(self, workspace_id: str) -> int:
+        """Quantos runners do workspace estão rodando agora — usado
+        pra alimentar o badge verde no header do grupo Runners."""
+        area = self._runner_areas.get(workspace_id)
+        if area is None:
+            return 0
+        from .runner_area import RunnerWidget
+
+        count = 0
+        for i in range(area.tabs.count()):
+            w = area.tabs.widget(i)
+            if isinstance(w, RunnerWidget) and w.is_running():
+                count += 1
+        return count
+
+    def _update_runner_group_badges(self, workspace_id: str) -> None:
+        from .runner_group_widget import RunnerGroupWidget
+
+        group = self._runner_group_items.get(workspace_id)
+        if group is None:
+            return
+        header = self.list_widget.itemWidget(group, 0)
+        if isinstance(header, RunnerGroupWidget):
+            header.set_running_count(self._running_runner_count(workspace_id))
+
     def _on_runner_state_changed(
         self, workspace_id: str, runner_id: str, state: str
     ) -> None:
@@ -2194,6 +2220,7 @@ class MainWindow(QMainWindow):
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, RunnerChildWidget):
             widget.set_state(state)
+        self._update_runner_group_badges(workspace_id)
 
     def _on_runner_status_changed(
         self, workspace_id: str, runner_id: str, status: str
