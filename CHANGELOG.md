@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.11] — 2026-05-22
+
+### Mudado
+- **Cor do título da aba do console reflete o status**
+  (`ui/terminal_area.py`): cada aba em "Claude console" agora pinta
+  o texto na cor do estado atual — vermelho (Ocioso), amber
+  (Rodando), laranja (Aguardando decisão), verde (Concluído). Antes
+  todas as abas ficavam cinza neutro e era preciso olhar a status
+  bar pra saber qual aba pedia atenção. Implementado via
+  `setTabTextColor` + remoção do `color:` do QSS (que vencia o
+  per-tab color).
+
 ## [0.60.10] — 2026-05-22
 
 ### Corrigido

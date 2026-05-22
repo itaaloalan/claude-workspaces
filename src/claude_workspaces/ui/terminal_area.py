@@ -1,7 +1,29 @@
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTabWidget, QVBoxLayout, QWidget
 
+from . import theme
+from .terminal_child_widget import (
+    STATE_AWAITING,
+    STATE_DONE,
+    STATE_ERROR,
+    STATE_IDLE,
+    STATE_WORKING,
+)
 from .terminal_widget import TerminalWidget
+
+
+# Cor do texto da aba em função do status do console. Mantém paridade
+# com o STATE_COLOR usado nas linhas da sidebar — usuário vê de relance
+# qual aba está rodando / ociosa / aguardando.
+_TAB_COLOR = {
+    STATE_WORKING: QColor(theme.WARNING),
+    STATE_AWAITING: QColor(theme.WAITING),
+    STATE_IDLE: QColor(theme.DANGER),
+    STATE_DONE: QColor(theme.SUCCESS),
+    STATE_ERROR: QColor(theme.DANGER),
+}
+_TAB_COLOR_DEFAULT = QColor(theme.TEXT_MUTED)
 
 
 class TerminalArea(QWidget):
@@ -30,16 +52,18 @@ class TerminalArea(QWidget):
         # bordas estranhas. Tab ativa com underline azul fino. Pane com
         # bg do terminal pra evitar faixa branca atrás dos terminais
         # antes de renderizar.
+        # Cor do texto NÃO entra no QSS — `color:` aqui vence o
+        # `setTabTextColor` que aplicamos por aba conforme o status
+        # (idle/working/awaiting). Mantemos só bg, padding e border.
         self.tabs.setStyleSheet(
             "QTabWidget::pane { border: 0; background: #0e0e0e; }"
             "QTabBar { background: #0e0e0e; }"
-            "QTabBar::tab { background: #0e0e0e; color: #9aa0a6; "
+            "QTabBar::tab { background: #0e0e0e; "
             "  padding: 4px 12px; border: 0; "
             "  border-right: 1px solid #2a2a2a; "
             "  font-size: 11px; min-height: 18px; }"
-            "QTabBar::tab:selected { background: #0e0e0e; color: #e6e6e6; "
+            "QTabBar::tab:selected { background: #0e0e0e; "
             "  border-bottom: 2px solid #3d6ea8; }"
-            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
         )
         self.tabs.tabCloseRequested.connect(self._close_tab)
         layout.addWidget(self.tabs)
@@ -65,6 +89,7 @@ class TerminalArea(QWidget):
         widget.setProperty("_base_title", title)
         # Texto inicial já com `#N` (mesmo formato do sidebar).
         self.tabs.setTabText(idx, f"✓ {self._compute_tab_display(widget)}")
+        self._apply_tab_color(idx, widget)
         # Emite estado inicial
         self.tab_activity_changed.emit(id(widget), title, "", False, False, False)
         return widget
@@ -96,6 +121,17 @@ class TerminalArea(QWidget):
         display = self._compute_tab_display(widget)
         prefix = "●" if running else "✓"
         self.tabs.setTabText(idx, f"{prefix} {display}")
+        self._apply_tab_color(idx, widget)
+
+    def _apply_tab_color(self, idx: int, widget: TerminalWidget) -> None:
+        """Pinta o texto da aba na cor do status atual (idle vermelho,
+        working amber, awaiting laranja, done verde). Quando o processo
+        nem subiu ainda, fica no muted padrão."""
+        if not widget.is_running():
+            self.tabs.tabBar().setTabTextColor(idx, _TAB_COLOR_DEFAULT)
+            return
+        color = _TAB_COLOR.get(widget._last_status, _TAB_COLOR_DEFAULT)
+        self.tabs.tabBar().setTabTextColor(idx, color)
 
     def _emit_activity(
         self,
@@ -115,6 +151,7 @@ class TerminalArea(QWidget):
         # com prefixo `#N` igual ao sidebar.
         prefix = "●" if widget.is_running() else "✓"
         self.tabs.setTabText(idx, f"{prefix} {self._compute_tab_display(widget)}")
+        self._apply_tab_color(idx, widget)
         self.tab_activity_changed.emit(
             id(widget),
             title,
@@ -156,6 +193,7 @@ class TerminalArea(QWidget):
             if isinstance(w, TerminalWidget):
                 prefix = "●" if w.is_running() else "✓"
                 self.tabs.setTabText(i, f"{prefix} {self._compute_tab_display(w)}")
+                self._apply_tab_color(i, w)
 
     def close_all(self) -> None:
         while self.tabs.count():
