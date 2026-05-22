@@ -4228,15 +4228,19 @@ class MainWindow(QMainWindow):
         else:
             title_prefix = self.settings.notify_ready_prefix
         title = f"{title_prefix} — {ws_name}" if title_prefix else ws_name
-        body_parts: list[str] = []
-        if info.get("title"):
-            body_parts.append(str(info["title"]))
-        if info.get("status"):
-            status = str(info["status"])
+        # Body: só o título da sessão (custom name ou preview do primeiro
+        # prompt). O `status` parsed do TUI traz lixo tipo o footer de
+        # "Context/Usage/Weekly", que polui o popup e não ajuda em nada —
+        # quem quer detalhe abre o app. Status só entra como fallback se
+        # o título estiver vazio.
+        title_text = str(info.get("title") or "").strip()
+        if title_text:
+            body = title_text
+        else:
+            status = str(info.get("status") or "").strip()
             if len(status) > 90:
                 status = status[:89] + "…"
-            body_parts.append(status)
-        body = "\n".join(body_parts) or "Console pronto pra próxima instrução."
+            body = status or "Console pronto pra próxima instrução."
         self._last_alert_tab_id = tab_id
         workspace_id = info.get("workspace_id", "")
 

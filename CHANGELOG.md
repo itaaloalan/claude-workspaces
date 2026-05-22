@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.10] — 2026-05-22
+
+### Melhorado — Notificação do S.O. focada no que importa
+- **`ui/main_window.py`** (`_on_inbox_alert`): popup do S.O. agora
+  mostra só o título da sessão (custom name / preview do primeiro
+  prompt). O `status` parsed do TUI vinha trazendo o footer do
+  Claude (`Context 25% | Usage 72% (resets in 3h4m) | Weekly 64%…`),
+  que poluía o banner e não ajudava em nada — quem quer detalhe
+  abre o app. Status só aparece como fallback quando o título
+  está vazio.
+
 ## [0.76.9] — 2026-05-22
 
 ### Corrigido — Cards REALMENTE renderizando agora (WA_StyledBackground)
