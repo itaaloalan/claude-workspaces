@@ -103,7 +103,7 @@ class Settings:
     # `notify_hook_default_body`: body do hook quando não dá pra ler a última
     #     mensagem do usuário do transcript.
     notify_app_name: str = "Claude Workspaces"
-    notify_ready_prefix: str = "✅ Pronto"
+    notify_ready_prefix: str = "⏳ Aguardando"
     notify_decision_prefix: str = "❓ Decisão"
     notify_reminder_prefix: str = "🔁 Ainda aguardando"
     notify_hook_title_format: str = "Claude — {project}"
@@ -161,6 +161,12 @@ class Settings:
         except (json.JSONDecodeError, OSError):
             return cls()
         valid = {f.name for f in fields(cls)}
+        # Migração: se o usuário ainda está com o default antigo "✅ Pronto"
+        # do notify_ready_prefix, troca pra "⏳ Aguardando" — alinha com o chip
+        # da central de notificações e com a semântica real (agente aguardando
+        # próxima instrução, não tarefa concluída).
+        if data.get("notify_ready_prefix") == "✅ Pronto":
+            data["notify_ready_prefix"] = "⏳ Aguardando"
         return cls(**{k: v for k, v in data.items() if k in valid})
 
     def save(self) -> None:

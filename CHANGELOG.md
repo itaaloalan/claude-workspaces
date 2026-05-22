@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.76.6] — 2026-05-22
+
+### Corrigido — Popup do S.O. auto-dismiss, prefixo "Aguardando", e sem falso "Sessão falhou"
+- **`notifications/desktop.py`**: popup do S.O. agora sempre auto-dismiss
+  (timeout configurável, default 10s), mesmo para HIGH/CRITICAL. A central
+  in-app preserva o histórico enquanto não vista; deixar o banner do Plasma
+  grudado só polui a área de notificações. `resident=False`, `transient=True`.
+- **`settings.py`** + **`ui/settings_panel.py`**: default do
+  `notify_ready_prefix` mudou de `✅ Pronto` para `⏳ Aguardando` — alinha
+  com o chip "Aguardando" da central in-app (a notificação é "agente
+  aguardando próxima instrução", não "tarefa concluída"). Migração
+  automática no `Settings.load()` substitui o valor antigo se o usuário
+  ainda estava com o default.
+- **`ui/main_window.py`** `_on_tab_session_exited`: terminações por sinal
+  (exit code > 128 = 128 + signum, ex: 143=SIGTERM, 130=SIGINT, 137=SIGKILL)
+  não geram mais notificação. Eram falsos positivos disparados toda vez
+  que o app reiniciava ou o usuário fechava uma aba.
+
 ## [0.76.5] — 2026-05-22
 
 ### Modificado — Workspace card mais visível

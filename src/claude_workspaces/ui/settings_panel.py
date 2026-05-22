@@ -536,7 +536,7 @@ class SettingsPanel(QWidget):
         texts_form.addRow("Nome do app:", self._notify_app_name)
 
         self._notify_ready_prefix = QLineEdit()
-        self._notify_ready_prefix.setPlaceholderText("✅ Pronto")
+        self._notify_ready_prefix.setPlaceholderText("⏳ Aguardando")
         self._notify_ready_prefix.setToolTip(
             "Prefixo do título quando uma tarefa termina (formato: '<prefixo> — <workspace>')."
         )

@@ -111,8 +111,6 @@ class DesktopNotifierAdapter(QObject):
                 log.debug("checagem de foco falhou", exc_info=True)
 
         urgency = NotificationPriority.to_urgency(n.priority)
-        # CRITICAL e HIGH ganham timeout longo (sticky).
-        sticky = n.priority in (NotificationPriority.HIGH, NotificationPriority.CRITICAL)
         # Popup do S.O. fica sem botões e sem som — botões/som ficam só na
         # central in-app. Alguns servidores deixavam de exibir o popup quando
         # tinha action buttons, então tirar as actions destrava a entrega.
@@ -120,18 +118,15 @@ class DesktopNotifierAdapter(QObject):
 
         key = n.dedup_key or f"_id:{n.id}"
         prev = self._active.get(key, 0)
-        # Resolve timeout: sticky para HIGH/CRITICAL ignora preferência (alerta
-        # de atenção não deve sumir sozinho). Para os demais, usa a setting
-        # `notify_timeout_ms` (default 10s); -1 = default do servidor; 0 = sticky.
-        if sticky:
-            timeout_ms = 0
-        else:
-            timeout_ms = 10000
-            if self._timeout_ms_provider is not None:
-                try:
-                    timeout_ms = int(self._timeout_ms_provider())
-                except Exception:
-                    log.debug("timeout_ms_provider falhou", exc_info=True)
+        # Popup do S.O. sempre auto-dismiss (mesmo HIGH/CRITICAL). A central
+        # in-app preserva a notificação enquanto não vista; deixar o banner
+        # nativo "grudado" só polui a área de notificações do Plasma.
+        timeout_ms = 10000
+        if self._timeout_ms_provider is not None:
+            try:
+                timeout_ms = int(self._timeout_ms_provider())
+            except Exception:
+                log.debug("timeout_ms_provider falhou", exc_info=True)
         try:
             nid = self._desktop.notify(
                 title=n.title,
@@ -142,8 +137,8 @@ class DesktopNotifierAdapter(QObject):
                 replaces_id=prev,
                 urgency=urgency,
                 desktop_entry="claude-workspaces",
-                resident=sticky,
-                transient=False if sticky else None,
+                resident=False,
+                transient=True,
                 suppress_sound=True,
             )
         except Exception:

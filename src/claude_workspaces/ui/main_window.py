@@ -2054,6 +2054,17 @@ class MainWindow(QMainWindow):
                     title = w.effective_title() if hasattr(w, "effective_title") else title
                     break
 
+        # Exit codes > 128 vêm de sinal (128 + signum): 143=SIGTERM, 130=SIGINT,
+        # 137=SIGKILL etc. Isso é terminação externa (app reiniciou, usuário
+        # fechou aba, kill manual) — NÃO é falha de task. Suprime silenciosamente
+        # pra evitar falso positivo a cada restart do app.
+        if exit_code > 128:
+            log.debug(
+                "session exit por sinal (exit=%s tab=%s) — sem notificação",
+                exit_code, tab_id,
+            )
+            return
+
         if exit_code <= 0:
             # Sucesso (ou indeterminado). Notif baixa prioridade.
             self.notif_service.notify(
