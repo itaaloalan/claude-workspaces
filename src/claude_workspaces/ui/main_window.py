@@ -2564,6 +2564,13 @@ class MainWindow(QMainWindow):
         # tenham minimum size herdado de algum sizeHint do conteúdo.
         self._terminal_pane_widget.setMinimumHeight(0)
         self._runners_pane.setMinimumHeight(0)
+        # Os toggles individuais (`_toggle_terminal_pane_minimized` /
+        # `_toggle_runners_minimized`) chamam `setVisible(False)` no widget
+        # pra esconder de vez. Se entrarmos aqui depois disso (ex.: chip
+        # restaurado pelo lado oposto, click no sidebar), o widget continua
+        # invisível e o splitter mostra área preta sem chip de volta.
+        self._terminal_pane_widget.setVisible(True)
+        self._runners_pane.setVisible(True)
 
         cur = self._bottom_sub_splitter.sizes()
         total = sum(cur)
@@ -2764,17 +2771,15 @@ class MainWindow(QMainWindow):
                 if a is area:
                     ws = self.workspaces_coord.find_by_id(ws_id)
                     break
-        log.info(
-            "[HEADER] refresh: ws=%s area=%s term=%s",
-            ws.id if ws else None,
-            id(area) if area else None,
-            term.__class__.__name__ if term else None,
-        )
         if ws is None or term is None or not isinstance(term, TerminalWidget):
-            self._terminal_pane_title.setText(
+            placeholder = (
                 "<span style='color:#666'>Claude console — "
                 "selecione um console no sidebar</span>"
             )
+            if getattr(self, "_terminal_pane_title_last", None) != placeholder:
+                log.info("[HEADER] → placeholder (ws/area/term faltando)")
+                self._terminal_pane_title.setText(placeholder)
+                self._terminal_pane_title_last = placeholder
             return
         # `#N título` no mesmo formato usado pelo sidebar/área.
         try:
@@ -2787,11 +2792,19 @@ class MainWindow(QMainWindow):
         console_html = (
             f"<span style='color:#e5b53b;font-weight:600'>{display}</span>"
         )
-        self._terminal_pane_title.setText(
+        new_text = (
             f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
             f"<span style='color:#555'>·</span> "
             f"<span style='color:#9aa0a6'>console</span> {console_html}"
         )
+        # Curtocircuita: setText em QLabel rich-text força relayout e
+        # re-render. Sem essa cache, sinais frequentes (currentChanged
+        # encadeados via `_sync_terminal_for`) ficam chamando setText
+        # com mesmo texto.
+        if getattr(self, "_terminal_pane_title_last", None) == new_text:
+            return
+        self._terminal_pane_title.setText(new_text)
+        self._terminal_pane_title_last = new_text
 
     def _sync_console_runner_host(self) -> None:
         """Mostra na aba 'Runners (console)' o painel do console ativo
@@ -3190,14 +3203,15 @@ class MainWindow(QMainWindow):
         area.tabs.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
         )
-        # Header do terminal pane mostra workspace+console — precisa
-        # atualizar quando muda console dentro do mesmo workspace, e
-        # também quando o título/atividade muda (rename, working/idle…).
+        # Header do terminal pane mostra workspace+console — atualiza
+        # quando muda console dentro do mesmo workspace. NÃO conectamos
+        # em `tab_activity_changed` porque ele dispara em todo update
+        # de status do Claude (rodando, idle, etc.) — virava ~10
+        # refresh/s sem o usuário tocar em nada, custo de HTML render
+        # acumulando lag. O `_refresh_terminal_pane_title` já cacheia
+        # último texto e curtocircuita se o título não muda.
         area.tabs.currentChanged.connect(
             lambda _i: self._refresh_terminal_pane_title()
-        )
-        area.tab_activity_changed.connect(
-            lambda *_a: self._refresh_terminal_pane_title()
         )
 
     def _handle_tab_activity(

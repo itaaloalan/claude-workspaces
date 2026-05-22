@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.12] — 2026-05-22
+
+### Corrigido
+- **Lentidão real: `_refresh_terminal_pane_title` disparando ~10x/s
+  sem o user clicar em nada** (`ui/main_window.py`):
+  - Removida conexão `area.tab_activity_changed →
+    _refresh_terminal_pane_title`. Esse signal dispara em todo
+    update de status do Claude (rodando/ocioso/working). Title só
+    muda em rename (raro), então o spam era custo puro.
+  - Adicionado cache `_terminal_pane_title_last` — `setText` em
+    QLabel rich-text força relayout + re-render do HTML; agora
+    curtocircuita se o texto é idêntico ao último (vale também
+    pro placeholder). Em prática, refresh signals continuam
+    chegando mas viram no-op imediato.
+  - Logs agora só emitem quando o texto efetivamente mudou —
+    facilita ler o `app.log` sem ruído.
+
 ## [0.61.11] — 2026-05-22
 
 ### Corrigido
