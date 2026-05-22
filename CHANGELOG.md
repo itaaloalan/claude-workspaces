@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.68.0] — 2026-05-22
+
+### Adicionado
+- **Ícone do Claude no card da sessão** (`ui/terminal_child_widget.py`): cada
+  console na sidebar agora exibe um ícone `fa5s.robot` à esquerda do card,
+  que fica azul (PRIMARY_HOVER) no item selecionado e cinza (TEXT_FAINT) nos
+  demais — sinaliza visualmente qual sessão está em foco sem depender só do
+  tint de background.
+
+### Alterado
+- **"Rodando" → "Trabalhando"** no label de estado do console
+  (`ui/terminal_child_widget.py`).
+- **Título do console muda de cor por estado** (`ui/terminal_child_widget.py`):
+  trabalhando = âmbar, aguardando = laranja, ocioso = cinza desbotado,
+  concluído = texto padrão, erro = vermelho — dá leitura instantânea do
+  estado de cada sessão batendo o olho na lista da sidebar.
+
 ## [0.67.0] — 2026-05-22
 
 ### Adicionado

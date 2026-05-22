@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from . import theme
 
 # Estados visíveis na UI — labels padronizados de acordo com o pedido
-# do usuário (Rodando/Aguardando/Parado/Erro/Concluído).
+# do usuário (Trabalhando/Aguardando/Ocioso/Erro/Concluído).
 STATE_WORKING = "working"      # rodando (trabalhando)
 STATE_AWAITING = "awaiting"    # aguardando decisão (permission prompt)
 STATE_IDLE = "idle"            # parado no prompt principal (sem ação ativa)
@@ -31,15 +31,26 @@ STATE_ERROR = "error"          # processo falhou / saiu com erro
 
 
 STATE_LABEL = {
-    STATE_WORKING: "Rodando",
+    STATE_WORKING: "Trabalhando",
     STATE_AWAITING: "Aguardando",
     STATE_IDLE: "Ocioso",
     STATE_DONE: "Concluído",
     STATE_ERROR: "Erro",
 }
 
+# Cor do título do console por estado — pra dar um sinal extra de
+# "tem trabalho rolando aqui" só batendo o olho na lista. Idle/Done
+# ficam num cinza mais discreto pra contrastar com os ativos.
+STATE_TITLE_COLOR = {
+    STATE_WORKING: theme.WARNING,
+    STATE_AWAITING: theme.WAITING,
+    STATE_IDLE: theme.TEXT_FAINT,
+    STATE_DONE: theme.TEXT_PRIMARY,
+    STATE_ERROR: theme.DANGER,
+}
+
 STATE_COLOR = {
-    # Rodando = amber (trabalho em curso)
+    # Trabalhando = amber (trabalho em curso)
     STATE_WORKING: theme.WARNING,
     # Aguardando = laranja forte (decisão pendente)
     STATE_AWAITING: theme.WAITING,
@@ -131,6 +142,24 @@ class TerminalChildWidget(QWidget):
         self._icon = QLabel()
         self._icon.setVisible(False)
 
+        # Ícone do Claude (robot) à esquerda — sinaliza "este card é uma
+        # sessão Claude" e dá feedback visual de seleção (azul quando
+        # selecionado, cinza nos demais).
+        from .icons import ic as _ic
+        self._claude_icon = QLabel()
+        self._claude_icon.setFixedSize(16, 16)
+        self._claude_icon_unselected_pix = _ic(
+            "fa5s.robot", color=theme.TEXT_FAINT
+        ).pixmap(14, 14)
+        self._claude_icon_selected_pix = _ic(
+            "fa5s.robot", color=theme.PRIMARY_HOVER
+        ).pixmap(14, 14)
+        self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
+        self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        outer.addWidget(
+            self._claude_icon, 0, Qt.AlignmentFlag.AlignVCenter
+        )
+
         vbox = QVBoxLayout()
         vbox.setContentsMargins(0, 0, 0, 0)
         vbox.setSpacing(0)
@@ -144,7 +173,8 @@ class TerminalChildWidget(QWidget):
         title_row.setSpacing(4)
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY}; font-weight: 600; font-size: 12px;"
+            f"color: {STATE_TITLE_COLOR[STATE_IDLE]};"
+            f" font-weight: 600; font-size: 12px;"
         )
         self._title_label.setTextFormat(Qt.TextFormat.PlainText)
         self._title_label.setWordWrap(False)
@@ -361,6 +391,13 @@ class TerminalChildWidget(QWidget):
         else:
             self._last_action = ""
         self._state_label.setText(self._compose_state_text(state))
+        # Tinta o título com a cor do estado pra dar leitura rápida da
+        # lista — sessões trabalhando ficam âmbar, aguardando laranja,
+        # ociosas em cinza desbotado.
+        self._title_label.setStyleSheet(
+            f"color: {STATE_TITLE_COLOR[state]};"
+            f" font-weight: 600; font-size: 12px;"
+        )
         # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
         # em sessão restaurada+ociosa.
         self._current_state = state
@@ -446,10 +483,12 @@ class TerminalChildWidget(QWidget):
                 "TerminalChildWidget { background: rgba(61, 110, 168, 38); "
                 "border-radius: 4px; border-left: 2px solid #3d6ea8; }"
             )
+            self._claude_icon.setPixmap(self._claude_icon_selected_pix)
         else:
             self.setStyleSheet(
                 "TerminalChildWidget { background: transparent; border-radius: 4px; }"
             )
+            self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
 
     def set_actions_visible(self, visible: bool) -> None:
         """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do
