@@ -1918,6 +1918,9 @@ class MainWindow(QMainWindow):
             self.status_widgets.set_task("Nenhuma tarefa em execução")
 
     _SECTION_HEADER_ROLE = "__section_header__"
+    # Sub-role pra guardar o label da seção (FIXADOS / WORKSPACES) no
+    # próprio item — usado pra resolver clique → toggle de colapso.
+    _SECTION_LABEL_ROLE = Qt.ItemDataRole.UserRole + 1
 
     _SECTION_ICONS = {
         "FIXADOS": "fa5s.thumbtack",
@@ -1925,23 +1928,30 @@ class MainWindow(QMainWindow):
     }
 
     def _add_section_header(self, label: str) -> None:
-        """Insere um item-cabeçalho não-selecionável (FIXADOS / WORKSPACES)
-        com ícone SVG discreto à esquerda.
+        """Insere um item-cabeçalho clicável (FIXADOS / WORKSPACES).
+
+        Clicar no header alterna o colapso da seção (esconde/mostra os
+        workspaces até o próximo header). Estado persiste em
+        `settings.section_collapsed`.
 
         Usa setText/setIcon nativos do QTreeWidgetItem (em vez de
         setItemWidget) — o widget custom sofria clipping pela largura
-        da coluna do tree e cortava o "S" final, mesmo com minimumWidth.
-        Native respeita o sizeHint do delegate."""
+        da coluna do tree e cortava o "S" final. Native respeita o
+        sizeHint do delegate."""
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtGui import QBrush, QColor, QFont
 
-        from .icons import ic as _ic
-        item = QTreeWidgetItem([label])
+        collapsed = bool(self.settings.section_collapsed.get(label, False))
+        chevron = "▸" if collapsed else "▾"
+        item = QTreeWidgetItem([f"{chevron} {label}"])
         item.setData(0, Qt.ItemDataRole.UserRole, self._SECTION_HEADER_ROLE)
-        item.setFlags(Qt.ItemFlag.NoItemFlags)
-        icon_name = self._SECTION_ICONS.get(label)
-        if icon_name:
-            item.setIcon(0, _ic(icon_name, color="#a8a8a8"))
+        item.setData(0, self._SECTION_LABEL_ROLE, label)
+        # Enabled mas não-selecionável: precisa de ItemIsEnabled pra
+        # disparar itemClicked; sem ItemIsSelectable pro highlight
+        # azul/seleção não aparecer.
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+        # Sem ícone — fica mais à esquerda (o ícone adicionava offset
+        # nativo do QTreeWidgetItem). Chevron já indica seção colapsável.
         font = QFont()
         font.setPointSize(7)
         font.setBold(True)
@@ -1950,6 +1960,61 @@ class MainWindow(QMainWindow):
         item.setForeground(0, QBrush(QColor("#a8a8a8")))
         item.setSizeHint(0, _QS(0, 20))
         self.list_widget.addTopLevelItem(item)
+        # Aplica o colapso restaurado imediatamente — esconde os
+        # workspaces da seção se já estava colapsada antes.
+        if collapsed:
+            self._apply_section_collapse(label, True)
+
+    def _items_in_section(self, label: str) -> list["QTreeWidgetItem"]:
+        """Lista top-level items que pertencem à seção `label`
+        (entre o header `label` e o próximo header, ou fim da tree)."""
+        items: list[QTreeWidgetItem] = []
+        n = self.list_widget.topLevelItemCount()
+        i = 0
+        while i < n:
+            it = self.list_widget.topLevelItem(i)
+            if (
+                it.data(0, Qt.ItemDataRole.UserRole) == self._SECTION_HEADER_ROLE
+                and it.data(0, self._SECTION_LABEL_ROLE) == label
+            ):
+                j = i + 1
+                while j < n:
+                    nxt = self.list_widget.topLevelItem(j)
+                    if nxt.data(0, Qt.ItemDataRole.UserRole) == self._SECTION_HEADER_ROLE:
+                        break
+                    items.append(nxt)
+                    j += 1
+                break
+            i += 1
+        return items
+
+    def _apply_section_collapse(self, label: str, collapsed: bool) -> None:
+        """Esconde/mostra os workspaces da seção e atualiza o chevron
+        do header."""
+        for top in self._items_in_section(label):
+            top.setHidden(collapsed)
+        # Atualiza chevron no texto do header
+        for i in range(self.list_widget.topLevelItemCount()):
+            it = self.list_widget.topLevelItem(i)
+            if (
+                it.data(0, Qt.ItemDataRole.UserRole) == self._SECTION_HEADER_ROLE
+                and it.data(0, self._SECTION_LABEL_ROLE) == label
+            ):
+                chevron = "▸" if collapsed else "▾"
+                it.setText(0, f"{chevron} {label}")
+                break
+
+    def _toggle_section_collapsed(self, label: str) -> None:
+        """Toggle do estado de colapso da seção (FIXADOS / WORKSPACES).
+        Persiste em settings."""
+        current = bool(self.settings.section_collapsed.get(label, False))
+        new_state = not current
+        self.settings.section_collapsed[label] = new_state
+        self._apply_section_collapse(label, new_state)
+        try:
+            self.settings.save()
+        except OSError:
+            pass
 
     def _is_section_header(self, item: "QTreeWidgetItem | None") -> bool:
         if item is None:
@@ -2644,6 +2709,29 @@ class MainWindow(QMainWindow):
             "[SIDEBAR] _on_tree_item_clicked ENTRY has_parent=%s data=%r",
             has_parent, raw_data,
         )
+        # Clique no header de seção (FIXADOS / WORKSPACES) → toggle.
+        if raw_data == self._SECTION_HEADER_ROLE:
+            label = item.data(0, self._SECTION_LABEL_ROLE)
+            if isinstance(label, str):
+                self._toggle_section_collapsed(label)
+            return
+        # Clique no nome do workspace (top-level) → toggle expand/collapse.
+        # Botões inline (+ / chevron) consomem o evento antes; aqui só
+        # chega quando o click é no nome/área vazia do row.
+        if item.parent() is None and isinstance(raw_data, Workspace):
+            new_expanded = not item.isExpanded()
+            item.setExpanded(new_expanded)
+            from .workspace_item_widget import WorkspaceItemWidget
+            w = self.list_widget.itemWidget(item, 0)
+            if isinstance(w, WorkspaceItemWidget):
+                w.set_collapsed(not new_expanded)
+            # Persiste o estado.
+            self.settings.workspace_collapsed[raw_data.id] = not new_expanded
+            try:
+                self.settings.save()
+            except OSError:
+                pass
+            return
         # Clique simples numa aba ativa/em ação (tab_id) já foca a aba.
         if item.parent() is None:
             return
@@ -4492,22 +4580,23 @@ class MainWindow(QMainWindow):
                     f"{pct:.0f}%</span>"
                 )
 
+            five_hour_reset_str = ""
             if snap.five_hour is not None:
                 pct = snap.five_hour.utilization_pct
-                reset_str = _reset_phrase(snap.five_hour.resets_at)
+                five_hour_reset_str = _reset_phrase(snap.five_hour.resets_at)
                 chips.append(_chip("5h", pct))
                 tip = f"Sessão 5h: {pct:.0f}%"
                 if snap.five_hour.resets_at is not None:
                     tip += (
                         "  ·  reseta "
                         f"{snap.five_hour.resets_at.astimezone().strftime('%H:%M')}"
-                        f" ({reset_str})"
+                        f" ({five_hour_reset_str})"
                     )
                 tooltip_lines.append(tip)
 
             if snap.seven_day is not None:
                 pct = snap.seven_day.utilization_pct
-                chips.append(_chip("sem", pct))
+                chips.append(_chip("semanal", pct))
                 reset_at = snap.seven_day.resets_at
                 tip = f"Semana (todos): {pct:.0f}%"
                 if reset_at is not None:
@@ -4519,7 +4608,7 @@ class MainWindow(QMainWindow):
 
             if snap.seven_day_sonnet is not None:
                 pct = snap.seven_day_sonnet.utilization_pct
-                chips.append(_chip("son", pct))
+                chips.append(_chip("Sonnet", pct))
                 tooltip_lines.append(f"Semana (Sonnet): {pct:.0f}%")
 
             if snap.seven_day_opus is not None:
@@ -4533,7 +4622,15 @@ class MainWindow(QMainWindow):
                 sep = (
                     f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
                 )
-                label.setText(sep.join(chips))
+                prefix = f"<span style='color: {theme.TEXT_FAINT};'>Usage: </span>"
+                suffix = ""
+                if five_hour_reset_str:
+                    suffix = (
+                        f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
+                        f"<span style='color: {theme.TEXT_FAINT};'>resets in "
+                        f"{five_hour_reset_str}</span>"
+                    )
+                label.setText(prefix + sep.join(chips) + suffix)
                 tooltip_lines.append(f"sync {sync_str} · fonte: API")
                 label.setToolTip("\n".join(tooltip_lines))
                 _set_container_visible(True)
@@ -4548,7 +4645,7 @@ class MainWindow(QMainWindow):
         if cooldown_now > 0:
             mins = max(1, cooldown_now // 60)
             label.setText(
-                f"<span style='color: {theme.TEXT_FAINT};'>Uso: </span>"
+                f"<span style='color: {theme.TEXT_FAINT};'>Usage: </span>"
                 f"<span style='color: {theme.WARNING};'>cooldown {mins}m</span>"
             )
             label.setToolTip(
@@ -4612,11 +4709,11 @@ class MainWindow(QMainWindow):
 
         limit_all = max(self.settings.plan_weekly_usd_limit_all, 0.01)
         all_pct = min(weekly.all_cost_usd / limit_all * 100.0, 999.0)
-        chips.append(_chip("sem", all_pct))
+        chips.append(_chip("semanal", all_pct))
 
         limit_sonnet = max(self.settings.plan_weekly_usd_limit_sonnet, 0.01)
         sonnet_pct = min(weekly.sonnet_cost_usd / limit_sonnet * 100.0, 999.0)
-        chips.append(_chip("son", sonnet_pct))
+        chips.append(_chip("Sonnet", sonnet_pct))
 
         cooldown = cooldown_remaining_seconds()
         cooldown_note = ""
@@ -4627,7 +4724,15 @@ class MainWindow(QMainWindow):
                 f"rate-limited). Reabra após esse tempo pra ver os % reais."
             )
         sep = f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
-        label.setText(sep.join(chips))
+        prefix = f"<span style='color: {theme.TEXT_FAINT};'>Usage: </span>"
+        suffix = ""
+        if reset_5h_str:
+            suffix = (
+                f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
+                f"<span style='color: {theme.TEXT_FAINT};'>resets in "
+                f"{reset_5h_str}</span>"
+            )
+        label.setText(prefix + sep.join(chips) + suffix)
         label.setToolTip(
             "Plan usage limits (fallback USD-baseado — API indisponível)"
             + cooldown_note + "\n"

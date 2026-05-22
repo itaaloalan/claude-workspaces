@@ -6,6 +6,31 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.63.0] — 2026-05-22
+
+### Adicionado
+- **Seções FIXADOS/WORKSPACES colapsáveis e persistidas**
+  (`ui/main_window.py`, `settings.py`): clique no header da seção
+  toggla a visibilidade dos workspaces até o próximo header; estado
+  persiste em `settings.section_collapsed`. Chevron `▾`/`▸` no texto
+  indica estado.
+- **Click no nome do workspace alterna expandir/recolher**
+  (`ui/main_window.py::_on_tree_item_clicked`): além de selecionar,
+  o click no row toggla `setExpanded`, sincroniza a chevron do
+  `WorkspaceItemWidget` e persiste em `workspace_collapsed`.
+
+### Mudou
+- **Pasta do workspace fica branca por padrão, azul quando selecionado**
+  (`ui/workspace_item_widget.py`): `set_selected` agora também repinta
+  o ícone (`#6aa9e0` selecionado, `#e6e6e6` demais).
+- **FIXADOS/WORKSPACES mais à esquerda** (`ui/main_window.py::_add_section_header`):
+  removidos os ícones SVG das seções — adicionavam offset nativo do
+  `QTreeWidgetItem` empurrando o texto pra direita.
+- **Labels de Usage não-abreviados + prefixo/sufixo**
+  (`ui/main_window.py::_refresh_plan_usage_status`): `5h X% · sem Y% ·
+  son Z%` virou `Usage: 5h X% · semanal Y% · Sonnet Z% · resets in
+  Hh:MMm`. Cobre tanto o caminho da API quanto o fallback USD-baseado.
+
 ## [0.62.3] — 2026-05-22
 
 ### Mudou

@@ -95,7 +95,11 @@ class WorkspaceItemWidget(QWidget):
         from PySide6.QtCore import QSize as _QS
         from .icons import ic as _ic
         self._ws_icon = QLabel()
-        self._ws_icon.setPixmap(_ic("fa5s.folder", color="#6aa9e0").pixmap(_QS(14, 14)))
+        self._ws_icon_size = _QS(14, 14)
+        # Cor da pasta reage à seleção (set_selected): azul quando
+        # selecionado, branco "off" quando não.
+        self._ws_icon_color_selected = "#6aa9e0"
+        self._ws_icon_color_unselected = "#e6e6e6"
         self._ws_icon.setFixedSize(16, 16)
         row.addWidget(self._ws_icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -187,8 +191,17 @@ class WorkspaceItemWidget(QWidget):
         self._apply_label_color()
 
     def _apply_label_color(self) -> None:
+        from .icons import ic as _ic
         color = "#ffffff" if self._selected else "#9a9a9a"
         self._label.setStyleSheet(f"color: {color};")
+        icon_color = (
+            self._ws_icon_color_selected
+            if self._selected
+            else self._ws_icon_color_unselected
+        )
+        self._ws_icon.setPixmap(
+            _ic("fa5s.folder", color=icon_color).pixmap(self._ws_icon_size)
+        )
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do botão de colapsar pra refletir o estado
