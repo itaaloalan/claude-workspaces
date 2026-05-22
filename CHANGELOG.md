@@ -6,6 +6,15 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.5] — 2026-05-22
+
+### Mudado
+- **STATE_IDLE volta a ser "Ocioso" em vermelho** (`ui/terminal_child_widget.py`):
+  o cinza neutro de 0.59.5 não chamava atenção suficiente. "Ocioso"
+  vermelho sinaliza melhor que o Claude está parado esperando ação
+  do usuário. Apenas o `_state_label` muda de cor — resto do card
+  (título, modelo, branch) segue inalterado.
+
 ## [0.60.4] — 2026-05-22
 
 ### Adicionado

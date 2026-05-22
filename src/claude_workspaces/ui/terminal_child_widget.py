@@ -33,7 +33,7 @@ STATE_ERROR = "error"          # processo falhou / saiu com erro
 STATE_LABEL = {
     STATE_WORKING: "Rodando",
     STATE_AWAITING: "Aguardando",
-    STATE_IDLE: "Parado",
+    STATE_IDLE: "Ocioso",
     STATE_DONE: "Concluído",
     STATE_ERROR: "Erro",
 }
@@ -43,8 +43,8 @@ STATE_COLOR = {
     STATE_WORKING: theme.WARNING,
     # Aguardando = laranja forte (decisão pendente)
     STATE_AWAITING: theme.WAITING,
-    # Parado = cinza neutro (não é erro — só ocioso)
-    STATE_IDLE: theme.TEXT_FAINT,
+    # Ocioso = vermelho (chamativo — Claude esperando ação do user)
+    STATE_IDLE: theme.DANGER,
     # Concluído = verde
     STATE_DONE: theme.SUCCESS,
     # Erro = vermelho
