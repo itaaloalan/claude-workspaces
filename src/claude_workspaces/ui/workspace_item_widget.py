@@ -240,13 +240,14 @@ class WorkspaceItemWidget(QWidget):
 
     def _apply_card_qss(self) -> None:
         """Renderiza o widget como card (bg + borda + radius), igual
-        mockup. Tom muda em seleção / hover."""
+        mockup. Cores levemente mais claras pra o card sobressair contra
+        o BG_PANEL (#1a1a1a) — sem isso a borda some no tema escuro."""
         if self._selected:
-            bg = "rgba(61, 110, 168, 32)"
+            bg = "rgba(61, 110, 168, 38)"
             border = theme.PRIMARY
         else:
-            bg = theme.BG_SURFACE
-            border = theme.BORDER_INPUT
+            bg = "#232323"
+            border = "#333333"
         self.setStyleSheet(
             f"WorkspaceItemWidget {{"
             f"  background: {bg};"
@@ -254,7 +255,7 @@ class WorkspaceItemWidget(QWidget):
             f"  border-radius: 6px;"
             f"}}"
             f"WorkspaceItemWidget:hover {{"
-            f"  border-color: {theme.BORDER if not self._selected else theme.PRIMARY_HOVER};"
+            f"  border-color: {theme.PRIMARY_HOVER if self._selected else '#404040'};"
             f"}}"
         )
 

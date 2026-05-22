@@ -2,6 +2,15 @@
 
 ## [0.76.5] — 2026-05-22
 
+### Modificado — Workspace card mais visível
+- **`ui/workspace_item_widget.py`**: bg `#1f1f1f`→`#232323` e borda
+  `#2c2c2c`→`#333333`. Sem isso o card sumia contra o `BG_PANEL`
+  (#1a1a1a) — quando o workspace estava expandido, o usuário não via
+  borda nenhuma envolvendo o header.
+
+
+## [0.76.5] — 2026-05-22
+
 ### Corrigido — Popup do S.O. sem botões e sem som
 - **`notifications/desktop.py`**: removidas as actions (`Abrir`, `Adiar 5m`,
   `Já vi`) do popup nativo do D-Bus. Alguns servidores (KDE em certas
