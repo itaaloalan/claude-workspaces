@@ -1941,14 +1941,14 @@ class MainWindow(QMainWindow):
         item.setFlags(Qt.ItemFlag.NoItemFlags)
         icon_name = self._SECTION_ICONS.get(label)
         if icon_name:
-            item.setIcon(0, _ic(icon_name, color="#707070"))
+            item.setIcon(0, _ic(icon_name, color="#a8a8a8"))
         font = QFont()
-        font.setPointSize(8)
+        font.setPointSize(7)
         font.setBold(True)
-        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.0)
         item.setFont(0, font)
-        item.setForeground(0, QBrush(QColor("#707070")))
-        item.setSizeHint(0, _QS(0, 22))
+        item.setForeground(0, QBrush(QColor("#a8a8a8")))
+        item.setSizeHint(0, _QS(0, 20))
         self.list_widget.addTopLevelItem(item)
 
     def _is_section_header(self, item: "QTreeWidgetItem | None") -> bool:

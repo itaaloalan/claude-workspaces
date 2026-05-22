@@ -6,6 +6,14 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.62.2] — 2026-05-22
+
+### Mudou
+- **Headers FIXADOS/WORKSPACES com fonte menor e cor mais clara**
+  (`ui/main_window.py::_add_section_header`): ponto da fonte 8→7,
+  letter-spacing 1.2→1.0px, cor `#707070`→`#a8a8a8` (texto e ícone),
+  altura da linha 22→20px.
+
 ## [0.62.1] — 2026-05-22
 
 ### Mudou
