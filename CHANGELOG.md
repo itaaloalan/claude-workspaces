@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.76.9] — 2026-05-22
+
+### Corrigido — Cards REALMENTE renderizando agora (WA_StyledBackground)
+Causa raiz dos cards "sumindo" da sidebar nas últimas versões: em
+PySide6, QSS de `background`/`border` em subclasses de `QWidget` é
+**ignorado silenciosamente** sem o atributo `Qt.WA_StyledBackground`.
+Por isso o usuário só via uma diferença sutil de cor (da QPalette
+default) e jurava que os cards não tinham borda — porque mesmo de
+fato não tinham.
+
+Aplicado em **`workspace_item_widget.py`**, **`runner_child_widget.py`**
+e **`terminal_child_widget.py`**:
+- `setAttribute(Qt.WA_StyledBackground, True)` — habilita renderização
+  de bg/border via QSS.
+- `setObjectName("WorkspaceCard"/"RunnerCard"/"ConsoleCard")` — limita
+  o QSS ao próprio widget (não cascateia bg pra QLabel/QPushButton
+  internos).
+- Seletor `#ObjectName` no stylesheet (em vez de type-selector que
+  tem comportamento inconsistente com subclasses Python).
+
 ## [0.76.8] — 2026-05-22
 
 ### Corrigido — Notificação do S.O. ficando "presa" na central

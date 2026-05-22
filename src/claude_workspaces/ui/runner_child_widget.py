@@ -54,7 +54,7 @@ _BTN_QSS = (
 )
 
 _CARD_QSS = (
-    f"RunnerChildWidget {{"
+    f"#RunnerCard {{"
     f"  background: #232323;"
     f"  border: 1px solid #333333;"
     f"  border-radius: {theme.RADIUS_MD}px;"
@@ -85,8 +85,10 @@ class RunnerChildWidget(QWidget):
         self.setMinimumHeight(self._CARD_HEIGHT)
         self.setMaximumHeight(self._CARD_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        # Card QSS direto no self — sem wrapper interno (que estava
-        # criando ilusão de dois backgrounds onde o texto ficava).
+        # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
+        # em subclasses de QWidget no PySide6. Sem isso o QSS é ignorado.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("RunnerCard")
         self.setStyleSheet(_CARD_QSS)
 
         card_layout = QHBoxLayout(self)

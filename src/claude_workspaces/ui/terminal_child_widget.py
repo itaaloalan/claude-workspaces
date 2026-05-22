@@ -156,7 +156,11 @@ class TerminalChildWidget(QWidget):
         self._status_strip.setVisible(False)
         # Card visual: bg sólido + borda lateral colorida pelo estado.
         # set_selected ajusta o tint do bg quando esta sessão é a current.
-        self.setAutoFillBackground(False)
+        # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
+        # em subclasses de QWidget no PySide6. Sem isso o QSS é ignorado
+        # e o card vira só texto solto sobre o panel.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("ConsoleCard")
         self._selected = False
         self._apply_card_qss()
 
@@ -553,7 +557,7 @@ class TerminalChildWidget(QWidget):
             bg = theme.BG_SURFACE
             border = theme.BORDER_INPUT
         self.setStyleSheet(
-            f"TerminalChildWidget {{"
+            f"#ConsoleCard {{"
             f"  background: {bg};"
             f"  border: 1px solid {border};"
             f"  border-left: 3px solid {accent};"

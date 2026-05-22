@@ -76,6 +76,11 @@ class WorkspaceItemWidget(QWidget):
         self._on_toggle_collapse = on_toggle_collapse
         # Enable hover tracking pro reveal das ações secundárias.
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
+        # em subclasses de QWidget no PySide6. Sem isso o QSS é ignorado
+        # silenciosamente e o card nunca aparece.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("WorkspaceCard")
         # Card visual — bg sólido + borda sutil + radius, igual mockup.
         # Tom muda em set_selected (tint azul) / hover (borda mais clara).
         self._selected = False
@@ -248,13 +253,15 @@ class WorkspaceItemWidget(QWidget):
         else:
             bg = "#232323"
             border = "#333333"
+        # #WorkspaceCard scope: limita o QSS ao próprio widget (não cascateia
+        # bg pra QLabel/QPushButton internos, que são transparentes).
         self.setStyleSheet(
-            f"WorkspaceItemWidget {{"
+            f"#WorkspaceCard {{"
             f"  background: {bg};"
             f"  border: 1px solid {border};"
             f"  border-radius: 6px;"
             f"}}"
-            f"WorkspaceItemWidget:hover {{"
+            f"#WorkspaceCard:hover {{"
             f"  border-color: {theme.PRIMARY_HOVER if self._selected else '#404040'};"
             f"}}"
         )
