@@ -152,11 +152,27 @@ class TerminalWidget(QWidget):
         self._fit_timer.setInterval(120)
         self._fit_timer.timeout.connect(self._emit_force_fit)
 
+        # Bg do widget inteiro = bg do terminal pra evitar faixa branca
+        # entre o toolbar e o terminal (palette default vinha cinza claro
+        # em alguns temas).
+        self.setStyleSheet(
+            "TerminalWidget { background: #0e0e0e; }"
+            "QLabel { background: transparent; }"
+        )
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        toolbar = QHBoxLayout()
+        # Toolbar fica num QWidget próprio pra poder setar bg sem
+        # afetar o resto.
+        toolbar_host = QWidget()
+        toolbar_host.setObjectName("TerminalToolbar")
+        toolbar_host.setStyleSheet(
+            "QWidget#TerminalToolbar { background: #161616; "
+            "border-bottom: 1px solid #2a2a2a; }"
+        )
+        toolbar = QHBoxLayout(toolbar_host)
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(terminal vazio)")
         self._status.setStyleSheet("color: #b0b0b0;")
@@ -194,7 +210,7 @@ class TerminalWidget(QWidget):
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.terminate)
         toolbar.addWidget(self._stop_btn)
-        outer.addLayout(toolbar)
+        outer.addWidget(toolbar_host)
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)

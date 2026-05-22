@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.3] — 2026-05-22
+
+### Mudado / Corrigido
+- **Linhas/borders estranhas na área do terminal corrigidas**:
+  - `TerminalArea` (`ui/terminal_area.py`): adicionado QSS pra padronizar
+    a tab bar interna com a externa (`_terminal_tabs`) — mesma cor, mesma
+    altura, mesmo underline azul na ativa.
+  - `TerminalWidget` (`ui/terminal_widget.py`): o toolbar com
+    "claude — <workspace>" + Continuar/Modo/Runners/Encerrar virou um
+    `QWidget` próprio com bg `#161616` + border-bottom `#2a2a2a` — antes
+    era um QHBoxLayout solto que pegava o bg cinza claro do palette
+    default em alguns temas (a "linha branca" entre toolbar e terminal).
+- Bg do `TerminalWidget` setado pra `#0e0e0e` (mesmo bg do terminal)
+  pra evitar faixa de cor errada na inicialização.
+
 ## [0.60.2] — 2026-05-21
 
 ### Adicionado

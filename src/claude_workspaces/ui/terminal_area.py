@@ -26,6 +26,21 @@ class TerminalArea(QWidget):
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
+        # QSS pra match com a tab bar externa do _terminal_tabs — sem
+        # bordas estranhas. Tab ativa com underline azul fino. Pane com
+        # bg do terminal pra evitar faixa branca atrás dos terminais
+        # antes de renderizar.
+        self.tabs.setStyleSheet(
+            "QTabWidget::pane { border: 0; background: #0e0e0e; }"
+            "QTabBar { background: #161616; }"
+            "QTabBar::tab { background: #161616; color: #9aa0a6; "
+            "  padding: 4px 12px; border: 0; "
+            "  border-right: 1px solid #2a2a2a; "
+            "  font-size: 11px; min-height: 18px; }"
+            "QTabBar::tab:selected { background: #181818; color: #e6e6e6; "
+            "  border-bottom: 2px solid #3d6ea8; }"
+            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
+        )
         self.tabs.tabCloseRequested.connect(self._close_tab)
         layout.addWidget(self.tabs)
 
