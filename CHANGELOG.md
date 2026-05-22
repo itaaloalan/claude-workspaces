@@ -6,9 +6,41 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
-## [0.65.2] — 2026-05-22
+## [0.66.0] — 2026-05-22
+
+### Adicionado
+- **NotificationCenter substitui o QMenu da bell** (`notifications/center.py`,
+  `ui/main_window.py`): popup frameless ancorado debaixo do sino, com
+  header ("Marcar todas como vistas"), filtros (Todas / Pendências / Hoje),
+  cards estilizados com borda lateral colorida por tipo, badge de
+  prioridade CRÍTICA, contador de ocorrências (`×N`), idade humana
+  (`5s`/`2m`/`3h`), ações por card (Abrir, Adiar 5m, Já vi, Descartar
+  `✕`), empty state ("Tá tudo em dia") e botão "Limpar histórico" que
+  remove só notificações vistas/descartadas.
+- **Sino do TopBar agora reflete `NotificationService.unread_count`**:
+  `MainWindow` instancia `NotificationService` apontando pra
+  `~/.config/claude-workspaces/notifications.json` e liga o sinal
+  `unread_count_changed` direto no `top_bar.set_inbox_count`. O ícone
+  fica laranja com contador quando há pendência.
 
 ### Alterado
+- **`_on_inbox_alert` espelha pro NotificationService**: transição
+  working→idle dispara `service.notify(agent_waiting, …)` (ou
+  `permission_required` quando `info.kind == "decision"`), com
+  `workspace_id`/`session_id`/`tab_id` preenchidos pra ações abrir o
+  console correto. Dedup do service evita spam quando o mesmo console
+  oscila entre estados.
+- **`_on_inbox_entry_removed` marca a notif como vista no service**:
+  quando o usuário foca o console (ou ele volta a trabalhar), a entrada
+  correspondente sai da contagem do sino — não some do histórico, só do
+  badge.
+- **`_show_inbox` agora abre o NotificationCenter** em vez do `QMenu`
+  espartano antigo. A função antiga (~60 linhas iterando
+  `terminals_coord.inbox_entries()` com submenus aninhados) foi
+  substituída pelo popup novo; lógica de ação (focar / dismiss / snooze)
+  vive nos sinais do Center.
+
+
 - **Pane "Runners console" mostra header com botões mesmo sem console aberto**
   (`ui/main_window.py`): o placeholder do pane agora mimetiza o header
   da RunnerArea (Rodar/Parar/Remover todos, Importar/Exportar,
