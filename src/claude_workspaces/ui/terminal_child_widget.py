@@ -111,12 +111,12 @@ class TerminalChildWidget(QWidget):
         # altura efetiva do row no QTreeWidget é o setSizeHint no
         # `_CHILD_HEIGHT` lá no main_window — manter sincronizado
         # (row = widget + 8px de border+padding do item).
-        self.setMinimumHeight(38)
-        self.setMaximumHeight(38)
+        self.setMinimumHeight(34)
+        self.setMaximumHeight(34)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(6, 0, 4, 0)
-        outer.setSpacing(6)
+        outer.setContentsMargins(2, 0, 4, 0)
+        outer.setSpacing(4)
 
         # Seleção: em vez de barra vertical à esquerda, usa um tint
         # sutil no bg do widget inteiro (set_selected pinta um RGBA

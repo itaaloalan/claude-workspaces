@@ -62,7 +62,7 @@ class RunnerChildWidget(QWidget):
             pra MainWindow reajustar o sizeHint do QTreeWidgetItem.
     """
 
-    _ROW1_HEIGHT = 22
+    _ROW1_HEIGHT = 18
     _ROW2_HEIGHT = 12
 
     size_hint_changed = Signal(int)
@@ -85,7 +85,7 @@ class RunnerChildWidget(QWidget):
         row_widget = QWidget(self)
         row_widget.setFixedHeight(self._ROW1_HEIGHT)
         row = QHBoxLayout(row_widget)
-        row.setContentsMargins(4, 2, 4, 2)
+        row.setContentsMargins(2, 0, 4, 0)
         row.setSpacing(6)
 
         self._dot = QLabel("")

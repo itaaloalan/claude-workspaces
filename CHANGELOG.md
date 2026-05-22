@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.73.0] — 2026-05-22
+
+### Alterado
+- **Sidebar compactada** (`ui/builders/sidebar_builder.py`,
+  `ui/terminal_child_widget.py`, `ui/runner_child_widget.py`,
+  `ui/workspace_item_widget.py`, `ui/main_window.py`): reduzido
+  indent do tree (12 → 6), padding do item (4px → 1px/2px), altura
+  do card de sessão Claude (38 → 34px) e do `_CHILD_HEIGHT` (44 →
+  38px), altura do runner (22 → 18px), margens internas dos
+  widgets de sessão/runner/bucket "Sessões Claude" e header de
+  workspace (36 → 28px). Menos espaço morto à esquerda e entre
+  rows; mesmo conteúdo cabendo em menos pixels verticais.
+
 ## [0.72.0] — 2026-05-22
 
 ### Adicionado

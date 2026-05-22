@@ -82,10 +82,10 @@ class WorkspaceItemWidget(QWidget):
         # Altura aumentada pra dar respiro entre workspaces — antes ficavam
         # "colados" um no outro porque o header tinha exatamente a altura
         # do label + 4px de padding. Agora 8px extras separam visualmente.
-        self.setMinimumHeight(36)
+        self.setMinimumHeight(28)
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(2, 4, 2, 8)
+        row.setContentsMargins(2, 2, 2, 4)
         row.setSpacing(6)
 
         # Ícone do workspace antes do nome — match com mockup que mostra

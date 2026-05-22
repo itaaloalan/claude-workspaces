@@ -126,7 +126,7 @@ _TREE_QSS = (
     # do header de workspace. Removido o border-bottom separador (poluía
     # visualmente quando combinado com a borda da seleção).
     f"QTreeWidget::item {{"
-    f"  padding: 4px 4px;"
+    f"  padding: 1px 2px;"
     f"  border: 0;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
@@ -320,7 +320,7 @@ class SidebarBuilder:
         self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)
         self.list_widget.setRootIsDecorated(True)
-        self.list_widget.setIndentation(12)
+        self.list_widget.setIndentation(6)
         self.list_widget.setUniformRowHeights(False)
         self.list_widget.setAnimated(True)
         self.list_widget.setExpandsOnDoubleClick(False)

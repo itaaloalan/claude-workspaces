@@ -2276,7 +2276,7 @@ class MainWindow(QMainWindow):
         # Cria
         bucket = QTreeWidgetItem()
         bucket.setData(0, Qt.ItemDataRole.UserRole, self._SESSOES_BUCKET_ROLE)
-        bucket.setSizeHint(0, _QS(0, 24))
+        bucket.setSizeHint(0, _QS(0, 20))
         ws_item.addChild(bucket)
         ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
         ws_id = ws_data.id if isinstance(ws_data, Workspace) else ""
@@ -2291,7 +2291,7 @@ class MainWindow(QMainWindow):
         host.setStyleSheet("background: transparent;")
         host.setCursor(Qt.CursorShape.PointingHandCursor)
         h = QHBoxLayout(host)
-        h.setContentsMargins(4, 2, 6, 2)
+        h.setContentsMargins(2, 0, 6, 0)
         h.setSpacing(6)
         chevron_lbl = QLabel()
         chevron_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
@@ -4477,7 +4477,7 @@ class MainWindow(QMainWindow):
     # Altura fixa do row do QTreeWidget pro TerminalChildWidget. Inclui
     # o overhead de padding 4px (top+bottom = 8px) do ::item — o widget
     # interno mede 52px (sincronizado lá), então row = 52 + 8 = 60.
-    _CHILD_HEIGHT = 44
+    _CHILD_HEIGHT = 38
 
     def _wire_child_actions(
         self, widget: "TerminalChildWidget", tab_id: int
