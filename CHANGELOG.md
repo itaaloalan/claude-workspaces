@@ -19,6 +19,17 @@
   `carregando`). Renderiza como `●  Startando...` em
   `theme.WARNING` (amarelo), igual aos outros transientes.
 
+## [0.76.16] — 2026-05-22
+
+### Modificado — Cards filhos com margin pro card do workspace
+- **`ui/terminal_child_widget.py`** + **`ui/runner_child_widget.py`**:
+  o widget externo (`self`) agora é um wrapper transparente com
+  `contentsMargins(8, 0, 8, 0)`, e o card real vive num `QFrame`
+  interno (`#ConsoleCard` / `#RunnerCard`). Assim os cards de sessão e
+  runner ganham 8px de respiro nas laterais em relação ao card do
+  workspace pai — antes ficavam "colados" nas paredes do card
+  expandido.
+
 ## [0.76.15] — 2026-05-22
 
 ### Corrigido — Sidebar polish (indentação, seleção, botões transparentes)

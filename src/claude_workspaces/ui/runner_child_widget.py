@@ -90,13 +90,21 @@ class RunnerChildWidget(QWidget):
         self.setMinimumHeight(self._CARD_HEIGHT)
         self.setMaximumHeight(self._CARD_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
-        # em subclasses de QWidget no PySide6. Sem isso o QSS é ignorado.
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setObjectName("RunnerCard")
-        self.setStyleSheet(_CARD_QSS)
+        # Wrapper externo transparente com margem horizontal — afasta o
+        # card dos limites do workspace card pai. Sem isso o card ficava
+        # colado nas paredes do workspace. O conteúdo real vive dentro
+        # do `_card` (QFrame com bg/border via #RunnerCard).
+        from PySide6.QtWidgets import QFrame
+        wrapper = QHBoxLayout(self)
+        wrapper.setContentsMargins(8, 0, 8, 0)
+        wrapper.setSpacing(0)
+        self._card = QFrame()
+        self._card.setObjectName("RunnerCard")
+        self._card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._card.setStyleSheet(_CARD_QSS)
+        wrapper.addWidget(self._card)
 
-        card_layout = QHBoxLayout(self)
+        card_layout = QHBoxLayout(self._card)
         card_layout.setContentsMargins(8, 2, 6, 2)
         card_layout.setSpacing(6)
 

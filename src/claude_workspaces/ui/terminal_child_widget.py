@@ -140,7 +140,20 @@ class TerminalChildWidget(QWidget):
         self.setMinimumHeight(44)
         self.setMaximumHeight(44)
 
-        outer = QHBoxLayout(self)
+        # Wrapper externo transparente com margem horizontal — afasta o
+        # card dos limites do workspace card pai. Sem isso o card ficava
+        # colado nas paredes do workspace ("inner colado"). O conteúdo
+        # real (icone + título + estado + ações) vive dentro do
+        # `self._card` (QFrame com bg/border).
+        wrapper = QHBoxLayout(self)
+        wrapper.setContentsMargins(8, 0, 8, 0)
+        wrapper.setSpacing(0)
+        self._card = QFrame()
+        self._card.setObjectName("ConsoleCard")
+        self._card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        wrapper.addWidget(self._card)
+
+        outer = QHBoxLayout(self._card)
         outer.setContentsMargins(8, 4, 8, 4)
         outer.setSpacing(6)
 
@@ -154,13 +167,6 @@ class TerminalChildWidget(QWidget):
         self._selection_strip.setVisible(False)
         self._status_strip = QFrame()
         self._status_strip.setVisible(False)
-        # Card visual: bg sólido + borda lateral colorida pelo estado.
-        # set_selected ajusta o tint do bg quando esta sessão é a current.
-        # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
-        # em subclasses de QWidget no PySide6. Sem isso o QSS é ignorado
-        # e o card vira só texto solto sobre o panel.
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setObjectName("ConsoleCard")
         self._selected = False
         self._apply_card_qss()
 
@@ -556,7 +562,7 @@ class TerminalChildWidget(QWidget):
         else:
             bg = theme.BG_SURFACE
             border = theme.BORDER_INPUT
-        self.setStyleSheet(
+        self._card.setStyleSheet(
             f"#ConsoleCard {{"
             f"  background: {bg};"
             f"  border: 1px solid {border};"
