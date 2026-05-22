@@ -69,22 +69,22 @@ class RunnerGroupWidget(QWidget):
         from PySide6.QtCore import QSize as _QS
         from .icons import ic as _ic
 
-        # Chevron como pixmap pequeno (8x8) — mesmo visual do header
-        # Sessões Claude. Embrulhado num QPushButton flat pra manter
-        # clique de toggle/expandir.
-        self._collapse_btn = QPushButton()
+        # Chevron como QLabel pixmap 8x8 — exatamente o mesmo formato
+        # usado no header "Sessões Claude" (`main_window._ensure_sessoes_bucket`).
+        # Importante: o QPushButton anterior tinha 14x14 e empurrava o
+        # ícone+label pra direita, desalinhando os dois grupos. Aqui
+        # usamos QLabel + mousePressEvent — sem hover, sem fixed size
+        # extra, alinhamento idêntico ao bucket Sessões.
+        self._collapse_btn = QLabel()
         self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._collapse_btn.setFlat(True)
-        self._collapse_btn.setFixedSize(14, 14)
-        self._collapse_btn.setIconSize(_QS(8, 8))
-        self._collapse_btn.setIcon(_ic("fa5s.chevron-down", color="#9aa0a6"))
-        self._collapse_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: 0; padding: 0; }"
-            "QPushButton:hover { background: #2a2a2a; border-radius: 3px; }"
+        self._collapse_btn.setPixmap(
+            _ic("fa5s.chevron-down", color="#9aa0a6").pixmap(_QS(8, 8))
         )
         self._collapse_btn.setToolTip("Recolher / expandir runners")
         if on_toggle_collapse is not None:
-            self._collapse_btn.clicked.connect(on_toggle_collapse)
+            self._collapse_btn.mousePressEvent = (  # type: ignore[method-assign]
+                lambda _ev, cb=on_toggle_collapse: cb()
+            )
         row.addWidget(self._collapse_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Ícone SVG (mdi6.source-branch) à esquerda do label — simetria
@@ -177,9 +177,12 @@ class RunnerGroupWidget(QWidget):
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do chevron (right recolhido, down expandido)."""
+        from PySide6.QtCore import QSize as _QS
         from .icons import ic as _ic
         name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
-        self._collapse_btn.setIcon(_ic(name, color="#9aa0a6"))
+        self._collapse_btn.setPixmap(
+            _ic(name, color="#9aa0a6").pixmap(_QS(8, 8))
+        )
 
     def _open_add_menu(self) -> None:
         # Se não tem gerador (escopo console-pending sem area), abre direto.

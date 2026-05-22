@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.10] — 2026-05-22
+
+### Corrigido
+- **Header "Runners" agora alinha pixel-a-pixel com "Sessões Claude"**
+  (`ui/runner_group_widget.py`): chevron passou de `QPushButton`
+  14x14 (com padding interno) pra `QLabel` 8x8 + mousePressEvent —
+  exatamente o mesmo formato do header Sessões. Antes o botão
+  empurrava ícone+label uns pixels pra direita; agora os dois
+  grupos começam exatamente na mesma coluna X.
+
 ## [0.60.9] — 2026-05-22
 
 ### Adicionado
