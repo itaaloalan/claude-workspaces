@@ -937,19 +937,22 @@ class MainWindow(QMainWindow):
             lambda _i: self._sync_console_runner_host()
         )
 
-        # Embute o host num QTabWidget com aba "Terminal" + "Runners".
+        # Embute o host num sub-splitter vertical: Claude console em cima
+        # + Runners (workspace + console) embaixo (minimizável).
         pane = builder.pane
         layout = pane.layout()
         layout.removeWidget(self.terminal_host)
 
-        self._bottom_tabs = QTabWidget(pane)
-        self._bottom_tabs.setDocumentMode(True)
-        self._bottom_tabs.setTabPosition(QTabWidget.TabPosition.North)
-        # Tabs fixas (Claude console / Runners / Runners console) não
-        # podem fechar; só EditorTabs abertas via FilesPanel.
-        self._bottom_tabs.tabCloseRequested.connect(self._on_central_tab_close)
-        # QSS estilo IDE: tab ativa com underline azul, sem borda esquerda
-        self._bottom_tabs.setStyleSheet(
+        from PySide6.QtWidgets import QSplitter as _QSp
+        self._bottom_sub_splitter = _QSp(Qt.Orientation.Vertical)
+        self._bottom_sub_splitter.setHandleWidth(SPLITTER_HANDLE_W)
+        self._bottom_sub_splitter.setStyleSheet(
+            "QSplitter::handle { background: #2a2a2a; }"
+            "QSplitter::handle:hover { background: #3d6ea8; }"
+        )
+
+        # ----- Tabs do TERMINAL (só Claude console + EditorTabs) -----
+        tabs_qss = (
             "QTabWidget::pane { border: 0; }"
             "QTabBar { background: #161616; }"
             "QTabBar::tab { background: #161616; color: #9aa0a6; "
@@ -959,17 +962,26 @@ class MainWindow(QMainWindow):
             "  border-bottom: 2px solid #3d6ea8; }"
             "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
         )
+        self._terminal_tabs = QTabWidget(pane)
+        self._terminal_tabs.setDocumentMode(True)
+        self._terminal_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self._terminal_tabs.setStyleSheet(tabs_qss)
+        # Tabs fixas (Claude console) não fecham; só EditorTabs abertas
+        # via FilesPanel. Handler é _on_central_tab_close.
+        self._terminal_tabs.tabCloseRequested.connect(self._on_central_tab_close)
+
         from .icons import ICONS, ic
-        idx_console = self._bottom_tabs.addTab(self.terminal_host, "Claude console")
-        self._bottom_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
+        idx_console = self._terminal_tabs.addTab(self.terminal_host, "Claude console")
+        self._terminal_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
 
-        # Botão "+" no canto da tab bar foi removido — tentativas de
-        # alinhar via setCornerWidget sempre quebraram em algum tema/DPI.
-        # Caminhos alternativos pra abrir nova sessão:
-        #   - Ctrl+N (atalho global)
-        #   - botão + no card de cada workspace na sidebar (terminal_child)
-        #   - botão + na row "WORKSPACES" do header da sidebar
+        # Mantém alias _bottom_tabs apontando pro terminal_tabs pra evitar
+        # quebrar callsites legados que assumiam um único QTabWidget. EditorTabs
+        # abertas via FilesPanel vão pro terminal_tabs naturalmente.
+        self._bottom_tabs = self._terminal_tabs
 
+        self._bottom_sub_splitter.addWidget(self._terminal_tabs)
+
+        # ----- Tabs dos RUNNERS (workspace + console) -----
         self.runner_host = QStackedWidget()
         self.runner_host.setMinimumHeight(0)
         runner_empty = QLabel("Selecione um workspace para ver seus runners.")
@@ -978,11 +990,7 @@ class MainWindow(QMainWindow):
             "background: #0e0e0e; color: #555; padding: 28px;"
         )
         self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
-        idx_rw = self._bottom_tabs.addTab(self.runner_host, "Runners workspace")
-        self._bottom_tabs.setTabIcon(idx_rw, ic(ICONS["runners_workspace"], color="#9aa0a6"))
 
-        # Terceira aba — runners de console (cada aba Claude tem seu próprio
-        # painel; aqui aparece o painel do console ativo).
         self.console_runner_host = QStackedWidget()
         self.console_runner_host.setMinimumHeight(0)
         crh_empty = QLabel(
@@ -994,23 +1002,89 @@ class MainWindow(QMainWindow):
         crh_empty.setStyleSheet(
             "background: #0e0e0e; color: #555; padding: 28px;"
         )
-        self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
-            crh_empty
+        self._console_runner_placeholder_idx = self.console_runner_host.addWidget(crh_empty)
+
+        # Container do runners pane: header com botão minimize + tabs
+        self._runners_pane = QWidget()
+        rp_layout = QVBoxLayout(self._runners_pane)
+        rp_layout.setContentsMargins(0, 0, 0, 0)
+        rp_layout.setSpacing(0)
+
+        runners_header = QWidget()
+        runners_header.setStyleSheet(
+            "background: #161616; border-bottom: 1px solid #2a2a2a;"
         )
-        idx_rc = self._bottom_tabs.addTab(self.console_runner_host, "Runners (console)")
-        self._bottom_tabs.setTabIcon(idx_rc, ic(ICONS["runners_console"], color="#9aa0a6"))
+        rh_layout = QHBoxLayout(runners_header)
+        rh_layout.setContentsMargins(8, 3, 4, 3)
+        rh_layout.setSpacing(4)
+        runners_title = QLabel("Runners")
+        runners_title.setStyleSheet(
+            "color: #c8c8c8; font-size: 11px; font-weight: 600;"
+        )
+        rh_layout.addWidget(runners_title)
+        rh_layout.addStretch(1)
+        from PySide6.QtCore import QSize as _QS
+        from PySide6.QtWidgets import QPushButton as _QPB
+        self._runners_minimize_btn = _QPB()
+        self._runners_minimize_btn.setIcon(ic("fa5s.chevron-down", color="#c8c8c8"))
+        self._runners_minimize_btn.setIconSize(_QS(11, 11))
+        self._runners_minimize_btn.setFixedSize(22, 20)
+        self._runners_minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._runners_minimize_btn.setToolTip("Minimizar área de runners")
+        self._runners_minimize_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
+            "QPushButton:hover { background: #2a2a2a; }"
+        )
+        self._runners_minimize_btn.clicked.connect(self._toggle_runners_minimized)
+        rh_layout.addWidget(self._runners_minimize_btn)
+        rp_layout.addWidget(runners_header)
 
-        # Liga o close button MAS remove ele das 3 abas fixas (só EditorTabs
-        # abertas via FilesPanel devem ter ✕). Tab abertas depois pegam o
-        # botão default (visível) — gerenciamento via _on_central_tab_close.
-        self._bottom_tabs.setTabsClosable(True)
-        from PySide6.QtWidgets import QTabBar
-        for fixed_idx in (idx_console, idx_rw, idx_rc):
-            for side in (QTabBar.ButtonPosition.RightSide, QTabBar.ButtonPosition.LeftSide):
-                self._bottom_tabs.tabBar().setTabButton(fixed_idx, side, None)
+        self._runners_tabs = QTabWidget(pane)
+        self._runners_tabs.setDocumentMode(True)
+        self._runners_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self._runners_tabs.setStyleSheet(tabs_qss)
+        idx_rw = self._runners_tabs.addTab(self.runner_host, "Runners workspace")
+        self._runners_tabs.setTabIcon(idx_rw, ic(ICONS["runners_workspace"], color="#9aa0a6"))
+        idx_rc = self._runners_tabs.addTab(self.console_runner_host, "Runners (console)")
+        self._runners_tabs.setTabIcon(idx_rc, ic(ICONS["runners_console"], color="#9aa0a6"))
+        rp_layout.addWidget(self._runners_tabs, stretch=1)
 
-        layout.addWidget(self._bottom_tabs, stretch=1)
+        self._bottom_sub_splitter.addWidget(self._runners_pane)
+        # Default: terminal ocupa 2/3, runners 1/3.
+        self._bottom_sub_splitter.setSizes([600, 300])
+
+        layout.addWidget(self._bottom_sub_splitter, stretch=1)
         return pane
+
+    def _toggle_runners_minimized(self) -> None:
+        """Alterna entre runners pane normal vs minimizado (só header
+        visível). Espelha o min/max do terminal."""
+        sizes = self._bottom_sub_splitter.sizes()
+        if len(sizes) < 2:
+            return
+        total = sum(sizes)
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ic
+        # Header runners tem ~28px (3+font+3+border)
+        header_h = 28
+        if sizes[1] > header_h + 4:
+            # Minimizar
+            self._runners_last_size = sizes[1]
+            self._runners_tabs.setVisible(False)
+            self._bottom_sub_splitter.setSizes([total - header_h, header_h])
+            self._runners_minimize_btn.setIcon(ic("fa5s.chevron-up", color="#c8c8c8"))
+            self._runners_minimize_btn.setIconSize(_QS(11, 11))
+            self._runners_minimize_btn.setToolTip("Restaurar área de runners")
+        else:
+            # Restaurar
+            target = getattr(self, "_runners_last_size", 300) or 300
+            self._runners_tabs.setVisible(True)
+            self._bottom_sub_splitter.setSizes([max(total - target, 200), target])
+            self._runners_minimize_btn.setIcon(ic("fa5s.chevron-down", color="#c8c8c8"))
+            self._runners_minimize_btn.setIconSize(_QS(11, 11))
+            self._runners_minimize_btn.setToolTip("Minimizar área de runners")
+        self._schedule_layout_save()
 
     def _open_file_finder_dialog(self, initial_query: str = "") -> None:
         """Abre o modal de localizar arquivo usando as pastas do workspace
@@ -2240,7 +2314,7 @@ class MainWindow(QMainWindow):
             for area in self._console_runner_areas.get(workspace.id, {}).values():
                 if area.console_session_id() == sid:
                     self.console_runner_host.setCurrentWidget(area)
-                    self._bottom_tabs.setCurrentWidget(self.console_runner_host)
+                    self._runners_tabs.setCurrentWidget(self.console_runner_host)
                     area.focus_runner(runner_id)
                     return
             # Área ainda não criada → garante criando via terminal dono.
@@ -2256,7 +2330,7 @@ class MainWindow(QMainWindow):
             # Não achou console dono (foi encerrado?) — fallback pro workspace.
         area = self._get_or_create_runner_area(workspace)
         self.runner_host.setCurrentWidget(area)
-        self._bottom_tabs.setCurrentWidget(self.runner_host)
+        self._runners_tabs.setCurrentWidget(self.runner_host)
         area.focus_runner(runner_id)
 
     def _focus_terminal_tab(self, workspace: Workspace, tab_id: int) -> None:
@@ -2445,7 +2519,7 @@ class MainWindow(QMainWindow):
         if existing is not None:
             # Já existe — só foca a aba "Runners (console)" no painel certo.
             self.console_runner_host.setCurrentWidget(existing)
-            self._bottom_tabs.setCurrentWidget(self.console_runner_host)
+            self._runners_tabs.setCurrentWidget(self.console_runner_host)
             return existing
         sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
         area = RunnerArea(workspace, settings=self.settings, console_session_id=sid)
@@ -2477,7 +2551,7 @@ class MainWindow(QMainWindow):
         # próprio terminal. O toolbar `▤ Runners` do terminal só foca a aba.
         self.console_runner_host.addWidget(area)
         self.console_runner_host.setCurrentWidget(area)
-        self._bottom_tabs.setCurrentWidget(self.console_runner_host)
+        self._runners_tabs.setCurrentWidget(self.console_runner_host)
         # Atualiza o grupo "Runners console" da sidebar — agora que a
         # area existe, o lookup pelo `_console_runner_areas` casa o sid
         # com os runners persistidos (chave pending criada no boot

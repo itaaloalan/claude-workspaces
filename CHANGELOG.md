@@ -6,6 +6,27 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.0] — 2026-05-21
+
+### Mudado
+- **Runners separados do Claude console em sub-splitter vertical**
+  (`ui/main_window._build_terminal_pane`):
+  - Topo do pane: `_terminal_tabs` = só Claude console (+ EditorTabs
+    abertas via FilesPanel).
+  - Embaixo: `_runners_pane` = header "Runners" com botão minimize
+    + `_runners_tabs` (Runners workspace + Runners console).
+  - Sub-splitter vertical entre os dois com handle redimensionável.
+  - Default sizes: terminal 2/3, runners 1/3.
+- Click no chevron ▼ do runners header colapsa só o conteúdo dos
+  runners (header permanece visível pra restaurar). Click no ▲
+  restaura tamanho anterior. Espelha o min/max do terminal.
+
+### Mantido
+- `_bottom_tabs` aliasado pra `_terminal_tabs` — callsites legados
+  que abriam EditorTab via FilesPanel continuam funcionando.
+- `setCurrentWidget(runner_host / console_runner_host)` foi
+  redirecionado pra `_runners_tabs` em ~4 callsites (sed).
+
 ## [0.59.8] — 2026-05-21
 
 ### Adicionado
