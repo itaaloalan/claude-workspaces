@@ -48,6 +48,12 @@ class TerminalArea(QWidget):
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
+        # Tab bar interna é redundante com a listagem do sidebar
+        # ("Sessões Claude"). Esconde a barra — `setCurrentIndex` continua
+        # funcionando, então o switch via sidebar (`_focus_terminal_tab`)
+        # segue valendo. O header do `_terminal_pane_widget` agora mostra
+        # workspace + console ativos em destaque.
+        self.tabs.tabBar().setVisible(False)
         # QSS pra match com a tab bar externa do _terminal_tabs — sem
         # bordas estranhas. Tab ativa com underline azul fino. Pane com
         # bg do terminal pra evitar faixa branca atrás dos terminais

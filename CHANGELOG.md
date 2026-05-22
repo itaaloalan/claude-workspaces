@@ -6,6 +6,25 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.2] — 2026-05-22
+
+### Mudado
+- **Tab bar interna do TerminalArea escondida + header do terminal pane
+  destacando workspace · console** (`ui/terminal_area.py`,
+  `ui/main_window.py`):
+  - A QTabBar interna de cada `TerminalArea` (que listava `#1 …`,
+    `#2 …` redundante com o sidebar "Sessões Claude") foi escondida
+    via `tabBar().setVisible(False)`. O switch entre consoles segue
+    funcionando via `setCurrentIndex` (`_focus_terminal_tab` no
+    sidebar) — única fonte de seleção agora é o próprio sidebar.
+  - Header do `_terminal_pane_widget` deixou de mostrar "Terminal"
+    estático e passou a exibir `workspace <nome verde> · console
+    <#N título amarelo>`, atualizando em tempo real via
+    `_refresh_terminal_pane_title` plugado em:
+    `terminal_host.currentChanged` (troca de workspace),
+    `area.tabs.currentChanged` (troca de console),
+    `area.tab_activity_changed` (rename / status / working).
+
 ## [0.61.1] — 2026-05-22
 
 ### Adicionado

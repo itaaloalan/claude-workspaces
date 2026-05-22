@@ -960,6 +960,9 @@ class MainWindow(QMainWindow):
         self.terminal_host.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
         )
+        self.terminal_host.currentChanged.connect(
+            lambda _i: self._refresh_terminal_pane_title()
+        )
 
         # Embute o host num sub-splitter vertical: Claude console em cima
         # + Runners (workspace + console) embaixo (minimizável).
@@ -1015,13 +1018,18 @@ class MainWindow(QMainWindow):
             "background: #161616; border-bottom: 1px solid #2a2a2a;"
         )
         th_layout = QHBoxLayout(terminal_header)
-        th_layout.setContentsMargins(8, 3, 4, 3)
-        th_layout.setSpacing(4)
-        terminal_title = QLabel("Terminal")
-        terminal_title.setStyleSheet(
-            "color: #c8c8c8; font-size: 11px; font-weight: 600;"
+        th_layout.setContentsMargins(10, 5, 4, 5)
+        th_layout.setSpacing(8)
+        # Label dinâmico: workspace + console ativo, ambos em destaque.
+        # Substitui a tab bar interna do TerminalArea (que foi escondida)
+        # — única fonte de "qual console estou olhando" agora é este header
+        # + a seleção no sidebar (Sessões Claude).
+        self._terminal_pane_title = QLabel("Claude console")
+        self._terminal_pane_title.setTextFormat(Qt.TextFormat.RichText)
+        self._terminal_pane_title.setStyleSheet(
+            "color: #c8c8c8; font-size: 12px;"
         )
-        th_layout.addWidget(terminal_title)
+        th_layout.addWidget(self._terminal_pane_title)
         th_layout.addStretch(1)
         from PySide6.QtWidgets import QPushButton as _QPB2
         self._terminal_pane_minimize_btn = _QPB2()
@@ -2543,6 +2551,7 @@ class MainWindow(QMainWindow):
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
+                self._refresh_terminal_pane_title()
                 break
 
     def _show_settings(self) -> None:
@@ -2581,6 +2590,39 @@ class MainWindow(QMainWindow):
         # resolvido depois da primeira instalação (signal não chegou ou
         # o JSONL só apareceu mais tarde).
         self._refresh_runner_children(workspace.id)
+
+    def _refresh_terminal_pane_title(self) -> None:
+        """Atualiza o header do terminal pane com workspace + console
+        atualmente selecionados, em destaque. Substitui a tab bar interna
+        do TerminalArea (que foi escondida) como única fonte do "qual
+        console estou olhando"."""
+        if not hasattr(self, "_terminal_pane_title"):
+            return
+        ws = self._current_workspace()
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        if ws is None or term is None or not isinstance(term, TerminalWidget):
+            self._terminal_pane_title.setText(
+                "<span style='color:#666'>Claude console — "
+                "selecione um console no sidebar</span>"
+            )
+            return
+        # `#N título` no mesmo formato usado pelo sidebar/área.
+        try:
+            display = area._compute_tab_display(term)
+        except Exception:
+            display = term.effective_title() or "console"
+        ws_html = (
+            f"<span style='color:#5ac35a;font-weight:600'>{ws.name}</span>"
+        )
+        console_html = (
+            f"<span style='color:#e5b53b;font-weight:600'>{display}</span>"
+        )
+        self._terminal_pane_title.setText(
+            f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
+            f"<span style='color:#555'>·</span> "
+            f"<span style='color:#9aa0a6'>console</span> {console_html}"
+        )
 
     def _sync_console_runner_host(self) -> None:
         """Mostra na aba 'Runners (console)' o painel do console ativo
@@ -2978,6 +3020,15 @@ class MainWindow(QMainWindow):
         # /api/oauth/usage gasta cota desnecessária do rate limit).
         area.tabs.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
+        )
+        # Header do terminal pane mostra workspace+console — precisa
+        # atualizar quando muda console dentro do mesmo workspace, e
+        # também quando o título/atividade muda (rename, working/idle…).
+        area.tabs.currentChanged.connect(
+            lambda _i: self._refresh_terminal_pane_title()
+        )
+        area.tab_activity_changed.connect(
+            lambda *_a: self._refresh_terminal_pane_title()
         )
 
     def _handle_tab_activity(
