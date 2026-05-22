@@ -19,6 +19,16 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
 - **`ui/main_window.py`**: passa `timeout_ms_provider=lambda:
   self.settings.notify_timeout_ms` ao montar o adapter.
 
+## [0.76.3] — 2026-05-22
+
+### Modificado — Runners como card no estilo do mockup
+- **`ui/runner_child_widget.py`**: reescrito como **card** de 44px no
+  mesmo padrão visual das sessões — ícone `mdi6.cube-outline` num
+  quadrado arredondado à esquerda, nome em bold + linha de status
+  ("● Running"/"● Idle"/"● Failed") logo abaixo, URL compacta (host:
+  port) + botão ▶/■ + menu `⋯` (hover-reveal) à direita. Bg
+  `BG_SURFACE` + borda 1px `BORDER_INPUT` + radius 6px.
+
 ## [0.76.2] — 2026-05-22
 
 ### Modificado — Workspace como card visual

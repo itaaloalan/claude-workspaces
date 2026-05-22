@@ -1,15 +1,10 @@
-"""Widget custom pros children "runner" da sidebar — uma linha compacta
-por runner do workspace, com nome + host:port + estado + botão ▶/■.
+"""Widget custom pros children "runner" da sidebar — um card por runner
+do workspace, no estilo do mockup:
 
-    [●]  runner-name  host:port    [▶]
-
-Estados:
-    idle/exited → bolinha cinza, botão ▶
-    running     → bolinha verde, botão ■
-    error       → bolinha vermelha, botão ▶
-
-O host:port só aparece quando há URL conhecida (detectada na saída ou
-configurada em `browser_url`). Vazio = label oculta.
+    ┌─────────────────────────────────────────────────┐
+    │ [📦]  glassfish-ogpms          host:port  [▶] ⋯ │
+    │       ● Running                                 │
+    └─────────────────────────────────────────────────┘
 """
 
 from __future__ import annotations
@@ -17,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from urllib.parse import urlparse
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -30,10 +25,17 @@ from PySide6.QtWidgets import (
 from . import theme
 
 _STATE_COLOR = {
-    "idle": theme.TEXT_DISABLED,
-    "exited": theme.TEXT_DISABLED,
+    "idle": theme.TEXT_FAINT,
+    "exited": theme.TEXT_FAINT,
     "running": theme.SUCCESS,
     "error": theme.DANGER,
+}
+
+_STATE_LABEL = {
+    "idle": "Idle",
+    "exited": "Idle",
+    "running": "Running",
+    "error": "Failed",
 }
 
 _BTN_QSS = (
@@ -41,39 +43,34 @@ _BTN_QSS = (
     f"  background: transparent;"
     f"  color: {theme.TEXT_FAINT};"
     f"  border: 0;"
-    f"  border-radius: 4px;"
-    f"  padding: 0px 4px;"
-    f"  font-size: 12px;"
+    f"  border-radius: {theme.RADIUS_SM}px;"
+    f"  padding: 0;"
+    f"  font-size: 13px;"
     f"}}"
     f"QPushButton:hover {{"
-    f"  background: {theme.BG_SURFACE};"
+    f"  background: {theme.BG_PANEL};"
     f"  color: {theme.TEXT_LINK};"
     f"}}"
 )
 
-
-_ROW_QSS = (
-    f"QWidget#RunnerChildRow {{"
-    f"  background: {theme.BG_DEEP};"
-    f"  border: 1px solid {theme.BORDER_SOFT};"
-    f"  border-left: 2px solid {theme.BORDER};"
-    f"  border-radius: {theme.RADIUS_SM}px;"
+_CARD_QSS = (
+    f"QWidget#RunnerChildCard {{"
+    f"  background: {theme.BG_SURFACE};"
+    f"  border: 1px solid {theme.BORDER_INPUT};"
+    f"  border-radius: {theme.RADIUS_MD}px;"
     f"}}"
 )
 
 
 class RunnerChildWidget(QWidget):
-    """Linha compacta de runner na sidebar (filho de workspace).
+    """Card de runner na sidebar (filho de workspace).
 
-    Layout:
-        Linha 1: [●] ⚙ nome host:port [▶]
-        Linha 2 (opcional): status curto (ex.: "reiniciando"), só aparece
-            quando set_status() recebe texto não vazio. Emite size_hint_changed
-            pra MainWindow reajustar o sizeHint do QTreeWidgetItem.
+    Layout (~44px):
+        Linha 1: [icon]  nome             host:port  [▶/■]  [⋯]
+        Linha 2:         status (Running/Idle/Failed)
     """
 
-    _ROW1_HEIGHT = 18
-    _ROW2_HEIGHT = 12
+    _CARD_HEIGHT = 44
 
     size_hint_changed = Signal(int)
 
@@ -85,43 +82,64 @@ class RunnerChildWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(self._ROW1_HEIGHT)
-        self.setMaximumHeight(self._ROW1_HEIGHT)
+        self.setMinimumHeight(self._CARD_HEIGHT)
+        self.setMaximumHeight(self._CARD_HEIGHT)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(0, 2, 0, 2)
         outer.setSpacing(0)
 
-        row_widget = QWidget(self)
-        row_widget.setObjectName("RunnerChildRow")
-        row_widget.setStyleSheet(_ROW_QSS)
-        row_widget.setFixedHeight(self._ROW1_HEIGHT)
-        row = QHBoxLayout(row_widget)
-        row.setContentsMargins(6, 0, 4, 0)
-        row.setSpacing(6)
+        card = QWidget(self)
+        card.setObjectName("RunnerChildCard")
+        card.setStyleSheet(_CARD_QSS)
+        outer.addWidget(card)
 
-        self._dot = QLabel("")
-        self._dot.setFixedSize(8, 8)
-        row.addWidget(self._dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(8, 4, 6, 4)
+        card_layout.setSpacing(8)
 
-        self._icon = QLabel("⚙")
+        # Ícone à esquerda — quadradinho com cube/box (match mockup).
+        from .icons import ic as _ic
+        self._icon = QLabel()
+        self._icon.setFixedSize(26, 26)
+        self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon.setStyleSheet(
-            f"color: {theme.TEXT_FAINT}; font-size: 11px;"
+            f"QLabel {{ background: {theme.BG_DEEP}; "
+            f"border: 1px solid {theme.BORDER_SOFT}; "
+            f"border-radius: {theme.RADIUS_SM}px; }}"
         )
-        row.addWidget(self._icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._icon.setPixmap(
+            _ic("mdi6.cube-outline", color=theme.TEXT_FADED).pixmap(QSize(14, 14))
+        )
+        card_layout.addWidget(self._icon, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # Bloco central: nome em cima, status embaixo.
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(0)
 
         self._name_label = QLabel(name)
         self._name_label.setStyleSheet(
-            f"color: {theme.TEXT_PRIMARY}; font-size: 11px;"
+            f"color: {theme.TEXT_PRIMARY}; font-size: 12px; font-weight: 600;"
         )
         self._name_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
         )
-        row.addWidget(self._name_label, stretch=1)
+        text_col.addWidget(self._name_label)
 
+        self._status_label = QLabel("")
+        self._status_label.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
+        )
+        text_col.addWidget(self._status_label)
+        card_layout.addLayout(text_col, stretch=1)
+
+        # URL compacta (host:port) — só aparece se houver
         self._addr_label = QLabel("")
         self._addr_label.setStyleSheet(
-            f"QLabel {{ color: {theme.TEXT_FAINT}; font-size: 10px; }}"
+            f"QLabel {{ color: {theme.TEXT_FAINT}; font-size: 10px; "
+            f"padding: 0 4px; }}"
             f"QLabel:hover {{ color: {theme.TEXT_LINK}; "
             f"text-decoration: underline; }}"
         )
@@ -129,28 +147,33 @@ class RunnerChildWidget(QWidget):
         self._addr_label.setVisible(False)
         self._addr_url: str = ""
         self._addr_label.mousePressEvent = self._on_addr_clicked  # type: ignore[assignment]
-        row.addWidget(self._addr_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_layout.addWidget(self._addr_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._toggle_btn = QPushButton("▶")
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._toggle_btn.setFixedSize(20, 18)
+        self._toggle_btn.setFixedSize(24, 24)
         self._toggle_btn.setStyleSheet(_BTN_QSS)
         self._toggle_btn.setToolTip("Iniciar runner")
         self._toggle_btn.clicked.connect(lambda _=False: on_toggle())
-        row.addWidget(self._toggle_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        card_layout.addWidget(self._toggle_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        outer.addWidget(row_widget)
-
-        self._status_label = QLabel("")
-        self._status_label.setStyleSheet(
-            f"color: {theme.TEXT_FAINT}; font-size: 10px;"
-            "padding: 0px 0px 2px 22px;"
-        )
-        self._status_label.setVisible(False)
-        outer.addWidget(self._status_label)
+        self._more_btn = QPushButton("⋯")
+        self._more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._more_btn.setFixedSize(24, 24)
+        self._more_btn.setStyleSheet(_BTN_QSS)
+        self._more_btn.setToolTip("Mais ações")
+        self._more_btn.setVisible(False)
+        card_layout.addWidget(self._more_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._state = "idle"
         self._apply_state()
+
+    def event(self, e: QEvent) -> bool:  # type: ignore[override]
+        if e.type() == QEvent.Type.HoverEnter:
+            self._more_btn.setVisible(True)
+        elif e.type() == QEvent.Type.HoverLeave:
+            self._more_btn.setVisible(False)
+        return super().event(e)
 
     def set_name(self, name: str) -> None:
         self._name_label.setText(name)
@@ -182,40 +205,33 @@ class RunnerChildWidget(QWidget):
             pass
 
     def set_status(self, status: str) -> None:
-        """Mostra a fase atual (linha 2) só durante transições.
-
-        Só faz sentido visualizar fases transientes (reiniciando, parando,
-        carregando) — estados estáveis (rodando, parado, erro) já são
-        cobertos pela bolinha colorida na linha 1.
-        """
+        """Fases transientes (reiniciando, parando, carregando) sobrescrevem
+        o label de estado padrão. Estados estáveis ficam na palavra do
+        _STATE_LABEL (Running/Idle/Failed) pintada pelo _apply_state."""
         status = (status or "").strip().lower()
         transient = {"reiniciando", "parando", "carregando"}
-        show = status in transient
-        was_visible = self._status_label.isVisible()
-        if show:
+        if status in transient:
             self._status_label.setText(status)
-            self._status_label.setVisible(True)
-            target = self._ROW1_HEIGHT + self._ROW2_HEIGHT
+            self._status_label.setStyleSheet(
+                f"color: {theme.WARNING}; font-size: 10px;"
+            )
         else:
-            self._status_label.clear()
-            self._status_label.setVisible(False)
-            target = self._ROW1_HEIGHT
-        self.setMinimumHeight(target)
-        self.setMaximumHeight(target)
-        if was_visible != show:
-            self.size_hint_changed.emit(target)
+            self._apply_state()  # restaura label/cor padrão
 
     def preferred_height(self) -> int:
-        return self.maximumHeight()
+        return self._CARD_HEIGHT
 
     def set_state(self, state: str) -> None:
         self._state = state if state in _STATE_COLOR else "idle"
         self._apply_state()
 
     def _apply_state(self) -> None:
-        color = _STATE_COLOR.get(self._state, theme.TEXT_DISABLED)
-        self._dot.setStyleSheet(
-            f"background-color: {color}; border-radius: 4px;"
+        color = _STATE_COLOR.get(self._state, theme.TEXT_FAINT)
+        label = _STATE_LABEL.get(self._state, "Idle")
+        # Bolinha colorida no início do status line.
+        self._status_label.setText(f"●  {label}")
+        self._status_label.setStyleSheet(
+            f"color: {color}; font-size: 10px;"
         )
         if self._state == "running":
             self._toggle_btn.setText("■")
