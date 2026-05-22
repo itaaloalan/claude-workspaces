@@ -882,6 +882,17 @@ class MainWindow(QMainWindow):
         panel.open_file_requested.connect(self._open_file_as_central_tab)
         return panel
 
+    def _refresh_terminal_tabs_bar(self) -> None:
+        """A tab bar do `_terminal_tabs` só aparece quando há mais que a
+        aba 'Claude console' (i.e. quando o user abriu arquivos via
+        FilesPanel — EditorTabs). Em workflow padrão fica escondida pra
+        evitar redundância com o header workspace·console."""
+        if not hasattr(self, "_terminal_tabs"):
+            return
+        self._terminal_tabs.tabBar().setVisible(
+            self._terminal_tabs.count() > 1
+        )
+
     def _on_central_tab_close(self, idx: int) -> None:
         """Fecha a aba SE for um EditorTab. Abas fixas (Claude console /
         Runners workspace / Runners console) ignoram o close request."""
@@ -890,6 +901,7 @@ class MainWindow(QMainWindow):
         if isinstance(w, EditorTab):
             self._bottom_tabs.removeTab(idx)
             w.deleteLater()
+            self._refresh_terminal_tabs_bar()
 
     def _open_file_as_central_tab(self, abs_path: str) -> None:
         """Abre `abs_path` como nova aba no `_bottom_tabs`. Se já estiver
@@ -916,6 +928,7 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.setCurrentIndex(idx)
         # Garante que tabsClosable está ON pra essa aba poder fechar
         self._bottom_tabs.setTabsClosable(True)
+        self._refresh_terminal_tabs_bar()
 
     def _build_right_dock(self) -> QWidget:
         self.dock_coord = DockCoordinator(
@@ -996,6 +1009,12 @@ class MainWindow(QMainWindow):
         # Tabs fixas (Claude console) não fecham; só EditorTabs abertas
         # via FilesPanel. Handler é _on_central_tab_close.
         self._terminal_tabs.tabCloseRequested.connect(self._on_central_tab_close)
+        # Esconde a tab bar enquanto só existir a aba "Claude console"
+        # — ela vira ruído já que o header logo acima mostra
+        # workspace · console. Quando EditorTabs forem abertas via
+        # FilesPanel (count > 1), a barra reaparece automaticamente
+        # via `_refresh_terminal_tabs_bar`.
+        self._terminal_tabs.tabBar().setVisible(False)
 
         from .icons import ICONS, ic
         idx_console = self._terminal_tabs.addTab(self.terminal_host, "Claude console")
@@ -1032,6 +1051,7 @@ class MainWindow(QMainWindow):
         th_layout.addWidget(self._terminal_pane_title)
         th_layout.addStretch(1)
         from PySide6.QtWidgets import QPushButton as _QPB2
+        from PySide6.QtCore import QSize as _QS
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
             ic("fa5s.window-minimize", color="#c8c8c8")

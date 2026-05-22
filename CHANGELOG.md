@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.3] — 2026-05-22
+
+### Mudado
+- **Tab bar do `_terminal_tabs` escondida quando só tem "Claude console"**
+  (`ui/main_window.py`): com o header novo mostrando workspace·console,
+  a aba "Claude console" virou redundante. Agora a barra só aparece
+  quando o usuário abre EditorTabs via FilesPanel (count > 1).
+  `_refresh_terminal_tabs_bar` é chamado em `_open_file_as_central_tab`
+  e `_on_central_tab_close` pra alternar a visibilidade.
+
 ## [0.61.2] — 2026-05-22
 
 ### Mudado
