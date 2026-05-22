@@ -5,6 +5,7 @@ from PySide6.QtCore import QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -36,6 +37,10 @@ class SettingsPanel(QWidget):
         super().__init__()
         self.settings = settings
         self._workspace_getter = None
+        # NotificationService é injetado depois (MainWindow chama
+        # `set_notification_service`); até lá os controles do center
+        # ficam ocultos.
+        self._notif_service = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(20, 20, 20, 20)
@@ -119,6 +124,7 @@ class SettingsPanel(QWidget):
 
         outer.addLayout(form)
 
+        outer.addWidget(self._build_claude_section())
         outer.addWidget(self._build_worktree_section())
         outer.addWidget(self._build_notifications_section())
         outer.addWidget(self._build_status_detection_section())
@@ -153,6 +159,19 @@ class SettingsPanel(QWidget):
     def _refresh_fields(self) -> None:
         self._claude_cmd.setText(self.settings.claude_command)
         self._claude_args.setText(" ".join(shlex.quote(a) for a in self.settings.claude_extra_args))
+        self._set_combo_value(
+            self._claude_permission_mode,
+            self._permission_mode_choices,
+            self.settings.claude_permission_mode,
+        )
+        self._set_combo_value(
+            self._claude_model, self._model_choices, self.settings.claude_model
+        )
+        self._set_combo_value(
+            self._claude_effort, self._effort_choices, self.settings.claude_effort
+        )
+        self._claude_allowed_tools.setText(self.settings.claude_allowed_tools)
+        self._claude_disallowed_tools.setText(self.settings.claude_disallowed_tools)
         self._terminal_cmd.setText(self.settings.terminal_command)
         self._shell_cmd.setText(self.settings.shell_command)
         self._vscode_cmd.setText(self.settings.vscode_command)
@@ -186,6 +205,17 @@ class SettingsPanel(QWidget):
         except ValueError as e:
             QMessageBox.warning(self, "Args inválidos", f"Não consegui parsear: {e}")
             return
+        self.settings.claude_permission_mode = self._get_combo_value(
+            self._claude_permission_mode, self._permission_mode_choices
+        )
+        self.settings.claude_model = self._get_combo_value(
+            self._claude_model, self._model_choices
+        )
+        self.settings.claude_effort = self._get_combo_value(
+            self._claude_effort, self._effort_choices
+        )
+        self.settings.claude_allowed_tools = self._claude_allowed_tools.text().strip()
+        self.settings.claude_disallowed_tools = self._claude_disallowed_tools.text().strip()
         self.settings.terminal_command = self._terminal_cmd.text().strip() or "konsole"
         self.settings.shell_command = self._shell_cmd.text().strip()
         self.settings.vscode_command = self._vscode_cmd.text().strip() or "code"
@@ -241,6 +271,124 @@ class SettingsPanel(QWidget):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def _build_claude_section(self) -> QWidget:
+        box = QGroupBox("Claude — defaults da sessão")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "Estas opções viram flags do <code>claude</code> CLI em toda "
+            "sessão lançada pelo app (console embutido, terminal externo, "
+            "resume, runner-gen). Você ainda pode trocar modo/modelo/effort "
+            "depois — Shift+Tab cicla o modo e <code>/model</code> "
+            "<code>/effort</code> trocam dentro da sessão."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        self._claude_permission_mode = QComboBox()
+        self._claude_permission_mode.setEditable(False)
+        self._permission_mode_choices: list[tuple[str, str]] = [
+            ("", "(default do Claude)"),
+            ("default", "default — pergunta a cada edição"),
+            ("acceptEdits", "acceptEdits — edita sem pedir"),
+            ("plan", "plan — planeja antes de editar"),
+            ("auto", "auto — escolhe o modo por tarefa"),
+            ("bypassPermissions", "bypassPermissions — sem perguntas"),
+            ("dontAsk", "dontAsk — bypass silencioso"),
+        ]
+        for _val, label in self._permission_mode_choices:
+            self._claude_permission_mode.addItem(label)
+        self._claude_permission_mode.setToolTip(
+            "Equivalente a --permission-mode <mode> no claude CLI. Vazio = "
+            "não passa a flag (Claude usa seu default global)."
+        )
+        form.addRow("Modo inicial:", self._claude_permission_mode)
+
+        self._claude_model = QComboBox()
+        self._claude_model.setEditable(True)
+        self._model_choices: list[tuple[str, str]] = [
+            ("", "(default do Claude)"),
+            ("opus", "opus — mais capaz"),
+            ("sonnet", "sonnet — equilibrado"),
+            ("haiku", "haiku — mais rápido/barato"),
+        ]
+        for _val, label in self._model_choices:
+            self._claude_model.addItem(label)
+        self._claude_model.setToolTip(
+            "Equivalente a --model <id> no claude CLI. Aceita alias "
+            "(opus/sonnet/haiku) ou nome completo (ex.: claude-sonnet-4-6). "
+            "Edite o campo pra digitar um ID específico."
+        )
+        form.addRow("Modelo padrão:", self._claude_model)
+
+        self._claude_effort = QComboBox()
+        self._claude_effort.setEditable(False)
+        self._effort_choices: list[tuple[str, str]] = [
+            ("", "(default do Claude)"),
+            ("low", "low"),
+            ("medium", "medium"),
+            ("high", "high"),
+            ("xhigh", "xhigh"),
+            ("max", "max"),
+        ]
+        for _val, label in self._effort_choices:
+            self._claude_effort.addItem(label)
+        self._claude_effort.setToolTip(
+            "Equivalente a --effort <level> no claude CLI."
+        )
+        form.addRow("Effort padrão:", self._claude_effort)
+
+        self._claude_allowed_tools = QLineEdit()
+        self._claude_allowed_tools.setPlaceholderText('ex: "Bash(git *) Edit Read"')
+        self._claude_allowed_tools.setToolTip(
+            "Lista (separada por espaço ou vírgula) de tool specs liberadas. "
+            "Vira --allowedTools no claude CLI."
+        )
+        form.addRow("Tools permitidas:", self._claude_allowed_tools)
+
+        self._claude_disallowed_tools = QLineEdit()
+        self._claude_disallowed_tools.setPlaceholderText('ex: "Bash(rm *) WebFetch"')
+        self._claude_disallowed_tools.setToolTip(
+            "Lista de tool specs bloqueadas. Vira --disallowedTools no claude CLI."
+        )
+        form.addRow("Tools bloqueadas:", self._claude_disallowed_tools)
+
+        layout.addLayout(form)
+        return box
+
+    @staticmethod
+    def _set_combo_value(
+        combo: QComboBox, choices: list[tuple[str, str]], value: str
+    ) -> None:
+        for idx, (val, _label) in enumerate(choices):
+            if val == value:
+                combo.setCurrentIndex(idx)
+                return
+        if combo.isEditable() and value:
+            combo.setCurrentText(value)
+        else:
+            combo.setCurrentIndex(0)
+
+    @staticmethod
+    def _get_combo_value(
+        combo: QComboBox, choices: list[tuple[str, str]]
+    ) -> str:
+        idx = combo.currentIndex()
+        if 0 <= idx < len(choices):
+            preset_val, preset_label = choices[idx]
+            if combo.isEditable():
+                typed = combo.currentText().strip()
+                if typed and typed != preset_label:
+                    return typed
+            return preset_val
+        if combo.isEditable():
+            return combo.currentText().strip()
+        return ""
 
     def _build_worktree_section(self) -> QWidget:
         box = QGroupBox("Worktree / Git ao abrir Claude")
@@ -425,8 +573,130 @@ class SettingsPanel(QWidget):
 
         layout.addLayout(texts_form)
 
+        # --------------- Centro de Notificações (novo) ---------------
+        # Preferências persistidas em notifications.json (NotificationService),
+        # separado das settings tradicionais — granularidade por tipo /
+        # workspace, limite de histórico, limpar histórico.
+        layout.addSpacing(10)
+        self._notif_center_section = QWidget()
+        sec_layout = QVBoxLayout(self._notif_center_section)
+        sec_layout.setContentsMargins(0, 0, 0, 0)
+        sec_layout.setSpacing(6)
+        sec_layout.addWidget(QLabel("<b>Centro de Notificações</b>"))
+        sec_intro = QLabel(
+            "Controla o sino, a inbox e os toasts do desktop. As preferências "
+            "são salvas em <code>~/.config/claude-workspaces/notifications.json</code>."
+        )
+        sec_intro.setWordWrap(True)
+        sec_intro.setStyleSheet("color: #c8c8c8;")
+        sec_layout.addWidget(sec_intro)
+
+        self._notif_desktop_chk = QCheckBox(
+            "Mostrar toasts do desktop (D-Bus)"
+        )
+        self._notif_desktop_chk.setToolTip(
+            "Quando desligado, novas notificações ainda contam no sino e "
+            "aparecem na inbox, mas nenhum popup nativo é disparado."
+        )
+        sec_layout.addWidget(self._notif_desktop_chk)
+
+        # Mute por tipo — uma checkbox por kind.
+        from ..notifications import NotificationKind as _Kind
+        self._notif_kind_chks: dict[str, QCheckBox] = {}
+        kind_labels = {
+            _Kind.PERMISSION_REQUIRED: "Pedidos de permissão",
+            _Kind.AGENT_WAITING: "Agente aguardando",
+            _Kind.TASK_COMPLETED: "Tarefa concluída",
+            _Kind.TASK_FAILED: "Tarefa falhou",
+            _Kind.AGENT_IDLE: "Agente ocioso",
+            _Kind.LONG_RUNNING: "Execução longa",
+            _Kind.COST_WARNING: "Aviso de custo",
+            _Kind.WORKSPACE_ERROR: "Erro no workspace",
+        }
+        mute_box = QGroupBox("Silenciar por tipo")
+        mute_layout = QVBoxLayout(mute_box)
+        for kind, label in kind_labels.items():
+            chk = QCheckBox(label)
+            self._notif_kind_chks[kind] = chk
+            mute_layout.addWidget(chk)
+        sec_layout.addWidget(mute_box)
+
+        # Histórico
+        hist_form = QFormLayout()
+        self._notif_history_limit = QSpinBox()
+        self._notif_history_limit.setRange(50, 5000)
+        self._notif_history_limit.setSingleStep(50)
+        self._notif_history_limit.setToolTip(
+            "Quantas notificações guardar em disco (mais antigas são descartadas)."
+        )
+        hist_form.addRow("Histórico máximo:", self._notif_history_limit)
+        sec_layout.addLayout(hist_form)
+
+        row_clear = QHBoxLayout()
+        self._notif_clear_btn = QPushButton("Limpar histórico")
+        self._notif_clear_btn.setToolTip(
+            "Remove notificações já vistas/descartadas. Pendentes ficam."
+        )
+        self._notif_clear_btn.clicked.connect(self._on_notif_clear_history)
+        row_clear.addWidget(self._notif_clear_btn)
+        row_clear.addStretch()
+        sec_layout.addLayout(row_clear)
+
+        # Hooks salvar/carregar valores quando o service estiver setado.
+        self._notif_desktop_chk.toggled.connect(self._on_notif_pref_changed)
+        for chk in self._notif_kind_chks.values():
+            chk.toggled.connect(self._on_notif_pref_changed)
+        self._notif_history_limit.valueChanged.connect(self._on_notif_pref_changed)
+
+        # Esconde até o service ser injetado.
+        self._notif_center_section.setVisible(False)
+        layout.addWidget(self._notif_center_section)
+
         self._refresh_hook_status()
         return box
+
+    def set_notification_service(self, service) -> None:
+        """MainWindow injeta o `NotificationService` depois da construção,
+        ativando a sub-seção 'Centro de Notificações' e carregando os
+        valores atuais. Idempotente — pode ser chamado de novo se as
+        preferências forem alteradas externamente."""
+        self._notif_service = service
+        prefs = service.preferences
+        # Carrega valores sem disparar callbacks (block signals).
+        self._notif_desktop_chk.blockSignals(True)
+        self._notif_desktop_chk.setChecked(bool(prefs.get("desktop_enabled", True)))
+        self._notif_desktop_chk.blockSignals(False)
+        muted = set(prefs.get("muted_kinds") or [])
+        for kind, chk in self._notif_kind_chks.items():
+            chk.blockSignals(True)
+            chk.setChecked(kind in muted)
+            chk.blockSignals(False)
+        self._notif_history_limit.blockSignals(True)
+        self._notif_history_limit.setValue(int(prefs.get("history_limit", 500)))
+        self._notif_history_limit.blockSignals(False)
+        self._notif_center_section.setVisible(True)
+
+    def _on_notif_pref_changed(self, *_args) -> None:
+        if self._notif_service is None:
+            return
+        muted = [
+            kind for kind, chk in self._notif_kind_chks.items() if chk.isChecked()
+        ]
+        self._notif_service.set_preferences(
+            desktop_enabled=self._notif_desktop_chk.isChecked(),
+            muted_kinds=muted,
+            history_limit=int(self._notif_history_limit.value()),
+        )
+
+    def _on_notif_clear_history(self) -> None:
+        if self._notif_service is None:
+            return
+        removed = self._notif_service.clear_dismissed()
+        for n in self._notif_service.list():
+            if n.seen and not n.is_actionable():
+                self._notif_service.remove(n.id)
+                removed += 1
+        log.info("Limpou %s notificações do histórico", removed)
 
     def _build_status_detection_section(self) -> QWidget:
         box = QGroupBox("Detecção de status")

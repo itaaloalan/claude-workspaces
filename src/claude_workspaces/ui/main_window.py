@@ -187,6 +187,19 @@ class MainWindow(QMainWindow):
         # Inicializa a contagem do sino imediatamente — service pode ter
         # itens vindos do disco antes do primeiro signal.
         self.top_bar.set_inbox_count(self.notif_service.unread_count())
+        # Settings panel já foi criado no _build_ui — agora que o service
+        # existe, injeta pra ativar a sub-seção "Centro de Notificações".
+        self.settings_panel.set_notification_service(self.notif_service)
+
+        # Long-running detection: tab_id → epoch em que entrou em "working".
+        # Limpo quando volta pra idle/done. Timer abaixo escaneia a cada
+        # 30s e emite `long_running` ao passar do threshold (5 min).
+        self._working_since: dict[int, float] = {}
+        self._long_running_notified: set[int] = set()
+        self._long_running_timer = QTimer(self)
+        self._long_running_timer.setInterval(30_000)
+        self._long_running_timer.timeout.connect(self._scan_long_running)
+        self._long_running_timer.start()
         # Center (popup) — criado preguiçosamente na primeira abertura.
         self._notif_center: NotificationCenter | None = None
         self.launch_coord.sessions_refresh_requested.connect(
@@ -336,6 +349,8 @@ class MainWindow(QMainWindow):
         self.settings_panel = SettingsPanel(self.settings)
         self.settings_panel.set_workspace_getter(self._current_workspace)
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
+        if hasattr(self, "notif_service"):
+            self.settings_panel.set_notification_service(self.notif_service)
         # Wrap em QScrollArea — SettingsPanel tem várias rows de form
         # e seu minimumSizeHint natural (~870px) trava o right_splitter
         # com collapsible=False, impedindo o terminal de crescer/maximizar.
@@ -1955,6 +1970,36 @@ class MainWindow(QMainWindow):
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
+
+    def _scan_long_running(self) -> None:
+        """Escaneia tabs em "working" e emite `long_running` ao passar do
+        threshold (5min). Idempotente por tab — não re-emite até o tab sair
+        de working e voltar."""
+        if not self._working_since:
+            return
+        import time as _t
+        now = _t.monotonic()
+        threshold = 5 * 60  # 5min — futuro: settings.long_running_seconds
+        for tab_id, started in list(self._working_since.items()):
+            if tab_id in self._long_running_notified:
+                continue
+            if (now - started) < threshold:
+                continue
+            self._long_running_notified.add(tab_id)
+            activity = self.terminals_coord.state.activity.get(tab_id)
+            title_str = activity[2] if activity else "Console"
+            ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id)
+            ws = self.workspaces_coord.find_by_id(ws_id) if ws_id else None
+            ws_name = ws.name if ws else "Workspace"
+            elapsed_min = int((now - started) // 60)
+            self.notif_service.notify(
+                NotificationKind.LONG_RUNNING,
+                title=f"⏱ Execução longa — {ws_name}",
+                body=f"{title_str}\nRodando há {elapsed_min} min.",
+                workspace_id=ws_id,
+                tab_id=tab_id,
+                data={"elapsed_seconds": int(now - started)},
+            )
 
     def _refresh_unread_badges(self) -> None:
         """Re-pinta o badge laranja em cada WorkspaceItemWidget com a
@@ -3736,6 +3781,16 @@ class MainWindow(QMainWindow):
         self.plugin_coord.dispatch_session_event(
             tab_id, workspace_id, title, is_working, is_running, needs_decision
         )
+
+        # Long-running tracking: marca quando entrou em working, limpa
+        # quando sai. _scan_long_running emite a notif depois do threshold.
+        if is_working:
+            if tab_id not in self._working_since:
+                import time as _t
+                self._working_since[tab_id] = _t.monotonic()
+        else:
+            self._working_since.pop(tab_id, None)
+            self._long_running_notified.discard(tab_id)
 
         ws_item = self._find_workspace_item(workspace_id)
         if ws_item is None:

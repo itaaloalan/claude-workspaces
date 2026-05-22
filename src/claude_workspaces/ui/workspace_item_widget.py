@@ -127,6 +127,22 @@ class WorkspaceItemWidget(QWidget):
         self._badge.hide()
         row.addWidget(self._badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # Badge de notificações pendentes (laranja) — independente do badge
+        # verde de "rodando". Pintado pelo MainWindow via NotificationService.
+        self._notif_badge = QLabel("")
+        self._notif_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._notif_badge.setStyleSheet(
+            "QLabel {"
+            "  background: rgba(201, 119, 45, 80);"
+            "  color: #ffce99;"
+            "  font-size: 9px; font-weight: 700;"
+            "  padding: 1px 6px; border-radius: 7px;"
+            "}"
+        )
+        self._notif_badge.setToolTip("Notificações pendentes neste workspace")
+        self._notif_badge.hide()
+        row.addWidget(self._notif_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
         # Pin indicator — aparece à direita do nome quando pinned=True.
         # Empurra os botões de ação pro fim, junto da borda direita.
         from PySide6.QtCore import QSize
@@ -163,6 +179,14 @@ class WorkspaceItemWidget(QWidget):
 
     def set_label(self, label: str) -> None:
         self._label.setText(label)
+
+    def set_unread_count(self, count: int) -> None:
+        """Pinta badge laranja com nº de notificações pendentes — esconde se 0."""
+        if count <= 0:
+            self._notif_badge.hide()
+            return
+        self._notif_badge.setText(str(count) if count < 100 else "99+")
+        self._notif_badge.show()
 
     def set_running_count(self, count: int) -> None:
         """Atualiza o indicador de "rodando" — bolinha verde (count≥1)

@@ -6,6 +6,48 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.71.0] — 2026-05-22
+
+### Adicionado
+- **Badge laranja de notificações pendentes na sidebar**
+  (`ui/workspace_item_widget.py`, `ui/main_window.py`): cada
+  `WorkspaceItemWidget` ganha um `_notif_badge` que renderiza
+  `unread_by_workspace()` do `NotificationService`. Aparece ao lado do
+  badge verde de "rodando" mostrando `N` ou `99+`. Pintado em
+  `refresh_list` e a cada `unread_count_changed`.
+- **Sub-seção "Centro de Notificações" no SettingsPanel**
+  (`ui/settings_panel.py`): toggle "Mostrar toasts do desktop", grupo
+  "Silenciar por tipo" com checkbox pra cada um dos 8
+  `NotificationKind`, spin "Histórico máximo" (50–5000) e botão "Limpar
+  histórico" que remove só notificações vistas/descartadas (preserva
+  pendências). MainWindow injeta o service via
+  `settings_panel.set_notification_service(notif_service)` logo após
+  criá-lo; sub-seção fica escondida até a injeção.
+- **Emissor `long_running` automático** (`ui/main_window.py`):
+  `_handle_tab_activity` registra timestamp `_working_since` quando uma
+  sessão entra em "working" e limpa quando sai; timer de 30s
+  (`_scan_long_running`) emite `service.notify(LONG_RUNNING)` se passar
+  de 5 min sem voltar pra idle. Idempotente por tab — `_long_running_notified`
+  evita duplicar até a sessão sair de working e voltar.
+
+
+  (`settings.py`, `ui/settings_panel.py`): novos campos
+  `claude_permission_mode`, `claude_model`, `claude_effort`,
+  `claude_allowed_tools` e `claude_disallowed_tools`. A UI expõe combos
+  para modo inicial (`--permission-mode`: default/acceptEdits/plan/auto/
+  bypassPermissions/dontAsk), modelo (`--model`: opus/sonnet/haiku ou ID
+  editável), effort (`--effort`: low/medium/high/xhigh/max) e line edits
+  para tools permitidas/bloqueadas. Cada campo vazio = não passa a flag
+  (Claude usa seu default global).
+- **`Settings.claude_session_flags()` + `claude_launch_args()`**: helpers
+  que derivam as flags do CLI a partir dos campos acima e juntam com
+  `claude_extra_args`. Todos os pontos de launch (`launchers.py`,
+  `services/launch_planner.py` via `launch_coordinator`, e os 4 sites em
+  `ui/main_window.py` — abrir Claude, runner-gen new, runner-gen resume,
+  Claude sem ctx) passaram a usar `claude_launch_args()` em vez de
+  `claude_extra_args` direto, garantindo que as flags valham para console
+  embutido, terminal externo, resume e runner-gen.
+
 ## [0.69.0] — 2026-05-22
 
 ### Adicionado
