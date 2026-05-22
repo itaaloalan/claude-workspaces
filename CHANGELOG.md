@@ -48,6 +48,13 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
   `claude_extra_args` direto, garantindo que as flags valham para console
   embutido, terminal externo, resume e runner-gen.
 
+### Alterado
+- **Ícones brancos nos botões "Abrir Claude" e "Cancel" do diálogo de
+  launch** (`ui/launch_claude_dialog.py`): os ícones padrão do estilo Qt
+  (`SP_DialogOkButton`/`SP_DialogCancelButton`) saíam pretos sobre fundo
+  escuro; agora são tintados pra branco via `QPainter` com
+  `CompositionMode_SourceIn`.
+
 ## [0.69.0] — 2026-05-22
 
 ### Adicionado

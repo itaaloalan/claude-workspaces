@@ -6,6 +6,7 @@
 import logging
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,8 +17,23 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QStyle,
     QVBoxLayout,
 )
+
+
+def _white_standard_icon(style: QStyle, sp: QStyle.StandardPixmap, size: int = 16) -> QIcon:
+    pm = style.standardIcon(sp).pixmap(size, size)
+    if pm.isNull():
+        return QIcon()
+    tinted = QPixmap(pm.size())
+    tinted.fill(Qt.GlobalColor.transparent)
+    p = QPainter(tinted)
+    p.drawPixmap(0, 0, pm)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    p.fillRect(tinted.rect(), QColor("white"))
+    p.end()
+    return QIcon(tinted)
 
 from ..git_status import get_status
 from ..git_worktree import (
@@ -183,7 +199,12 @@ class LaunchClaudeDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Abrir Claude")
+        style = self.style()
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        ok_btn.setText("Abrir Claude")
+        ok_btn.setIcon(_white_standard_icon(style, QStyle.StandardPixmap.SP_DialogOkButton))
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        cancel_btn.setIcon(_white_standard_icon(style, QStyle.StandardPixmap.SP_DialogCancelButton))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         v.addWidget(buttons)
