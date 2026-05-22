@@ -40,6 +40,12 @@ class Settings:
     # criação errada que duplicava sidebar).
     body_dock_state_schema: int = 0
     right_splitter_sizes: list[int] = field(default_factory=list)  # [content, terminal]
+    # Tamanhos persistidos do sub-splitter de baixo: [terminal_pane, runners_pane].
+    bottom_sub_splitter_sizes: list[int] = field(default_factory=list)
+    # Quais panes estavam minimizados na sessão anterior — restaurados no
+    # startup pra reaparecer como chips na MinimizeTray + área colapsada.
+    # Valores válidos: "workspace", "terminal_pane", "runners".
+    minimized_panes: list[str] = field(default_factory=list)
     workspace_columns_sizes: list[int] = field(default_factory=list)  # legado, sem uso atual
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
     # Dock direito (Tarefas + Git + Skills colapsáveis)

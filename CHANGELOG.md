@@ -6,6 +6,25 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.15] — 2026-05-22
+
+### Adicionado
+- **Persistência do estado de minimizar dos panes**
+  (`settings.py`, `ui/main_window.py`): novos campos
+  `bottom_sub_splitter_sizes` (sizes do splitter inferior
+  terminal/runners) e `minimized_panes` (lista com
+  "workspace"/"terminal_pane"/"runners" que estavam colapsados).
+  `_persist_layout` grava o estado atual; `_restore_minimized_panes`
+  rodando 1 tick após o init re-aplica chips na MinimizeTray +
+  área colapsada. Minimizar agora "gruda" entre sessões.
+- **Branch + modelo no header do terminal pane**
+  (`ui/main_window.py`): além de workspace/console, header agora
+  mostra `branch ⎇ <nome amarelo>` (+ contador laranja `●N` se há
+  arquivos modificados) e `modelo <nome azul>`. Dados vêm do
+  `TerminalChildWidget.status_info()` do tab_id correspondente —
+  mesma fonte do footer. Refresh reconectado em
+  `tab_activity_changed` (cache evita o custo de relayout).
+
 ## [0.61.14] — 2026-05-22
 
 ### Mudado

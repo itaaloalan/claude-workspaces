@@ -472,6 +472,28 @@ class MainWindow(QMainWindow):
         # Estado inicial dos botões do terminal
         self.right_splitter.splitterMoved.connect(lambda *_: self._refresh_terminal_btns())
         QTimer.singleShot(0, self._refresh_terminal_btns)
+        # Restaura panes minimizados salvos. Deferido pra rodar depois
+        # do show() — splitter.height() é 0 enquanto a window não foi
+        # mostrada, e o setSizes não cola corretamente.
+        QTimer.singleShot(0, self._restore_minimized_panes)
+
+    def _restore_minimized_panes(self) -> None:
+        """Re-aplica `settings.minimized_panes` no startup — chip na
+        tray + visibilidade colapsada do pane correspondente. Espelha
+        o que o user fez na sessão anterior."""
+        try:
+            panes = list(self.settings.minimized_panes or [])
+        except Exception:
+            return
+        if not panes:
+            return
+        if "workspace" in panes and not self._content_is_minimized():
+            self._toggle_content_minimized()
+        if hasattr(self, "_bottom_sub_splitter"):
+            if "terminal_pane" in panes and not self._terminal_pane_is_minimized():
+                self._toggle_terminal_pane_minimized()
+            if "runners" in panes and not self._runners_pane_is_minimized():
+                self._toggle_runners_minimized()
 
     def _schedule_layout_save(self, *_args) -> None:
         self._layout_save_timer.start()
@@ -480,6 +502,23 @@ class MainWindow(QMainWindow):
     def _persist_layout(self) -> None:
         self.settings.body_dock_state = self.body_dock.save_state_b64()
         self.settings.right_splitter_sizes = list(self.right_splitter.sizes())
+        if hasattr(self, "_bottom_sub_splitter"):
+            self.settings.bottom_sub_splitter_sizes = list(
+                self._bottom_sub_splitter.sizes()
+            )
+        # Persiste quais panes estavam minimizados — read estado direto
+        # dos checkers `_content_is_minimized` etc., única fonte de
+        # verdade. Restaurado no setup pra reaparecer chip + área
+        # colapsada exatamente como o user deixou.
+        minimized: list[str] = []
+        if self._content_is_minimized():
+            minimized.append("workspace")
+        if hasattr(self, "_bottom_sub_splitter"):
+            if self._terminal_pane_is_minimized():
+                minimized.append("terminal_pane")
+            if self._runners_pane_is_minimized():
+                minimized.append("runners")
+        self.settings.minimized_panes = minimized
         self.settings.workspace_columns_sizes = self.details.columns_sizes()
         g = self.geometry()
         self.settings.window_geometry = [g.x(), g.y(), g.width(), g.height()]
@@ -1142,8 +1181,12 @@ class MainWindow(QMainWindow):
         rp_layout.addWidget(self._runners_tabs, stretch=1)
 
         self._bottom_sub_splitter.addWidget(self._runners_pane)
-        # Default: terminal ocupa 2/3, runners 1/3.
-        self._bottom_sub_splitter.setSizes([600, 300])
+        # Restaura sizes salvos; default = terminal 2/3, runners 1/3.
+        saved_sub = list(self.settings.bottom_sub_splitter_sizes or [])
+        if len(saved_sub) == 2 and sum(saved_sub) > 0:
+            self._bottom_sub_splitter.setSizes(saved_sub)
+        else:
+            self._bottom_sub_splitter.setSizes([600, 300])
 
         layout.addWidget(self._bottom_sub_splitter, stretch=1)
         return pane
@@ -2860,10 +2903,47 @@ class MainWindow(QMainWindow):
         console_html = (
             f"<span style='color:#e5b53b;font-weight:600'>{display}</span>"
         )
+        # Branch + model: lookup do TerminalChildWidget correspondente
+        # (mesma fonte usada pelo footer / status bar) — não duplicar
+        # lógica de extrair branch do git/model do JSONL.
+        branch_html = ""
+        model_html = ""
+        try:
+            tab_id = id(term)
+            tree_item = self.terminals_coord.state.tree_items.get(tab_id)
+            if tree_item is not None:
+                child = self.list_widget.itemWidget(tree_item, 0)
+                if isinstance(child, TerminalChildWidget):
+                    info = child.status_info()
+                    branch = (info.get("branch") or "").strip()
+                    modified = int(info.get("modified") or 0)
+                    model = (info.get("model") or "").strip()
+                    if branch:
+                        short = branch if len(branch) <= 22 else branch[:21] + "…"
+                        mod_html = (
+                            f" <span style='color:#ff9d3b'>●{modified}</span>"
+                            if modified > 0 else ""
+                        )
+                        branch_html = (
+                            f" <span style='color:#555'>·</span> "
+                            f"<span style='color:#9aa0a6'>branch</span> "
+                            f"<span style='color:#e5b53b;font-weight:600'>"
+                            f"⎇ {short}</span>{mod_html}"
+                        )
+                    if model:
+                        model_html = (
+                            f" <span style='color:#555'>·</span> "
+                            f"<span style='color:#9aa0a6'>modelo</span> "
+                            f"<span style='color:#6aa9e0;font-weight:600'>"
+                            f"{model}</span>"
+                        )
+        except Exception:
+            pass
         new_text = (
             f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
             f"<span style='color:#555'>·</span> "
             f"<span style='color:#9aa0a6'>console</span> {console_html}"
+            f"{branch_html}{model_html}"
         )
         # Curtocircuita: setText em QLabel rich-text força relayout e
         # re-render. Sem essa cache, sinais frequentes (currentChanged
@@ -3271,15 +3351,21 @@ class MainWindow(QMainWindow):
         area.tabs.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
         )
-        # Header do terminal pane mostra workspace+console — atualiza
-        # quando muda console dentro do mesmo workspace. NÃO conectamos
-        # em `tab_activity_changed` porque ele dispara em todo update
-        # de status do Claude (rodando, idle, etc.) — virava ~10
-        # refresh/s sem o usuário tocar em nada, custo de HTML render
-        # acumulando lag. O `_refresh_terminal_pane_title` já cacheia
-        # último texto e curtocircuita se o título não muda.
+        # Header do terminal pane mostra workspace+console+branch+model.
+        # Atualiza em:
+        #   - currentChanged (troca de console)
+        #   - tab_activity_changed (rename/status — também usado pra
+        #     re-render branch/model porque o status_info do
+        #     TerminalChildWidget é atualizado lá)
+        # `_refresh_terminal_pane_title` cacheia `_terminal_pane_title_last`
+        # e curtocircuita se o texto não muda — então signals de
+        # atividade pura (sem mudança de title/branch/model) viram
+        # no-op, sem cost de HTML render.
         area.tabs.currentChanged.connect(
             lambda _i: self._refresh_terminal_pane_title()
+        )
+        area.tab_activity_changed.connect(
+            lambda *_a: self._refresh_terminal_pane_title()
         )
 
     def _handle_tab_activity(
