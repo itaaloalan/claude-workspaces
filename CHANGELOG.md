@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.62.0] — 2026-05-22
+
+### Mudou
+- **Runners workspace e Runners console agora são panes separados no
+  bottom_sub_splitter** (`ui/main_window.py`): em vez de um único pane
+  com duas abas, cada um vira pane independente com header + botão de
+  minimizar próprio. Cada pane gera seu chip na MinimizeTray
+  (`Runners` / `Runners console`), abre via clique no sidebar focando
+  o pane correto, e persiste tamanho/estado minimizado independente.
+  `bottom_sub_splitter_sizes` migra automaticamente de 2 entradas
+  (terminal/runners) para 3 (terminal/runners/runners_console)
+  dividindo a antiga entrada de runners ao meio.
+
 ## [0.61.17] — 2026-05-22
 
 ### Corrigido

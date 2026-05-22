@@ -491,8 +491,6 @@ class MainWindow(QMainWindow):
             return
         if not panes:
             return
-        from PySide6.QtCore import QSize as _QS
-        from .icons import ic
 
         if "workspace" in panes:
             sizes = self.right_splitter.sizes()
@@ -509,38 +507,18 @@ class MainWindow(QMainWindow):
                 self.details.refresh_minimize_btn(True)
 
         if hasattr(self, "_bottom_sub_splitter"):
-            sub = self._bottom_sub_splitter.sizes()
-            sub_total = sum(sub) or self._bottom_sub_splitter.height() or 600
             self._terminal_pane_widget.setMinimumHeight(0)
             self._runners_pane.setMinimumHeight(0)
+            self._runners_console_pane.setMinimumHeight(0)
 
-            if "terminal_pane" in panes:
-                if sub and sub[0] > 4:
-                    self._terminal_pane_last_size = sub[0]
-                self._bottom_sub_splitter.setSizes([0, sub_total])
-                if hasattr(self, "_minimize_tray"):
-                    self._minimize_tray.add_chip(
-                        "terminal_pane", "Terminal", "fa5s.terminal"
-                    )
-                self._terminal_pane_minimize_btn.setIcon(
-                    ic("fa5s.window-maximize", color="#c8c8c8")
-                )
-                self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
-                self._terminal_pane_minimize_btn.setToolTip("Restaurar terminal")
-
-            if "runners" in panes:
-                if sub and sub[1] > 4:
-                    self._runners_last_size = sub[1]
-                self._bottom_sub_splitter.setSizes([sub_total, 0])
-                if hasattr(self, "_minimize_tray"):
-                    self._minimize_tray.add_chip(
-                        "runners", "Runners", "mdi6.source-branch"
-                    )
-                self._runners_minimize_btn.setIcon(
-                    ic("fa5s.window-maximize", color="#c8c8c8")
-                )
-                self._runners_minimize_btn.setIconSize(_QS(11, 11))
-                self._runners_minimize_btn.setToolTip("Restaurar área de runners")
+            # Usa os toggles direto — fonte única de verdade pro min/max.
+            # Ignora panes já minimizados (toggle inverte estado).
+            if "terminal_pane" in panes and not self._terminal_pane_is_minimized():
+                self._toggle_terminal_pane_minimized()
+            if "runners" in panes and not self._runners_pane_is_minimized():
+                self._toggle_runners_minimized()
+            if "runners_console" in panes and not self._runners_console_pane_is_minimized():
+                self._toggle_runners_console_minimized()
 
     def _schedule_layout_save(self, *_args) -> None:
         self._layout_save_timer.start()
@@ -565,6 +543,8 @@ class MainWindow(QMainWindow):
                 minimized.append("terminal_pane")
             if self._runners_pane_is_minimized():
                 minimized.append("runners")
+            if self._runners_console_pane_is_minimized():
+                minimized.append("runners_console")
         self.settings.minimized_panes = minimized
         self.settings.workspace_columns_sizes = self.details.columns_sizes()
         g = self.geometry()
@@ -1159,7 +1139,9 @@ class MainWindow(QMainWindow):
 
         self._bottom_sub_splitter.addWidget(self._terminal_pane_widget)
 
-        # ----- Tabs dos RUNNERS (workspace + console) -----
+        # ----- Panes dos RUNNERS (workspace e console, separados) -----
+        # Cada um tem header + botão minimize próprio e ocupa entrada
+        # independente no `_bottom_sub_splitter` — chip próprio na tray.
         self.runner_host = QStackedWidget()
         self.runner_host.setMinimumHeight(0)
         runner_empty = QLabel("Selecione um workspace para ver seus runners.")
@@ -1182,58 +1164,77 @@ class MainWindow(QMainWindow):
         )
         self._console_runner_placeholder_idx = self.console_runner_host.addWidget(crh_empty)
 
-        # Container do runners pane: header com botão minimize + tabs
-        self._runners_pane = QWidget()
-        rp_layout = QVBoxLayout(self._runners_pane)
-        rp_layout.setContentsMargins(0, 0, 0, 0)
-        rp_layout.setSpacing(0)
-
-        runners_header = QWidget()
-        runners_header.setStyleSheet(
-            "background: #161616; border-bottom: 1px solid #2a2a2a;"
-        )
-        rh_layout = QHBoxLayout(runners_header)
-        rh_layout.setContentsMargins(8, 3, 4, 3)
-        rh_layout.setSpacing(4)
-        runners_title = QLabel("Runners")
-        runners_title.setStyleSheet(
-            "color: #c8c8c8; font-size: 11px; font-weight: 600;"
-        )
-        rh_layout.addWidget(runners_title)
-        rh_layout.addStretch(1)
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB
-        self._runners_minimize_btn = _QPB()
-        self._runners_minimize_btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
-        self._runners_minimize_btn.setIconSize(_QS(11, 11))
-        self._runners_minimize_btn.setFixedSize(22, 20)
-        self._runners_minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._runners_minimize_btn.setToolTip("Minimizar área de runners")
-        self._runners_minimize_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-            "QPushButton:hover { background: #2a2a2a; }"
-        )
-        self._runners_minimize_btn.clicked.connect(self._toggle_runners_minimized)
-        rh_layout.addWidget(self._runners_minimize_btn)
-        rp_layout.addWidget(runners_header)
 
-        self._runners_tabs = QTabWidget(pane)
-        self._runners_tabs.setDocumentMode(True)
-        self._runners_tabs.setTabPosition(QTabWidget.TabPosition.North)
-        self._runners_tabs.setStyleSheet(tabs_qss)
-        idx_rw = self._runners_tabs.addTab(self.runner_host, "Runners workspace")
-        self._runners_tabs.setTabIcon(idx_rw, ic(ICONS["runners_workspace"], color="#9aa0a6"))
-        idx_rc = self._runners_tabs.addTab(self.console_runner_host, "Runners (console)")
-        self._runners_tabs.setTabIcon(idx_rc, ic(ICONS["runners_console"], color="#9aa0a6"))
-        rp_layout.addWidget(self._runners_tabs, stretch=1)
+        def _build_pane(
+            title: str, icon_name: str, body: QWidget, tooltip_min: str,
+            on_click,
+        ) -> tuple[QWidget, _QPB]:
+            container = QWidget()
+            cl = QVBoxLayout(container)
+            cl.setContentsMargins(0, 0, 0, 0)
+            cl.setSpacing(0)
+            header = QWidget()
+            header.setStyleSheet(
+                "background: #161616; border-bottom: 1px solid #2a2a2a;"
+            )
+            hl = QHBoxLayout(header)
+            hl.setContentsMargins(8, 3, 4, 3)
+            hl.setSpacing(6)
+            icon_lbl = QLabel()
+            icon_lbl.setPixmap(ic(icon_name, color="#9aa0a6").pixmap(_QS(12, 12)))
+            hl.addWidget(icon_lbl)
+            t_lbl = QLabel(title)
+            t_lbl.setStyleSheet(
+                "color: #c8c8c8; font-size: 11px; font-weight: 600;"
+            )
+            hl.addWidget(t_lbl)
+            hl.addStretch(1)
+            btn = _QPB()
+            btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
+            btn.setIconSize(_QS(11, 11))
+            btn.setFixedSize(22, 20)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(tooltip_min)
+            btn.setStyleSheet(
+                "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
+                "QPushButton:hover { background: #2a2a2a; }"
+            )
+            btn.clicked.connect(on_click)
+            hl.addWidget(btn)
+            cl.addWidget(header)
+            cl.addWidget(body, stretch=1)
+            return container, btn
+
+        self._runners_pane, self._runners_minimize_btn = _build_pane(
+            "Runners",
+            ICONS["runners_workspace"],
+            self.runner_host,
+            "Minimizar área de runners",
+            self._toggle_runners_minimized,
+        )
+        self._runners_console_pane, self._runners_console_minimize_btn = _build_pane(
+            "Runners console",
+            ICONS["runners_console"],
+            self.console_runner_host,
+            "Minimizar runners do console",
+            self._toggle_runners_console_minimized,
+        )
 
         self._bottom_sub_splitter.addWidget(self._runners_pane)
-        # Restaura sizes salvos; default = terminal 2/3, runners 1/3.
+        self._bottom_sub_splitter.addWidget(self._runners_console_pane)
+        # Restaura sizes salvos. Default: terminal 60% / runners 20% / runners_console 20%.
+        # Migração: salvos com 2 entradas (legado terminal+runners combinados)
+        # → divide a antiga entrada de runners ao meio.
         saved_sub = list(self.settings.bottom_sub_splitter_sizes or [])
-        if len(saved_sub) == 2 and sum(saved_sub) > 0:
+        if len(saved_sub) == 3 and sum(saved_sub) > 0:
             self._bottom_sub_splitter.setSizes(saved_sub)
+        elif len(saved_sub) == 2 and sum(saved_sub) > 0:
+            half = max(saved_sub[1] // 2, 80)
+            self._bottom_sub_splitter.setSizes([saved_sub[0], half, half])
         else:
-            self._bottom_sub_splitter.setSizes([600, 300])
+            self._bottom_sub_splitter.setSizes([600, 200, 200])
 
         layout.addWidget(self._bottom_sub_splitter, stretch=1)
         return pane
@@ -1246,6 +1247,9 @@ class MainWindow(QMainWindow):
         elif panel_id == "runners":
             if self._runners_pane_is_minimized():
                 self._toggle_runners_minimized()
+        elif panel_id == "runners_console":
+            if self._runners_console_pane_is_minimized():
+                self._toggle_runners_console_minimized()
         elif panel_id == "terminal_pane":
             if self._terminal_pane_is_minimized():
                 self._toggle_terminal_pane_minimized()
@@ -1259,7 +1263,15 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_bottom_sub_splitter")
             else []
         )
-        return len(sizes) >= 2 and sizes[1] <= 4
+        return len(sizes) >= 3 and sizes[1] <= 4
+
+    def _runners_console_pane_is_minimized(self) -> bool:
+        sizes = (
+            self._bottom_sub_splitter.sizes()
+            if hasattr(self, "_bottom_sub_splitter")
+            else []
+        )
+        return len(sizes) >= 3 and sizes[2] <= 4
 
     def _terminal_pane_is_minimized(self) -> bool:
         sizes = (
@@ -1267,83 +1279,124 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_bottom_sub_splitter")
             else []
         )
-        return len(sizes) >= 2 and sizes[0] <= 4
+        return len(sizes) >= 3 and sizes[0] <= 4
+
+    def _toggle_pane_at(
+        self,
+        idx: int,
+        pane_widget: QWidget,
+        btn,
+        chip_id: str,
+        chip_label: str,
+        chip_icon: str,
+        tooltip_min: str,
+        tooltip_max: str,
+        last_size_attr: str,
+        default_size: int,
+    ) -> None:
+        """Colapsa/restaura uma entrada do `_bottom_sub_splitter`.
+
+        Generaliza o min/max — funciona pra terminal (idx=0),
+        runners workspace (idx=1) e runners console (idx=2)."""
+        sizes = self._bottom_sub_splitter.sizes()
+        if len(sizes) < 3 or idx >= len(sizes):
+            return
+        total = sum(sizes)
+        from PySide6.QtCore import QSize as _QS
+
+        from .icons import ic
+        if sizes[idx] > 4:
+            # Minimizar — guarda o tamanho atual + colapsa só essa entrada
+            setattr(self, last_size_attr, sizes[idx])
+            pane_widget.setVisible(False)
+            new_sizes = list(sizes)
+            freed = new_sizes[idx]
+            new_sizes[idx] = 0
+            # Redistribui o espaço liberado nas demais entradas, na
+            # proporção do tamanho atual delas (mantém ratio entre os
+            # panes que sobraram). Se todas as outras estão zeradas,
+            # joga tudo no terminal (idx 0) como fallback razoável.
+            others_total = sum(s for i, s in enumerate(new_sizes) if i != idx)
+            if others_total > 0:
+                for i in range(len(new_sizes)):
+                    if i == idx:
+                        continue
+                    new_sizes[i] += int(freed * (new_sizes[i] / others_total))
+            else:
+                new_sizes[0] = total
+            self._bottom_sub_splitter.setSizes(new_sizes)
+            btn.setIcon(ic("fa5s.window-maximize", color="#c8c8c8"))
+            btn.setIconSize(_QS(11, 11))
+            btn.setToolTip(tooltip_max)
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.add_chip(chip_id, chip_label, chip_icon)
+        else:
+            target = getattr(self, last_size_attr, default_size) or default_size
+            pane_widget.setVisible(True)
+            # Tira proporcional dos outros panes pra abrir espaço.
+            others_total = sum(s for i, s in enumerate(sizes) if i != idx)
+            new_sizes = list(sizes)
+            if others_total > 0 and target < others_total:
+                scale = (others_total - target) / others_total
+                for i in range(len(new_sizes)):
+                    if i == idx:
+                        continue
+                    new_sizes[i] = max(int(new_sizes[i] * scale), 0)
+                new_sizes[idx] = target
+            else:
+                # Fallback: pega 1/3 do total
+                each = max(total // 3, 100)
+                new_sizes = [each] * 3
+                new_sizes[idx] = max(target, each)
+            self._bottom_sub_splitter.setSizes(new_sizes)
+            btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
+            btn.setIconSize(_QS(11, 11))
+            btn.setToolTip(tooltip_min)
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.remove_chip(chip_id)
+        self._schedule_layout_save()
 
     def _toggle_terminal_pane_minimized(self) -> None:
-        """Espelha `_toggle_runners_minimized` mas no lado do terminal:
-        colapsa o terminal pane dentro do `_bottom_sub_splitter` pra 0 +
-        chip na MinimizeTray pra restaurar."""
-        sizes = self._bottom_sub_splitter.sizes()
-        if len(sizes) < 2:
-            return
-        total = sum(sizes)
-        from PySide6.QtCore import QSize as _QS
-
-        from .icons import ic
-        if sizes[0] > 4:
-            self._terminal_pane_last_size = sizes[0]
-            self._terminal_pane_widget.setVisible(False)
-            self._bottom_sub_splitter.setSizes([0, total])
-            self._terminal_pane_minimize_btn.setIcon(
-                ic("fa5s.window-maximize", color="#c8c8c8")
-            )
-            self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
-            self._terminal_pane_minimize_btn.setToolTip("Restaurar terminal")
-            if hasattr(self, "_minimize_tray"):
-                self._minimize_tray.add_chip(
-                    "terminal_pane", "Terminal", "fa5s.terminal"
-                )
-        else:
-            target = getattr(self, "_terminal_pane_last_size", 600) or 600
-            self._terminal_pane_widget.setVisible(True)
-            self._bottom_sub_splitter.setSizes(
-                [target, max(total - target, 100)]
-            )
-            self._terminal_pane_minimize_btn.setIcon(
-                ic("fa5s.window-minimize", color="#c8c8c8")
-            )
-            self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
-            self._terminal_pane_minimize_btn.setToolTip("Minimizar terminal")
-            if hasattr(self, "_minimize_tray"):
-                self._minimize_tray.remove_chip("terminal_pane")
-        self._schedule_layout_save()
+        self._toggle_pane_at(
+            0,
+            self._terminal_pane_widget,
+            self._terminal_pane_minimize_btn,
+            "terminal_pane",
+            "Terminal",
+            "fa5s.terminal",
+            "Minimizar terminal",
+            "Restaurar terminal",
+            "_terminal_pane_last_size",
+            600,
+        )
 
     def _toggle_runners_minimized(self) -> None:
-        """Alterna entre runners pane normal vs minimizado (só header
-        visível). Espelha o min/max do terminal."""
-        sizes = self._bottom_sub_splitter.sizes()
-        if len(sizes) < 2:
-            return
-        total = sum(sizes)
-        from PySide6.QtCore import QSize as _QS
+        self._toggle_pane_at(
+            1,
+            self._runners_pane,
+            self._runners_minimize_btn,
+            "runners",
+            "Runners",
+            "mdi6.source-branch",
+            "Minimizar área de runners",
+            "Restaurar área de runners",
+            "_runners_last_size",
+            200,
+        )
 
-        from .icons import ic
-        # Header runners tem ~28px (3+font+3+border)
-        header_h = 28
-        if sizes[1] > header_h + 4:
-            # Minimizar — colapsa pra 0 + chip na tray pra restaurar
-            self._runners_last_size = sizes[1]
-            self._runners_pane.setVisible(False)
-            self._bottom_sub_splitter.setSizes([total, 0])
-            self._runners_minimize_btn.setIcon(ic("fa5s.window-maximize", color="#c8c8c8"))
-            self._runners_minimize_btn.setIconSize(_QS(11, 11))
-            self._runners_minimize_btn.setToolTip("Restaurar área de runners")
-            if hasattr(self, "_minimize_tray"):
-                self._minimize_tray.add_chip(
-                    "runners", "Runners", "mdi6.source-branch"
-                )
-        else:
-            # Restaurar
-            target = getattr(self, "_runners_last_size", 300) or 300
-            self._runners_pane.setVisible(True)
-            self._runners_tabs.setVisible(True)
-            self._bottom_sub_splitter.setSizes([max(total - target, 200), target])
-            self._runners_minimize_btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
-            self._runners_minimize_btn.setIconSize(_QS(11, 11))
-            self._runners_minimize_btn.setToolTip("Minimizar área de runners")
-            if hasattr(self, "_minimize_tray"):
-                self._minimize_tray.remove_chip("runners")
-        self._schedule_layout_save()
+    def _toggle_runners_console_minimized(self) -> None:
+        self._toggle_pane_at(
+            2,
+            self._runners_console_pane,
+            self._runners_console_minimize_btn,
+            "runners_console",
+            "Runners console",
+            "fa5s.list-alt",
+            "Minimizar runners do console",
+            "Restaurar runners do console",
+            "_runners_console_last_size",
+            200,
+        )
 
     def _open_file_finder_dialog(self, initial_query: str = "") -> None:
         """Abre o modal de localizar arquivo usando as pastas do workspace
@@ -2652,15 +2705,15 @@ class MainWindow(QMainWindow):
             old.stop()
 
         start = list(self._bottom_sub_splitter.sizes())
-        # Se o start não tem 2 elementos válidos, aplica direto sem anim.
-        if len(start) != 2 or len(target) != 2:
+        # Se start e target não baterem em tamanho, aplica direto sem anim.
+        if len(start) != len(target) or not start:
             self._bottom_sub_splitter.setSizes(target)
             return
         # Normaliza pro mesmo total — splitter mantém soma fixa.
         total = sum(start) or sum(target) or 1
         if sum(target) != total and sum(target) > 0:
             scale = total / sum(target)
-            target = [int(target[0] * scale), int(target[1] * scale)]
+            target = [int(v * scale) for v in target]
 
         anim = QVariantAnimation(self)
         anim.setDuration(180)
@@ -2669,9 +2722,8 @@ class MainWindow(QMainWindow):
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         def _tick(t: float, s=start, e=target) -> None:
-            v0 = int(s[0] + (e[0] - s[0]) * t)
-            v1 = int(s[1] + (e[1] - s[1]) * t)
-            self._bottom_sub_splitter.setSizes([v0, v1])
+            vals = [int(s[i] + (e[i] - s[i]) * t) for i in range(len(s))]
+            self._bottom_sub_splitter.setSizes(vals)
 
         anim.valueChanged.connect(_tick)
         self._sub_splitter_anim = anim
@@ -2679,11 +2731,12 @@ class MainWindow(QMainWindow):
 
     def _focus_pane_from_sidebar(self, pane: str) -> None:
         """Click pelo sidebar = "focar" o pane escolhido dentro do
-        `_bottom_sub_splitter`. `pane` ∈ {"runners", "terminal"}.
+        `_bottom_sub_splitter`. `pane` ∈ {"runners", "runners_console",
+        "terminal"}.
 
         Mantém o workspace upper como estiver (não auto-minimiza —
-        causava lentidão visível em cada click). Aplica setSizes
-        sincrono e atualiza chips/ícones inline."""
+        causava lentidão visível em cada click). Atualiza chips/ícones
+        inline pra refletir quem está colapsado."""
         if not hasattr(self, "_bottom_sub_splitter"):
             log.info("[FOCUS] _bottom_sub_splitter ainda não existe, abort")
             return
@@ -2692,9 +2745,6 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QSize as _QS
         from .icons import ic
 
-        # Cache dos QIcons usados aqui — qtawesome renderiza SVG via
-        # paint, cada `ic(...)` é caro o suficiente pra dar travada
-        # perceptível em sequência (2 ícones * 2 panes * cada click).
         cache = getattr(self, "_focus_icon_cache", None)
         if cache is None:
             cache = {
@@ -2705,17 +2755,14 @@ class MainWindow(QMainWindow):
         icon_min = cache["min"]
         icon_max = cache["max"]
 
-        # Garante que os panes podem colapsar pra 0 — caso ainda
-        # tenham minimum size herdado de algum sizeHint do conteúdo.
         self._terminal_pane_widget.setMinimumHeight(0)
         self._runners_pane.setMinimumHeight(0)
-        # Os toggles individuais (`_toggle_terminal_pane_minimized` /
-        # `_toggle_runners_minimized`) chamam `setVisible(False)` no widget
-        # pra esconder de vez. Se entrarmos aqui depois disso (ex.: chip
-        # restaurado pelo lado oposto, click no sidebar), o widget continua
-        # invisível e o splitter mostra área preta sem chip de volta.
+        self._runners_console_pane.setMinimumHeight(0)
+        # Toggles individuais escondem via setVisible(False); precisamos
+        # garantir que estão visíveis antes de redimensionar.
         self._terminal_pane_widget.setVisible(True)
         self._runners_pane.setVisible(True)
+        self._runners_console_pane.setVisible(True)
 
         cur = self._bottom_sub_splitter.sizes()
         total = sum(cur)
@@ -2724,50 +2771,63 @@ class MainWindow(QMainWindow):
             total = h
         if total < 200:
             total = 600
-        log.info(
-            "[FOCUS] pane=%s cur_sizes=%s sub_splitter.height=%d total=%d "
-            "terminal_visible=%s runners_visible=%s",
-            pane, cur, h, total,
-            self._terminal_pane_widget.isVisible(),
-            self._runners_pane.isVisible(),
-        )
+        # Garante len 3 — caso saved sizes ainda não tenham sido aplicados.
+        if len(cur) != 3:
+            cur = [total // 2, total // 4, total // 4]
 
-        if pane == "runners":
-            if cur and cur[0] > 4:
-                self._terminal_pane_last_size = cur[0]
-            self._animate_bottom_sub_splitter([0, total])
-            log.info(
-                "[FOCUS] anim → setSizes([0,%d])", total,
-            )
-            if hasattr(self, "_minimize_tray"):
-                self._minimize_tray.remove_chip("runners")
-                self._minimize_tray.add_chip(
-                    "terminal_pane", "Terminal", "fa5s.terminal"
-                )
-            self._runners_minimize_btn.setIcon(icon_min)
-            self._runners_minimize_btn.setIconSize(_QS(11, 11))
-            self._runners_minimize_btn.setToolTip("Minimizar área de runners")
-            self._terminal_pane_minimize_btn.setIcon(icon_max)
-            self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
-            self._terminal_pane_minimize_btn.setToolTip("Restaurar terminal")
-        elif pane == "terminal":
-            if cur and cur[1] > 4:
+        # Salva last_size do pane focado antes de zerar — restauração
+        # posterior precisa de um valor sensato.
+        if pane == "terminal":
+            if cur[1] > 4:
                 self._runners_last_size = cur[1]
-            self._animate_bottom_sub_splitter([total, 0])
-            log.info(
-                "[FOCUS] anim → setSizes([%d,0])", total,
-            )
-            if hasattr(self, "_minimize_tray"):
-                self._minimize_tray.remove_chip("terminal_pane")
-                self._minimize_tray.add_chip(
-                    "runners", "Runners", "mdi6.source-branch"
-                )
-            self._terminal_pane_minimize_btn.setIcon(icon_min)
-            self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
-            self._terminal_pane_minimize_btn.setToolTip("Minimizar terminal")
-            self._runners_minimize_btn.setIcon(icon_max)
-            self._runners_minimize_btn.setIconSize(_QS(11, 11))
-            self._runners_minimize_btn.setToolTip("Restaurar área de runners")
+            if cur[2] > 4:
+                self._runners_console_last_size = cur[2]
+            target = [total, 0, 0]
+            chips_add = [("runners", "Runners", "mdi6.source-branch"),
+                         ("runners_console", "Runners console", "fa5s.list-alt")]
+            chips_remove = ["terminal_pane"]
+            btns_to_max = [self._runners_minimize_btn,
+                           self._runners_console_minimize_btn]
+            btns_to_min = [self._terminal_pane_minimize_btn]
+        elif pane == "runners":
+            if cur[0] > 4:
+                self._terminal_pane_last_size = cur[0]
+            if cur[2] > 4:
+                self._runners_console_last_size = cur[2]
+            target = [0, total, 0]
+            chips_add = [("terminal_pane", "Terminal", "fa5s.terminal"),
+                         ("runners_console", "Runners console", "fa5s.list-alt")]
+            chips_remove = ["runners"]
+            btns_to_max = [self._terminal_pane_minimize_btn,
+                           self._runners_console_minimize_btn]
+            btns_to_min = [self._runners_minimize_btn]
+        elif pane == "runners_console":
+            if cur[0] > 4:
+                self._terminal_pane_last_size = cur[0]
+            if cur[1] > 4:
+                self._runners_last_size = cur[1]
+            target = [0, 0, total]
+            chips_add = [("terminal_pane", "Terminal", "fa5s.terminal"),
+                         ("runners", "Runners", "mdi6.source-branch")]
+            chips_remove = ["runners_console"]
+            btns_to_max = [self._terminal_pane_minimize_btn,
+                           self._runners_minimize_btn]
+            btns_to_min = [self._runners_console_minimize_btn]
+        else:
+            return
+
+        self._animate_bottom_sub_splitter(target)
+        if hasattr(self, "_minimize_tray"):
+            for cid in chips_remove:
+                self._minimize_tray.remove_chip(cid)
+            for cid, lbl, ico in chips_add:
+                self._minimize_tray.add_chip(cid, lbl, ico)
+        for b in btns_to_min:
+            b.setIcon(icon_min)
+            b.setIconSize(_QS(11, 11))
+        for b in btns_to_max:
+            b.setIcon(icon_max)
+            b.setIconSize(_QS(11, 11))
 
         log.info(
             "[FOCUS-PERF] _focus_pane_from_sidebar(%s) dt=%.1fms",
@@ -2777,6 +2837,9 @@ class MainWindow(QMainWindow):
 
     def _ensure_runners_pane_visible(self) -> None:
         self._focus_pane_from_sidebar("runners")
+
+    def _ensure_runners_console_pane_visible(self) -> None:
+        self._focus_pane_from_sidebar("runners_console")
 
     def _ensure_terminal_pane_visible(self) -> None:
         self._focus_pane_from_sidebar("terminal")
@@ -2794,9 +2857,6 @@ class MainWindow(QMainWindow):
             workspace.id, runner_id,
         )
         self._open_runner_t0 = t0
-        # Antes de focar: se o runners pane está minimizado, restaura e
-        # minimiza o terminal pane (mesmo gesto que o user pediu).
-        self._ensure_runners_pane_visible()
         # Identifica o escopo procurando o runner no workspace.
         runner = next((r for r in workspace.runners if r.id == runner_id), None)
         sid = (runner.console_session_id or "") if runner is not None else ""
@@ -2805,11 +2865,11 @@ class MainWindow(QMainWindow):
             runner is not None, sid,
         )
         if sid:
-            # Console-scope: localiza a RunnerArea do console dono.
+            # Console-scope: foca o pane "Runners console" + localiza area.
+            self._ensure_runners_console_pane_visible()
             for area in self._console_runner_areas.get(workspace.id, {}).values():
                 if area.console_session_id() == sid:
                     self.console_runner_host.setCurrentWidget(area)
-                    self._runners_tabs.setCurrentWidget(self.console_runner_host)
                     area.focus_runner(runner_id)
                     return
             # Área ainda não criada → garante criando via terminal dono.
@@ -2823,6 +2883,8 @@ class MainWindow(QMainWindow):
                     area.focus_runner(runner_id)
                     return
             # Não achou console dono (foi encerrado?) — fallback pro workspace.
+        # Workspace-scope: foca o pane "Runners" (workspace).
+        self._ensure_runners_pane_visible()
         log.info("[SIDEBAR] usando workspace-scope runner area (fallback)")
         import time
         t1 = time.perf_counter()
@@ -2830,7 +2892,6 @@ class MainWindow(QMainWindow):
         t2 = time.perf_counter()
         self.runner_host.setCurrentWidget(area)
         t3 = time.perf_counter()
-        self._runners_tabs.setCurrentWidget(self.runner_host)
         t4 = time.perf_counter()
         area.focus_runner(runner_id)
         t5 = time.perf_counter()
@@ -3145,9 +3206,9 @@ class MainWindow(QMainWindow):
     def _ensure_terminal_runner_panel(self, workspace: Workspace, terminal) -> RunnerArea:
         existing = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
         if existing is not None:
-            # Já existe — só foca a aba "Runners (console)" no painel certo.
+            # Já existe — só foca o pane "Runners console" e seleciona a area.
             self.console_runner_host.setCurrentWidget(existing)
-            self._runners_tabs.setCurrentWidget(self.console_runner_host)
+            self._ensure_runners_console_pane_visible()
             return existing
         sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
         area = RunnerArea(workspace, settings=self.settings, console_session_id=sid)
@@ -3175,11 +3236,11 @@ class MainWindow(QMainWindow):
                 self._on_runner_status_changed(wid, rid, txt)
         )
         self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
-        # Painel mora no top tab "Runners (console)" — não embute mais no
-        # próprio terminal. O toolbar `▤ Runners` do terminal só foca a aba.
+        # Painel mora no pane "Runners console" (separado) — não embute mais
+        # no próprio terminal. O toolbar `▤ Runners` do terminal foca o pane.
         self.console_runner_host.addWidget(area)
         self.console_runner_host.setCurrentWidget(area)
-        self._runners_tabs.setCurrentWidget(self.console_runner_host)
+        self._ensure_runners_console_pane_visible()
         # Atualiza o grupo "Runners console" da sidebar — agora que a
         # area existe, o lookup pelo `_console_runner_areas` casa o sid
         # com os runners persistidos (chave pending criada no boot
