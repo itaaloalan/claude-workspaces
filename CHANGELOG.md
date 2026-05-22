@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.62.1] — 2026-05-22
+
+### Mudou
+- **Header de Runners na sidebar: removido botão "+" e botões de ação
+  ficaram "inteligentes"** (`ui/runner_group_widget.py`,
+  `ui/main_window.py`): criação de runner raramente acontece pela
+  sidebar (já existe ação dentro do pane), então `+` foi removido. Os
+  botões de ação agora reagem ao estado real do escopo — quando há ≥1
+  runner rodando mostra `↻` (reiniciar todos) e `■` (parar todos);
+  quando nenhum está rodando mostra `▶` (rodar todos). Adicionados
+  `_run_all_workspace_runners` / `_run_all_console_runners`.
+
+### Corrigido
+- **FIXADOS/WORKSPACES ainda cortavam mesmo após 0.61.17**
+  (`ui/main_window.py::_add_section_header`): trocada estratégia de
+  `setItemWidget` por `setText`/`setIcon`/`setFont` nativos no
+  `QTreeWidgetItem`. O widget custom sofria clipping pela largura da
+  coluna do tree mesmo com `setMinimumWidth`; native respeita o
+  sizeHint do delegate e desenha o texto inteiro.
+
 ## [0.62.0] — 2026-05-22
 
 ### Mudou

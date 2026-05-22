@@ -4,9 +4,12 @@ Aparece como item filho do workspace (ou do console) quando há ao menos
 um runner naquele escopo. Os RunnerChildWidget ficam aninhados sob ele,
 então o usuário pode recolher tudo de uma vez pela seta da tree.
 
-    [Runners workspace]                              [＋]
+    [Runners]   [2] [● 1]                    [↻] [■] / [▶]
 
-O botão ＋ abre o diálogo de criação de runner no escopo correto.
+Botões à direita reagem ao estado: quando há ≥1 runner rodando, mostra
+↻ (reiniciar todos) e ■ (parar todos); quando nenhum está rodando,
+mostra apenas ▶ (rodar todos). Criação de runner é feita dentro do
+pane "Runners" — não duplica aqui.
 """
 
 from __future__ import annotations
@@ -17,7 +20,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QMenu,
     QPushButton,
     QSizePolicy,
     QWidget,
@@ -48,13 +50,17 @@ class RunnerGroupWidget(QWidget):
     def __init__(
         self,
         label: str,
-        on_add_blank: Callable[[], None],
+        on_add_blank: Callable[[], None] | None = None,
         on_generate: Callable[[], None] | None = None,
         on_toggle_collapse: Callable[[], None] | None = None,
         on_stop_all: Callable[[], None] | None = None,
         on_restart_all: Callable[[], None] | None = None,
+        on_run_all: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
+        # `on_add_blank`/`on_generate` mantidos só por compat — botão `+`
+        # foi removido (criação fica dentro do pane Runners).
+        del on_add_blank, on_generate
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setMinimumHeight(24)
@@ -126,6 +132,12 @@ class RunnerGroupWidget(QWidget):
 
         row.addStretch(1)
 
+        # Tracking pra ajustar visibilidade dos botões com base no
+        # estado: 0 rodando → só "▶ run all"; ≥1 rodando → ↻ + ■.
+        self._total_count = 0
+        self._running_count = 0
+
+        self._restart_all_btn: QPushButton | None = None
         if on_restart_all is not None:
             self._restart_all_btn = QPushButton("↻")
             self._restart_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -135,6 +147,7 @@ class RunnerGroupWidget(QWidget):
             self._restart_all_btn.clicked.connect(on_restart_all)
             row.addWidget(self._restart_all_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        self._stop_all_btn: QPushButton | None = None
         if on_stop_all is not None:
             self._stop_all_btn = QPushButton("■")
             self._stop_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -144,36 +157,55 @@ class RunnerGroupWidget(QWidget):
             self._stop_all_btn.clicked.connect(on_stop_all)
             row.addWidget(self._stop_all_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._add_btn = QPushButton("＋")
-        self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._add_btn.setFixedSize(20, 18)
-        self._add_btn.setToolTip("Novo runner neste escopo")
-        self._add_btn.setStyleSheet(_BTN_QSS)
-        self._on_add_blank = on_add_blank
-        self._on_generate = on_generate
-        self._add_btn.clicked.connect(self._open_add_menu)
-        row.addWidget(self._add_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._run_all_btn: QPushButton | None = None
+        if on_run_all is not None:
+            self._run_all_btn = QPushButton("▶")
+            self._run_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._run_all_btn.setFixedSize(20, 18)
+            self._run_all_btn.setToolTip("Rodar todos os runners deste escopo")
+            self._run_all_btn.setStyleSheet(_BTN_QSS)
+            self._run_all_btn.clicked.connect(on_run_all)
+            row.addWidget(self._run_all_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self._refresh_action_buttons()
 
     def set_count(self, count: int | None) -> None:
         """Mostra '[N]' à direita do label. None ou 0 esconde."""
+        self._total_count = int(count or 0)
         if not count:
             self._count_badge.setVisible(False)
-            return
-        self._count_badge.setText(str(count))
-        self._count_badge.setVisible(True)
+        else:
+            self._count_badge.setText(str(count))
+            self._count_badge.setVisible(True)
+        self._refresh_action_buttons()
 
     def set_running_count(self, count: int | None) -> None:
         """Mostra badge verde com a contagem de runners em execução.
         None ou 0 esconde — assim em workspace ocioso só aparece o
         badge cinza do total."""
+        self._running_count = int(count or 0)
         if not count:
             self._running_badge.setVisible(False)
-            return
-        # `●` antes do número deixa o pulso "ligado" visual mesmo a
-        # 9px, em paridade com os dots verdes das linhas de runner.
-        self._running_badge.setText(f"● {count}")
-        self._running_badge.setToolTip(f"{count} runner(s) em execução")
-        self._running_badge.setVisible(True)
+        else:
+            self._running_badge.setText(f"● {count}")
+            self._running_badge.setToolTip(f"{count} runner(s) em execução")
+            self._running_badge.setVisible(True)
+        self._refresh_action_buttons()
+
+    def _refresh_action_buttons(self) -> None:
+        """Visibilidade dos botões de ação reflete o estado real:
+        - 0 runners no escopo → esconde tudo (nada pra fazer)
+        - ≥1 runner, 0 rodando → mostra ▶ (rodar todos), esconde ↻/■
+        - ≥1 runner rodando → mostra ↻/■, esconde ▶
+        """
+        has_any = self._total_count > 0
+        any_running = self._running_count > 0
+        if self._run_all_btn is not None:
+            self._run_all_btn.setVisible(has_any and not any_running)
+        if self._stop_all_btn is not None:
+            self._stop_all_btn.setVisible(has_any and any_running)
+        if self._restart_all_btn is not None:
+            self._restart_all_btn.setVisible(has_any and any_running)
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do chevron (right recolhido, down expandido)."""
@@ -184,14 +216,3 @@ class RunnerGroupWidget(QWidget):
             _ic(name, color="#9aa0a6").pixmap(_QS(8, 8))
         )
 
-    def _open_add_menu(self) -> None:
-        # Se não tem gerador (escopo console-pending sem area), abre direto.
-        if self._on_generate is None:
-            self._on_add_blank()
-            return
-        menu = QMenu(self)
-        a_blank = menu.addAction("Em branco")
-        a_blank.triggered.connect(lambda: self._on_add_blank())
-        a_gen = menu.addAction("Gerar com Claude")
-        a_gen.triggered.connect(lambda: self._on_generate())
-        menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))

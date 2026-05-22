@@ -1926,41 +1926,30 @@ class MainWindow(QMainWindow):
 
     def _add_section_header(self, label: str) -> None:
         """Insere um item-cabeçalho não-selecionável (FIXADOS / WORKSPACES)
-        com ícone SVG discreto à esquerda."""
+        com ícone SVG discreto à esquerda.
+
+        Usa setText/setIcon nativos do QTreeWidgetItem (em vez de
+        setItemWidget) — o widget custom sofria clipping pela largura
+        da coluna do tree e cortava o "S" final, mesmo com minimumWidth.
+        Native respeita o sizeHint do delegate."""
         from PySide6.QtCore import QSize as _QS
+        from PySide6.QtGui import QBrush, QColor, QFont
 
         from .icons import ic as _ic
-        item = QTreeWidgetItem([""])
+        item = QTreeWidgetItem([label])
         item.setData(0, Qt.ItemDataRole.UserRole, self._SECTION_HEADER_ROLE)
         item.setFlags(Qt.ItemFlag.NoItemFlags)
-        self.list_widget.addTopLevelItem(item)
-
-        host = QWidget()
-        host.setStyleSheet("background: transparent;")
-        h = QHBoxLayout(host)
-        # Margens menores + spacing menor pra dar espaço pro texto
-        # com letter-spacing — antes o label era espremido pela coluna
-        # estreita do sidebar e cortava o "S" final de WORKSPACES.
-        h.setContentsMargins(2, 8, 2, 4)
-        h.setSpacing(4)
         icon_name = self._SECTION_ICONS.get(label)
         if icon_name:
-            ic_lbl = QLabel()
-            ic_lbl.setPixmap(_ic(icon_name, color="#707070").pixmap(_QS(9, 9)))
-            h.addWidget(ic_lbl)
-        text_lbl = QLabel(label)
-        text_lbl.setStyleSheet(
-            "QLabel { color: #707070; font-size: 10px; font-weight: 700; "
-            "letter-spacing: 1.2px; background: transparent; }"
-        )
-        # Garante que o label fica com tamanho mínimo igual ao texto
-        # completo — QLabel default pode encolher abaixo do sizeHint
-        # quando o parent é estreito (QTreeWidgetItem column 0).
-        text_lbl.adjustSize()
-        text_lbl.setMinimumWidth(text_lbl.sizeHint().width())
-        h.addWidget(text_lbl)
-        h.addStretch(1)
-        self.list_widget.setItemWidget(item, 0, host)
+            item.setIcon(0, _ic(icon_name, color="#707070"))
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
+        item.setFont(0, font)
+        item.setForeground(0, QBrush(QColor("#707070")))
+        item.setSizeHint(0, _QS(0, 22))
+        self.list_widget.addTopLevelItem(item)
 
     def _is_section_header(self, item: "QTreeWidgetItem | None") -> bool:
         if item is None:
@@ -2252,11 +2241,10 @@ class MainWindow(QMainWindow):
 
             header = RunnerGroupWidget(
                 "Runners",
-                on_add_blank=lambda w=ws: self._open_runner_edit(w, None),
-                on_generate=lambda w=ws: self._generate_runner_with_claude(w),
                 on_toggle_collapse=_toggle,
                 on_stop_all=lambda _c=False, w=ws: self._stop_all_workspace_runners(w),
                 on_restart_all=lambda _c=False, w=ws: self._restart_all_workspace_runners(w),
+                on_run_all=lambda _c=False, w=ws: self._run_all_workspace_runners(w),
             )
             self.list_widget.setItemWidget(group, 0, header)
             collapsed = bool(
@@ -2362,15 +2350,6 @@ class MainWindow(QMainWindow):
             group.setSizeHint(0, QSize(0, 24))
             term_item.addChild(group)
 
-            def _add_blank(w=ws, t=term):
-                area = self._ensure_terminal_runner_panel(w, t)
-                self._open_runner_edit(
-                    w, None, console_session_id=area.console_session_id()
-                )
-
-            def _gen(w=ws):
-                self._generate_runner_with_claude(w)
-
             def _toggle(*_, g=group):
                 g.setExpanded(not g.isExpanded())
                 w = self.list_widget.itemWidget(g, 0)
@@ -2379,11 +2358,10 @@ class MainWindow(QMainWindow):
 
             header = RunnerGroupWidget(
                 "Runners console",
-                on_add_blank=_add_blank,
-                on_generate=_gen,
                 on_toggle_collapse=_toggle,
                 on_stop_all=lambda _c=False, w=ws, t=term: self._stop_all_console_runners(w, t),
                 on_restart_all=lambda _c=False, w=ws, t=term: self._restart_all_console_runners(w, t),
+                on_run_all=lambda _c=False, w=ws, t=term: self._run_all_console_runners(w, t),
             )
             self.list_widget.setItemWidget(group, 0, header)
             group.setExpanded(True)
@@ -3135,6 +3113,11 @@ class MainWindow(QMainWindow):
             return
         area.stop_all()
 
+    def _run_all_workspace_runners(self, workspace: Workspace) -> None:
+        # Garante a RunnerArea (cobre clique no ▶ sem ter aberto o pane).
+        area = self._get_or_create_runner_area(workspace)
+        area.run_all()
+
     def _restart_all_workspace_runners(self, workspace: Workspace) -> None:
         # Garante a RunnerArea pra cobrir o caso de o usuário clicar
         # "↻" no header sem ter aberto a aba de runners ainda.
@@ -3146,6 +3129,10 @@ class MainWindow(QMainWindow):
         if area is None:
             return
         area.stop_all()
+
+    def _run_all_console_runners(self, workspace: Workspace, terminal) -> None:
+        area = self._ensure_terminal_runner_panel(workspace, terminal)
+        area.run_all()
 
     def _restart_all_console_runners(self, workspace: Workspace, terminal) -> None:
         area = self._ensure_terminal_runner_panel(workspace, terminal)
