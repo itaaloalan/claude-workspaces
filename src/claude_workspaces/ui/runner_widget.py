@@ -22,6 +22,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -92,6 +93,20 @@ class RunnerWidget(QWidget):
         self._status.setStyleSheet("color: #b0b0b0;")
         toolbar.addWidget(self._status)
         toolbar.addStretch()
+
+        # Filtro de log — substring case-insensitive aplicada linha a linha.
+        # Mudanças disparam replay do buffer pra refletir o filtro no
+        # histórico já recebido, não só nas linhas futuras.
+        self._filter_edit = QLineEdit()
+        self._filter_edit.setPlaceholderText("Filtrar logs…")
+        self._filter_edit.setClearButtonEnabled(True)
+        self._filter_edit.setFixedWidth(180)
+        self._filter_edit.setToolTip(
+            "Mostra só linhas que contêm o texto (case-insensitive). "
+            "Esvazie pra ver o log completo."
+        )
+        self._filter_edit.textChanged.connect(self._on_filter_changed)
+        toolbar.addWidget(self._filter_edit)
 
         self._start_btn = QPushButton("▶ Start")
         self._start_btn.clicked.connect(self.start)
@@ -342,6 +357,10 @@ class RunnerWidget(QWidget):
         )
         # Volta o status original depois de 2s.
         QTimer.singleShot(2000, lambda t=prev: self._status.setText(t))
+
+    def _on_filter_changed(self, text: str) -> None:
+        self.bridge.set_filter(text)
+        self.bridge.replay_filtered(self._log_buf)
 
     def _clear_log(self) -> None:
         self._log_buf = ""

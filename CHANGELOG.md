@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.0] — 2026-05-22
+
+### Adicionado
+- **Filtro de logs no console do runner** (`ui/runner_widget.py`,
+  `ui/terminal_widget.py`): nova caixa "Filtrar logs…" na toolbar
+  de cada runner. Filtragem é substring case-insensitive aplicada
+  linha a linha (após strip de ANSI, pra casar com linhas
+  coloridas). Ao mudar o texto, o terminal é limpo e o histórico
+  inteiro (`_log_buf`) é re-emitido já filtrado, então o usuário
+  vê tanto o passado quanto as novas linhas. Implementado em
+  `TerminalBridge.set_filter` + `replay_filtered` — o terminal
+  do Claude ignora (filtro vazio = pass-through, comportamento
+  inalterado).
+
 ## [0.60.11] — 2026-05-22
 
 ### Mudado

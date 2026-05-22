@@ -46,9 +46,70 @@ class TerminalBridge(QObject):
         super().__init__()
         self.session = session
         self.session.output_received.connect(self._on_pty_output)
+        # Filtro opcional aplicado linha a linha (substring case-insensitive
+        # após strip de ANSI). Vazio = pass-through. Usado pelo RunnerWidget
+        # pra filtrar logs sem perder o buffer completo (replay).
+        self._filter_text: str = ""
+        self._line_buf: bytearray = bytearray()
 
     def _on_pty_output(self, data: bytes) -> None:
-        self.output_to_terminal.emit(data)
+        if not self._filter_text:
+            # Sem filtro: pass-through. Se havia parcial bufferizado por
+            # um filtro anterior, devolve antes pra não perder bytes.
+            if self._line_buf:
+                pending = bytes(self._line_buf)
+                self._line_buf.clear()
+                self.output_to_terminal.emit(pending + data)
+            else:
+                self.output_to_terminal.emit(data)
+            return
+        self._line_buf.extend(data)
+        out = bytearray()
+        while True:
+            idx = self._line_buf.find(b"\n")
+            if idx < 0:
+                break
+            line = bytes(self._line_buf[: idx + 1])
+            del self._line_buf[: idx + 1]
+            if self._line_matches(line):
+                out.extend(line)
+        if out:
+            self.output_to_terminal.emit(bytes(out))
+
+    def set_filter(self, text: str) -> None:
+        """Define o filtro de linhas. Vazio = sem filtro (pass-through)."""
+        self._filter_text = (text or "").strip().lower()
+
+    def replay_filtered(self, full_log: str) -> None:
+        """Limpa o terminal e re-emite `full_log` aplicando o filtro atual.
+        Resets também o buffer de linha parcial — chamada típica após o
+        usuário mudar o filtro."""
+        self.clear_requested.emit()
+        self._line_buf.clear()
+        if not full_log:
+            return
+        data = full_log.encode("utf-8", errors="replace")
+        if not self._filter_text:
+            self.output_to_terminal.emit(data)
+            return
+        out = bytearray()
+        for line in data.splitlines(keepends=True):
+            if self._line_matches(line):
+                out.extend(line)
+        if out:
+            self.output_to_terminal.emit(bytes(out))
+
+    def _line_matches(self, line: bytes) -> bool:
+        if not self._filter_text:
+            return True
+        try:
+            text = line.decode("utf-8", errors="replace")
+        except Exception:
+            return False
+        # Match após strip de ANSI pra que "error" case com linhas
+        # coloridas (\x1b[31merror\x1b[0m).
+        from ..services.runner_url_detect import strip_ansi
+        return self._filter_text in strip_ansi(text).lower()
 
     @Slot(str)
     def input_from_terminal(self, data: str) -> None:
