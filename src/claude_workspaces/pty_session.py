@@ -5,6 +5,7 @@ import pty
 import signal
 import struct
 import termios
+import time
 
 from PySide6.QtCore import QObject, QSocketNotifier, Signal
 
@@ -14,12 +15,22 @@ log = logging.getLogger(__name__)
 class PtySession(QObject):
     output_received = Signal(bytes)
     finished = Signal()
+    # Variante com exit code (POSIX status, ou -1 quando indeterminado:
+    # cleanup chamado sem reap, ou waitpid não encontrou nada).
+    # Convenção: 0 = sucesso; >0 = falha; -1 = desconhecido. Listeners
+    # que precisam diferenciar success/failure conectam aqui; o sinal
+    # `finished` (sem arg) continua existindo pra back-compat.
+    finished_with_status = Signal(int)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.pid: int | None = None
         self.master_fd: int | None = None
         self._notifier: QSocketNotifier | None = None
+        # Exit code da última execução (None enquanto rodando ou nunca rodou).
+        # Lido pelos listeners de `finished` que querem o status sem se
+        # conectar ao sinal extra.
+        self.last_exit_code: int | None = None
         # Último tamanho pedido pelo frontend xterm.js. Pode chegar ANTES
         # do start() (resize via WebChannel é assíncrono e o JS faz fit
         # antes da gente forkar) — guardamos pra aplicar pós-fork e evitar
@@ -92,6 +103,7 @@ class PtySession(QObject):
             log.info("pty %s atingiu EOF", self.pid)
             self._cleanup()
             self.finished.emit()
+            self.finished_with_status.emit(self.last_exit_code if self.last_exit_code is not None else -1)
             return
 
         self.output_received.emit(data)
@@ -158,6 +170,7 @@ class PtySession(QObject):
         # zera o pid mas não emite `finished`.
         if had_pid:
             self.finished.emit()
+            self.finished_with_status.emit(self.last_exit_code if self.last_exit_code is not None else -1)
 
     def _schedule_sigkill(self, pid: int) -> None:
         from PySide6.QtCore import QTimer
@@ -191,7 +204,30 @@ class PtySession(QObject):
             self.master_fd = None
         if self.pid is not None:
             try:
-                os.waitpid(self.pid, os.WNOHANG)
+                # Loop curto pra dar chance do filho ser reaped — sob carga
+                # do KDE/Wayland, o socket EOF chega antes do exit status
+                # estar disponível e WNOHANG devolve (0, 0). Tentamos com
+                # WNOHANG umas poucas vezes e desistimos rapido pra não
+                # bloquear o event loop.
+                wait_pid = 0
+                wait_status = 0
+                for _ in range(5):
+                    wait_pid, wait_status = os.waitpid(self.pid, os.WNOHANG)
+                    if wait_pid != 0:
+                        break
+                    time.sleep(0.01)
+                if wait_pid != 0:
+                    # POSIX status: low byte = sinal/0, alto byte = exit code.
+                    if os.WIFEXITED(wait_status):
+                        self.last_exit_code = os.WEXITSTATUS(wait_status)
+                    elif os.WIFSIGNALED(wait_status):
+                        # Convenção shell: 128 + nº do sinal pra distinguir
+                        # de exit codes "normais".
+                        self.last_exit_code = 128 + os.WTERMSIG(wait_status)
+                    else:
+                        self.last_exit_code = -1
+                else:
+                    self.last_exit_code = -1
             except OSError:
-                pass
+                self.last_exit_code = -1
             self.pid = None

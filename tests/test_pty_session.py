@@ -103,3 +103,47 @@ def test_write_swallows_os_error(session):
     with patch("claude_workspaces.pty_session.os.write", side_effect=raise_os_error):
         # Não levanta
         session.write(b"x")
+
+
+def test_finished_with_status_emits_exit_code(session):
+    """Quando waitpid devolve status válido, last_exit_code é populado e
+    finished_with_status emite o código mapeado pro POSIX."""
+    statuses = []
+    session.finished_with_status.connect(lambda c: statuses.append(c))
+    session.master_fd = 999
+    session.pid = 12345
+    # status POSIX: WIFEXITED + WEXITSTATUS=0 → exit code 0.
+    with patch("claude_workspaces.pty_session.os.read", return_value=b""), \
+         patch("claude_workspaces.pty_session.os.waitpid", return_value=(12345, 0)):
+        session._on_readable()
+    assert session.last_exit_code == 0
+    assert statuses == [0]
+
+
+def test_finished_with_status_maps_non_zero_exit(session):
+    session.master_fd = 999
+    session.pid = 12345
+    # Status com WEXITSTATUS=42: alto byte do status = 42 << 8.
+    status = 42 << 8
+    statuses = []
+    session.finished_with_status.connect(lambda c: statuses.append(c))
+    with patch("claude_workspaces.pty_session.os.read", return_value=b""), \
+         patch("claude_workspaces.pty_session.os.waitpid", return_value=(12345, status)):
+        session._on_readable()
+    assert session.last_exit_code == 42
+    assert statuses == [42]
+
+
+def test_finished_with_status_unknown_when_waitpid_returns_zero(session):
+    """waitpid devolvendo (0, 0) significa "não foi possível reapear" —
+    last_exit_code vira -1 e o sinal carrega -1."""
+    session.master_fd = 999
+    session.pid = 12345
+    statuses = []
+    session.finished_with_status.connect(lambda c: statuses.append(c))
+    with patch("claude_workspaces.pty_session.os.read", return_value=b""), \
+         patch("claude_workspaces.pty_session.os.waitpid", return_value=(0, 0)), \
+         patch("claude_workspaces.pty_session.time.sleep", return_value=None):
+        session._on_readable()
+    assert session.last_exit_code == -1
+    assert statuses == [-1]

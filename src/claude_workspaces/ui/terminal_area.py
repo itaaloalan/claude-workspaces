@@ -31,6 +31,9 @@ class TerminalArea(QWidget):
     Mantém o estado das sessões mesmo quando o usuário alterna entre workspaces."""
 
     running_count_changed = Signal(int)
+    # tab_id, exit_code — re-emitido pelo TerminalCoordinator e finalmente
+    # consumido pelo MainWindow pra emitir task_completed/task_failed.
+    tab_session_exited = Signal("qint64", int)
     # tab_id é id() do widget — pode passar de 2^31, então usa qint64
     # (tab_id, title, status, is_working, is_running, needs_decision)
     tab_activity_changed = Signal("qint64", str, str, bool, bool, bool)
@@ -89,6 +92,9 @@ class TerminalArea(QWidget):
             lambda status, working, needs_decision, w=widget: self._emit_activity(
                 w, status, working, needs_decision
             )
+        )
+        widget.session_exited.connect(
+            lambda code, w=widget: self.tab_session_exited.emit(id(w), code)
         )
         idx = self.tabs.addTab(widget, title)
         self.tabs.setCurrentIndex(idx)

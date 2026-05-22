@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.74.0] — 2026-05-22
+
+### Adicionado
+- **Emissores `task_completed` / `task_failed` baseados no exit code do PTY**
+  (`pty_session.py`, `ui/terminal_widget.py`, `ui/terminal_area.py`,
+  `ui/coordinators/terminal_coordinator.py`, `ui/main_window.py`):
+  `PtySession._cleanup` agora captura o exit status via
+  `waitpid(WNOHANG)` (com retry curto pra dar tempo do filho ser
+  reaped sob carga do KDE/Wayland) e popula
+  `last_exit_code` (0 = sucesso, >0 = exit code da convenção shell —
+  `128+signum` quando morre por sinal, -1 = indeterminado). Novo sinal
+  `finished_with_status(int)` é emitido logo depois de `finished` em
+  ambas as rotas (EOF do socket e `terminate()`).
+  `TerminalWidget` re-emite via `session_exited(int)`, `TerminalArea` via
+  `tab_session_exited(tab_id, code)` e `TerminalCoordinator` via
+  `tab_session_exited(tab_id, code, workspace_id)` que MainWindow
+  consome em `_on_tab_session_exited` chamando
+  `notif_service.notify(TASK_COMPLETED|TASK_FAILED, ...)` com workspace,
+  sessão e tab_id preenchidos. Limpa também o tracking de
+  `_working_since`/`_long_running_notified` pra não acumular falso
+  positivo. Coberto por 3 testes novos em `tests/test_pty_session.py`
+  (exit=0, exit=42, indeterminado).
+
 ## [0.73.0] — 2026-05-22
 
 ### Alterado

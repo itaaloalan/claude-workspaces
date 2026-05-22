@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
         self.terminals_coord.workspace_running_changed.connect(self._on_workspace_running)
         self.terminals_coord.tab_activity_changed.connect(self._handle_tab_activity)
         self.terminals_coord.tab_removed.connect(self._handle_tab_removed)
+        self.terminals_coord.tab_session_exited.connect(self._on_tab_session_exited)
         # Sino agora reflete o unread real do NotificationService (criado abaixo).
         self.terminals_coord.spinner_tick.connect(self._on_spinner_tick)
         self.terminals_coord.terminal_area_created.connect(self._on_area_created)
@@ -1970,6 +1971,54 @@ class MainWindow(QMainWindow):
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
+
+    def _on_tab_session_exited(
+        self, tab_id: int, exit_code: int, workspace_id: str
+    ) -> None:
+        """PTY de um console terminou. Emite task_completed (exit=0) ou
+        task_failed (exit>0). exit_code=-1 = indeterminado; tratamos como
+        completed pra não criar alarme falso (KDE Wayland às vezes não
+        consegue reapear o filho a tempo)."""
+        # Limpa o tracking de long_running pra esse tab — não faz sentido
+        # alertar "execução longa" de algo que já acabou.
+        self._working_since.pop(tab_id, None)
+        self._long_running_notified.discard(tab_id)
+
+        ws = self.workspaces_coord.find_by_id(workspace_id) if workspace_id else None
+        ws_name = ws.name if ws else "Workspace"
+        # Tenta achar session_id atual do widget (claimed_session_id).
+        session_id: str | None = None
+        title = "Console"
+        area = self.terminals_coord.area_for(workspace_id) if workspace_id else None
+        if area is not None:
+            for i in range(area.tabs.count()):
+                w = area.tabs.widget(i)
+                if id(w) == tab_id and isinstance(w, TerminalWidget):
+                    session_id = w.claimed_session_id()
+                    title = w.effective_title() if hasattr(w, "effective_title") else title
+                    break
+
+        if exit_code <= 0:
+            # Sucesso (ou indeterminado). Notif baixa prioridade.
+            self.notif_service.notify(
+                NotificationKind.TASK_COMPLETED,
+                title=f"✓ Sessão encerrada — {ws_name}",
+                body=f"{title}\nProcesso saiu com exit code {exit_code}.",
+                workspace_id=workspace_id or None,
+                session_id=session_id,
+                tab_id=tab_id,
+                data={"exit_code": exit_code},
+            )
+        else:
+            self.notif_service.notify(
+                NotificationKind.TASK_FAILED,
+                title=f"✗ Sessão falhou — {ws_name}",
+                body=f"{title}\nProcesso saiu com exit code {exit_code}.",
+                workspace_id=workspace_id or None,
+                session_id=session_id,
+                tab_id=tab_id,
+                data={"exit_code": exit_code},
+            )
 
     def _scan_long_running(self) -> None:
         """Escaneia tabs em "working" e emite `long_running` ao passar do

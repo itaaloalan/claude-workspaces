@@ -55,6 +55,9 @@ class TerminalCoordinator(QObject):
     inbox_entry_removed = Signal("qint64")  # tab_id
     spinner_tick = Signal(str)  # current spinner char
     terminal_area_created = Signal(str, object)  # workspace_id, TerminalArea
+    # Sessão PTY terminou (process exit). exit_code: 0=success, >0=fail,
+    # -1=desconhecido. workspace_id pra contextualizar a notif.
+    tab_session_exited = Signal("qint64", int, str)  # tab_id, exit_code, workspace_id
 
     # Duração mínima (segundos) que um tab precisa ficar em is_working=True
     # antes da transição pra is_working=False contar como "Pronto". Filtra
@@ -107,6 +110,10 @@ class TerminalCoordinator(QObject):
                     )
             )
             area.tab_removed.connect(self._on_tab_removed)
+            area.tab_session_exited.connect(
+                lambda tab_id, code, wid=ws_id:
+                    self.tab_session_exited.emit(tab_id, code, wid)
+            )
             area.tabs.currentChanged.connect(
                 lambda idx, a=area: self._on_tab_focused(a, idx)
             )

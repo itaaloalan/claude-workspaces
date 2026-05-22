@@ -128,6 +128,9 @@ class TerminalWidget(QWidget):
     running_changed = Signal(bool)
     # status_text, is_working, needs_decision
     activity_changed = Signal(str, bool, bool)
+    # Exit code do PTY quando a sessão termina (0=success, >0=fail, -1=desconhecido).
+    # MainWindow conecta pra emitir task_completed/task_failed no NotificationService.
+    session_exited = Signal(int)
     # Emitido quando o terminal resolve/reivindica um session_id de Claude.
     # Permite ao painel embutido de runners atualizar seu filtro pra mostrar
     # apenas runners daquele console.
@@ -275,6 +278,11 @@ class TerminalWidget(QWidget):
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)
+        # Repropaga o exit code pra cima. `finished_with_status` é emitido
+        # logo depois de `finished` (mesmo evento) — quem só liga em
+        # `running_changed`/`finished` continua funcionando, quem precisa
+        # do status conecta aqui.
+        self.session.finished_with_status.connect(self.session_exited.emit)
         self.session.output_received.connect(self._record_output)
 
         self.bridge = TerminalBridge(self.session)
