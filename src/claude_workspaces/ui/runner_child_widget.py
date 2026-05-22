@@ -199,9 +199,13 @@ class RunnerChildWidget(QWidget):
         o label de estado padrão. Estados estáveis ficam na palavra do
         _STATE_LABEL (Running/Idle/Failed) pintada pelo _apply_state."""
         status = (status or "").strip().lower()
-        transient = {"reiniciando", "parando", "carregando"}
+        transient = {"reiniciando", "parando", "carregando", "startando"}
         if status in transient:
-            self._status_label.setText(status)
+            # "startando" ganha "..." pra deixar claro que é em andamento
+            # (mockup pedido pelo usuário: "Startando..." enquanto o
+            # browser não abre).
+            text = "Startando..." if status == "startando" else status
+            self._status_label.setText(f"●  {text}")
             self._status_label.setStyleSheet(
                 f"color: {theme.WARNING}; font-size: 10px;"
             )

@@ -285,9 +285,18 @@ class RunnerWidget(QWidget):
             log.exception("Falha ao iniciar runner")
             self._set_state("error", f"(erro) {e}")
             return
-        label = {"start": "rodando", "stop": "parando", "restart": "reiniciando"}.get(
-            intent, intent
-        )
+        # Para runners que abrem browser quando pronto: mostra "startando"
+        # (transiente, amarelo na sidebar) até o ready_pattern/URL ser
+        # detectado e o browser efetivamente abrir — aí vira "rodando" verde.
+        if (
+            intent in ("start", "restart")
+            and self._runner.open_browser_on_ready
+        ):
+            label = "startando"
+        else:
+            label = {
+                "start": "rodando", "stop": "parando", "restart": "reiniciando",
+            }.get(intent, intent)
         self._set_state("running", f"● {label}: {cmd[:80]}", status_label=label)
 
     def _on_bridge_ready(self) -> None:
@@ -334,6 +343,9 @@ class RunnerWidget(QWidget):
             return
         self._browser_opened_this_start = True
         self._set_current_url(url)
+        # Sai do label "startando" → "rodando" agora que detectamos o
+        # ready/URL e vamos abrir o browser. State continua "running".
+        self._emit_status_label("rodando")
         # Delay configurável (default 5s) — dá tempo do server aceitar
         # conexões antes do browser bater na porta. Glassfish/Spring Boot
         # logam a URL antes do listener tá pronto.
@@ -408,9 +420,12 @@ class RunnerWidget(QWidget):
                 "idle": "parado",
                 "running": "rodando",
             }.get(state, state)
-        self._emit_status_label(status_label)
+        # Ordem importa: state primeiro (sidebar re-aplica o label padrão
+        # via _apply_state), status depois (pode sobrescrever com label
+        # transiente tipo "startando"/"reiniciando").
         if prev != state:
             self.state_changed.emit(state)
+        self._emit_status_label(status_label)
 
     def closeEvent(self, event) -> None:  # noqa: D401
         self.terminate()

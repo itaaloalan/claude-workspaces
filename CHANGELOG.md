@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.76.16] — 2026-05-22
+
+### Melhorado — "Startando..." enquanto browser não abre (runners com open_browser_on_ready)
+- **`ui/runner_widget.py`**: ao iniciar/reiniciar um runner com
+  `open_browser_on_ready=True`, o status_label emitido agora é
+  `"startando"` (transiente, amarelo) em vez de `"rodando"`. Quando o
+  `ready_pattern` casa e a URL é detectada (mesmo ponto em que o browser
+  vai abrir), emite `"rodando"` e a sidebar volta pro verde "Running".
+  Para runners sem `open_browser_on_ready`, comportamento é o mesmo de
+  antes (vai direto pra "rodando"/Running).
+- **`ui/runner_widget.py` `_set_state`**: invertida a ordem de emissão —
+  `state_changed` agora dispara antes de `status_changed`. Sem isso, a
+  sidebar aplicava o label padrão ("Running" verde) DEPOIS do label
+  transiente ("Startando..." amarelo), apagando-o imediatamente.
+- **`ui/runner_child_widget.py` `set_status`**: `"startando"` adicionado
+  ao set de status transientes (junto com `reiniciando`/`parando`/
+  `carregando`). Renderiza como `●  Startando...` em
+  `theme.WARNING` (amarelo), igual aos outros transientes.
+
 ## [0.76.15] — 2026-05-22
 
 ### Corrigido — Sidebar polish (indentação, seleção, botões transparentes)
