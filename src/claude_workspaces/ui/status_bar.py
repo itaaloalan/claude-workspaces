@@ -141,13 +141,36 @@ class StatusBarWidgets(QWidget):
         self.stack.setVisible(bool(label))
 
     def set_mcp(self, count: int) -> None:
-        self.mcp.setText(f"MCP: {count} configurado{'s' if count != 1 else ''}")
+        # MCP: cinza quando 0, ciano quando há plugados — facilita
+        # confirmar de relance se o workspace tem MCP configurado.
+        if count <= 0:
+            self.mcp.setText("MCP: —")
+            self.mcp._text.setStyleSheet(
+                "QLabel { color: #9aa0a6; font-size: 11px; background: transparent; }"
+            )
+        else:
+            self.mcp.setText(
+                f"MCP: {count} configurado{'s' if count != 1 else ''}"
+            )
+            self.mcp._text.setStyleSheet(
+                "QLabel { color: #6cc7ce; font-size: 11px; background: transparent; }"
+            )
 
     def set_runners(self, active: int, total: int) -> None:
+        # Runners: cinza sem total, verde se algum ativo, amarelo se há
+        # runners configurados mas nenhum rodando.
         if total == 0:
             self.runners.setText("Runners: —")
-        else:
+            color = "#9aa0a6"
+        elif active > 0:
             self.runners.setText(f"Runners: {active}/{total} ativos")
+            color = "#5ac35a"
+        else:
+            self.runners.setText(f"Runners: 0/{total} parados")
+            color = "#e5b53b"
+        self.runners._text.setStyleSheet(
+            f"QLabel {{ color: {color}; font-size: 11px; background: transparent; }}"
+        )
 
     def _set_console_visible(self, visible: bool) -> None:
         self._console_sep.setVisible(visible)
@@ -191,15 +214,24 @@ class StatusBarWidgets(QWidget):
             self.console_branch.setVisible(False)
         else:
             short = branch if len(branch) <= 18 else branch[:17] + "…"
+            # Branch sempre em amarelo (mesma linguagem visual do chip
+            # de branch no toolbar do git_panel); contador de modified
+            # fica num amarelo um pouco mais quente pra contrastar.
             if modified > 0:
                 self.console_branch.setText(
-                    f"⎇ {short}  <span style='color:#e5b53b'>●{modified}</span>"
+                    f"<span style='color:#9aa0a6'>⎇</span> "
+                    f"<span style='color:#e5b53b;font-weight:600'>{short}</span>"
+                    f"  <span style='color:#ff9d3b'>●{modified}</span>"
                 )
                 self.console_branch.setToolTip(
                     f"Branch: {branch} — {modified} arquivo(s) modificado(s)"
                 )
             else:
-                self.console_branch.setText(f"⎇ {short}")
+                self.console_branch.setText(
+                    f"<span style='color:#9aa0a6'>⎇</span> "
+                    f"<span style='color:#e5b53b;font-weight:600'>{short}</span> "
+                    f"<span style='color:#5ac35a'>✓</span>"
+                )
                 self.console_branch.setToolTip(
                     f"Branch: {branch} — working tree limpo"
                 )

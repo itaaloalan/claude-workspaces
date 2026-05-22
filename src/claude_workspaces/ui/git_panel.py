@@ -231,21 +231,26 @@ class GitPanel(QWidget):
         # Branch picker inline — mostra a branch atual (ou "(multi)") com
         # ícone code-branch. Click abre o branch picker do primeiro repo.
         self._branch_btn = QPushButton("  —")
-        self._branch_btn.setIcon(_ic("fa5s.code-branch", color="#9aa0a6"))
+        self._branch_btn.setIcon(_ic("fa5s.code-branch", color="#e5b53b"))
         self._branch_btn.setIconSize(_QS(11, 11))
         self._branch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._branch_btn.setToolTip("Trocar branch do primeiro repo deste workspace")
+        # Branch destacada em amarelo pra ficar visível à primeira vista,
+        # tanto em mono-repo quanto em multi-repo.
         self._branch_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #c8c8c8; "
-            "border: 1px solid #2c2c2c; border-radius: 4px; "
-            "padding: 2px 8px; font-size: 11px; }"
-            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+            "QPushButton { background: rgba(229,181,59,0.08); color: #e5b53b; "
+            "border: 1px solid rgba(229,181,59,0.35); border-radius: 4px; "
+            "padding: 2px 8px; font-size: 11px; font-weight: 600; }"
+            "QPushButton:hover { border-color: #e5b53b; color: #ffd35c; "
+            "background: rgba(229,181,59,0.16); }"
+            "QPushButton:disabled { color: #666; border-color: #2c2c2c; "
+            "background: transparent; font-weight: 400; }"
         )
         self._branch_btn.clicked.connect(self._on_branch_btn_clicked)
         layout.addWidget(self._branch_btn)
 
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        self._counter.setStyleSheet("color: #b0b0b0; font-size: 11px; padding: 0 4px;")
         layout.addWidget(self._counter)
         layout.addStretch()
 
@@ -420,9 +425,13 @@ class GitPanel(QWidget):
             self._branch_btn.setEnabled(False)
             self._poll_timer.stop()
         else:
-            self._counter.setText(
-                "limpo" if total_files == 0 else f"{total_files} alteração(ões)"
-            )
+            if total_files == 0:
+                self._counter.setText("<span style='color:#5ac35a'>✓ limpo</span>")
+            else:
+                self._counter.setText(
+                    f"<span style='color:#e5b53b'>● {total_files} alteração(ões)</span>"
+                )
+            self._counter.setTextFormat(Qt.TextFormat.RichText)
             # Atualiza label do branch picker: 1 repo → mostra branch;
             # >1 repos com mesma branch → idem; senão → "(multi)".
             branches = {s.branch for s in self._statuses.values() if s.is_repo and s.branch}

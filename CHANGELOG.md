@@ -6,6 +6,23 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.6] — 2026-05-22
+
+### Mudado
+- **Branch destacada em amarelo + status bar colorida por estado**
+  (`ui/git_panel.py`, `ui/status_bar.py`):
+  - Chip da branch no toolbar do Git Panel ganhou cor amarela
+    (texto, ícone, borda discreta) pra ficar visível à primeira
+    vista — antes era cinza e se misturava com o resto do toolbar.
+  - Contador ao lado do chip ficou verde (`✓ limpo`) ou amarelo
+    (`● N alteração(ões)`) pra dar feedback rápido do status.
+  - Status bar (footer) também:
+    - `MCP`: cinza quando 0, ciano quando há plugados.
+    - `Runners`: verde se algum ativo, amarelo se todos parados,
+      cinza se não há runners.
+    - Branch do console selecionado em amarelo + ✓ verde quando
+      working tree limpo, contador laranja `●N` quando dirty.
+
 ## [0.60.5] — 2026-05-22
 
 ### Mudado
