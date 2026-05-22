@@ -479,21 +479,68 @@ class MainWindow(QMainWindow):
 
     def _restore_minimized_panes(self) -> None:
         """Re-aplica `settings.minimized_panes` no startup — chip na
-        tray + visibilidade colapsada do pane correspondente. Espelha
-        o que o user fez na sessão anterior."""
+        tray + visibilidade colapsada do pane correspondente. Aplica
+        estado direto (setVisible + chip) sem depender de
+        `_content_is_minimized` etc., porque o `right_splitter_sizes`
+        salvo já vem com sizes minimizados (ex.: [0, total] pro
+        workspace) e os toggles antigos checavam o size pra decidir
+        se viraria estado — pulando o efeito visual."""
         try:
             panes = list(self.settings.minimized_panes or [])
         except Exception:
             return
         if not panes:
             return
-        if "workspace" in panes and not self._content_is_minimized():
-            self._toggle_content_minimized()
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic
+
+        if "workspace" in panes:
+            sizes = self.right_splitter.sizes()
+            total = sum(sizes) or 800
+            if sizes and sizes[0] > 50:
+                self._content_last_size = sizes[0]
+            self.content_stack.setVisible(False)
+            self.right_splitter.setSizes([0, total])
+            if hasattr(self, "_minimize_tray"):
+                self._minimize_tray.add_chip(
+                    "workspace", "Workspace", "fa5s.folder-open"
+                )
+            if hasattr(self, "details"):
+                self.details.refresh_minimize_btn(True)
+
         if hasattr(self, "_bottom_sub_splitter"):
-            if "terminal_pane" in panes and not self._terminal_pane_is_minimized():
-                self._toggle_terminal_pane_minimized()
-            if "runners" in panes and not self._runners_pane_is_minimized():
-                self._toggle_runners_minimized()
+            sub = self._bottom_sub_splitter.sizes()
+            sub_total = sum(sub) or self._bottom_sub_splitter.height() or 600
+            self._terminal_pane_widget.setMinimumHeight(0)
+            self._runners_pane.setMinimumHeight(0)
+
+            if "terminal_pane" in panes:
+                if sub and sub[0] > 4:
+                    self._terminal_pane_last_size = sub[0]
+                self._bottom_sub_splitter.setSizes([0, sub_total])
+                if hasattr(self, "_minimize_tray"):
+                    self._minimize_tray.add_chip(
+                        "terminal_pane", "Terminal", "fa5s.terminal"
+                    )
+                self._terminal_pane_minimize_btn.setIcon(
+                    ic("fa5s.window-maximize", color="#c8c8c8")
+                )
+                self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
+                self._terminal_pane_minimize_btn.setToolTip("Restaurar terminal")
+
+            if "runners" in panes:
+                if sub and sub[1] > 4:
+                    self._runners_last_size = sub[1]
+                self._bottom_sub_splitter.setSizes([sub_total, 0])
+                if hasattr(self, "_minimize_tray"):
+                    self._minimize_tray.add_chip(
+                        "runners", "Runners", "mdi6.source-branch"
+                    )
+                self._runners_minimize_btn.setIcon(
+                    ic("fa5s.window-maximize", color="#c8c8c8")
+                )
+                self._runners_minimize_btn.setIconSize(_QS(11, 11))
+                self._runners_minimize_btn.setToolTip("Restaurar área de runners")
 
     def _schedule_layout_save(self, *_args) -> None:
         self._layout_save_timer.start()

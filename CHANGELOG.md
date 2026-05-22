@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.16] — 2026-05-22
+
+### Corrigido
+- **Workspace minimizado não persistia entre sessões** (`ui/main_window.py`):
+  `_restore_minimized_panes` antes chamava `_toggle_content_minimized`
+  guardado por `if not self._content_is_minimized()`. Mas o
+  `right_splitter_sizes` salvo já vinha com `[0, total]` (estado
+  minimizado), então o checker retornava True na hora — e o toggle
+  era pulado. Resultado: o splitter ficava minimizado mas
+  `content_stack` continuava visível e a chip da MinimizeTray nunca
+  era criada. Agora aplica estado direto (`setVisible(False)` +
+  `add_chip` + sizes) sem depender de checker. Mesma correção pra
+  `terminal_pane` e `runners`.
+
 ## [0.61.15] — 2026-05-22
 
 ### Adicionado
