@@ -19,6 +19,16 @@ e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pra
 - **`ui/main_window.py`**: passa `timeout_ms_provider=lambda:
   self.settings.notify_timeout_ms` ao montar o adapter.
 
+## [0.76.2] — 2026-05-22
+
+### Modificado — Workspace como card visual
+- **`ui/workspace_item_widget.py`**: cada workspace agora é renderizado
+  como **card** com bg sólido (`BG_SURFACE`), borda 1px discreta
+  (`BORDER_INPUT`), radius 6px — match com mockup. Seleção tinta em
+  azul + borda `PRIMARY`. Hover sobe a opacidade da borda.
+- **`ui/main_window.py`**: altura do item da tree do workspace 30→44px
+  pra dar respiro entre os cards (sem isso a borda colava).
+
 ## [0.76.1] — 2026-05-22
 
 ### Modificado — Card de sessão (TerminalChildWidget) repaginado

@@ -71,14 +71,18 @@ class WorkspaceItemWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(30)
+        self.setMinimumHeight(38)
         self._on_add_claude = on_add_claude
         self._on_toggle_collapse = on_toggle_collapse
         # Enable hover tracking pro reveal das ações secundárias.
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        # Card visual — bg sólido + borda sutil + radius, igual mockup.
+        # Tom muda em set_selected (tint azul) / hover (borda mais clara).
+        self._selected = False
+        self._apply_card_qss()
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(6, 4, 6, 6)
+        row.setContentsMargins(10, 6, 8, 6)
         row.setSpacing(8)
 
         # Ícone do workspace antes do nome — match com mockup que mostra
@@ -226,12 +230,33 @@ class WorkspaceItemWidget(QWidget):
         self._pin_icon.setVisible(pinned)
 
     def set_selected(self, selected: bool) -> None:
-        """Workspace selecionado fica branco; os demais ficam cinza
-        claro — visual de "seleção" sem precisar de fundo/borda."""
+        """Workspace selecionado ganha tint azul + borda primary; demais
+        ficam com bg sutil + borda discreta — visual de card sempre."""
         if self._selected == selected:
             return
         self._selected = selected
         self._apply_label_color()
+        self._apply_card_qss()
+
+    def _apply_card_qss(self) -> None:
+        """Renderiza o widget como card (bg + borda + radius), igual
+        mockup. Tom muda em seleção / hover."""
+        if self._selected:
+            bg = "rgba(61, 110, 168, 32)"
+            border = theme.PRIMARY
+        else:
+            bg = theme.BG_SURFACE
+            border = theme.BORDER_INPUT
+        self.setStyleSheet(
+            f"WorkspaceItemWidget {{"
+            f"  background: {bg};"
+            f"  border: 1px solid {border};"
+            f"  border-radius: 6px;"
+            f"}}"
+            f"WorkspaceItemWidget:hover {{"
+            f"  border-color: {theme.BORDER if not self._selected else theme.PRIMARY_HOVER};"
+            f"}}"
+        )
 
     def _apply_label_color(self) -> None:
         from .icons import ic as _ic

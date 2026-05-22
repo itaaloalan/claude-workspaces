@@ -2349,6 +2349,8 @@ class MainWindow(QMainWindow):
             if isinstance(widget, WorkspaceItemWidget):
                 widget.set_collapsed(not item.isExpanded())
 
+        from PySide6.QtCore import QSize as _QS
+
         widget = WorkspaceItemWidget(ws.name, on_add, on_toggle)
         widget.set_collapsed(not item.isExpanded())
         widget.set_pinned(ws.pinned)
@@ -2359,6 +2361,9 @@ class MainWindow(QMainWindow):
         # rebuilds da árvore preservam o highlight branco no item certo.
         current_ws = self._current_workspace()
         widget.set_selected(current_ws is not None and current_ws.id == ws.id)
+        # SizeHint com altura extra pra dar respiro entre cards (sem isso,
+        # tree cola um card no outro e a borda some).
+        item.setSizeHint(0, _QS(0, 44))
         self.list_widget.setItemWidget(item, 0, widget)
         self._refresh_empty_placeholder(item)
 
