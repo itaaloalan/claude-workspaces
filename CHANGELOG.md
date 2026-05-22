@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.17] — 2026-05-22
+
+### Melhorado — espaçamento FIXADOS/WORKSPACES + alinhamento dos chevrons
+- **`ui/builders/sidebar_builder.py`**: margem topo do header
+  `WORKSPACES` aumentada de 4px → 16px, abrindo respiro visual entre a
+  seção `FIXADOS` e a lista de workspaces.
+- **`ui/runner_group_widget.py`** e **`ui/main_window.py`
+  (`_ensure_sessoes_bucket`)**: margem esquerda dos headers `Runners` e
+  `Sessões Claude` ajustada para 8px, alinhando o chevron com a borda
+  esquerda dos cards filhos (terminais/runners), que já usam wrapper
+  com `setContentsMargins(8, 0, 8, 0)`.
+
 ## [0.76.16] — 2026-05-22
 
 ### Melhorado — "Startando..." enquanto browser não abre (runners com open_browser_on_ready)

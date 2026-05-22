@@ -68,7 +68,7 @@ class RunnerGroupWidget(QWidget):
         row = QHBoxLayout(self)
         # Margens/spacing iguais ao header do bucket "Sessões Claude" pra os
         # dois grupos ficarem alinhados verticalmente na sidebar.
-        row.setContentsMargins(4, 2, 6, 2)
+        row.setContentsMargins(8, 2, 6, 2)
         row.setSpacing(6)
 
         from PySide6.QtCore import QSize as _QS

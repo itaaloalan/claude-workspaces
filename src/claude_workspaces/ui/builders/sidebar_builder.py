@@ -442,7 +442,7 @@ class SidebarBuilder:
         header_row = QWidget()
         header_row.setObjectName("WorkspacesHeaderRow")
         header_layout = QHBoxLayout(header_row)
-        header_layout.setContentsMargins(0, 4, 0, 0)
+        header_layout.setContentsMargins(0, 16, 0, 0)
         header_layout.setSpacing(6)
         header = QLabel("WORKSPACES")
         header.setStyleSheet(theme.section_header_qss())

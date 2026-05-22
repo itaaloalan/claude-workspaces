@@ -2415,7 +2415,7 @@ class MainWindow(QMainWindow):
         host.setStyleSheet("background: transparent;")
         host.setCursor(Qt.CursorShape.PointingHandCursor)
         h = QHBoxLayout(host)
-        h.setContentsMargins(2, 0, 6, 0)
+        h.setContentsMargins(8, 0, 6, 0)
         h.setSpacing(6)
         chevron_lbl = QLabel()
         chevron_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
