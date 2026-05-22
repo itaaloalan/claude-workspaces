@@ -10,6 +10,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPalette
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -193,6 +194,21 @@ _VERSION_LABEL_QSS = (
     f"}}"
 )
 
+_HEADER_ICON_BTN_QSS = (
+    f"QPushButton {{"
+    f"  background: transparent;"
+    f"  border: 0;"
+    f"  border-radius: {theme.RADIUS_SM}px;"
+    f"  color: {theme.TEXT_FAINT};"
+    f"  font-size: 13px;"
+    f"  padding: 0;"
+    f"}}"
+    f"QPushButton:hover {{"
+    f"  background: {theme.BG_SURFACE};"
+    f"  color: {theme.TEXT_LINK};"
+    f"}}"
+)
+
 _CONTEXT_STATUS_QSS = (
     f"QLabel {{"
     f"  color: {theme.TEXT_FADED};"
@@ -232,91 +248,105 @@ class SidebarBuilder:
         self._on_search_workspaces = on_search_workspaces
 
     def build(self) -> SidebarBuilder:
-        self.wrapper = QWidget()
-        self.wrapper.setStyleSheet(f"background: {theme.BG_PANEL};")
-        layout = QVBoxLayout(self.wrapper)
-        layout.setContentsMargins(8, 10, 8, 8)
-        layout.setSpacing(6)
-
-        # Header "WORKSPACES" + toggle das ações inline nos consoles
-        # (▶ Continuar / ⚙ Modo). Texto/tooltip do botão é refrescado
-        # pela MainWindow via `set_child_actions_visible`.
-        header_row = QWidget()
-        header_row.setObjectName("WorkspacesHeaderRow")
-        header_row.setStyleSheet(_SECTION_HEADER_ROW_QSS)
-        header_layout = QHBoxLayout(header_row)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(0)
-        header = QLabel("WORKSPACES")
-        header.setStyleSheet(_SECTION_HEADER_QSS)
-        header_layout.addWidget(header, stretch=1)
-        self.actions_toggle_btn = QPushButton("⌃")
-        self.actions_toggle_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.actions_toggle_btn.setStyleSheet(_HEADER_TOGGLE_QSS)
-        self.actions_toggle_btn.setFixedHeight(18)
-        self.actions_toggle_btn.setToolTip(
-            "Ocultar/mostrar os botões ▶ Continuar / ⚙ Modo em cada"
-            " console. As ações continuam acessíveis no menu de contexto."
-        )
-        header_layout.addWidget(self.actions_toggle_btn, 0, Qt.AlignmentFlag.AlignRight)
-
-        # Botão + (novo workspace) e filtro funnel na row do header
-        # WORKSPACES — espelha o mockup, dá ações 1-clique sem precisar
-        # do botão grande no rodapé.
         from PySide6.QtCore import QSize
 
         from ..icons import ICONS
         from ..icons import ic as _ic
-        self.header_add_btn = QPushButton()
-        self.header_add_btn.setIcon(_ic(ICONS["add"], color="#9aa0a6"))
-        self.header_add_btn.setIconSize(QSize(11, 11))
-        self.header_add_btn.setFixedSize(20, 18)
-        self.header_add_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.header_add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
-        self.header_add_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: 0; padding: 0; }"
-            "QPushButton:hover { background: #2a2a2a; border-radius: 3px; }"
-        )
-        self.header_add_btn.clicked.connect(self._on_add_clicked)
-        header_layout.addWidget(self.header_add_btn, 0, Qt.AlignmentFlag.AlignRight)
 
-        layout.addWidget(header_row)
+        self.wrapper = QWidget()
+        self.wrapper.setStyleSheet(f"background: {theme.BG_PANEL};")
+        layout = QVBoxLayout(self.wrapper)
+        layout.setContentsMargins(8, 10, 8, 8)
+        layout.setSpacing(8)
 
-        # Input local de busca workspaces (espelha o filtro do top bar
-        # mas fica colado na lista, igual VSCode/JetBrains).
+        # Search row primeiro — search alinhado no topo igual ao mockup.
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Buscar workspaces…")
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setStyleSheet(
-            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
-            "border-radius: 4px; padding: 5px 8px; color: #e6e6e6; font-size: 11px; }"
-            "QLineEdit:focus { border-color: #3d6ea8; }"
-            "QLineEdit { selection-background-color: #3d6ea8; }"
-        )
-        # Placeholder mais visível (default fica quase invisível em tema escuro)
+        self.search_input.setStyleSheet(theme.line_edit_qss())
         pal = self.search_input.palette()
-        pal.setColor(pal.ColorRole.PlaceholderText, QColor("#888"))
+        pal.setColor(pal.ColorRole.PlaceholderText, QColor(theme.TEXT_FAINT))
         self.search_input.setPalette(pal)
+        self.search_input.setFixedHeight(28)
         if self._on_search_workspaces is not None:
             self.search_input.textChanged.connect(self._on_search_workspaces)
 
-        # Wrappa o input num row com filtro funnel à direita (mockup).
         search_row = QHBoxLayout()
         search_row.setContentsMargins(0, 0, 0, 0)
         search_row.setSpacing(4)
         search_row.addWidget(self.search_input, stretch=1)
         self.filter_btn = QPushButton()
-        self.filter_btn.setIcon(_ic(ICONS["filter"], color="#9aa0a6"))
+        self.filter_btn.setIcon(_ic(ICONS["filter"], color=theme.TEXT_FAINT))
         self.filter_btn.setIconSize(QSize(12, 12))
-        self.filter_btn.setFixedSize(28, 26)
+        self.filter_btn.setFixedSize(28, 28)
         self.filter_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.filter_btn.setToolTip("Filtros avançados (em breve)")
         self.filter_btn.setStyleSheet(
-            "QPushButton { background: #1f1f1f; border: 1px solid #2c2c2c; border-radius: 4px; }"
-            "QPushButton:hover { border-color: #3d6ea8; }"
+            f"QPushButton {{ background: {theme.BG_SURFACE}; "
+            f"border: 1px solid {theme.BORDER_INPUT}; border-radius: {theme.RADIUS_SM}px; }}"
+            f"QPushButton:hover {{ border-color: {theme.PRIMARY}; }}"
         )
         search_row.addWidget(self.filter_btn)
         layout.addLayout(search_row)
+
+        # Seções ATENÇÃO e FIXADOS — começam ocultas; MainWindow popula
+        # via set_attention_items/set_pinned_items (stubs por enquanto).
+        self.attention_section = self._make_section_container("ATENÇÃO")
+        self.attention_section.setVisible(False)
+        layout.addWidget(self.attention_section)
+
+        self.pinned_section = self._make_section_container("FIXADOS")
+        self.pinned_section.setVisible(False)
+        layout.addWidget(self.pinned_section)
+
+        # Header WORKSPACES — label + count chip + botões à direita.
+        header_row = QWidget()
+        header_row.setObjectName("WorkspacesHeaderRow")
+        header_layout = QHBoxLayout(header_row)
+        header_layout.setContentsMargins(0, 4, 0, 0)
+        header_layout.setSpacing(6)
+        header = QLabel("WORKSPACES")
+        header.setStyleSheet(theme.section_header_qss())
+        header_layout.addWidget(header, 0)
+
+        self.workspaces_count_label = QLabel("")
+        self.workspaces_count_label.setStyleSheet(
+            f"QLabel {{ color: {theme.TEXT_FAINT}; background: {theme.BG_SURFACE}; "
+            f"font-size: 9px; font-weight: 700; padding: 1px 6px; "
+            f"border-radius: 7px; }}"
+        )
+        self.workspaces_count_label.setVisible(False)
+        header_layout.addWidget(self.workspaces_count_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        header_layout.addStretch(1)
+
+        # actions_toggle_btn é mantido (MainWindow conecta nele), mas
+        # agora vive escondido — comportamento exposto via menu ⋯.
+        self.actions_toggle_btn = QPushButton("⌃")
+        self.actions_toggle_btn.setStyleSheet(_HEADER_TOGGLE_QSS)
+        self.actions_toggle_btn.setVisible(False)
+
+        self.header_add_btn = QPushButton()
+        self.header_add_btn.setIcon(_ic(ICONS["add"], color=theme.TEXT_FAINT))
+        self.header_add_btn.setIconSize(QSize(12, 12))
+        self.header_add_btn.setFixedSize(22, 20)
+        self.header_add_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.header_add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
+        self.header_add_btn.setStyleSheet(_HEADER_ICON_BTN_QSS)
+        self.header_add_btn.clicked.connect(self._on_add_clicked)
+        header_layout.addWidget(self.header_add_btn, 0, Qt.AlignmentFlag.AlignRight)
+
+        self.header_more_btn = QPushButton("⋯")
+        self.header_more_btn.setFixedSize(22, 20)
+        self.header_more_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.header_more_btn.setStyleSheet(_HEADER_ICON_BTN_QSS)
+        self.header_more_btn.setToolTip(
+            "Mais ações (mostrar/ocultar atalhos nos consoles, etc.)"
+        )
+        self.header_more_btn.clicked.connect(self._open_header_menu)
+        header_layout.addWidget(self.header_more_btn, 0, Qt.AlignmentFlag.AlignRight)
+
+        layout.addWidget(header_row)
 
         self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)
@@ -440,3 +470,102 @@ class SidebarBuilder:
         layout.addWidget(self.version_label)
 
         return self
+
+    # ---------- helpers de seção / API pública ----------
+
+    def _make_section_container(self, title: str) -> QFrame:
+        """Container colapsável com header (sm-caps + count chip) + body
+        que recebe filhos via .body_layout. Começa oculto; o caller chama
+        setVisible(True) quando popular."""
+        container = QFrame()
+        container.setObjectName(f"Section_{title}")
+        container.setStyleSheet("QFrame { background: transparent; border: 0; }")
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(4)
+
+        head_row = QHBoxLayout()
+        head_row.setContentsMargins(0, 0, 0, 0)
+        head_row.setSpacing(6)
+
+        title_label = QLabel(title)
+        title_label.setStyleSheet(theme.section_header_qss())
+        head_row.addWidget(title_label, 0)
+
+        count_label = QLabel("")
+        count_label.setStyleSheet(
+            f"QLabel {{ color: {theme.TEXT_FAINT}; background: {theme.BG_SURFACE}; "
+            f"font-size: 9px; font-weight: 700; padding: 1px 6px; "
+            f"border-radius: 7px; }}"
+        )
+        count_label.setVisible(False)
+        head_row.addWidget(count_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        head_row.addStretch(1)
+        vbox.addLayout(head_row)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(4)
+        vbox.addWidget(body)
+
+        # Expostos no próprio container pra MainWindow popular.
+        container.count_label = count_label  # type: ignore[attr-defined]
+        container.body_layout = body_layout  # type: ignore[attr-defined]
+        return container
+
+    def _open_header_menu(self) -> None:
+        """Menu ⋯ do header WORKSPACES — agrupa ações secundárias que
+        antes poluíam a row do header (toggle de atalhos inline, etc).
+        Dispara o mesmo signal de `actions_toggle_btn` pra MainWindow."""
+        from PySide6.QtWidgets import QMenu
+
+        menu = QMenu(self.header_more_btn)
+        menu.setStyleSheet(
+            f"QMenu {{ background: {theme.BG_SURFACE}; "
+            f"color: {theme.TEXT_PRIMARY}; border: 1px solid {theme.BORDER_INPUT}; }}"
+            f"QMenu::item {{ padding: 6px 14px; }}"
+            f"QMenu::item:selected {{ background: {theme.PRIMARY}; color: {theme.TEXT_BRIGHT}; }}"
+        )
+        toggle_action = menu.addAction(self.actions_toggle_btn.toolTip().split(".")[0])
+        toggle_action.triggered.connect(self.actions_toggle_btn.click)
+        menu.addAction("Criar novo workspace…").triggered.connect(self._on_add_clicked)
+        menu.exec_(self.header_more_btn.mapToGlobal(
+            self.header_more_btn.rect().bottomRight()
+        ))
+
+    def set_workspaces_count(self, n: int) -> None:
+        """Atualiza o chip de contagem ao lado de WORKSPACES."""
+        if n <= 0:
+            self.workspaces_count_label.setVisible(False)
+            return
+        self.workspaces_count_label.setText(str(n))
+        self.workspaces_count_label.setVisible(True)
+
+    def set_attention_items(self, items: list[QWidget]) -> None:
+        """Popula a seção ATENÇÃO com cards já-prontos. Esconde se vazio."""
+        body = self.attention_section.body_layout  # type: ignore[attr-defined]
+        while body.count():
+            it = body.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
+        for w in items:
+            body.addWidget(w)
+        self.attention_section.count_label.setText(str(len(items)))  # type: ignore[attr-defined]
+        self.attention_section.count_label.setVisible(bool(items))  # type: ignore[attr-defined]
+        self.attention_section.setVisible(bool(items))
+
+    def set_pinned_items(self, items: list[QWidget]) -> None:
+        """Popula FIXADOS com cards já-prontos. Esconde se vazio."""
+        body = self.pinned_section.body_layout  # type: ignore[attr-defined]
+        while body.count():
+            it = body.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
+        for w in items:
+            body.addWidget(w)
+        self.pinned_section.count_label.setText(str(len(items)))  # type: ignore[attr-defined]
+        self.pinned_section.count_label.setVisible(bool(items))  # type: ignore[attr-defined]
+        self.pinned_section.setVisible(bool(items))

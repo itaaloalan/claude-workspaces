@@ -16,11 +16,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QWidget,
@@ -52,18 +53,10 @@ _DOT_QSS = (
     f"}}"
 )
 
-# Pill com count quando há >1 terminal rodando — fundo verde transparente
-# pra combinar com a bolinha sem competir com o nome do workspace.
-_BADGE_QSS = (
-    f"QLabel {{"
-    f"  background: rgba(90, 195, 90, 38);"
-    f"  color: {theme.SUCCESS};"
-    f"  font-size: 9px;"
-    f"  font-weight: 700;"
-    f"  padding: 1px 5px;"
-    f"  border-radius: 7px;"
-    f"}}"
-)
+# Pill com count quando há >1 terminal rodando — agora via token de estado
+# (state_badge_qss) pra ficar consistente com o resto da sidebar.
+_BADGE_QSS = theme.state_badge_qss(theme.STATE_DONE)
+_NOTIF_BADGE_QSS = theme.state_badge_qss(theme.STATE_AWAITING)
 
 
 class WorkspaceItemWidget(QWidget):
@@ -78,14 +71,15 @@ class WorkspaceItemWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        # Altura aumentada pra dar respiro entre workspaces — antes ficavam
-        # "colados" um no outro porque o header tinha exatamente a altura
-        # do label + 4px de padding. Agora 8px extras separam visualmente.
-        self.setMinimumHeight(28)
+        self.setMinimumHeight(30)
+        self._on_add_claude = on_add_claude
+        self._on_toggle_collapse = on_toggle_collapse
+        # Enable hover tracking pro reveal das ações secundárias.
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(2, 2, 2, 4)
-        row.setSpacing(6)
+        row.setContentsMargins(6, 4, 6, 6)
+        row.setSpacing(8)
 
         # Ícone do workspace antes do nome — match com mockup que mostra
         # um pequeno avatar/logo. fa5s.folder é o default; podia ser
@@ -130,14 +124,7 @@ class WorkspaceItemWidget(QWidget):
         # verde de "rodando". Pintado pelo MainWindow via NotificationService.
         self._notif_badge = QLabel("")
         self._notif_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._notif_badge.setStyleSheet(
-            "QLabel {"
-            "  background: rgba(201, 119, 45, 80);"
-            "  color: #ffce99;"
-            "  font-size: 9px; font-weight: 700;"
-            "  padding: 1px 6px; border-radius: 7px;"
-            "}"
-        )
+        self._notif_badge.setStyleSheet(_NOTIF_BADGE_QSS)
         self._notif_badge.setToolTip("Notificações pendentes neste workspace")
         self._notif_badge.hide()
         row.addWidget(self._notif_badge, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -167,7 +154,17 @@ class WorkspaceItemWidget(QWidget):
         )
         self._add_btn.setStyleSheet(_BTN_QSS)
         self._add_btn.clicked.connect(on_add_claude)
+        self._add_btn.setVisible(False)  # reveal on hover
         row.addWidget(self._add_btn)
+
+        self._more_btn = QPushButton("⋯")
+        self._more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._more_btn.setFixedSize(22, 22)
+        self._more_btn.setToolTip("Mais ações")
+        self._more_btn.setStyleSheet(_BTN_QSS)
+        self._more_btn.clicked.connect(self._open_menu)
+        self._more_btn.setVisible(False)  # reveal on hover
+        row.addWidget(self._more_btn)
 
         self._collapse_btn = QPushButton("⌄")
         self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -176,6 +173,28 @@ class WorkspaceItemWidget(QWidget):
         self._collapse_btn.setStyleSheet(_BTN_QSS)
         self._collapse_btn.clicked.connect(on_toggle_collapse)
         row.addWidget(self._collapse_btn)
+
+    def _open_menu(self) -> None:
+        menu = QMenu(self._more_btn)
+        menu.setStyleSheet(
+            f"QMenu {{ background: {theme.BG_SURFACE}; "
+            f"color: {theme.TEXT_PRIMARY}; border: 1px solid {theme.BORDER_INPUT}; }}"
+            f"QMenu::item {{ padding: 6px 14px; }}"
+            f"QMenu::item:selected {{ background: {theme.PRIMARY}; "
+            f"color: {theme.TEXT_BRIGHT}; }}"
+        )
+        menu.addAction("＋  Abrir Claude novo").triggered.connect(self._on_add_claude)
+        menu.addAction("Recolher / expandir").triggered.connect(self._on_toggle_collapse)
+        menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
+
+    def event(self, e: QEvent) -> bool:  # type: ignore[override]
+        if e.type() == QEvent.Type.HoverEnter:
+            self._add_btn.setVisible(True)
+            self._more_btn.setVisible(True)
+        elif e.type() == QEvent.Type.HoverLeave:
+            self._add_btn.setVisible(False)
+            self._more_btn.setVisible(False)
+        return super().event(e)
 
     def set_label(self, label: str) -> None:
         self._label.setText(label)
@@ -216,7 +235,7 @@ class WorkspaceItemWidget(QWidget):
 
     def _apply_label_color(self) -> None:
         from .icons import ic as _ic
-        color = "#ffffff" if self._selected else "#9a9a9a"
+        color = theme.TEXT_PRIMARY if self._selected else theme.TEXT_MUTED
         self._label.setStyleSheet(f"color: {color};")
         icon_color = (
             self._ws_icon_color_selected

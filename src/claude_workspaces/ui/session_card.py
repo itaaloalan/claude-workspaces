@@ -1,17 +1,40 @@
+from __future__ import annotations
+
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QVBoxLayout,
 )
 
 from ..claude_sessions import ClaudeSession
 from ..session_marks import is_starred, set_starred
+from . import theme
+
+SessionState = Literal["working", "awaiting", "idle", "error", "done"]
+
+_STATE_LABEL = {
+    "working": "Trabalhando",
+    "awaiting": "Aguardando",
+    "idle": "Ocioso",
+    "error": "Erro",
+    "done": "Concluída",
+}
+_STATE_COLOR = {
+    "working": theme.STATE_WORKING,
+    "awaiting": theme.STATE_AWAITING,
+    "idle": theme.STATE_IDLE,
+    "error": theme.STATE_ERROR,
+    "done": theme.STATE_DONE,
+}
 
 
 class SessionCard(QFrame):
@@ -23,37 +46,31 @@ class SessionCard(QFrame):
     export_requested = Signal(ClaudeSession)
     star_toggled = Signal(ClaudeSession, bool)
 
-    _BTN_GHOST = (
-        "QPushButton {"
-        "  background: transparent; color: #c8c8c8;"
-        "  border: 1px solid #3a3a3a; border-radius: 3px;"
-        "  padding: 1px 6px; font-size: 11px;"
-        "}"
-        "QPushButton:hover { color: #6aa9e0; border-color: #3d6ea8; }"
-    )
-
     def __init__(
         self,
         session: ClaudeSession,
         show_origin: bool = False,
+        state: SessionState | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self.session = session
         self.setObjectName("SessionCard")
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setStyleSheet(
-            "QFrame#SessionCard {"
-            "  background: #1f1f1f;"
-            "  border: 1px solid #2c2c2c;"
-            "  border-radius: 6px;"
-            "}"
-            "QFrame#SessionCard:hover { border-color: #3d6ea8; }"
-        )
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+        # Heurística default: sessão modificada nos últimos 5 min = "working",
+        # senão "done". Caller pode sobrescrever passando state explícito
+        # (awaiting / error / idle).
+        if state is None:
+            state = "working" if (time.time() - session.mtime) < 300 else "done"
+        self._state: SessionState = state
+        accent = _STATE_COLOR[self._state]
+        self.setStyleSheet(theme.left_accent_qss(accent, object_name="SessionCard"))
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(8, 5, 8, 5)
-        outer.setSpacing(2)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(4)
 
         header = QHBoxLayout()
         header.setSpacing(6)
@@ -61,109 +78,113 @@ class SessionCard(QFrame):
         self._starred = is_starred(session.id)
         self._star_btn = QPushButton()
         self._star_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._star_btn.setFixedWidth(22)
+        self._star_btn.setFixedWidth(20)
         self._star_btn.setFlat(True)
         self._star_btn.clicked.connect(self._on_toggle_star)
         self._refresh_star_visual()
         header.addWidget(self._star_btn)
+        # Estrela some no idle; reaparece em hover ou quando já marcada.
+        self._star_btn.setVisible(self._starred)
 
         title = QLabel(self._title_text())
-        title.setStyleSheet("font-weight: 600; color: #e6e6e6; font-size: 12px;")
-        title.setWordWrap(True)
+        title.setStyleSheet(
+            f"font-weight: 600; color: {theme.TEXT_PRIMARY}; font-size: 12px;"
+        )
+        title.setWordWrap(False)
+        title.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        # Elide longo: cabe na largura disponível sem quebrar visualmente feio.
+        title.setMinimumWidth(0)
         header.addWidget(title, stretch=1)
 
-        # Badge Ativa (verde) / Concluída (cinza) — heurística:
-        # sessão modificada nos últimos 5 minutos é "Ativa".
-        import time
-        is_active = (time.time() - session.mtime) < 300  # 5min
-        badge = QLabel("Ativa" if is_active else "Concluída")
-        if is_active:
-            badge.setStyleSheet(
-                "QLabel { background: rgba(90, 195, 90, 38); color: #5ac35a; "
-                "font-size: 9px; font-weight: 700; padding: 2px 8px; "
-                "border-radius: 8px; }"
-            )
-        else:
-            badge.setStyleSheet(
-                "QLabel { background: #2a2a2a; color: #9aa0a6; "
-                "font-size: 9px; font-weight: 700; padding: 2px 8px; "
-                "border-radius: 8px; }"
-            )
+        badge = QLabel(_STATE_LABEL[self._state])
+        badge.setStyleSheet(theme.state_badge_qss(accent))
         header.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
         when = QLabel(self._when_text())
-        when.setStyleSheet("color: #8a8a8a; font-size: 10px;")
-        when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        when.setStyleSheet(f"color: {theme.TEXT_FAINT}; font-size: 10px;")
+        when.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         header.addWidget(when)
 
         outer.addLayout(header)
 
         if show_origin:
             origin = QLabel(Path(session.origin_cwd).name)
-            origin.setStyleSheet("color: #6aa9e0; font-size: 10px;")
+            origin.setStyleSheet(f"color: {theme.TEXT_LINK}; font-size: 10px;")
             outer.addWidget(origin)
 
         actions = QHBoxLayout()
-        actions.setSpacing(4)
+        actions.setSpacing(6)
         actions.addStretch()
 
-        delete_btn = QPushButton("✕")
-        delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        delete_btn.setToolTip("Excluir o arquivo desta sessão (.jsonl)")
-        delete_btn.setStyleSheet(
-            "QPushButton {"
-            "  background: transparent; color: #888;"
-            "  border: 1px solid #3a3a3a; border-radius: 3px;"
-            "  padding: 1px 6px; font-size: 11px;"
-            "}"
-            "QPushButton:hover { color: #e57373; border-color: #a23a3a; }"
+        # ⋯ agrupa ações secundárias (delete, export, handoff) — só visível
+        # em hover. Reduz poluição mantendo o card limpo no idle.
+        self._more_btn = QPushButton("⋯")
+        self._more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._more_btn.setFixedSize(22, 22)
+        self._more_btn.setToolTip("Mais ações")
+        self._more_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {theme.TEXT_FAINT}; "
+            f"border: 0; border-radius: {theme.RADIUS_SM}px; font-size: 14px; }}"
+            f"QPushButton:hover {{ background: {theme.BG_PANEL}; "
+            f"color: {theme.TEXT_LINK}; }}"
         )
-        delete_btn.clicked.connect(lambda: self.delete_requested.emit(self.session))
-        actions.addWidget(delete_btn)
+        self._more_btn.clicked.connect(self._open_menu)
+        self._more_btn.setVisible(False)
+        actions.addWidget(self._more_btn)
 
-        export_btn = QPushButton("📝")
-        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.setToolTip("Exportar conversa como markdown")
-        export_btn.setStyleSheet(self._BTN_GHOST)
-        export_btn.clicked.connect(lambda: self.export_requested.emit(self.session))
-        actions.addWidget(export_btn)
-
-        handoff_btn = QPushButton("→ Handoff")
-        handoff_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        handoff_btn.setToolTip(
-            "Abrir novo Claude com briefing dessa sessão como primeira mensagem"
-        )
-        handoff_btn.setStyleSheet(self._BTN_GHOST)
-        handoff_btn.clicked.connect(lambda: self.handoff_requested.emit(self.session))
-        actions.addWidget(handoff_btn)
-
-        # Label "Retomar" pra sessão ativa (azul mais forte), "Reabrir"
-        # pra concluída (azul mais discreto). Match com mockup.
-        resume_btn = QPushButton("Retomar" if is_active else "Reabrir")
+        # Botão principal — "Retomar" pra working/awaiting, "Reabrir" pro resto.
+        is_live = self._state in ("working", "awaiting")
+        resume_btn = QPushButton("Retomar" if is_live else "Reabrir")
         resume_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        if is_active:
+        if is_live:
             resume_btn.setStyleSheet(
-                "QPushButton {"
-                "  background: #3d6ea8; color: #fff; font-weight: 600;"
-                "  border: 0; border-radius: 3px;"
-                "  padding: 2px 12px; font-size: 11px;"
-                "}"
-                "QPushButton:hover { background: #4a82c5; }"
+                f"QPushButton {{ background: {theme.PRIMARY}; color: {theme.TEXT_BRIGHT}; "
+                f"font-weight: 600; border: 0; border-radius: {theme.RADIUS_SM}px; "
+                f"padding: 3px 12px; font-size: 11px; }}"
+                f"QPushButton:hover {{ background: {theme.PRIMARY_HOVER}; }}"
             )
         else:
             resume_btn.setStyleSheet(
-                "QPushButton {"
-                "  background: #2d4a6e; color: #e6e6e6;"
-                "  border: 0; border-radius: 3px;"
-                "  padding: 2px 10px; font-size: 11px;"
-                "}"
-                "QPushButton:hover { background: #3d6ea8; }"
+                f"QPushButton {{ background: transparent; color: {theme.TEXT_MUTED}; "
+                f"border: 1px solid {theme.BORDER_INPUT}; "
+                f"border-radius: {theme.RADIUS_SM}px; padding: 3px 10px; font-size: 11px; }}"
+                f"QPushButton:hover {{ border-color: {theme.PRIMARY}; "
+                f"color: {theme.TEXT_LINK}; }}"
             )
         resume_btn.clicked.connect(lambda: self.resume_requested.emit(self.session))
         actions.addWidget(resume_btn)
         outer.addLayout(actions)
 
         self.setToolTip(f"ID: {session.id}\nOrigem: {session.origin_cwd}")
+
+    def _open_menu(self) -> None:
+        menu = QMenu(self._more_btn)
+        menu.setStyleSheet(
+            f"QMenu {{ background: {theme.BG_SURFACE}; "
+            f"color: {theme.TEXT_PRIMARY}; border: 1px solid {theme.BORDER_INPUT}; }}"
+            f"QMenu::item {{ padding: 6px 14px; }}"
+            f"QMenu::item:selected {{ background: {theme.PRIMARY}; "
+            f"color: {theme.TEXT_BRIGHT}; }}"
+        )
+        menu.addAction("→  Handoff (novo Claude com briefing)").triggered.connect(
+            lambda: self.handoff_requested.emit(self.session)
+        )
+        menu.addAction("📝  Exportar como markdown").triggered.connect(
+            lambda: self.export_requested.emit(self.session)
+        )
+        menu.addSeparator()
+        del_action = menu.addAction("✕  Excluir sessão (.jsonl)")
+        del_action.triggered.connect(lambda: self.delete_requested.emit(self.session))
+        menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
+
+    def event(self, e: QEvent) -> bool:  # type: ignore[override]
+        if e.type() == QEvent.Type.HoverEnter:
+            self._more_btn.setVisible(True)
+            self._star_btn.setVisible(True)
+        elif e.type() == QEvent.Type.HoverLeave:
+            self._more_btn.setVisible(False)
+            self._star_btn.setVisible(self._starred)
+        return super().event(e)
 
     def _refresh_star_visual(self) -> None:
         if self._starred:
@@ -172,18 +193,18 @@ class SessionCard(QFrame):
             self._star_btn.setStyleSheet(
                 "QPushButton {"
                 "  background: transparent; color: #f0c040;"
-                "  border: 0; font-size: 14px; padding: 0;"
+                "  border: 0; font-size: 13px; padding: 0;"
                 "}"
                 "QPushButton:hover { color: #ffd860; }"
             )
         else:
             self._star_btn.setText("☆")
-            self._star_btn.setToolTip("Favoritar essa sessão (acha ela depois com o filtro ★)")
+            self._star_btn.setToolTip(
+                "Favoritar essa sessão (acha ela depois com o filtro ★)"
+            )
             self._star_btn.setStyleSheet(
-                "QPushButton {"
-                "  background: transparent; color: #6a6a6a;"
-                "  border: 0; font-size: 14px; padding: 0;"
-                "}"
+                f"QPushButton {{ background: transparent; color: {theme.TEXT_FAINT}; "
+                "border: 0; font-size: 13px; padding: 0; }}"
                 "QPushButton:hover { color: #f0c040; }"
             )
 
@@ -196,8 +217,8 @@ class SessionCard(QFrame):
     def _title_text(self) -> str:
         if self.session.preview:
             text = self.session.preview.replace("\n", " ").strip()
-            if len(text) > 70:
-                return text[:69] + "…"
+            if len(text) > 56:
+                return text[:55] + "…"
             return text
         return "(sem prompt registrado)"
 

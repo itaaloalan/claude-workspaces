@@ -6,6 +6,49 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.76.0] — 2026-05-22
+
+### Modificado — Repaginação visual da sidebar
+- **`ui/theme.py`**: novos tokens `SPACE_*`, `RADIUS_*`, `STATE_*`
+  (working/awaiting/idle/error/done) + helpers `section_header_qss()`,
+  `state_badge_qss(color)` e `left_accent_qss(color)` pra padronizar
+  badges, headers e cards com borda lateral colorida.
+- **`ui/builders/sidebar_builder.py`**: topo reorganizado — search agora
+  é a primeira linha, com filter button alinhado ao lado; novas seções
+  **ATENÇÃO** e **FIXADOS** (containers `QFrame` ocultos até serem
+  populados via `set_attention_items()` / `set_pinned_items()`, stubs
+  para próxima iteração); header WORKSPACES ganhou chip de contagem
+  discreto + botão `⋯` agrupando ações secundárias (o
+  `actions_toggle_btn` continua presente mas escondido, dispara via
+  menu — preserva wiring da MainWindow).
+- **`ui/workspace_item_widget.py`**: altura 28→30, padding/spacing
+  arejado, ações secundárias (`＋`, `⋯`) com hover-reveal — só
+  aparecem quando o mouse passa em cima do row; menu `⋯` agrupa
+  "Abrir Claude novo" e "Recolher/expandir"; cor do label via tokens
+  (`TEXT_PRIMARY`/`TEXT_MUTED`); badges via `state_badge_qss`.
+- **`ui/session_card.py`**: novo argumento opcional `state` com 5
+  valores (working/awaiting/idle/error/done) que pinta uma **barra
+  lateral colorida de 3px** no card + badge único padronizado
+  ("Trabalhando"/"Aguardando"/"Ocioso"/"Erro"/"Concluída"). Ações
+  secundárias (`✕`, `📝`, `→ Handoff`) saíram do layout fixo e viram
+  itens de menu `⋯` revelado em hover; só "Retomar/Reabrir" continua
+  sempre visível. Estrela some no idle quando não-marcada.
+  Heurística atual de mtime mapeia para working/done por default;
+  awaiting/error ficam disponíveis para callers que detectarem o
+  estado real.
+- **`ui/runner_group_widget.py`**: badges do header agora usam
+  `state_badge_qss` (tira CSS hardcoded, consistência com o resto).
+- **`ui/runner_child_widget.py`**: cada runner na sidebar ganhou um
+  pequeno container com bg `BG_DEEP` e borda lateral cinza fina —
+  comunica visualmente que é um processo, não uma conversa Claude.
+
+### Nota
+Sem alterações de lógica: seleção de workspace, expansão da árvore,
+sessões, runners, notificações e ações continuam idênticas. Stubs de
+ATENÇÃO/FIXADOS só renderizam quando MainWindow chamar
+`set_attention_items(...)` / `set_pinned_items(...)` — populate real
+é follow-up.
+
 ## [0.75.0] — 2026-05-22
 
 ### Adicionado

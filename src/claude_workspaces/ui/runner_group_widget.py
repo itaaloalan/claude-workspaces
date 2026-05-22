@@ -111,10 +111,7 @@ class RunnerGroupWidget(QWidget):
         # Badge de contagem total (escondido se 0/None) — mesmo visual do
         # bucket Sessões Claude na sidebar.
         self._count_badge = QLabel("")
-        self._count_badge.setStyleSheet(
-            "background: #2a2a2a; color: #9aa0a6; font-size: 9px; "
-            "font-weight: 700; padding: 1px 6px; border-radius: 6px;"
-        )
+        self._count_badge.setStyleSheet(theme.state_badge_qss(theme.STATE_IDLE))
         self._count_badge.setVisible(False)
         row.addWidget(self._count_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -122,10 +119,7 @@ class RunnerGroupWidget(QWidget):
         # quando há ao menos 1 runner rodando. Ajuda a ver de relance
         # quantos estão de fato online sem precisar abrir a lista.
         self._running_badge = QLabel("")
-        self._running_badge.setStyleSheet(
-            "background: rgba(90,195,90,0.18); color: #7ad97a; font-size: 9px; "
-            "font-weight: 700; padding: 1px 6px; border-radius: 6px;"
-        )
+        self._running_badge.setStyleSheet(theme.state_badge_qss(theme.STATE_DONE))
         self._running_badge.setToolTip("Runners em execução")
         self._running_badge.setVisible(False)
         row.addWidget(self._running_badge, 0, Qt.AlignmentFlag.AlignVCenter)

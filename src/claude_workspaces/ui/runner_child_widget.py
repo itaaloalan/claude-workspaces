@@ -52,6 +52,16 @@ _BTN_QSS = (
 )
 
 
+_ROW_QSS = (
+    f"QWidget#RunnerChildRow {{"
+    f"  background: {theme.BG_DEEP};"
+    f"  border: 1px solid {theme.BORDER_SOFT};"
+    f"  border-left: 2px solid {theme.BORDER};"
+    f"  border-radius: {theme.RADIUS_SM}px;"
+    f"}}"
+)
+
+
 class RunnerChildWidget(QWidget):
     """Linha compacta de runner na sidebar (filho de workspace).
 
@@ -83,9 +93,11 @@ class RunnerChildWidget(QWidget):
         outer.setSpacing(0)
 
         row_widget = QWidget(self)
+        row_widget.setObjectName("RunnerChildRow")
+        row_widget.setStyleSheet(_ROW_QSS)
         row_widget.setFixedHeight(self._ROW1_HEIGHT)
         row = QHBoxLayout(row_widget)
-        row.setContentsMargins(2, 0, 4, 0)
+        row.setContentsMargins(6, 0, 4, 0)
         row.setSpacing(6)
 
         self._dot = QLabel("")

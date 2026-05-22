@@ -147,6 +147,87 @@ def list_widget_qss() -> str:
     )
 
 
+# ---------- Spacing / radius scale ----------
+
+SPACE_XS = 2
+SPACE_SM = 4
+SPACE_MD = 8
+SPACE_LG = 12
+
+RADIUS_SM = 4
+RADIUS_MD = 6
+
+
+# ---------- Estados (sessão / item) ----------
+# Cor sólida que vai na barra lateral do card + cor do texto do badge.
+# bg do badge = state @ ~15% via state_badge_qss().
+
+STATE_WORKING = WARNING     # âmbar — Claude trabalhando
+STATE_AWAITING = WAITING    # laranja — aguardando permissão / atenção
+STATE_IDLE = TEXT_FAINT     # cinza — ocioso
+STATE_ERROR = DANGER        # vermelho — erro
+STATE_DONE = SUCCESS        # verde — concluído
+
+
+_STATE_BADGE_BG = {
+    STATE_WORKING: "rgba(224, 184, 106, 38)",
+    STATE_AWAITING: "rgba(224, 144, 96, 46)",
+    STATE_IDLE: "rgba(136, 136, 136, 32)",
+    STATE_ERROR: "rgba(213, 114, 114, 42)",
+    STATE_DONE: "rgba(90, 195, 90, 38)",
+}
+
+
+def section_header_qss() -> str:
+    """Label de header de seção (sm-caps, faint, letter-spacing)."""
+    return (
+        f"QLabel {{"
+        f"  color: {TEXT_FAINT};"
+        f"  font-size: 10px;"
+        f"  font-weight: 700;"
+        f"  letter-spacing: 1.4px;"
+        f"  padding: 2px 4px 6px 4px;"
+        f"}}"
+    )
+
+
+def state_badge_qss(state_color: str) -> str:
+    """Pill compacto pra status (Trabalhando/Aguardando/etc)."""
+    bg = _STATE_BADGE_BG.get(state_color, "rgba(136, 136, 136, 32)")
+    return (
+        f"QLabel {{"
+        f"  background: {bg};"
+        f"  color: {state_color};"
+        f"  font-size: 9px;"
+        f"  font-weight: 700;"
+        f"  padding: 1px 7px;"
+        f"  border-radius: 8px;"
+        f"}}"
+    )
+
+
+def left_accent_qss(
+    state_color: str,
+    *,
+    bg: str | None = None,
+    border: str | None = None,
+    radius: int = RADIUS_MD,
+    object_name: str = "AccentCard",
+) -> str:
+    """Card com barra colorida de 3px à esquerda — sinaliza estado sem
+    poluir com badge grande. O resto do card mantém bg/borda padrão."""
+    bg = bg or BG_SURFACE
+    border = border or BORDER_INPUT
+    return (
+        f"QFrame#{object_name} {{"
+        f"  background: {bg};"
+        f"  border: 1px solid {border};"
+        f"  border-left: 3px solid {state_color};"
+        f"  border-radius: {radius}px;"
+        f"}}"
+    )
+
+
 def tree_widget_qss() -> str:
     return (
         f"QTreeWidget {{ background: transparent; border: 0; color: {TEXT_PRIMARY}; }}"
