@@ -2544,6 +2544,8 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "_bottom_sub_splitter"):
             log.info("[FOCUS] _bottom_sub_splitter ainda não existe, abort")
             return
+        import time
+        _fp_t0 = time.perf_counter()
         from PySide6.QtCore import QSize as _QS
         from .icons import ic
 
@@ -2626,6 +2628,10 @@ class MainWindow(QMainWindow):
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Restaurar área de runners")
 
+        log.info(
+            "[FOCUS-PERF] _focus_pane_from_sidebar(%s) dt=%.1fms",
+            pane, (time.perf_counter() - _fp_t0) * 1000,
+        )
         self._schedule_layout_save()
 
     def _ensure_runners_pane_visible(self) -> None:
@@ -2640,10 +2646,13 @@ class MainWindow(QMainWindow):
         Resolve o escopo automaticamente: runners workspace-scope abrem
         no painel "Runners workspace"; runners de console abrem no painel
         "Runners (console)" do console dono."""
+        import time
+        t0 = time.perf_counter()
         log.info(
             "[SIDEBAR] _open_runner_from_sidebar ws=%s runner=%s",
             workspace.id, runner_id,
         )
+        self._open_runner_t0 = t0
         # Antes de focar: se o runners pane está minimizado, restaura e
         # minimiza o terminal pane (mesmo gesto que o user pediu).
         self._ensure_runners_pane_visible()
@@ -2674,18 +2683,31 @@ class MainWindow(QMainWindow):
                     return
             # Não achou console dono (foi encerrado?) — fallback pro workspace.
         log.info("[SIDEBAR] usando workspace-scope runner area (fallback)")
+        import time
+        t1 = time.perf_counter()
         area = self._get_or_create_runner_area(workspace)
+        t2 = time.perf_counter()
         self.runner_host.setCurrentWidget(area)
+        t3 = time.perf_counter()
         self._runners_tabs.setCurrentWidget(self.runner_host)
-        log.info(
-            "[SIDEBAR] chamando area.focus_runner(%s) — area_id=%s "
-            "runners_tabs_current=%s",
-            runner_id, id(area),
-            self._runners_tabs.currentWidget().__class__.__name__,
-        )
+        t4 = time.perf_counter()
         area.focus_runner(runner_id)
+        t5 = time.perf_counter()
+        total = (t5 - getattr(self, "_open_runner_t0", t1)) * 1000
+        log.info(
+            "[SIDEBAR-PERF] _open_runner_from_sidebar dt_total=%.1fms "
+            "get_area=%.1fms runner_host_set=%.1fms tabs_set=%.1fms "
+            "focus_runner=%.1fms",
+            total,
+            (t2 - t1) * 1000,
+            (t3 - t2) * 1000,
+            (t4 - t3) * 1000,
+            (t5 - t4) * 1000,
+        )
 
     def _focus_terminal_tab(self, workspace: Workspace, tab_id: int) -> None:
+        import time
+        ft_t0 = time.perf_counter()
         log.info(
             "[SIDEBAR] _focus_terminal_tab ws=%s tab_id=%s",
             workspace.id, tab_id,
@@ -2699,11 +2721,14 @@ class MainWindow(QMainWindow):
             return
         for i in range(area.tabs.count()):
             if id(area.tabs.widget(i)) == tab_id:
-                log.info("[SIDEBAR] foco aba idx=%d", i)
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
                 self._refresh_terminal_pane_title()
+                log.info(
+                    "[SIDEBAR-PERF] _focus_terminal_tab dt=%.1fms",
+                    (time.perf_counter() - ft_t0) * 1000,
+                )
                 break
 
     def _show_settings(self) -> None:

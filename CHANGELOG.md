@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.13] — 2026-05-22
+
+### Adicionado
+- **Timing logs no click do sidebar** (`ui/main_window.py`):
+  `_open_runner_from_sidebar`, `_focus_terminal_tab` e
+  `_focus_pane_from_sidebar` agora emitem `[SIDEBAR-PERF]` e
+  `[FOCUS-PERF]` com duração em ms de cada subpasso
+  (get_or_create_area, runner_host_set, tabs_set, focus_runner) —
+  pra identificar qual é o gargalo real da lentidão reportada no
+  click do runner.
+
 ## [0.61.12] — 2026-05-22
 
 ### Corrigido
