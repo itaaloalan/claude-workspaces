@@ -599,8 +599,17 @@ class TerminalWidget(QWidget):
         digitar manualmente em cada console."""
         if not self.session.is_running():
             return
-        data = text + ("\r" if submit else "")
-        self.session.write(data.encode("utf-8"))
+        self.session.write(text.encode("utf-8"))
+        if submit:
+            # Why: Claude CLI usa bracketed paste — texto + '\r' na mesma
+            # escrita vira paste com newline (não submete). Mandar o '\r'
+            # numa escrita separada, depois de um tick, faz a TUI tratar
+            # como Enter de verdade.
+            QTimer.singleShot(
+                120,
+                lambda: self.session.is_running()
+                and self.session.write(b"\r"),
+            )
 
     def send_continue(self) -> None:
         """Atalho — manda 'continue' + Enter pra retomar trabalho do Claude."""

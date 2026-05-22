@@ -6,6 +6,17 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.7] — 2026-05-22
+
+### Corrigido
+- **Prompt inicial do modal exigia Enter manual pra submeter**
+  (`ui/terminal_widget.py`): `send_text` mandava texto + `\r` numa
+  única escrita no PTY; o bracketed paste do Claude CLI interpretava
+  o `\r` como newline da composição em vez de Enter. Agora o `\r`
+  vai numa escrita separada via `QTimer.singleShot(120ms)`, então o
+  prompt é submetido sozinho. Afeta também `send_continue`,
+  `/model` e `/effort`.
+
 ## [0.60.6] — 2026-05-22
 
 ### Mudado
