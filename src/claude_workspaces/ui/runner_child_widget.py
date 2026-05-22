@@ -74,7 +74,7 @@ class RunnerChildWidget(QWidget):
         Linha 2:         status (Running/Idle/Failed)
     """
 
-    _CARD_HEIGHT = 38
+    _CARD_HEIGHT = 32
 
     size_hint_changed = Signal(int)
 
@@ -96,13 +96,13 @@ class RunnerChildWidget(QWidget):
         self.setStyleSheet(_CARD_QSS)
 
         card_layout = QHBoxLayout(self)
-        card_layout.setContentsMargins(8, 4, 6, 4)
-        card_layout.setSpacing(8)
+        card_layout.setContentsMargins(8, 2, 6, 2)
+        card_layout.setSpacing(6)
 
         # Ícone à esquerda — quadradinho com cube/box (match mockup).
         from .icons import ic as _ic
         self._icon = QLabel()
-        self._icon.setFixedSize(22, 22)
+        self._icon.setFixedSize(20, 20)
         self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon.setStyleSheet(
             f"QLabel {{ background: {theme.BG_DEEP}; "

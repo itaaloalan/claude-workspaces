@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.76.12] — 2026-05-22
+
+### Modificado — Runner card mais compacto
+- **`ui/runner_child_widget.py`**: altura 38→32px, margens internas
+  vertical 4→2px, spacing 8→6px, ícone 22→20px. Lista de runners
+  fica mais densa sem perder legibilidade — usuário pediu pra
+  comprimir o espaço interno depois que vimos a lista expandida.
+
 ## [0.76.11] — 2026-05-22
 
 ### Corrigido — Duplo background nos cards (workspace/runner/console)
