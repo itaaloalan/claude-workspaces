@@ -2501,28 +2501,21 @@ class MainWindow(QMainWindow):
         self._focus_terminal_tab(ws, data)
 
     def _focus_pane_from_sidebar(self, pane: str) -> None:
-        """Click pelo sidebar = "focar" o pane escolhido: maximiza ele e
-        minimiza os outros dois. `pane` ∈ {"runners", "terminal"}.
+        """Click pelo sidebar = "focar" o pane escolhido dentro do
+        `_bottom_sub_splitter`. `pane` ∈ {"runners", "terminal"}.
 
-        Aplica o estado final via QTimer.singleShot — assim a expansão
-        do `right_splitter` causada pelo workspace minimizar tem tempo
-        de propagar antes de calcularmos `total` do sub-splitter."""
+        Mantém o workspace upper como estiver (não auto-minimiza —
+        causava lentidão visível em cada click). Aplica setSizes
+        sincrono e atualiza chips/ícones inline."""
         if not hasattr(self, "_bottom_sub_splitter"):
             return
-        from PySide6.QtCore import QTimer
-
-        # 1) Workspace upper sempre minimizado em focus mode
-        if not self._content_is_minimized():
-            self._toggle_content_minimized()
-
-        # 2) Defer a aplicação dos sizes do sub-splitter pra depois do
-        #    Qt processar o resize do right_splitter. Sem isso, o
-        #    setSizes via valores stale e o pane alvo não maximiza.
-        QTimer.singleShot(0, lambda p=pane: self._apply_focus_pane(p))
-
-    def _apply_focus_pane(self, pane: str) -> None:
         from PySide6.QtCore import QSize as _QS
         from .icons import ic
+
+        # Garante que os panes podem colapsar pra 0 — caso ainda
+        # tenham minimum size herdado de algum sizeHint do conteúdo.
+        self._terminal_pane_widget.setMinimumHeight(0)
+        self._runners_pane.setMinimumHeight(0)
 
         cur = self._bottom_sub_splitter.sizes()
         total = sum(cur)
@@ -2531,15 +2524,6 @@ class MainWindow(QMainWindow):
             total = h
         if total < 200:
             total = 600
-
-        # Garante que os panes podem colapsar pra 0 e ficar visíveis
-        # — sem mexer em setVisible (que faz o splitter redistribuir
-        # automaticamente antes do nosso setSizes e cria o bug
-        # "runner click não maximiza").
-        self._terminal_pane_widget.setVisible(True)
-        self._runners_pane.setVisible(True)
-        self._terminal_pane_widget.setMinimumHeight(0)
-        self._runners_pane.setMinimumHeight(0)
 
         if pane == "runners":
             if cur and cur[0] > 4:
@@ -2683,9 +2667,18 @@ class MainWindow(QMainWindow):
         console estou olhando"."""
         if not hasattr(self, "_terminal_pane_title"):
             return
-        ws = self._current_workspace()
         area = self._active_terminal_area()
         term = area.tabs.currentWidget() if area is not None else None
+        # Workspace: resolve a partir da própria area ativa — não usa
+        # `_current_workspace()` porque o item selecionado no sidebar
+        # pode ser um console/runner (filhos do bucket) e o helper
+        # antigo só subia 1 nível, dando None nesses casos.
+        ws = None
+        if area is not None:
+            for ws_id, a in self.terminals_coord._areas.items():
+                if a is area:
+                    ws = self.workspaces_coord.find_by_id(ws_id)
+                    break
         if ws is None or term is None or not isinstance(term, TerminalWidget):
             self._terminal_pane_title.setText(
                 "<span style='color:#666'>Claude console — "

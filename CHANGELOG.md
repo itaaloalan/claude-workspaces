@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.8] — 2026-05-22
+
+### Corrigido
+- **Header do terminal pane mostrando placeholder com console
+  selecionado** (`ui/main_window.py`): `_refresh_terminal_pane_title`
+  usava `_current_workspace()` que só subia 1 nível na tree — com a
+  estrutura `workspace → bucket "Sessões Claude" → console`, clicar
+  no console retornava None. Agora resolve o workspace direto pela
+  `TerminalArea` ativa em `terminal_host`, via lookup em
+  `terminals_coord._areas`.
+
+### Mudado
+- **Focus pelo sidebar agora é síncrono e não minimiza o workspace
+  upper** (`ui/main_window.py`): `_focus_pane_from_sidebar` removeu
+  o `QTimer.singleShot` e o auto-minimize do workspace — eram a causa
+  da lentidão visível em todo click do sidebar. Agora só ajusta
+  `_bottom_sub_splitter` direto (setSizes + minHeight 0), atualiza
+  chips/ícones inline. Workspace upper segue intocado; user
+  minimiza manualmente se quiser.
+
 ## [0.61.7] — 2026-05-22
 
 ### Mudado
