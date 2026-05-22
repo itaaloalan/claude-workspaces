@@ -2429,6 +2429,16 @@ class MainWindow(QMainWindow):
         # item anterior, liga a do novo. Só TerminalChildWidget tem
         # `set_selected`; outros widgets (workspace header, runner)
         # ignoram.
+        current_data = (
+            current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        )
+        previous_data = (
+            _previous.data(0, Qt.ItemDataRole.UserRole) if _previous is not None else None
+        )
+        log.info(
+            "[SIDEBAR] _on_selection_changed prev=%r current=%r",
+            previous_data, current_data,
+        )
         for item in (_previous, current):
             if item is None:
                 continue
@@ -2446,6 +2456,10 @@ class MainWindow(QMainWindow):
             self._refresh_status_bar_console()
             return
         ws = self._workspace_of_item(current)
+        log.info(
+            "[SIDEBAR] _on_selection_changed → ws=%s (resolvido via _workspace_of_item)",
+            ws.id if ws else None,
+        )
         if ws is None:
             self._refresh_status_bar_console()
             return
@@ -2455,12 +2469,32 @@ class MainWindow(QMainWindow):
         self._update_status_bar(ws)
         self._refresh_status_bar_console()
         self.plugin_coord.dispatch_workspace_opened(ws.id)
+        # Safety net: clicks em RunnerChildWidget muitas vezes não
+        # disparam `itemClicked` (o widget customizado intercepta o
+        # mouse). Re-dispatcha o focus a partir do selection_changed
+        # — esse signal SEMPRE roda em mudança de seleção.
+        if (
+            isinstance(current_data, tuple)
+            and len(current_data) == 3
+            and current_data[0] == "runner"
+        ):
+            log.info(
+                "[SIDEBAR] (safety net) selection_changed detectou runner — "
+                "redirecionando pro _open_runner_from_sidebar"
+            )
+            self._open_runner_from_sidebar(ws, current_data[2])
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
         """Delega pro DockCoordinator."""
         self.dock_coord.broadcast_workspace(workspace)
 
     def _on_tree_item_clicked(self, item: QTreeWidgetItem, _col: int) -> None:
+        raw_data = item.data(0, Qt.ItemDataRole.UserRole) if item else None
+        has_parent = item.parent() is not None if item else False
+        log.info(
+            "[SIDEBAR] _on_tree_item_clicked ENTRY has_parent=%s data=%r",
+            has_parent, raw_data,
+        )
         # Clique simples numa aba ativa/em ação (tab_id) já foca a aba.
         if item.parent() is None:
             return

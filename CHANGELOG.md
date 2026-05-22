@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.10] — 2026-05-22
+
+### Adicionado
+- **Logs ainda mais detalhados + safety net pro click do runner**
+  (`ui/main_window.py`):
+  - `_on_tree_item_clicked` agora loga ENTRY com `has_parent` e
+    raw `data` — confirma se o handler dispara em runner clicks.
+  - `_on_selection_changed` loga prev/current data e o ws
+    resolvido via `_workspace_of_item` (que sobe múltiplos níveis).
+  - Safety net: se `_on_selection_changed` detectar que o item
+    selecionado é um runner (`("runner", ws_id, runner_id)`), ele
+    re-dispatcha `_open_runner_from_sidebar` no lugar do click —
+    contorna o caso onde `RunnerChildWidget` intercepta o mouse e
+    `itemClicked` nunca dispara.
+
 ## [0.61.9] — 2026-05-22
 
 ### Adicionado
