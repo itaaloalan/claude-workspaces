@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.14] — 2026-05-22
+
+### Mudado
+- **Animação suave de 180ms no resize do bottom sub-splitter**
+  (`ui/main_window.py`): timing logs (0.61.13) mostraram que o
+  Python no click do runner roda em 1-3ms — o lag perceptível era
+  o QWebEngineView (xterm.js do console + dos runners) repintando
+  ~100-200ms após o setSizes brusco. Agora `_animate_bottom_sub_splitter`
+  interpola sizes via `QVariantAnimation` com easing OutCubic em
+  180ms — o user vê movimento imediato no click e a percepção de
+  lag some. Cancela animação anterior antes de iniciar nova pra
+  não acumular queue em clicks rápidos.
+
 ## [0.61.13] — 2026-05-22
 
 ### Adicionado

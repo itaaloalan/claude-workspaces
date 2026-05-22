@@ -2534,6 +2534,51 @@ class MainWindow(QMainWindow):
             return
         self._focus_terminal_tab(ws, data)
 
+    def _animate_bottom_sub_splitter(self, target: list[int]) -> None:
+        """Anima `_bottom_sub_splitter.setSizes` ao longo de ~180ms.
+
+        Por que: trocar de [617, 308] pra [0, 907] num único frame
+        deixa o user com a sensação de "click ficou travado" — o
+        QWebEngineView dos panes (console xterm + runner xterm) leva
+        ~100-200ms pra repintar no novo tamanho, e como o tamanho
+        final é aplicado de uma vez, todo esse delay aparece após o
+        click. Animando, o tamanho cresce/diminui em frames intermediários
+        — o user vê movimento imediato e a percepção de lag some.
+        """
+        from PySide6.QtCore import QEasingCurve, QVariantAnimation
+
+        # Cancela animação anterior (se houver) — evita queue de
+        # animações conflitantes ao clicar rápido entre runner/console.
+        old = getattr(self, "_sub_splitter_anim", None)
+        if old is not None and old.state() == old.State.Running:
+            old.stop()
+
+        start = list(self._bottom_sub_splitter.sizes())
+        # Se o start não tem 2 elementos válidos, aplica direto sem anim.
+        if len(start) != 2 or len(target) != 2:
+            self._bottom_sub_splitter.setSizes(target)
+            return
+        # Normaliza pro mesmo total — splitter mantém soma fixa.
+        total = sum(start) or sum(target) or 1
+        if sum(target) != total and sum(target) > 0:
+            scale = total / sum(target)
+            target = [int(target[0] * scale), int(target[1] * scale)]
+
+        anim = QVariantAnimation(self)
+        anim.setDuration(180)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        def _tick(t: float, s=start, e=target) -> None:
+            v0 = int(s[0] + (e[0] - s[0]) * t)
+            v1 = int(s[1] + (e[1] - s[1]) * t)
+            self._bottom_sub_splitter.setSizes([v0, v1])
+
+        anim.valueChanged.connect(_tick)
+        self._sub_splitter_anim = anim
+        anim.start()
+
     def _focus_pane_from_sidebar(self, pane: str) -> None:
         """Click pelo sidebar = "focar" o pane escolhido dentro do
         `_bottom_sub_splitter`. `pane` ∈ {"runners", "terminal"}.
@@ -2592,10 +2637,9 @@ class MainWindow(QMainWindow):
         if pane == "runners":
             if cur and cur[0] > 4:
                 self._terminal_pane_last_size = cur[0]
-            self._bottom_sub_splitter.setSizes([0, total])
+            self._animate_bottom_sub_splitter([0, total])
             log.info(
-                "[FOCUS] após setSizes([0,%d]) → real_sizes=%s",
-                total, self._bottom_sub_splitter.sizes(),
+                "[FOCUS] anim → setSizes([0,%d])", total,
             )
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.remove_chip("runners")
@@ -2611,10 +2655,9 @@ class MainWindow(QMainWindow):
         elif pane == "terminal":
             if cur and cur[1] > 4:
                 self._runners_last_size = cur[1]
-            self._bottom_sub_splitter.setSizes([total, 0])
+            self._animate_bottom_sub_splitter([total, 0])
             log.info(
-                "[FOCUS] após setSizes([%d,0]) → real_sizes=%s",
-                total, self._bottom_sub_splitter.sizes(),
+                "[FOCUS] anim → setSizes([%d,0])", total,
             )
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.remove_chip("terminal_pane")
