@@ -54,9 +54,9 @@ _BTN_QSS = (
 )
 
 _CARD_QSS = (
-    f"QWidget#RunnerChildCard {{"
-    f"  background: {theme.BG_SURFACE};"
-    f"  border: 1px solid {theme.BORDER_INPUT};"
+    f"RunnerChildWidget {{"
+    f"  background: #232323;"
+    f"  border: 1px solid #333333;"
     f"  border-radius: {theme.RADIUS_MD}px;"
     f"}}"
 )
@@ -85,17 +85,11 @@ class RunnerChildWidget(QWidget):
         self.setMinimumHeight(self._CARD_HEIGHT)
         self.setMaximumHeight(self._CARD_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        # Card QSS direto no self — sem wrapper interno (que estava
+        # criando ilusão de dois backgrounds onde o texto ficava).
+        self.setStyleSheet(_CARD_QSS)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 2, 0, 2)
-        outer.setSpacing(0)
-
-        card = QWidget(self)
-        card.setObjectName("RunnerChildCard")
-        card.setStyleSheet(_CARD_QSS)
-        outer.addWidget(card)
-
-        card_layout = QHBoxLayout(card)
+        card_layout = QHBoxLayout(self)
         card_layout.setContentsMargins(8, 4, 6, 4)
         card_layout.setSpacing(8)
 

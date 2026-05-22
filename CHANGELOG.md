@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.7] — 2026-05-22
+
+### Corrigido — Runner com aparência de "dois backgrounds"
+- **`ui/runner_child_widget.py`**: estrutura achatada — o card QSS
+  agora é aplicado direto no `self` (QWidget externo) em vez de num
+  wrapper interno. Antes a sobreposição de `outer QVBoxLayout` +
+  `card QWidget` dentro criava ilusão de duas camadas de bg (visível
+  no print do usuário onde a área do texto parecia mais escura que a
+  borda do card). Cores também alinhadas com o workspace card
+  (#232323 bg + #333333 border).
+
 ## [0.76.6] — 2026-05-22
 
 ### Corrigido — Popup do S.O. auto-dismiss, prefixo "Aguardando", e sem falso "Sessão falhou"
