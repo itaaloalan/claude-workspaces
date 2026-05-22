@@ -6,6 +6,29 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.1] — 2026-05-22
+
+### Adicionado
+- **Terminal pane ganhou botão de minimizar + click no sidebar
+  alterna foco entre terminal/runners** (`ui/main_window.py`):
+  - Adicionado header sobre o `_terminal_tabs` com botão de
+    minimizar idêntico ao do runners pane. `_toggle_terminal_pane_minimized`
+    colapsa só o terminal dentro do `_bottom_sub_splitter` (paralelo
+    a `_toggle_runners_minimized`); chip "terminal_pane" na
+    MinimizeTray pra restaurar.
+  - Click num runner pelo sidebar: se o runners pane está
+    minimizado, restaura e minimiza o terminal pane no mesmo
+    gesto (`_ensure_runners_pane_visible`). Click num console:
+    espelho — restaura terminal + minimiza runners
+    (`_ensure_terminal_pane_visible`). Sem efeito se o pane já
+    estiver visível.
+
+### Mudado
+- **Workspace minimize alinhado com runners/terminal** (`ui/main_window.py`):
+  `_toggle_content_minimized` agora colapsa pra 0 + chip na
+  MinimizeTray (antes deixava 50px de header visível). Restauração
+  via clique no chip — mesmo padrão dos outros panes.
+
 ## [0.61.0] — 2026-05-22
 
 ### Adicionado
