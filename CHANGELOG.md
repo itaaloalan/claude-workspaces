@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.65.2] — 2026-05-22
+
+### Alterado
+- **Pane "Runners console" mostra header com botões mesmo sem console aberto**
+  (`ui/main_window.py`): o placeholder do pane agora mimetiza o header
+  da RunnerArea (Rodar/Parar/Remover todos, Importar/Exportar,
+  ↗ Copiar do workspace, ↻ Recarregar runners, + Novo) com botões
+  desabilitados e tooltip "Abra um console Claude para criar runners
+  específicos dele". Antes só aparecia o texto explicativo; agora o
+  visual fica consistente com o pane workspace e o usuário enxerga
+  quais ações estarão disponíveis assim que abrir um console.
+
 ## [0.65.1] — 2026-05-22
 
 ### Alterado

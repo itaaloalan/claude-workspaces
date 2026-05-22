@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
@@ -38,6 +39,12 @@ from ..logging_utils import log_exceptions
 from ..models import Workspace
 from ..repo_status_poller import RepoStatusPoller
 from ..hook_manager import refresh_installed_hook
+from ..notifications import (
+    NotificationKind,
+    NotificationPriority,
+    NotificationService,
+)
+from ..notifications.center import NotificationCenter
 from ..services.desktop_notifier import DesktopNotifier
 from .persistent_toast import PersistentToast, position_toasts
 from ..services.quick_open import find_files
@@ -156,13 +163,29 @@ class MainWindow(QMainWindow):
         self.terminals_coord.workspace_running_changed.connect(self._on_workspace_running)
         self.terminals_coord.tab_activity_changed.connect(self._handle_tab_activity)
         self.terminals_coord.tab_removed.connect(self._handle_tab_removed)
-        self.terminals_coord.inbox_changed.connect(self.top_bar.set_inbox_count)
+        # Sino agora reflete o unread real do NotificationService (criado abaixo).
         self.terminals_coord.spinner_tick.connect(self._on_spinner_tick)
         self.terminals_coord.terminal_area_created.connect(self._on_area_created)
         self.terminals_coord.inbox_alert.connect(self._on_inbox_alert)
         self.terminals_coord.inbox_entry_removed.connect(
             self._on_inbox_entry_removed
         )
+
+        # ---------- Notification service (novo) ----------
+        # Único ponto de verdade pra sino + center + (em commits subsequentes)
+        # tray e badges. terminals_coord continua emitindo inbox_alert (working
+        # → idle), e `_on_inbox_alert` espelha pro service.notify(...).
+        from ..storage import config_dir as _cfg_dir
+        self.notif_service = NotificationService(
+            _cfg_dir() / "notifications.json", parent=self
+        )
+        self.notif_service.unread_count_changed.connect(self.top_bar.set_inbox_count)
+        self.notif_service.reminder_due.connect(self._on_notif_reminder_due)
+        # Inicializa a contagem do sino imediatamente — service pode ter
+        # itens vindos do disco antes do primeiro signal.
+        self.top_bar.set_inbox_count(self.notif_service.unread_count())
+        # Center (popup) — criado preguiçosamente na primeira abertura.
+        self._notif_center: NotificationCenter | None = None
         self.launch_coord.sessions_refresh_requested.connect(
             self.details.refresh_sessions_soon
         )
@@ -1157,16 +1180,9 @@ class MainWindow(QMainWindow):
 
         self.console_runner_host = QStackedWidget()
         self.console_runner_host.setMinimumHeight(0)
-        crh_empty = QLabel(
-            "Abra um console Claude e, na barra do terminal, clique em "
-            "▤ Runners para criar runners específicos desse console."
+        self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
+            self._build_console_runner_placeholder()
         )
-        crh_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        crh_empty.setWordWrap(True)
-        crh_empty.setStyleSheet(
-            "background: #0e0e0e; color: #555; padding: 28px;"
-        )
-        self._console_runner_placeholder_idx = self.console_runner_host.addWidget(crh_empty)
 
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB
@@ -1242,6 +1258,54 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self._bottom_sub_splitter, stretch=1)
         return pane
+
+    def _build_console_runner_placeholder(self) -> QWidget:
+        """Placeholder do pane 'Runners console' quando nenhum console está aberto.
+
+        Mimetiza o header da RunnerArea (mesmos botões em mesma ordem) mas
+        com tudo desabilitado e tooltip explicando que precisa abrir um
+        console Claude primeiro. Visual fica consistente com o pane workspace.
+        """
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        header = QWidget()
+        h = QHBoxLayout(header)
+        h.setContentsMargins(8, 4, 8, 4)
+        h.setSpacing(6)
+        h.addWidget(QLabel("Runners (console)"))
+        h.addStretch()
+
+        hint = (
+            "Abra um console Claude para criar runners específicos dele."
+        )
+        for text in (
+            "▶ Rodar todos",
+            "■ Parar todos",
+            "✕ Remover todos",
+            "Importar",
+            "Exportar",
+            "↗ Copiar do workspace",
+            "↻ Recarregar runners",
+            "+ Novo",
+        ):
+            btn = QPushButton(text)
+            btn.setEnabled(False)
+            btn.setToolTip(hint)
+            h.addWidget(btn)
+        outer.addWidget(header)
+
+        body = QLabel(
+            "Abra um console Claude e, na barra do terminal, clique em "
+            "▤ Runners para criar runners específicos desse console."
+        )
+        body.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        body.setWordWrap(True)
+        body.setStyleSheet("background: #0e0e0e; color: #555; padding: 28px;")
+        outer.addWidget(body, stretch=1)
+        return container
 
     def _on_minimize_tray_restore(self, panel_id: str) -> None:
         """Click num chip da MinimizeTray → restaura o painel correspondente."""
@@ -3875,6 +3939,30 @@ class MainWindow(QMainWindow):
         body = "\n".join(body_parts) or "Console pronto pra próxima instrução."
         self._last_alert_tab_id = tab_id
         workspace_id = info.get("workspace_id", "")
+
+        # ----- Espelha pro NotificationService (fonte de verdade do sino
+        # e do NotificationCenter). Type=agent_waiting porque "console
+        # working→idle" é exatamente "agente aguardando próxima instrução".
+        # Cooldown/dedup do service evita spam, e suprimimos quando o
+        # console já está em foco (mesmo critério acima).
+        notif_kind = (
+            NotificationKind.PERMISSION_REQUIRED
+            if str(info.get("kind", "")) == "decision"
+            else NotificationKind.AGENT_WAITING
+        )
+        session_id = str(info.get("session_id") or "")
+        self.notif_service.notify(
+            notif_kind,
+            title=title,
+            body=body,
+            workspace_id=workspace_id or None,
+            session_id=session_id or None,
+            tab_id=tab_id,
+            data={
+                "source": "inbox_alert",
+                "is_reminder": bool(is_reminder),
+            },
+        )
         # Toast in-app top-most (independente do KDE) — garante visibilidade
         # mesmo com Plasma matando o popup D-Bus. Notif do KDE continua
         # também, pra caso a janela esteja em outro virtual desktop.
@@ -4069,6 +4157,16 @@ class MainWindow(QMainWindow):
         # Limpa o debounce — tab saiu do inbox, próxima transição
         # working→idle é genuína e deve disparar notif sem suprimir.
         self._ready_alert_last.pop(tab_id, None)
+        # Marca a notif "agent_waiting" correspondente como vista no service
+        # (não dismiss — usuário pode querer ver o histórico). Busca pela
+        # tab_id; pode haver mais de uma se o mesmo console gerou perm+waiting,
+        # então iteramos.
+        for n in self.notif_service.list(only_unseen=True):
+            if n.tab_id == tab_id and n.kind in (
+                NotificationKind.AGENT_WAITING,
+                NotificationKind.PERMISSION_REQUIRED,
+            ):
+                self.notif_service.mark_seen(n.id)
         nid = self._active_notifications.pop(tab_id, None)
         if nid is None or self._desktop_notifier is None:
             return
@@ -4126,60 +4224,45 @@ class MainWindow(QMainWindow):
             )
 
     def _show_inbox(self) -> None:
-        entries = self.terminals_coord.inbox_entries()
-        if not entries:
-            menu = QMenu(self)
-            empty = QAction("(nenhum console aguardando)", menu)
-            empty.setEnabled(False)
-            menu.addAction(empty)
-            menu.exec_(self.top_bar.mapToGlobal(self.top_bar.rect().bottomRight()))
+        """Abre o NotificationCenter (popup) embaixo da bell."""
+        if self._notif_center is None:
+            self._notif_center = NotificationCenter(
+                self.notif_service,
+                workspace_name_fn=self._workspace_name_for_notif,
+                parent=self,
+            )
+            self._notif_center.open_target_requested.connect(
+                self._on_notif_open_target
+            )
+        self._notif_center.show_at(self.top_bar._inbox_btn)
+
+    def _workspace_name_for_notif(self, workspace_id: str) -> str:
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        return ws.name if ws else workspace_id
+
+    def _on_notif_open_target(self, notification) -> None:
+        """Click em 'Abrir' num card do NotificationCenter."""
+        ws_id = notification.workspace_id
+        tab_id = notification.tab_id
+        if ws_id and tab_id is not None:
+            self._focus_tab_from_inbox(ws_id, int(tab_id))
             return
-        menu = QMenu(self)
-        for tab_id, info in list(entries.items()):
-            ws = self.workspaces_coord.find_by_id(info["workspace_id"])
-            ws_name = ws.name if ws else "?"
-            label = f"{ws_name} · {info['title']}"
-            if info.get("status"):
-                sub = info["status"]
-                if len(sub) > 60:
-                    sub = sub[:59] + "…"
-                label += f"  —  {sub}"
-            if info.get("dismissed"):
-                label = "👁  " + label  # marca visual de "já visto"
-            entry_menu = menu.addMenu(label)
-            focus_act = QAction("Focar console", entry_menu)
-            focus_act.triggered.connect(
-                lambda _c=False, wid=info["workspace_id"], tid=tab_id:
-                    self._focus_tab_from_inbox(wid, tid)
-            )
-            entry_menu.addAction(focus_act)
-            entry_menu.addSeparator()
-            seen_act = QAction("Já vi — não me lembre", entry_menu)
-            seen_act.triggered.connect(
-                lambda _c=False, tid=tab_id:
-                    self.terminals_coord.dismiss_inbox(tid)
-            )
-            entry_menu.addAction(seen_act)
-            for minutes in (5, 15, 30):
-                snz = QAction(f"Lembrar em {minutes} min", entry_menu)
-                snz.triggered.connect(
-                    lambda _c=False, tid=tab_id, s=minutes * 60:
-                        self.terminals_coord.snooze_inbox(tid, s)
-                )
-                entry_menu.addAction(snz)
-            entry_menu.addSeparator()
-            remove_act = QAction("Remover do inbox", entry_menu)
-            remove_act.triggered.connect(
-                lambda _c=False, tid=tab_id:
-                    self.terminals_coord.remove_from_inbox(tid)
-            )
-            entry_menu.addAction(remove_act)
-        menu.addSeparator()
-        clear = QAction("Limpar inbox", menu)
-        clear.triggered.connect(self.terminals_coord.clear_inbox)
-        menu.addAction(clear)
-        anchor = self.top_bar._inbox_btn
-        menu.exec_(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+        sid = notification.session_id
+        if sid and self._focus_terminal_by_session_id(sid):
+            return
+        if ws_id:
+            ws_item = self._find_workspace_item(ws_id)
+            if ws_item is not None:
+                self.list_widget.setCurrentItem(ws_item)
+
+    def _on_notif_reminder_due(self, notification) -> None:
+        """Service mandou relembrar uma pendência. Entrega real (desktop /
+        tray) é despachada no `_on_inbox_alert` quando o terminals_coord
+        relembra; aqui só log pra debug."""
+        log.debug(
+            "reminder_due: id=%s kind=%s ws=%s",
+            notification.id, notification.kind, notification.workspace_id,
+        )
 
     def _focus_tab_from_inbox(self, workspace_id: str, tab_id: int) -> None:
         self.terminals_coord.remove_from_inbox(tab_id)
