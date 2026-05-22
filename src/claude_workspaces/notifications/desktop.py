@@ -111,14 +111,12 @@ class DesktopNotifierAdapter(QObject):
                 log.debug("checagem de foco falhou", exc_info=True)
 
         urgency = NotificationPriority.to_urgency(n.priority)
-        # CRITICAL e HIGH ganham timeout longo (sticky) e action "Abrir".
+        # CRITICAL e HIGH ganham timeout longo (sticky).
         sticky = n.priority in (NotificationPriority.HIGH, NotificationPriority.CRITICAL)
+        # Popup do S.O. fica sem botões e sem som — botões/som ficam só na
+        # central in-app. Alguns servidores deixavam de exibir o popup quando
+        # tinha action buttons, então tirar as actions destrava a entrega.
         actions: list[tuple[str, str]] = []
-        if n.workspace_id or n.session_id or n.tab_id is not None:
-            actions.append(("open", "Abrir"))
-        if n.is_actionable():
-            actions.append(("snooze5", "Adiar 5m"))
-            actions.append(("seen", "Já vi"))
 
         key = n.dedup_key or f"_id:{n.id}"
         prev = self._active.get(key, 0)
@@ -146,6 +144,7 @@ class DesktopNotifierAdapter(QObject):
                 desktop_entry="claude-workspaces",
                 resident=sticky,
                 transient=False if sticky else None,
+                suppress_sound=True,
             )
         except Exception:
             log.exception("DesktopNotifier.notify falhou")

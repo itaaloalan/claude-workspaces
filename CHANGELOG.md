@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.76.5] — 2026-05-22
+
+### Corrigido — Popup do S.O. sem botões e sem som
+- **`notifications/desktop.py`**: removidas as actions (`Abrir`, `Adiar 5m`,
+  `Já vi`) do popup nativo do D-Bus. Alguns servidores (KDE em certas
+  configs, GNOME com extensões) deixavam de exibir o banner quando havia
+  action buttons — tirar as actions destrava a entrega. Botões continuam
+  vivos na central de notificações in-app, que é onde o usuário interage
+  com Adiar/Já vi/Abrir.
+- **`notifications/desktop.py`** + **`services/desktop_notifier.py`**:
+  popup do S.O. agora envia hint `suppress-sound=true`. Som de alerta
+  fica só no toast in-app (via `_play_sound_async`/canberra), evitando
+  som duplicado em servidores que tocam default próprio.
+
 ## [0.76.4] — 2026-05-22
 
 ### Modificado — Padronização visual sidebar (mockup-aligned)

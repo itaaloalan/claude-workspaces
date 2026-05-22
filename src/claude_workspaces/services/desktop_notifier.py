@@ -238,6 +238,7 @@ class DesktopNotifier(QObject):
         sound_name: str | None = None,
         resident: bool = False,
         transient: bool | None = None,
+        suppress_sound: bool = False,
     ) -> int | None:
         """Dispara notificação. Retorna o id (int) ou None em falha.
 
@@ -281,6 +282,12 @@ class DesktopNotifier(QObject):
             # invocada. KDE também usa pra manter o popup visível com actions
             # em vez de tratar como transient.
             hint_parts.append("'resident': <true>")
+        if suppress_sound:
+            # `suppress-sound=true` pede ao servidor pra não tocar som default.
+            # GNOME honra; KDE Plasma costuma ignorar — mas como não enviamos
+            # sound-name, e o servidor decide por conta, isso reduz som
+            # supérfluo em servidores que respeitam a hint.
+            hint_parts.append("'suppress-sound': <true>")
         if transient is not None:
             # `transient=false` força o servidor a manter na central de
             # notificações. KDE Plasma 6 lê isso pra decidir entre popup
