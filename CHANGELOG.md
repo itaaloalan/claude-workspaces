@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.76.4] — 2026-05-22
+
+### Modificado — Padronização visual sidebar (mockup-aligned)
+- **`ui/runner_child_widget.py`**: altura 44→38px (mais compacto),
+  ícone do cubo 26→22px, e **removido o botão `⋯`** que não tinha
+  ação plumbada (start/stop/restart/edit/remove vivem no pane Runners,
+  não no widget da sidebar).
+- **`ui/terminal_child_widget.py`**: ícone do robot Claude agora vive
+  num **quadradinho arredondado** (26×26, `BG_DEEP` + borda
+  `BORDER_SOFT` + radius 4px), mesmo idioma visual dos runners — o
+  mockup mostra essa estética consistente em todos os children da
+  sidebar.
+
+
 Todas as mudanças relevantes neste projeto são documentadas aqui.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)

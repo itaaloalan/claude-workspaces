@@ -172,16 +172,23 @@ class TerminalChildWidget(QWidget):
         # sessão Claude" e dá feedback visual de seleção (azul quando
         # selecionado, cinza nos demais).
         from .icons import ic as _ic
+        # Ícone num quadradinho arredondado (padrão visual do mockup —
+        # mesma estética dos runners). Cor reage à seleção.
         self._claude_icon = QLabel()
-        self._claude_icon.setFixedSize(16, 16)
+        self._claude_icon.setFixedSize(26, 26)
+        self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._claude_icon.setStyleSheet(
+            f"QLabel {{ background: {theme.BG_DEEP}; "
+            f"border: 1px solid {theme.BORDER_SOFT}; "
+            f"border-radius: {theme.RADIUS_SM}px; }}"
+        )
         self._claude_icon_unselected_pix = _ic(
-            "fa5s.robot", color=theme.TEXT_FAINT
+            "fa5s.robot", color=theme.TEXT_FADED
         ).pixmap(14, 14)
         self._claude_icon_selected_pix = _ic(
             "fa5s.robot", color=theme.PRIMARY_HOVER
         ).pixmap(14, 14)
         self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
-        self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         outer.addWidget(
             self._claude_icon, 0, Qt.AlignmentFlag.AlignVCenter
         )

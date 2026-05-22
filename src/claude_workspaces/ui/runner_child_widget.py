@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from urllib.parse import urlparse
 
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -70,7 +70,7 @@ class RunnerChildWidget(QWidget):
         Linha 2:         status (Running/Idle/Failed)
     """
 
-    _CARD_HEIGHT = 44
+    _CARD_HEIGHT = 38
 
     size_hint_changed = Signal(int)
 
@@ -102,7 +102,7 @@ class RunnerChildWidget(QWidget):
         # Ícone à esquerda — quadradinho com cube/box (match mockup).
         from .icons import ic as _ic
         self._icon = QLabel()
-        self._icon.setFixedSize(26, 26)
+        self._icon.setFixedSize(22, 22)
         self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon.setStyleSheet(
             f"QLabel {{ background: {theme.BG_DEEP}; "
@@ -157,23 +157,12 @@ class RunnerChildWidget(QWidget):
         self._toggle_btn.clicked.connect(lambda _=False: on_toggle())
         card_layout.addWidget(self._toggle_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._more_btn = QPushButton("⋯")
-        self._more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._more_btn.setFixedSize(24, 24)
-        self._more_btn.setStyleSheet(_BTN_QSS)
-        self._more_btn.setToolTip("Mais ações")
-        self._more_btn.setVisible(False)
-        card_layout.addWidget(self._more_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        # ⋯ removido por enquanto — não tem ações plumbadas via callback
+        # (start/stop/restart/edit/remove vivem no pane Runners, não no
+        # widget da sidebar). Voltar a adicionar quando houver hookup.
 
         self._state = "idle"
         self._apply_state()
-
-    def event(self, e: QEvent) -> bool:  # type: ignore[override]
-        if e.type() == QEvent.Type.HoverEnter:
-            self._more_btn.setVisible(True)
-        elif e.type() == QEvent.Type.HoverLeave:
-            self._more_btn.setVisible(False)
-        return super().event(e)
 
     def set_name(self, name: str) -> None:
         self._name_label.setText(name)
