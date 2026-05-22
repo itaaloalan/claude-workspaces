@@ -348,7 +348,12 @@ class SidebarBuilder:
         # refresh + timestamp do último sync. Tudo agrupado num container
         # pra esconder/mostrar junto.
         self.context_status_container = QWidget()
-        ctx_row = QHBoxLayout(self.context_status_container)
+        ctx_outer = QVBoxLayout(self.context_status_container)
+        ctx_outer.setContentsMargins(0, 0, 0, 0)
+        ctx_outer.setSpacing(0)
+
+        ctx_row_widget = QWidget()
+        ctx_row = QHBoxLayout(ctx_row_widget)
         ctx_row.setContentsMargins(0, 0, 0, 0)
         ctx_row.setSpacing(6)
 
@@ -380,6 +385,17 @@ class SidebarBuilder:
             self.context_status_refresh_btn,
             alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
         )
+        ctx_outer.addWidget(ctx_row_widget)
+
+        # Linha secundária: "atualizado há Xmin" — pequeno e discreto,
+        # só pra dar noção de quão recente está o snapshot exibido.
+        self.context_status_updated_label = QLabel("")
+        self.context_status_updated_label.setStyleSheet(
+            f"QLabel {{ color: {theme.TEXT_DISABLED}; "
+            "font-size: 9px; padding: 0px 4px 4px 4px; }}"
+        )
+        self.context_status_updated_label.setVisible(False)
+        ctx_outer.addWidget(self.context_status_updated_label)
 
         self.context_status_container.setVisible(False)
         layout.addWidget(self.context_status_container)

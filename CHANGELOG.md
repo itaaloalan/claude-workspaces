@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.69.0] — 2026-05-22
+
+### Adicionado
+- **Subtítulo "atualizado há Xmin atrás" abaixo do Usage**
+  (`ui/builders/sidebar_builder.py`, `ui/main_window.py`): nova label
+  pequena e discreta (9px, cor `TEXT_DISABLED`) sob o chip de Usage que
+  mostra há quanto tempo o último snapshot do plano foi sincronizado.
+  Atualiza junto com cada sync bem-sucedido (API ou fallback USD) e é
+  re-renderizada a cada 30s por um `QTimer` próprio só pra evoluir o
+  texto relativo sem refazer fetch. Esconde junto com o container do
+  Usage e fica em "atualizado agora" durante o primeiro minuto.
+
 ## [0.68.0] — 2026-05-22
 
 ### Adicionado

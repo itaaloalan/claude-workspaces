@@ -180,6 +180,9 @@ class MainWindow(QMainWindow):
             _cfg_dir() / "notifications.json", parent=self
         )
         self.notif_service.unread_count_changed.connect(self.top_bar.set_inbox_count)
+        self.notif_service.unread_count_changed.connect(
+            lambda _c: self._refresh_unread_badges()
+        )
         self.notif_service.reminder_due.connect(self._on_notif_reminder_due)
         # Inicializa a contagem do sino imediatamente — service pode ter
         # itens vindos do disco antes do primeiro signal.
@@ -245,6 +248,16 @@ class MainWindow(QMainWindow):
         self._idle_tick_timer.setInterval(1_000)
         self._idle_tick_timer.timeout.connect(self._on_idle_tick)
         self._idle_tick_timer.start()
+
+        # Tick de 30s só pra atualizar o "atualizado há Xmin atrás"
+        # debaixo do Usage — re-renderiza o texto relativo a partir do
+        # _last_plan_usage_sync_at já armazenado, não refaz fetch.
+        self._plan_usage_updated_timer = QTimer(self)
+        self._plan_usage_updated_timer.setInterval(30_000)
+        self._plan_usage_updated_timer.timeout.connect(
+            self._refresh_plan_usage_updated_label
+        )
+        self._plan_usage_updated_timer.start()
 
         self._restore_geometry()
         self.refresh_list()
@@ -1510,6 +1523,7 @@ class MainWindow(QMainWindow):
         self._context_status_refresh_btn.clicked.connect(
             self._on_context_status_refresh_clicked
         )
+        self._context_status_updated_label = builder.context_status_updated_label
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -1868,6 +1882,8 @@ class MainWindow(QMainWindow):
 
         self.details.show_empty()
         self._update_status_bar(None)
+        if hasattr(self, "notif_service"):
+            self._refresh_unread_badges()
 
     def _find_workspace_item(self, workspace_id: str) -> QTreeWidgetItem | None:
         for i in range(self.list_widget.topLevelItemCount()):
@@ -1939,6 +1955,19 @@ class MainWindow(QMainWindow):
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
+
+    def _refresh_unread_badges(self) -> None:
+        """Re-pinta o badge laranja em cada WorkspaceItemWidget com a
+        contagem de notifs não-vistas do `NotificationService`."""
+        from .workspace_item_widget import WorkspaceItemWidget
+        counts = self.notif_service.unread_by_workspace()
+        for ws in self.workspaces_coord.workspaces:
+            item = self._find_workspace_item(ws.id)
+            if item is None:
+                continue
+            widget = self.list_widget.itemWidget(item, 0)
+            if isinstance(widget, WorkspaceItemWidget):
+                widget.set_unread_count(counts.get(ws.id, 0))
 
     def _focus_active_workspace_from_status(self) -> None:
         """Click no segmento 'workspace' do footer → ativa view de
@@ -3526,7 +3555,7 @@ class MainWindow(QMainWindow):
                 return
             argv = [
                 self.settings.claude_command,
-                *self.settings.claude_extra_args,
+                *self.settings.claude_launch_args(),
                 "--resume",
                 entry.session_id,
             ]
@@ -3551,7 +3580,7 @@ class MainWindow(QMainWindow):
             # extras via Read sem precisar de --add-dir.
             argv = [
                 self.settings.claude_command,
-                *self.settings.claude_extra_args,
+                *self.settings.claude_launch_args(),
                 prompt,
             ]
             title = f"runner-gen #{area.count() + 1}"
@@ -3621,7 +3650,7 @@ class MainWindow(QMainWindow):
         repo = find_app_repo_root()
         argv = [
             self.settings.claude_command,
-            *self.settings.claude_extra_args,
+            *self.settings.claude_launch_args(),
             "--resume",
             session_id,
         ]
@@ -4671,6 +4700,46 @@ class MainWindow(QMainWindow):
                 btn.setText("⟳")
                 btn.setEnabled(True)
 
+    def _refresh_plan_usage_updated_label(self) -> None:
+        """Re-renderiza o subtítulo 'atualizado há Xmin atrás' a partir
+        de `_last_plan_usage_sync_at`. Chamado pelo timer de 30s e logo
+        após cada sync bem-sucedido em `_refresh_plan_usage_status`."""
+        from datetime import datetime
+
+        label = getattr(self, "_context_status_updated_label", None)
+        if label is None:
+            return
+        ts = getattr(self, "_last_plan_usage_sync_at", None)
+        if ts is None:
+            label.setVisible(False)
+            return
+        secs = max(int((datetime.now() - ts).total_seconds()), 0)
+        if secs < 60:
+            phrase = "atualizado agora"
+        elif secs < 3600:
+            mins = secs // 60
+            phrase = (
+                "atualizado há 1 minuto atrás"
+                if mins == 1
+                else f"atualizado há {mins} minutos atrás"
+            )
+        elif secs < 86_400:
+            hours = secs // 3600
+            phrase = (
+                "atualizado há 1 hora atrás"
+                if hours == 1
+                else f"atualizado há {hours} horas atrás"
+            )
+        else:
+            days = secs // 86_400
+            phrase = (
+                "atualizado há 1 dia atrás"
+                if days == 1
+                else f"atualizado há {days} dias atrás"
+            )
+        label.setText(phrase)
+        label.setVisible(True)
+
     def _refresh_plan_usage_status(self, force: bool = False) -> None:
         """Atualiza o label de uso do plano na sidebar numa única linha
         compacta tipo `5h 34% · sem 41% · son 12%` (cores no número,
@@ -4694,11 +4763,15 @@ class MainWindow(QMainWindow):
         if label is None:
             return
 
+        updated_label = getattr(self, "_context_status_updated_label", None)
+
         def _set_container_visible(visible: bool) -> None:
             if container is not None:
                 container.setVisible(visible)
             else:
                 label.setVisible(visible)
+            if not visible and updated_label is not None:
+                updated_label.setVisible(False)
 
         def _color(p: float) -> str:
             if p < 50:
@@ -4776,6 +4849,7 @@ class MainWindow(QMainWindow):
 
             if chips:
                 self._last_plan_usage_sync_at = datetime.now()
+                self._refresh_plan_usage_updated_label()
                 sync_str = self._last_plan_usage_sync_at.strftime("%H:%M:%S")
                 sep = (
                     f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
@@ -4912,6 +4986,8 @@ class MainWindow(QMainWindow):
             "`plan_weekly_usd_limit_all` e `plan_weekly_usd_limit_sonnet` "
             "em settings.json pra calibrar com claude.ai."
         )
+        self._last_plan_usage_sync_at = datetime.now()
+        self._refresh_plan_usage_updated_label()
         _set_container_visible(True)
 
     def _on_repo_status_ready(
@@ -5065,7 +5141,7 @@ class MainWindow(QMainWindow):
         title = f"claude (sem ctx) #{area.count() + 1}"
         terminal = area.add_terminal(title)
         terminal.configure_claude(home)
-        argv = [self.settings.claude_command, *self.settings.claude_extra_args]
+        argv = [self.settings.claude_command, *self.settings.claude_launch_args()]
         try:
             terminal.start_shell_command(
                 argv,
