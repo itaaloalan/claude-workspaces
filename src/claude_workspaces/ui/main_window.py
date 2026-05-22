@@ -2002,17 +2002,33 @@ class MainWindow(QMainWindow):
             )
 
     def _refresh_unread_badges(self) -> None:
-        """Re-pinta o badge laranja em cada WorkspaceItemWidget com a
-        contagem de notifs não-vistas do `NotificationService`."""
+        """Re-pinta badges em workspaces (laranja na sidebar) e nas sessões
+        Claude (laranja no TerminalChildWidget) com base no service."""
         from .workspace_item_widget import WorkspaceItemWidget
-        counts = self.notif_service.unread_by_workspace()
+        ws_counts = self.notif_service.unread_by_workspace()
         for ws in self.workspaces_coord.workspaces:
             item = self._find_workspace_item(ws.id)
             if item is None:
                 continue
             widget = self.list_widget.itemWidget(item, 0)
             if isinstance(widget, WorkspaceItemWidget):
-                widget.set_unread_count(counts.get(ws.id, 0))
+                widget.set_unread_count(ws_counts.get(ws.id, 0))
+        # Badge por sessão: chave do service.unread_by_session é session_id;
+        # nas notifs do inbox_alert também guardamos tab_id, então fazemos
+        # o fallback por tab_id pra casos onde session_id não foi setado.
+        sess_counts = self.notif_service.unread_by_session()
+        tab_counts: dict[int, int] = {}
+        for n in self.notif_service.list(only_unseen=True):
+            if n.tab_id is not None:
+                tab_counts[n.tab_id] = tab_counts.get(n.tab_id, 0) + 1
+        for tab_id, tree_item in self.terminals_coord.state.tree_items.items():
+            widget = self.list_widget.itemWidget(tree_item, 0)
+            if not isinstance(widget, TerminalChildWidget):
+                continue
+            sid = widget.claimed_session_id() if hasattr(widget, "claimed_session_id") else None
+            count = sess_counts.get(sid, 0) if sid else 0
+            count = max(count, tab_counts.get(tab_id, 0))
+            widget.set_unread_count(count)
 
     def _focus_active_workspace_from_status(self) -> None:
         """Click no segmento 'workspace' do footer → ativa view de

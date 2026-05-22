@@ -185,6 +185,22 @@ class TerminalChildWidget(QWidget):
         self._title_label.setMaximumHeight(16)
         title_row.addWidget(self._title_label, stretch=1)
 
+        # Badge de notificações pendentes (pintado pelo MainWindow via
+        # NotificationService.unread_by_session — chave: claimed_session_id).
+        self._notif_badge = QLabel("")
+        self._notif_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._notif_badge.setStyleSheet(
+            "QLabel {"
+            "  background: rgba(201, 119, 45, 100);"
+            "  color: #ffce99;"
+            "  font-size: 9px; font-weight: 700;"
+            "  padding: 1px 5px; border-radius: 6px;"
+            "}"
+        )
+        self._notif_badge.setToolTip("Notificações pendentes nesta sessão")
+        self._notif_badge.hide()
+        title_row.addWidget(self._notif_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
         # Estado atual + elegibilidade pro ▶ continuar. O continue só faz
         # sentido em sessões restauradas no startup (--resume) que estão
         # ociosas — caso típico: app fechou no meio de uma tarefa e o
@@ -329,6 +345,14 @@ class TerminalChildWidget(QWidget):
         vbox.addLayout(state_row)
 
         outer.addLayout(vbox, stretch=1)
+
+    def set_unread_count(self, count: int) -> None:
+        """Pinta badge laranja com nº de notificações pendentes nessa sessão."""
+        if count <= 0:
+            self._notif_badge.hide()
+            return
+        self._notif_badge.setText(str(count) if count < 100 else "99+")
+        self._notif_badge.show()
 
     def set_title(self, title: str, tooltip: str = "") -> None:
         if title:

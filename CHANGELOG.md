@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.72.0] — 2026-05-22
+
+### Adicionado
+- **Badge laranja de notificações pendentes por sessão Claude**
+  (`ui/terminal_child_widget.py`, `ui/main_window.py`):
+  `TerminalChildWidget` ganha `set_unread_count` + `_notif_badge`
+  posicionado entre o título da sessão e os botões de ação.
+  `MainWindow._refresh_unread_badges` agora itera também
+  `terminals_coord.state.tree_items` cruzando
+  `notif_service.unread_by_session()` (chave: `claimed_session_id`)
+  com fallback por `tab_id` pra cobrir notifs vindas do
+  `inbox_alert` que não têm session_id.
+
 ## [0.71.0] — 2026-05-22
 
 ### Adicionado
