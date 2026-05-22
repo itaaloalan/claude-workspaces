@@ -162,8 +162,8 @@ class RunnerChildWidget(QWidget):
     def _on_addr_clicked(self, event) -> None:
         if event.button() != Qt.MouseButton.LeftButton or not self._addr_url:
             return
-        from ..services.system_open import open_url
         from ..errors import LaunchError
+        from ..services.system_open import open_url
         try:
             open_url(self._addr_url)
         except LaunchError:

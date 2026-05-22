@@ -75,7 +75,7 @@ def launch_claude(workspace: Workspace, settings: Settings) -> None:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
     _require(settings.terminal_command, "terminal")
     cwd, extras = workspace.launch_paths()
-    cmd = [settings.claude_command, *settings.claude_extra_args]
+    cmd = [settings.claude_command, *settings.claude_launch_args()]
     for extra in extras:
         cmd += ["--add-dir", extra]
     _run_in_terminal(settings, cmd, cwd)
@@ -89,7 +89,7 @@ def launch_claude_resume(
     _require(settings.terminal_command, "terminal")
     ws_cwd, extras = workspace.launch_paths()
     effective_cwd = cwd or ws_cwd
-    cmd = [settings.claude_command, *settings.claude_extra_args, "--resume", session_id]
+    cmd = [settings.claude_command, *settings.claude_launch_args(), "--resume", session_id]
     for extra in extras:
         cmd += ["--add-dir", extra]
     _run_in_terminal(settings, cmd, effective_cwd)
@@ -97,7 +97,7 @@ def launch_claude_resume(
 
 def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
     _require(settings.terminal_command, "terminal")
-    cmd = [settings.claude_command, *settings.claude_extra_args]
+    cmd = [settings.claude_command, *settings.claude_launch_args()]
     _run_in_terminal(settings, cmd, directory)
 
 
@@ -140,7 +140,7 @@ def launch_claude_for_runner_gen(
             "Repositório do claude-workspaces não encontrado — gerador "
             "precisa rodar no diretório do projeto pra ler docs/runners-spec.md"
         )
-    cmd = [settings.claude_command, *settings.claude_extra_args, prompt]
+    cmd = [settings.claude_command, *settings.claude_launch_args(), prompt]
     _run_in_terminal(settings, cmd, repo)
 
 

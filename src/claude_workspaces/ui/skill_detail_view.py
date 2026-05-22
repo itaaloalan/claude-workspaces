@@ -260,7 +260,7 @@ class SkillDetailView(QWidget):
             return
         try:
             try:
-                target = install_item(self._item, scope, ws_folder, overwrite=False)
+                install_item(self._item, scope, ws_folder, overwrite=False)
             except LaunchError as exists_err:
                 if "já existe" not in str(exists_err):
                     raise
@@ -272,7 +272,7 @@ class SkillDetailView(QWidget):
                 )
                 if resp != QMessageBox.StandardButton.Yes:
                     return
-                target = install_item(self._item, scope, ws_folder, overwrite=True)
+                install_item(self._item, scope, ws_folder, overwrite=True)
         except LaunchError as e:
             QMessageBox.critical(self, "Falha ao instalar", str(e))
             return

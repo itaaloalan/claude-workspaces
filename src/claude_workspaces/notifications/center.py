@@ -315,14 +315,13 @@ class NotificationCenter(QFrame):
         for k, btn in self._filter_btns.items():
             checked = k == key
             btn.setChecked(checked)
+            bg = "#243044" if checked else "#1f1f1f"
+            color = "#6aa9e0" if checked else "#c8c8c8"
             btn.setStyleSheet(
-                "QPushButton { background: %s; color: %s; border: 1px solid #2c2c2c; "
-                "border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
-                "QPushButton:hover { border-color: #3d6ea8; }"
-                % (
-                    "#243044" if checked else "#1f1f1f",
-                    "#6aa9e0" if checked else "#c8c8c8",
-                )
+                f"QPushButton {{ background: {bg}; color: {color}; "
+                f"border: 1px solid #2c2c2c; border-radius: 4px; "
+                f"padding: 4px 10px; font-size: 11px; }}"
+                f"QPushButton:hover {{ border-color: #3d6ea8; }}"
             )
         self._refresh()
 

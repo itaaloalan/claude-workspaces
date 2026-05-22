@@ -11,8 +11,6 @@ dentro do dock central.
 
 from __future__ import annotations
 
-import base64
-
 import PySide6QtAds as ads
 from PySide6.QtCore import QByteArray, QObject, QRect, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap

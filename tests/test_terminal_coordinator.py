@@ -191,8 +191,9 @@ def test_inbox_entry_removed_on_explicit_remove(coord):
 
 def test_inbox_entry_removed_on_tab_focused(coord):
     """Clicar na aba (foco) tira do inbox e fecha a notificação."""
-    from claude_workspaces.ui.terminal_area import TerminalArea
     from PySide6.QtWidgets import QWidget
+
+    from claude_workspaces.ui.terminal_area import TerminalArea
 
     area = TerminalArea()
     placeholder = QWidget()

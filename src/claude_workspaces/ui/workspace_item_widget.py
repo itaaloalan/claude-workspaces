@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
 
 from . import theme
 
-
 _BTN_QSS = (
     f"QPushButton {{"
     f"  background: transparent;"
@@ -93,7 +92,7 @@ class WorkspaceItemWidget(QWidget):
         # detectado pelo stack (fa5b.git-alt se é repo git, etc) mas
         # pra evitar complexidade fica no folder por enquanto.
         from PySide6.QtCore import QSize as _QS
-        from .icons import ic as _ic
+
         self._ws_icon = QLabel()
         self._ws_icon_size = _QS(14, 14)
         # Cor da pasta reage à seleção (set_selected): azul quando
@@ -146,6 +145,7 @@ class WorkspaceItemWidget(QWidget):
         # Pin indicator — aparece à direita do nome quando pinned=True.
         # Empurra os botões de ação pro fim, junto da borda direita.
         from PySide6.QtCore import QSize
+
         from .icons import ICONS, ic
         self._pin_icon = QLabel()
         self._pin_icon.setFixedSize(14, 14)

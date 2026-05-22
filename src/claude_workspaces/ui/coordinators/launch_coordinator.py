@@ -91,7 +91,7 @@ class LaunchCoordinator(QObject):
 
         argv = build_claude_argv(
             self.settings.claude_command,
-            self.settings.claude_extra_args,
+            self.settings.claude_launch_args(),
             extras,
             resume_session_id,
         )

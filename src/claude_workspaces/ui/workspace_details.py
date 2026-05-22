@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -106,6 +106,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         # ---------- Trio de ações no canto direito: pin / refresh / ⋯ ----------
         from PySide6.QtCore import QSize
+
         from .icons import ICONS, ic
 
         def _icon_btn(qta_name: str, tooltip: str, color: str = "#c8c8c8") -> QPushButton:
@@ -162,12 +163,18 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         # Mantidos pra compatibilidade interna (usados em _refresh_mcp_status,
         # show_workspace). Ficam invisíveis — o conteúdo agora vai pros chips.
-        self._stacks = QLabel(); self._stacks.setVisible(False)
-        self._desc = QLabel(); self._desc.setVisible(False)
-        self._folders = QLabel(); self._folders.setVisible(False)
-        self._mcp_label = QLabel(); self._mcp_label.setVisible(False)
-        self._mcp_edit_btn = QPushButton(); self._mcp_edit_btn.setVisible(False)
-        self._mcp_remove_btn = QPushButton(); self._mcp_remove_btn.setVisible(False)
+        self._stacks = QLabel()
+        self._stacks.setVisible(False)
+        self._desc = QLabel()
+        self._desc.setVisible(False)
+        self._folders = QLabel()
+        self._folders.setVisible(False)
+        self._mcp_label = QLabel()
+        self._mcp_label.setVisible(False)
+        self._mcp_edit_btn = QPushButton()
+        self._mcp_edit_btn.setVisible(False)
+        self._mcp_remove_btn = QPushButton()
+        self._mcp_remove_btn.setVisible(False)
         self._mcp_edit_btn.clicked.connect(self._on_edit_mcp)
         self._mcp_remove_btn.clicked.connect(self._on_remove_mcp)
 

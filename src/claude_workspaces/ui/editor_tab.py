@@ -9,10 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QPlainTextEdit, QVBoxLayout, QWidget
-
 
 # Limite por arquivo — acima disso só mostra um aviso pra evitar congelar
 # a UI carregando MB de log.

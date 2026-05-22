@@ -8,7 +8,7 @@ console do Claude rodando num workspace, no estilo IntelliJ:
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,

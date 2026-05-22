@@ -21,9 +21,8 @@ from claude_workspaces.notifications import (
     NotificationPriority,
     NotificationService,
     NotificationStore,
+    persistence,
 )
-from claude_workspaces.notifications import persistence
-
 
 # ---------------------------------------------------------------------- Store
 

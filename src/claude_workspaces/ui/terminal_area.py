@@ -12,7 +12,6 @@ from .terminal_child_widget import (
 )
 from .terminal_widget import TerminalWidget
 
-
 # Cor do texto da aba em função do status do console. Mantém paridade
 # com o STATE_COLOR usado nas linhas da sidebar — usuário vê de relance
 # qual aba está rodando / ociosa / aguardando.

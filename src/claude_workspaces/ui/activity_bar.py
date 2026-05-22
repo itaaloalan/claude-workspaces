@@ -133,6 +133,7 @@ class _NavButton(QFrame):
         # Detecta pelo ponto (qtawesome usa prefixo.nome).
         if "." in icon:
             from PySide6.QtCore import QSize as _QS
+
             from .icons import ic as _ic
             pix = _ic(icon, color="#9aa0a6").pixmap(_QS(18, 18))
             self._icon_label.setPixmap(pix)
@@ -175,6 +176,7 @@ class _NavButton(QFrame):
         # Repinta o ícone qtawesome com cor matching o estado
         if self._icon_qta_name is not None:
             from PySide6.QtCore import QSize as _QS
+
             from .icons import ic as _ic
             color = "#6aa9e0" if value else "#9aa0a6"
             self._icon_label.setPixmap(_ic(self._icon_qta_name, color=color).pixmap(_QS(18, 18)))

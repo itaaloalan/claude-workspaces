@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import Workspace
-from .icons import ICONS, ic
+from .icons import ic
 
 
 class FilesPanel(QWidget):

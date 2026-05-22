@@ -264,7 +264,9 @@ class SidebarBuilder:
         # WORKSPACES — espelha o mockup, dá ações 1-clique sem precisar
         # do botão grande no rodapé.
         from PySide6.QtCore import QSize
-        from ..icons import ICONS, ic as _ic
+
+        from ..icons import ICONS
+        from ..icons import ic as _ic
         self.header_add_btn = QPushButton()
         self.header_add_btn.setIcon(_ic(ICONS["add"], color="#9aa0a6"))
         self.header_add_btn.setIconSize(QSize(11, 11))
@@ -293,7 +295,6 @@ class SidebarBuilder:
         )
         # Placeholder mais visível (default fica quase invisível em tema escuro)
         pal = self.search_input.palette()
-        from PySide6.QtGui import QColor
         pal.setColor(pal.ColorRole.PlaceholderText, QColor("#888"))
         self.search_input.setPalette(pal)
         if self._on_search_workspaces is not None:

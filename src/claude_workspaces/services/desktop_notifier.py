@@ -29,12 +29,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from PySide6.QtCore import SLOT, QObject, Signal, Slot
+
 # Mapa reason → nome legível pro log (spec FDO §Signals.NotificationClosed).
 # 1=expired (timeout do servidor), 2=dismissed (usuário fechou), 3=closed
 # (CloseNotification chamado), 4=undefined/reserved.
 _CLOSE_REASONS = {1: "expired", 2: "dismissed", 3: "closed_api", 4: "undefined"}
-
-from PySide6.QtCore import QObject, SLOT, Signal, Slot
 
 try:
     from PySide6.QtDBus import (

@@ -13,11 +13,10 @@ os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform-hint=x11")
 
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QPalette  # noqa: E402
-from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from .logging_setup import setup_logging  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
-
 
 _GLOBAL_DARK_QSS = """
 QMenu {

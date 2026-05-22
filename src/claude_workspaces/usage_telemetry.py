@@ -9,7 +9,7 @@ mudar preços.
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -256,7 +256,7 @@ def weekly_plan_usage(window_days: int = 7) -> WeeklyPlanUsage:
     base = Path.home() / ".claude" / "projects"
     if not base.is_dir():
         return out
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff = datetime.now(UTC) - timedelta(days=window_days)
     cutoff_epoch = cutoff.timestamp()
     try:
         projects = list(base.iterdir())
@@ -336,7 +336,7 @@ def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
     base = Path.home() / ".claude" / "projects"
     if not base.is_dir():
         return out
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Pré-filtra arquivos modificados na última 2*janela — cobre o caso
     # de a sessão atual ter começado pouco antes do cutoff rolante.
     mtime_cutoff = (now - timedelta(seconds=window_seconds * 2)).timestamp()

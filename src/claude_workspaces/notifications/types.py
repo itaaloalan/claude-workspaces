@@ -126,7 +126,7 @@ class Notification:
         tab_id: int | None = None,
         dedup_key: str | None = None,
         data: dict[str, Any] | None = None,
-    ) -> "Notification":
+    ) -> Notification:
         prio = priority or DEFAULT_PRIORITY.get(kind, NotificationPriority.NORMAL)
         if dedup_key is None:
             dedup_key = f"{kind}:{workspace_id or ''}:{session_id or ''}"
@@ -154,7 +154,7 @@ class Notification:
         return asdict(self)
 
     @staticmethod
-    def from_dict(d: dict[str, Any]) -> "Notification":
+    def from_dict(d: dict[str, Any]) -> Notification:
         return Notification(
             id=str(d.get("id") or uuid.uuid4().hex),
             kind=str(d.get("kind", "")),

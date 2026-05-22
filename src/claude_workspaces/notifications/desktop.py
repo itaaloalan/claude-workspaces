@@ -66,7 +66,7 @@ class DesktopNotifierAdapter(QObject):
         # Não conseguimos achar a entrada pelo id (já saiu do store), então
         # iteramos: como o map é pequeno, é barato.
         pending: list[str] = []
-        for key, nid in self._active.items():
+        for key, _nid in self._active.items():
             if key.startswith(f"_id:{notif_id}"):
                 pending.append(key)
         for key in pending:

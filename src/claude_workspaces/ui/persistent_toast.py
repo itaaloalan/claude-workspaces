@@ -326,7 +326,7 @@ def position_toasts(toasts: list[PersistentToast]) -> None:
 
 
 FLASH_DURATION_MS = 2500
-_active_flash_toasts: list["FlashToast"] = []
+_active_flash_toasts: list[FlashToast] = []
 
 
 class FlashToast(QWidget):

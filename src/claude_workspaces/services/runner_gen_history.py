@@ -38,7 +38,7 @@ class RunnerGenEntry:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "RunnerGenEntry":
+    def from_dict(cls, data: dict) -> RunnerGenEntry:
         return cls(
             workspace_id=str(data.get("workspace_id") or ""),
             session_id=str(data.get("session_id") or ""),

@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
 
 from . import theme
 
-
 MODES = [
     ("✋", "Ask before edits", "Claude pede aprovação a cada edição"),
     ("⟨/⟩", "Edit automatically", "Edita direto sem pedir aprovação"),

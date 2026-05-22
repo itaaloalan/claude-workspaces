@@ -21,6 +21,15 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..git_status import get_status
+from ..git_worktree import (
+    list_local_branches,
+    suggest_branch_name,
+    worktree_path_for,
+)
+from ..models import Workspace
+from ..settings import Settings
+
 
 def _white_standard_icon(style: QStyle, sp: QStyle.StandardPixmap, size: int = 16) -> QIcon:
     pm = style.standardIcon(sp).pixmap(size, size)
@@ -34,15 +43,6 @@ def _white_standard_icon(style: QStyle, sp: QStyle.StandardPixmap, size: int = 1
     p.fillRect(tinted.rect(), QColor("white"))
     p.end()
     return QIcon(tinted)
-
-from ..git_status import get_status
-from ..git_worktree import (
-    list_local_branches,
-    suggest_branch_name,
-    worktree_path_for,
-)
-from ..models import Workspace
-from ..settings import Settings
 
 log = logging.getLogger(__name__)
 

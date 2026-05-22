@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
 
 from . import theme
 
-
 _BTN_QSS = (
     f"QPushButton {{"
     f"  background: transparent;"
@@ -73,6 +72,7 @@ class RunnerGroupWidget(QWidget):
         row.setSpacing(6)
 
         from PySide6.QtCore import QSize as _QS
+
         from .icons import ic as _ic
 
         # Chevron como QLabel pixmap 8x8 — exatamente o mesmo formato
@@ -210,6 +210,7 @@ class RunnerGroupWidget(QWidget):
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do chevron (right recolhido, down expandido)."""
         from PySide6.QtCore import QSize as _QS
+
         from .icons import ic as _ic
         name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
         self._collapse_btn.setPixmap(

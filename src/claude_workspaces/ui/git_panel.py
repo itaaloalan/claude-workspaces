@@ -28,9 +28,6 @@ from PySide6.QtWidgets import (
 )
 
 from ..git_actions import (
-    commit as git_commit,
-)
-from ..git_actions import (
     checkout_branch,
     delete_untracked,
     discard_unstaged,
@@ -41,6 +38,9 @@ from ..git_actions import (
     stage_file,
     unstage_all,
     unstage_file,
+)
+from ..git_actions import (
+    commit as git_commit,
 )
 from ..git_actions import (
     fetch as git_fetch,
@@ -262,6 +262,7 @@ class GitPanel(QWidget):
         )
 
         from PySide6.QtCore import QSize as _QS
+
         from .icons import ic as _ic
 
         def _icon_btn(qta_name: str, tooltip: str, slot, label: str = "") -> QPushButton:

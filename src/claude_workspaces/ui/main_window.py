@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from ..claude_sessions import list_sessions_for_paths
 from ..errors import LaunchError
+from ..hook_manager import refresh_installed_hook
 from ..launchers import (
     LauncherError,
     find_app_repo_root,
@@ -37,16 +39,14 @@ from ..launchers import (
 )
 from ..logging_utils import log_exceptions
 from ..models import Workspace
-from ..repo_status_poller import RepoStatusPoller
-from ..hook_manager import refresh_installed_hook
 from ..notifications import (
     NotificationKind,
     NotificationPriority,
     NotificationService,
 )
 from ..notifications.center import NotificationCenter
+from ..repo_status_poller import RepoStatusPoller
 from ..services.desktop_notifier import DesktopNotifier
-from .persistent_toast import PersistentToast, position_toasts
 from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
 from ..session_persistence import (
@@ -55,6 +55,7 @@ from ..session_persistence import (
     save_sessions,
 )
 from ..settings import Settings
+from . import theme
 from .activity_bar import (
     VIEW_APPS,
     VIEW_CATALOG,
@@ -78,12 +79,13 @@ from .git_panel import open_path_in_editor
 from .launch_claude_dialog import LaunchClaudeDialog  # noqa: F401  (importado p/ tests)
 from .memory_panel import MemoryPanel
 from .panels import DockPanelSpec
+from .persistent_toast import PersistentToast, position_toasts
+from .runner_area import RunnerArea
+from .runner_edit_dialog import RunnerEditDialog
 from .session_export_dialog import open_session_export_dialog
 from .settings_panel import SettingsPanel
 from .shortcuts_dialog import ShortcutsDialog
 from .skills_panel import SkillsPanel
-from .runner_area import RunnerArea
-from .runner_edit_dialog import RunnerEditDialog
 from .terminal_area import TerminalArea
 from .terminal_child_widget import (
     STATE_AWAITING,
@@ -93,7 +95,6 @@ from .terminal_child_widget import (
     TerminalChildWidget,
 )
 from .terminal_widget import TerminalWidget
-from . import theme
 from .theme import (
     LAYOUT_SAVE_DEBOUNCE_MS,
     SIDEBAR_DEFAULT_W,
@@ -140,12 +141,12 @@ class MainWindow(QMainWindow):
         self._console_runner_areas: dict[str, dict[str, RunnerArea]] = {}
         self._runner_placeholder_idx: int = 0
         # workspace_id → { runner_id → QTreeWidgetItem } (footer rows na sidebar)
-        self._runner_tree_items: dict[str, dict[str, "QTreeWidgetItem"]] = {}
+        self._runner_tree_items: dict[str, dict[str, QTreeWidgetItem]] = {}
         # workspace_id → QTreeWidgetItem (header "Runners workspace")
-        self._runner_group_items: dict[str, "QTreeWidgetItem"] = {}
+        self._runner_group_items: dict[str, QTreeWidgetItem] = {}
         # (workspace_id, tab_id) → QTreeWidgetItem (header "Runners console")
         self._console_runner_group_items: dict[
-            tuple[str, int], "QTreeWidgetItem"
+            tuple[str, int], QTreeWidgetItem
         ] = {}
         self._sidebar_last_size: int = SIDEBAR_DEFAULT_W
         self._terminal_last_size: int = 520
@@ -1046,7 +1047,6 @@ class MainWindow(QMainWindow):
 
         editor = EditorTab(abs_path)
         title = Path(abs_path).name
-        from PySide6.QtCore import QSize
 
         from .icons import ic
         idx = self._bottom_tabs.addTab(editor, title)
@@ -1177,8 +1177,8 @@ class MainWindow(QMainWindow):
         )
         th_layout.addWidget(self._terminal_pane_title)
         th_layout.addStretch(1)
-        from PySide6.QtWidgets import QPushButton as _QPB2
         from PySide6.QtCore import QSize as _QS
+        from PySide6.QtWidgets import QPushButton as _QPB2
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
             ic("fa5s.window-minimize", color="#c8c8c8")
@@ -1982,7 +1982,6 @@ class MainWindow(QMainWindow):
         uma janela cruza 80% (high) ou 95% (critical). Dedup por janela —
         a mesma janela só re-notifica depois do cooldown do service ou
         quando passa de high pra critical."""
-        from ..notifications import NotificationPriority
         thresholds = [
             ("5h", getattr(snap, "five_hour", None)),
             ("7d", getattr(snap, "seven_day", None)),
@@ -2019,7 +2018,6 @@ class MainWindow(QMainWindow):
         """Helper público pra qualquer callsite emitir um erro de workspace
         como notificação. Usado por handlers de launch/git/etc. Centralizado
         aqui pra evitar que cada caller tenha que conhecer o service."""
-        from ..notifications import NotificationPriority
         ws = self.workspaces_coord.find_by_id(workspace_id) if workspace_id else None
         ws_name = ws.name if ws else "Workspace"
         self.notif_service.notify(
@@ -2374,7 +2372,7 @@ class MainWindow(QMainWindow):
         no topo) e antes do placeholder/outros."""
         from PySide6.QtCore import QSize as _QS
 
-        from .icons import ICONS, ic as _ic
+        from .icons import ic as _ic
         # Procura existente
         for i in range(ws_item.childCount()):
             c = ws_item.child(i)
@@ -2474,7 +2472,8 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB
 
-        from .icons import ICONS, ic as _ic
+        from .icons import ICONS
+        from .icons import ic as _ic
 
         # Idempotente: se já existe em qualquer posição, só remove e
         # re-insere no topo (Runner group é inserido em 0 depois e
@@ -3139,6 +3138,7 @@ class MainWindow(QMainWindow):
         import time
         _fp_t0 = time.perf_counter()
         from PySide6.QtCore import QSize as _QS
+
         from .icons import ic
 
         cache = getattr(self, "_focus_icon_cache", None)
@@ -3269,7 +3269,7 @@ class MainWindow(QMainWindow):
                     area.focus_runner(runner_id)
                     return
             # Área ainda não criada → garante criando via terminal dono.
-            for tab_id, term_item in self.terminals_coord.state.tree_items.items():
+            for tab_id, _term_item in self.terminals_coord.state.tree_items.items():
                 term = self._terminal_widget_for(tab_id)
                 if term is None:
                     continue
@@ -4938,7 +4938,7 @@ class MainWindow(QMainWindow):
         `/status` do Claude Code consome — números idênticos ao
         claude.ai). Se token ausente, expirado ou request falha, cai
         pro cálculo USD-baseado a partir dos JSONLs locais."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from ..plan_usage_api import cooldown_remaining_seconds, fetch_plan_usage
         from ..usage_telemetry import recent_plan_usage, weekly_plan_usage
@@ -4988,7 +4988,7 @@ class MainWindow(QMainWindow):
             def _reset_phrase(reset_at):
                 if reset_at is None:
                     return ""
-                delta = reset_at - datetime.now(timezone.utc)
+                delta = reset_at - datetime.now(UTC)
                 mins_left = max(int(delta.total_seconds() // 60), 0)
                 if mins_left >= 60:
                     return f"{mins_left // 60}h{mins_left % 60:02d}m"
@@ -5110,7 +5110,7 @@ class MainWindow(QMainWindow):
             limit_5h = max(self.settings.plan_usd_limit_5h, 0.01)
             sess_pct = min(usage.cost_usd / limit_5h * 100.0, 999.0)
             reset_at = usage.first_ts + timedelta(hours=5)
-            delta = reset_at - datetime.now(timezone.utc)
+            delta = reset_at - datetime.now(UTC)
             mins_left = max(int(delta.total_seconds() // 60), 0)
             reset_5h_str = (
                 f"{mins_left // 60}h{mins_left % 60:02d}m"

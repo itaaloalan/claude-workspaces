@@ -15,6 +15,24 @@ def settings_file() -> Path:
 class Settings:
     claude_command: str = "claude"
     claude_extra_args: list[str] = field(default_factory=list)
+    # Flags injetadas em toda sessão Claude lançada pelo app (console embutido,
+    # terminal externo, resume, runner-gen). Vazio = não passa a flag, deixando
+    # o Claude usar o default dele/config global do usuário.
+    # `claude_permission_mode`: --permission-mode <mode>. Valores aceitos pelo
+    #     CLI: "default", "acceptEdits", "plan", "bypassPermissions", "auto",
+    #     "dontAsk". Aplica no startup, mas o usuário ainda pode trocar via
+    #     Shift+Tab depois (assim como o popup de modos faz).
+    # `claude_model`: --model <id|alias>. Alias ("opus", "sonnet", "haiku") ou
+    #     nome completo ("claude-sonnet-4-6"). Vazio = default do Claude.
+    # `claude_effort`: --effort <low|medium|high|xhigh|max>. Vazio = default.
+    # `claude_allowed_tools` / `claude_disallowed_tools`: lista CSV ou separada
+    #     por espaço de tool specs (ex.: "Bash(git *) Edit"). Passa pra
+    #     --allowedTools / --disallowedTools.
+    claude_permission_mode: str = ""
+    claude_model: str = ""
+    claude_effort: str = ""
+    claude_allowed_tools: str = ""
+    claude_disallowed_tools: str = ""
     terminal_command: str = "konsole"
     shell_command: str = ""  # "" = autodetect from /etc/passwd (login shell)
     vscode_command: str = "code"
@@ -156,6 +174,28 @@ class Settings:
     def update_from(self, other: "Settings") -> None:
         for f in fields(self):
             setattr(self, f.name, getattr(other, f.name))
+
+    def claude_session_flags(self) -> list[str]:
+        """Flags derivadas das configurações 'Claude' do app — anexadas ao
+        argv junto com `claude_extra_args` em todo launch de sessão.
+        Vazio quando o respectivo campo está vazio (não passa a flag)."""
+        flags: list[str] = []
+        if self.claude_permission_mode:
+            flags += ["--permission-mode", self.claude_permission_mode]
+        if self.claude_model:
+            flags += ["--model", self.claude_model]
+        if self.claude_effort:
+            flags += ["--effort", self.claude_effort]
+        if self.claude_allowed_tools.strip():
+            flags += ["--allowedTools", self.claude_allowed_tools.strip()]
+        if self.claude_disallowed_tools.strip():
+            flags += ["--disallowedTools", self.claude_disallowed_tools.strip()]
+        return flags
+
+    def claude_launch_args(self) -> list[str]:
+        """Args completos pra anexar após `claude_command`: extras configurados
+        pelo usuário + flags derivadas das configurações 'Claude'."""
+        return [*self.claude_extra_args, *self.claude_session_flags()]
 
     def ide_command(self, ide_key: str) -> str:
         return {

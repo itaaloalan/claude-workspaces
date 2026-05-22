@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 
 from ..models import RunnerConfig
 
-
 _NPM_LIKE = {"npm", "yarn", "pnpm", "bun", "npx"}
 
 

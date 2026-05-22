@@ -11,8 +11,6 @@ import logging
 import re
 import shlex
 import subprocess
-from collections.abc import Callable
-from pathlib import Path
 
 from PySide6.QtCore import QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
