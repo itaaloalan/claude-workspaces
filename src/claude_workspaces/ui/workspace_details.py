@@ -132,11 +132,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         refresh_btn.clicked.connect(self._on_refresh_clicked)
         header_row.addWidget(refresh_btn)
 
-        # Minimize/expand da parte superior — colapsa workspace details
-        # pra terminal ocupar quase tudo. Botão muda de ícone conforme
-        # estado (chevron-down quando expandido, chevron-up quando minimizado).
+        # Minimize/expand da parte superior — estilo Windows (— / ▢).
+        # Colapsa workspace details pra terminal ocupar quase tudo.
         self._minimize_btn = _icon_btn(
-            "fa5s.chevron-down", "Minimizar parte superior (terminal full)"
+            "fa5s.window-minimize", "Minimizar parte superior (terminal full)"
         )
         self._minimize_btn.clicked.connect(self.minimize_toggle_requested.emit)
         header_row.addWidget(self._minimize_btn)
@@ -425,11 +424,12 @@ class WorkspaceDetailsPanel(QStackedWidget):
         )
 
     def refresh_minimize_btn(self, minimized: bool) -> None:
-        """MainWindow chama isso quando alterna a parte superior."""
+        """MainWindow chama isso quando alterna a parte superior.
+        Ícones estilo Windows: — quando expandido, ▢ quando minimizado."""
         from PySide6.QtCore import QSize
 
         from .icons import ic
-        icon_name = "fa5s.chevron-up" if minimized else "fa5s.chevron-down"
+        icon_name = "fa5s.window-maximize" if minimized else "fa5s.window-minimize"
         self._minimize_btn.setIcon(ic(icon_name, color="#c8c8c8"))
         self._minimize_btn.setIconSize(QSize(14, 14))
         self._minimize_btn.setToolTip(

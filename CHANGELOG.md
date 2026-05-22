@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.60.1] — 2026-05-21
+
+### Mudado
+- **Botões de minimize/restaurar agora estilo Windows** (— / ▢) em vez
+  de chevrons:
+  - Workspace details header (`ui/workspace_details.py`):
+    `fa5s.chevron-down/up` → `fa5s.window-minimize/maximize`
+  - Runners pane header (`ui/main_window.py`): mesmo swap.
+  Match com convenção desktop tradicional.
+
 ## [0.60.0] — 2026-05-21
 
 ### Mudado

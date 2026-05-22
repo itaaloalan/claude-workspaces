@@ -1026,7 +1026,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB
         self._runners_minimize_btn = _QPB()
-        self._runners_minimize_btn.setIcon(ic("fa5s.chevron-down", color="#c8c8c8"))
+        self._runners_minimize_btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
         self._runners_minimize_btn.setIconSize(_QS(11, 11))
         self._runners_minimize_btn.setFixedSize(22, 20)
         self._runners_minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1069,19 +1069,19 @@ class MainWindow(QMainWindow):
         # Header runners tem ~28px (3+font+3+border)
         header_h = 28
         if sizes[1] > header_h + 4:
-            # Minimizar
+            # Minimizar — ícone vira ▢ (restaurar / maximize)
             self._runners_last_size = sizes[1]
             self._runners_tabs.setVisible(False)
             self._bottom_sub_splitter.setSizes([total - header_h, header_h])
-            self._runners_minimize_btn.setIcon(ic("fa5s.chevron-up", color="#c8c8c8"))
+            self._runners_minimize_btn.setIcon(ic("fa5s.window-maximize", color="#c8c8c8"))
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Restaurar área de runners")
         else:
-            # Restaurar
+            # Restaurar — ícone volta pra — (minimize)
             target = getattr(self, "_runners_last_size", 300) or 300
             self._runners_tabs.setVisible(True)
             self._bottom_sub_splitter.setSizes([max(total - target, 200), target])
-            self._runners_minimize_btn.setIcon(ic("fa5s.chevron-down", color="#c8c8c8"))
+            self._runners_minimize_btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
             self._runners_minimize_btn.setIconSize(_QS(11, 11))
             self._runners_minimize_btn.setToolTip("Minimizar área de runners")
         self._schedule_layout_save()
