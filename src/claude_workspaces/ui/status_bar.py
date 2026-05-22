@@ -11,9 +11,18 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
+
+
+class _ClickableLabel(QLabel):
+    clicked = Signal()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 _SEG_QSS = (
@@ -36,6 +45,13 @@ def _segment(text: str = "", tooltip: str = "") -> QLabel:
 
 
 class _IconSegment(QWidget):
+    clicked = Signal()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
     """Segmento da status bar com ícone SVG (qtawesome) + texto.
 
     Expõe `setText` / `setVisible` / `setToolTip` pra ter a mesma API
@@ -90,7 +106,7 @@ class StatusBarWidgets(QWidget):
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(0)
 
-        self.workspace = _IconSegment("fa5s.folder-open", "—", "Workspace ativo")
+        self.workspace = _IconSegment("fa5s.folder-open", "—", "Clique pra ir ao workspace ativo na sidebar")
         self.stack = _IconSegment("fa5s.cube", "", "Stack detectado")
         # Versão real do Python que está rodando o app — útil pra debug.
         py_ver = f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -102,7 +118,7 @@ class StatusBarWidgets(QWidget):
         # do card da sidebar: estado (com cor) · modelo · branch git.
         # Ficam ocultos enquanto não há console selecionado.
         self._console_sep = _separator()
-        self.console_state = QLabel("")
+        self.console_state = _ClickableLabel("")
         self.console_state.setTextFormat(Qt.TextFormat.RichText)
         self.console_state.setStyleSheet(_SEG_QSS)
         self.console_state.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))

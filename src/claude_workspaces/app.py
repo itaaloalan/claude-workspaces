@@ -56,6 +56,52 @@ QMessageBox QLabel, QInputDialog QLabel {
     color: #e6e6e6;
     background: transparent;
 }
+/* Scrollbar global — espelha o visual minimalista do viewport do
+ * console (terminal.html): 8px, sem track, thumb sutil, hover amarelo.
+ * Pega QListWidget/QTreeWidget/QScrollArea/QPlainTextEdit/QTextBrowser
+ * etc. de uma vez. */
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0;
+    border: 0;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 8px;
+    margin: 0;
+    border: 0;
+}
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: rgba(255, 255, 255, 40);
+    border-radius: 4px;
+    min-height: 24px;
+    min-width: 24px;
+}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background: rgba(229, 181, 59, 140);
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    background: transparent;
+    border: 0;
+    height: 0;
+    width: 0;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
+}
+QScrollBar::up-arrow, QScrollBar::down-arrow,
+QScrollBar::left-arrow, QScrollBar::right-arrow {
+    background: transparent;
+    border: 0;
+    width: 0;
+    height: 0;
+}
+QScrollBar::corner {
+    background: transparent;
+}
 """
 
 

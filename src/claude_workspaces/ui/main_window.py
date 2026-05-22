@@ -447,6 +447,10 @@ class MainWindow(QMainWindow):
         sb.setStyleSheet("QStatusBar { background: #161616; border-top: 1px solid #2a2a2a; }")
         sb.setSizeGripEnabled(False)
         sb.addPermanentWidget(self.status_widgets, stretch=1)
+        # Click no segmento de workspace foca a sidebar/seleciona o
+        # workspace ativo; click no console_state foca o console ativo.
+        self.status_widgets.workspace.clicked.connect(self._focus_active_workspace_from_status)
+        self.status_widgets.console_state.clicked.connect(self._focus_active_console_from_status)
 
         # Restaurar tamanhos das colunas internas dos details
         if self.settings.workspace_columns_sizes:
@@ -1738,6 +1742,13 @@ class MainWindow(QMainWindow):
         for ws in regular:
             _add_workspace(ws)
 
+        # Reaplica colapso das seções DEPOIS de popular — no add_header
+        # original a tree ainda não tinha os items abaixo, então o
+        # esconder não pegava nada.
+        for _label in ("FIXADOS", "WORKSPACES"):
+            if bool(self.settings.section_collapsed.get(_label, False)):
+                self._apply_section_collapse(_label, True)
+
         self._apply_filter(
             self.top_bar.search.text() if hasattr(self, "top_bar") else ""
         )
@@ -1864,6 +1875,44 @@ class MainWindow(QMainWindow):
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
+
+    def _focus_active_workspace_from_status(self) -> None:
+        """Click no segmento 'workspace' do footer → ativa view de
+        workspaces, scrolla pro workspace selecionado na sidebar e foca."""
+        ws = self._current_workspace()
+        if ws is None:
+            return
+        self.main_stack.setCurrentWidget(self.body_view)
+        self.activity_bar.set_active(VIEW_WORKSPACES)
+        self.content_stack.setCurrentIndex(0)
+        item = self._find_workspace_item(ws.id)
+        if item is not None:
+            self.list_widget.setCurrentItem(item)
+            self.list_widget.scrollToItem(item)
+            self.list_widget.setFocus()
+
+    def _focus_active_console_from_status(self) -> None:
+        """Click no segmento de console do footer → foca a aba do
+        terminal selecionado e seu pane (restaura se minimizado)."""
+        item = self.list_widget.currentItem()
+        if item is None:
+            return
+        tab_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(tab_id, int):
+            return
+        parent = item.parent()
+        if parent is None:
+            return
+        ws = parent.data(0, Qt.ItemDataRole.UserRole)
+        # Sobe parents até achar o workspace (consoles podem estar
+        # aninhados no bucket "Sessões Claude").
+        while parent is not None and not isinstance(ws, Workspace):
+            parent = parent.parent()
+            if parent is not None:
+                ws = parent.data(0, Qt.ItemDataRole.UserRole)
+        if not isinstance(ws, Workspace):
+            return
+        self._focus_terminal_tab(ws, tab_id)
 
     def _refresh_status_bar_console(self) -> None:
         """Sincroniza os segmentos de console do footer com o item

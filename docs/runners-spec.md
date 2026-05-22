@@ -188,6 +188,51 @@ Nomeie cada runner de forma curta e específica (`web`, `api`,
 `glassfish-ogpms`, `worker-emails`) — evite nomes genéricos como
 "runner" ou "app".
 
+### Exibindo a porta no nome (sidebar)
+
+Quando o runner sobe um servidor HTTP/TCP com porta conhecida, **inclua
+a porta no nome entre parênteses**: `web (5173)`, `api (5000)`,
+`glassfish (8080)`. O nome é o que aparece na sidebar/aba da seção
+Runners, e ter a porta visível ali poupa o usuário de abrir o log ou
+lembrar a config.
+
+Descubra a porta nesta ordem:
+
+1. Config explícita no projeto (`vite.config.ts` `server.port`,
+   `next.config.js`, `application.properties` `server.port=`,
+   `appsettings.json` `ASPNETCORE_URLS`, `docker-compose.yml`
+   `ports:`, etc.).
+2. Variável de ambiente que o `start_cmd` define (`PORT=3000`,
+   `ASPNETCORE_URLS=http://0.0.0.0:5000`).
+3. Default do framework quando nada está sobrescrito (Vite 5173,
+   Next 3000, CRA 3000, Django 8000, Rails 3000, Spring Boot 8080,
+   Expo/Metro 8081, Flask 5000).
+
+Quando não houver porta (CLI, worker, processo sem socket), omita os
+parênteses.
+
+## Configuração do browser (Settings global)
+
+Os campos `open_browser_on_ready` / `browser_url` / `ready_pattern` no
+runner controlam **quando** abrir o browser e **em qual URL**. **Como**
+o browser é invocado é controlado pelo Settings global do
+claude-workspaces (campo "Comando do browser"):
+
+- **Vazio (default)** — usa `xdg-open` (Linux) / `QDesktopServices`. O
+  comportamento de janela vs aba depende do handler default do desktop
+  e pode abrir uma janela nova a cada chamada.
+- **Binário do browser direto** (`google-chrome`, `chromium`,
+  `firefox`, `brave`, `microsoft-edge`) — navegadores modernos, quando
+  chamados pelo nome com uma URL, reusam a janela já aberta e abrem
+  apenas uma **aba nova**. Esse é o comportamento recomendado para
+  quem deixa o browser aberto o tempo todo.
+- **Comando customizado** com flags — ex: `firefox --new-tab`,
+  `google-chrome --new-window` se preferir o oposto.
+
+Isso é uma config de UI do app, não vai no JSON do runner. Se o
+usuário reclamar que "abre uma janela nova toda vez", direcione pra
+Settings → Comando do browser.
+
 Salve no caminho que o app indicar no prompt (criando diretórios pai
 com `mkdir -p` se necessário). Depois informe:
 

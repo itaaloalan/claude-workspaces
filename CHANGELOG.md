@@ -6,6 +6,26 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.64.0] — 2026-05-22
+
+### Corrigido
+- **Colapso de FIXADOS/WORKSPACES agora persiste no reinício**
+  (`ui/main_window.py`): o restore do estado rodava dentro de
+  `_add_section_header`, antes dos workspaces serem inseridos na tree,
+  então não havia nada pra esconder. Agora reaplica o colapso após o
+  loop de população.
+
+### Adicionado
+- **Click no footer navega pro workspace/console ativo**
+  (`ui/status_bar.py`, `ui/main_window.py`): clicar no segmento de
+  workspace na status bar foca a sidebar/seleciona o workspace; clicar
+  no segmento de console foca a aba do terminal (restaura pane se
+  minimizado).
+- **Scrollbars globais com visual do console**
+  (`app.py`): QScrollBar de toda a app (listas, trees, scroll areas)
+  passa a usar o mesmo estilo minimalista do viewport do xterm — 8px,
+  thumb sutil branco translúcido, hover amarelo.
+
 ## [0.63.0] — 2026-05-22
 
 ### Adicionado
