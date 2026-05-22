@@ -6,6 +6,16 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.7] — 2026-05-22
+
+### Mudado
+- **Scroll do terminal redesenhado** (`ui/static/terminal.html`):
+  scrollbar do `.xterm-viewport` agora tem 8px de largura, thumb
+  semi-transparente branco (10% opacity) com border-radius 4px e
+  track transparente. Hover destaca em amarelo (229,181,59) na
+  mesma paleta do chip de branch. Visualmente mais discreto e
+  alinhado com o resto da UI.
+
 ## [0.61.6] — 2026-05-22
 
 ### Corrigido
