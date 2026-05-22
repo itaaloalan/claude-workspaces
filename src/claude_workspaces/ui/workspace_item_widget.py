@@ -104,8 +104,10 @@ class WorkspaceItemWidget(QWidget):
         label_font.setBold(True)
         label_font.setPointSizeF(label_font.pointSizeF() + 1.5)
         self._label.setFont(label_font)
-        self._label.setStyleSheet("color: #f2f2f2;")
         self._label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        # Cor reage à seleção (set_selected); default = não selecionado.
+        self._selected = False
+        self._apply_label_color()
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._dot = QLabel("")
@@ -175,6 +177,18 @@ class WorkspaceItemWidget(QWidget):
     def set_pinned(self, pinned: bool) -> None:
         """Mostra/esconde o indicador 📌 ao lado do nome."""
         self._pin_icon.setVisible(pinned)
+
+    def set_selected(self, selected: bool) -> None:
+        """Workspace selecionado fica branco; os demais ficam cinza
+        claro — visual de "seleção" sem precisar de fundo/borda."""
+        if self._selected == selected:
+            return
+        self._selected = selected
+        self._apply_label_color()
+
+    def _apply_label_color(self) -> None:
+        color = "#ffffff" if self._selected else "#9a9a9a"
+        self._label.setStyleSheet(f"color: {color};")
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do botão de colapsar pra refletir o estado

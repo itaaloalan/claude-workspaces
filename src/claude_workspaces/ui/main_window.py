@@ -1982,6 +1982,10 @@ class MainWindow(QMainWindow):
         widget.set_running_count(
             self.terminals_coord.state.running_counts.get(ws.id, 0)
         )
+        # Inicializa seleção pra refletir o ws atualmente selecionado —
+        # rebuilds da árvore preservam o highlight branco no item certo.
+        current_ws = self._current_workspace()
+        widget.set_selected(current_ws is not None and current_ws.id == ws.id)
         self.list_widget.setItemWidget(item, 0, widget)
         self._refresh_empty_placeholder(item)
 
@@ -2574,6 +2578,22 @@ class MainWindow(QMainWindow):
             widget = self.list_widget.itemWidget(item, 0)
             if isinstance(widget, TerminalChildWidget):
                 widget.set_selected(item is current)
+
+        # Workspace highlight: o top-level cujo ws bate com a seleção
+        # atual fica branco; os outros, cinza claro. Funciona tanto pra
+        # clique direto no header do workspace quanto pra clique num
+        # filho (console/runner) — `_workspace_of_item` sobe pro ws pai.
+        from .workspace_item_widget import WorkspaceItemWidget
+        current_ws = self._workspace_of_item(current) if current is not None else None
+        current_ws_id = current_ws.id if current_ws is not None else None
+        for i in range(self.list_widget.topLevelItemCount()):
+            top = self.list_widget.topLevelItem(i)
+            w = self.list_widget.itemWidget(top, 0)
+            if isinstance(w, WorkspaceItemWidget):
+                ws_at_top = self._workspace_of_item(top)
+                w.set_selected(
+                    ws_at_top is not None and ws_at_top.id == current_ws_id
+                )
 
         if self.content_stack.currentIndex() != 0:
             self.content_stack.setCurrentIndex(0)

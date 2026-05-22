@@ -6,6 +6,18 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.62.3] — 2026-05-22
+
+### Mudou
+- **Nome do workspace fica branco só no selecionado**
+  (`ui/workspace_item_widget.py`, `ui/main_window.py`): novo
+  `set_selected(bool)` troca a cor do label entre `#ffffff`
+  (selecionado) e `#9a9a9a` (demais). `_on_selection_changed` aplica
+  pra todos os top-level items resolvendo o ws via `_workspace_of_item`
+  (assim clique num filho — console/runner — destaca o ws pai).
+  `_install_workspace_item_widget` inicializa o estado pra rebuilds
+  preservarem o highlight.
+
 ## [0.62.2] — 2026-05-22
 
 ### Mudou
