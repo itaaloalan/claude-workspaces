@@ -36,6 +36,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
     edit_requested = Signal(Workspace)
     delete_requested = Signal(Workspace)
     pin_toggle_requested = Signal(Workspace)
+    minimize_toggle_requested = Signal()
     launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
     launch_shell_requested = Signal(Workspace)
     handoff_requested = Signal(Workspace, ClaudeSession)
@@ -130,6 +131,15 @@ class WorkspaceDetailsPanel(QStackedWidget):
         refresh_btn = _icon_btn("fa5s.sync-alt", "Recarregar workspace")
         refresh_btn.clicked.connect(self._on_refresh_clicked)
         header_row.addWidget(refresh_btn)
+
+        # Minimize/expand da parte superior — colapsa workspace details
+        # pra terminal ocupar quase tudo. Botão muda de ícone conforme
+        # estado (chevron-down quando expandido, chevron-up quando minimizado).
+        self._minimize_btn = _icon_btn(
+            "fa5s.chevron-down", "Minimizar parte superior (terminal full)"
+        )
+        self._minimize_btn.clicked.connect(self.minimize_toggle_requested.emit)
+        header_row.addWidget(self._minimize_btn)
 
         # ⋯ menu (Editar / MCP / Remover)
         more_btn = _icon_btn(ICONS["more"], "Mais ações")
@@ -412,6 +422,19 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._pin_btn.setIconSize(QSize(14, 14))
         self._pin_btn.setToolTip(
             "Desafixar workspace" if self.workspace.pinned else "Fixar workspace"
+        )
+
+    def refresh_minimize_btn(self, minimized: bool) -> None:
+        """MainWindow chama isso quando alterna a parte superior."""
+        from PySide6.QtCore import QSize
+
+        from .icons import ic
+        icon_name = "fa5s.chevron-up" if minimized else "fa5s.chevron-down"
+        self._minimize_btn.setIcon(ic(icon_name, color="#c8c8c8"))
+        self._minimize_btn.setIconSize(QSize(14, 14))
+        self._minimize_btn.setToolTip(
+            "Restaurar parte superior" if minimized
+            else "Minimizar parte superior (terminal full)"
         )
 
     def set_active_status(self, active: bool) -> None:

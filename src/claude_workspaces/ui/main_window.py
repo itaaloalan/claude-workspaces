@@ -289,6 +289,7 @@ class MainWindow(QMainWindow):
         self.details.edit_requested.connect(self.edit_workspace)
         self.details.delete_requested.connect(self.delete_workspace)
         self.details.pin_toggle_requested.connect(self._toggle_pin_workspace)
+        self.details.minimize_toggle_requested.connect(self._toggle_content_minimized)
         self.details.launch_claude_requested.connect(self._launch_claude_for)
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.open_file_requested.connect(self._open_file_in_editor)
@@ -571,6 +572,33 @@ class MainWindow(QMainWindow):
         half = total // 2
         self.right_splitter.setSizes([total - half, half])
         self._refresh_terminal_btns()
+        self._schedule_layout_save()
+
+    def _content_is_minimized(self) -> bool:
+        """Upper area (workspace details + sessions) está minimizada?
+        Considerado minimizado se sobrar só a faixa fina do título."""
+        sizes = self.right_splitter.sizes()
+        if not sizes or len(sizes) < 2:
+            return False
+        return sizes[0] <= 50  # ~altura do header+chips colapsado
+
+    def _toggle_content_minimized(self) -> None:
+        """Alterna entre upper minimizado (terminal full) e tamanho normal.
+        Quando minimizado, deixa ~40px do upper visível pra mostrar o
+        botão de expand de volta."""
+        sizes = self.right_splitter.sizes()
+        total = sum(sizes) or 800
+        if not self._content_is_minimized():
+            # Minimizar: guarda tamanho atual + colapsa pra faixa do header
+            self._content_last_size = sizes[0] if sizes[0] > 50 else 400
+            self.right_splitter.setSizes([40, max(total - 40, 200)])
+        else:
+            target = getattr(self, "_content_last_size", 400) or 400
+            self.right_splitter.setSizes([target, max(total - target, 200)])
+        self._refresh_terminal_btns()
+        # Atualiza o ícone do botão de minimize no header dos details
+        if hasattr(self, "details"):
+            self.details.refresh_minimize_btn(self._content_is_minimized())
         self._schedule_layout_save()
 
     def _refresh_terminal_btns(self) -> None:

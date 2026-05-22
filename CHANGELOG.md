@@ -6,6 +6,20 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.59.8] — 2026-05-21
+
+### Adicionado
+- **Botão minimize/expand da parte superior** no header do workspace
+  (`ui/workspace_details.py`, `ui/main_window.py`):
+  - Chevron ▼ (down) quando expandido → click minimiza upper (terminal
+    ocupa quase tudo, sobram 40px do header pra ver o botão de volta).
+  - Chevron ▲ (up) quando minimizado → click restaura tamanho anterior.
+  - Espelha o já-existente min/max do terminal mas pelo lado de cima.
+- `_toggle_content_minimized`, `_content_is_minimized` em MainWindow;
+  signal `minimize_toggle_requested` em WorkspaceDetailsPanel;
+  método `refresh_minimize_btn(minimized)` pra MainWindow notificar
+  o widget e atualizar o ícone.
+
 ## [0.59.7] — 2026-05-21
 
 ### Adicionado
