@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.6] — 2026-05-22
+
+### Corrigido
+- **Click no runner pelo sidebar ainda não maximizava — fix definitivo**
+  (`ui/main_window.py`): `_focus_pane_from_sidebar` agora apenas
+  minimiza o workspace upper sincronamente; o ajuste do
+  `_bottom_sub_splitter` foi movido pra `_apply_focus_pane` agendado
+  via `QTimer.singleShot(0, …)`, dando 1 tick pro Qt propagar a
+  expansão do right_splitter. Removidos os `setVisible(False)` que
+  faziam o splitter redistribuir automaticamente antes do nosso
+  `setSizes` (causa real do bug — visibilidade hide + redistribuição
+  do splitter brigavam com nossos sizes intermediários). Adicionado
+  `setMinimumHeight(0)` explícito nos dois panes pra garantir que
+  `setSizes([0, total])` colapsa de verdade.
+
 ## [0.61.5] — 2026-05-22
 
 ### Corrigido

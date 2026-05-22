@@ -2504,22 +2504,26 @@ class MainWindow(QMainWindow):
         """Click pelo sidebar = "focar" o pane escolhido: maximiza ele e
         minimiza os outros dois. `pane` ∈ {"runners", "terminal"}.
 
-        Aplica o estado final direto (sem passar pelos toggles em
-        sequência) — chamar toggles encadeados sofria com sizes
-        intermediários do `_bottom_sub_splitter` antes do Qt propagar
-        a expansão do `right_splitter` após o workspace minimizar."""
+        Aplica o estado final via QTimer.singleShot — assim a expansão
+        do `right_splitter` causada pelo workspace minimizar tem tempo
+        de propagar antes de calcularmos `total` do sub-splitter."""
         if not hasattr(self, "_bottom_sub_splitter"):
             return
-        from PySide6.QtCore import QSize as _QS
-        from .icons import ic
+        from PySide6.QtCore import QTimer
 
         # 1) Workspace upper sempre minimizado em focus mode
         if not self._content_is_minimized():
             self._toggle_content_minimized()
 
-        # 2) Total disponível pro bottom sub-splitter — usa height() pra
-        #    pegar a área real depois do workspace colapsar (sum(sizes)
-        #    pode estar stale antes do event loop propagar resize).
+        # 2) Defer a aplicação dos sizes do sub-splitter pra depois do
+        #    Qt processar o resize do right_splitter. Sem isso, o
+        #    setSizes via valores stale e o pane alvo não maximiza.
+        QTimer.singleShot(0, lambda p=pane: self._apply_focus_pane(p))
+
+    def _apply_focus_pane(self, pane: str) -> None:
+        from PySide6.QtCore import QSize as _QS
+        from .icons import ic
+
         cur = self._bottom_sub_splitter.sizes()
         total = sum(cur)
         h = self._bottom_sub_splitter.height()
@@ -2528,12 +2532,18 @@ class MainWindow(QMainWindow):
         if total < 200:
             total = 600
 
+        # Garante que os panes podem colapsar pra 0 e ficar visíveis
+        # — sem mexer em setVisible (que faz o splitter redistribuir
+        # automaticamente antes do nosso setSizes e cria o bug
+        # "runner click não maximiza").
+        self._terminal_pane_widget.setVisible(True)
+        self._runners_pane.setVisible(True)
+        self._terminal_pane_widget.setMinimumHeight(0)
+        self._runners_pane.setMinimumHeight(0)
+
         if pane == "runners":
-            # Guarda último tamanho do terminal antes de colapsar
             if cur and cur[0] > 4:
                 self._terminal_pane_last_size = cur[0]
-            self._runners_pane.setVisible(True)
-            self._terminal_pane_widget.setVisible(False)
             self._bottom_sub_splitter.setSizes([0, total])
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.remove_chip("runners")
@@ -2553,8 +2563,6 @@ class MainWindow(QMainWindow):
         elif pane == "terminal":
             if cur and cur[1] > 4:
                 self._runners_last_size = cur[1]
-            self._terminal_pane_widget.setVisible(True)
-            self._runners_pane.setVisible(False)
             self._bottom_sub_splitter.setSizes([total, 0])
             if hasattr(self, "_minimize_tray"):
                 self._minimize_tray.remove_chip("terminal_pane")
