@@ -38,12 +38,14 @@ class DesktopNotifierAdapter(QObject):
         desktop: DesktopNotifier,
         *,
         is_app_focused: callable,
+        timeout_ms_provider: callable | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._service = service
         self._desktop = desktop
         self._is_app_focused = is_app_focused
+        self._timeout_ms_provider = timeout_ms_provider
         # dedup_key → note_id D-Bus ativo (pra replaces_id).
         self._active: dict[str, int] = {}
 
@@ -105,13 +107,25 @@ class DesktopNotifierAdapter(QObject):
 
         key = n.dedup_key or f"_id:{n.id}"
         prev = self._active.get(key, 0)
+        # Resolve timeout: sticky para HIGH/CRITICAL ignora preferência (alerta
+        # de atenção não deve sumir sozinho). Para os demais, usa a setting
+        # `notify_timeout_ms` (default 10s); -1 = default do servidor; 0 = sticky.
+        if sticky:
+            timeout_ms = 0
+        else:
+            timeout_ms = 10000
+            if self._timeout_ms_provider is not None:
+                try:
+                    timeout_ms = int(self._timeout_ms_provider())
+                except Exception:
+                    log.debug("timeout_ms_provider falhou", exc_info=True)
         try:
             nid = self._desktop.notify(
                 title=n.title,
                 body=n.body or "",
                 actions=actions,
                 on_action=lambda action_key, _n=n: self._handle_action(_n, action_key),
-                timeout_ms=0 if sticky else 6000,
+                timeout_ms=timeout_ms,
                 replaces_id=prev,
                 urgency=urgency,
                 desktop_entry="claude-workspaces",

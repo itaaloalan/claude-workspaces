@@ -4109,6 +4109,7 @@ class MainWindow(QMainWindow):
                     self.notif_service,
                     notifier,
                     is_app_focused=self._is_app_in_foreground,
+                    timeout_ms_provider=lambda: self.settings.notify_timeout_ms,
                     parent=self,
                 )
                 self._desktop_adapter.open_target_requested.connect(

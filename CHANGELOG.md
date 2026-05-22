@@ -6,6 +6,19 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.76.2] — 2026-05-22
+
+### Corrigido — Banner de notificação do SO sumindo muito rápido
+- **`notifications/desktop.py`**: o `DesktopNotifierAdapter` estava
+  enviando `timeout_ms=6000` hard-coded ao servidor D-Bus, ignorando
+  completamente a setting `notify_timeout_ms` (default 10s, configurável
+  até 600s via Settings → "Duração do banner"). Agora o adapter recebe
+  um `timeout_ms_provider` e respeita a preferência do usuário.
+  Notificações HIGH/CRITICAL continuam `sticky` (timeout=0) — alertas
+  de atenção não devem expirar sozinhos.
+- **`ui/main_window.py`**: passa `timeout_ms_provider=lambda:
+  self.settings.notify_timeout_ms` ao montar o adapter.
+
 ## [0.76.1] — 2026-05-22
 
 ### Modificado — Card de sessão (TerminalChildWidget) repaginado
