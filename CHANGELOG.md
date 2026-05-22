@@ -6,6 +6,21 @@ O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.
 e o projeto segue [versionamento semântico](https://semver.org/lang/pt-BR/) pragmático
 (pré-1.0: `minor` para features visíveis, `patch` para correções/refactors).
 
+## [0.61.4] — 2026-05-22
+
+### Mudado
+- **Click no sidebar agora "foca" o pane (maximiza + minimiza os outros)**
+  (`ui/main_window.py`):
+  - `_focus_pane_from_sidebar(pane)` substitui a lógica de "só
+    restaura se estava minimizado". Agora sempre que o user clica
+    num runner ou console pelo sidebar:
+    - Workspace upper é minimizado
+    - O pane escolhido é maximizado
+    - O outro pane do `_bottom_sub_splitter` é minimizado
+  - Os botões de minimizar/maximizar dos próprios panes continuam
+    permitindo o user dividir a tela manualmente; o focus só
+    dispara via sidebar.
+
 ## [0.61.3] — 2026-05-22
 
 ### Mudado
