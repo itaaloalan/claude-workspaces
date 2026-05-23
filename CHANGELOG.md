@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.18] — 2026-05-23
+
+### Corrigido — borda do workspace fechando antes dos runners
+- **`ui/builders/sidebar_builder.py`**: `setup_card_overlay` agora
+  também conecta `rowsInserted` / `rowsRemoved` / `layoutChanged` do
+  model da tree ao `update()` do overlay. Antes, o overlay só repintava
+  em expand/collapse/scroll/resize — quando runners eram populados
+  dinamicamente (depois do expand), `_last_visible_descendant` recalculava
+  na próxima pintura ociosa, mas como não havia trigger, a borda lateral
+  fechava no antigo último item e os novos cards (api, camera, …)
+  apareciam fora do contorno do workspace.
+
 ## [0.76.17] — 2026-05-22
 
 ### Melhorado — espaçamento FIXADOS/WORKSPACES + alinhamento dos chevrons

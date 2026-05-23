@@ -110,6 +110,21 @@ class _StableTree(QTreeWidget):
         self.verticalScrollBar().valueChanged.connect(
             lambda _v: self._card_overlay.update()
         )
+        # Inserção/remoção dinâmica de filhos (runners detectados depois
+        # do expand, consoles abertos/fechados) também muda o "último
+        # descendant visível" — sem isso a borda lateral fica curta e
+        # cards novos aparecem fora do contorno do workspace.
+        model = self.model()
+        if model is not None:
+            model.rowsInserted.connect(
+                lambda *_a: self._card_overlay.update()
+            )
+            model.rowsRemoved.connect(
+                lambda *_a: self._card_overlay.update()
+            )
+            model.layoutChanged.connect(
+                lambda *_a: self._card_overlay.update()
+            )
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
