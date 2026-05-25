@@ -359,6 +359,16 @@ class GitPanel(QWidget):
         self._commit_push_btn.clicked.connect(self._do_commit_and_push)
         bottom.addWidget(self._commit_push_btn)
 
+        # Botão "Push" puro — abre o diálogo de push sem commitar nada
+        # (pros casos em que o usuário já commitou e só quer enviar).
+        self._push_btn = QPushButton("Push")
+        self._push_btn.setStyleSheet(ghost_qss)
+        self._push_btn.setToolTip(
+            "Push da branch atual — mostra commits e arquivos antes de enviar"
+        )
+        self._push_btn.clicked.connect(lambda: self._do_push())
+        bottom.addWidget(self._push_btn)
+
         bottom.addStretch()
         v.addLayout(bottom)
         return box
@@ -851,6 +861,9 @@ class GitPanel(QWidget):
         )
         menu.addAction(
             self._action("⇡⇣ Fetch", lambda: self._do_fetch_one(folder))
+        )
+        menu.addAction(
+            self._action("⬆ Push…", lambda: self._do_push(folders=[folder]))
         )
         self._add_switch_branch_menu(menu, folder)
         menu.addSeparator()

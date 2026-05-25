@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.76.32] — 2026-05-25
+
+### Adicionado
+- **`ui/git_panel.py`**: mais dois pontos de entrada pro diálogo de push, além
+  do botão na toolbar — ação **"⬆ Push…"** no menu de contexto do repo (só
+  aquele repo) e botão **Push** ao lado do "Commit + Push" no rodapé (push sem
+  commitar, pra quem já commitou e só quer enviar).
+
 ## [0.76.31] — 2026-05-25
 
 ### Adicionado — diálogo "Push Commits" estilo IntelliJ
