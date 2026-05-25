@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.76.34] — 2026-05-25
+
+### Adicionado — diff lado-a-lado no diálogo de push
+- **`ui/diff_viewer_dialog.py`** (novo): `DiffViewerDialog` mostra o diff de um
+  arquivo lado-a-lado (estilo IntelliJ) — conteúdo antigo (base) à esquerda,
+  novo (HEAD) à direita, alinhados linha-a-linha via `difflib`, com fundo
+  colorido por tipo (removido/adicionado/alterado), numeração de linha e
+  scroll vertical/horizontal sincronizado.
+- **`ui/push_dialog.py`**: duplo clique num arquivo da árvore abre o
+  `DiffViewerDialog` daquele arquivo.
+- **`git_actions.py`**: `push_preview` agora guarda a revisão-base do diff
+  (`PushPreview.base`/`.head`) e há `file_blob(folder, rev, path)` pra obter o
+  conteúdo do arquivo em cada revisão (`git show <rev>:<path>`).
+
 ## [0.76.33] — 2026-05-25
 
 ### Corrigido

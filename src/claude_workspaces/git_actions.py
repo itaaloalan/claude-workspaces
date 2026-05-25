@@ -208,6 +208,10 @@ class PushPreview:
     has_upstream: bool = False
     commits: list[PushCommit] = field(default_factory=list)
     files: list[tuple[str, str]] = field(default_factory=list)
+    # Revisão-base do diff (pai do commit mais antigo, ou EMPTY_TREE) e a
+    # ponta (sempre HEAD) — usadas pra montar o diff lado-a-lado por arquivo.
+    base: str = ""
+    head: str = "HEAD"
     error: str = ""
 
     @property
@@ -292,12 +296,24 @@ def push_preview(folder: str) -> PushPreview:
     ok, _ = _git_out(["git", "rev-parse", "--verify", "--quiet", base], folder)
     if not ok:
         base = EMPTY_TREE  # commit raiz, sem pai
+    pv.base = base
     ok, diff_out = _git_out(
         ["git", "diff", "--name-status", "-z", f"{base}", "HEAD"], folder
     )
     if ok:
         pv.files = _parse_name_status_z(diff_out)
     return pv
+
+
+def file_blob(folder: str, rev: str, path: str) -> str:
+    """Conteúdo do arquivo na revisão `rev` (`git show <rev>:<path>`).
+
+    Vazio se o arquivo não existe naquela revisão (ex.: arquivo novo na base,
+    ou deletado no HEAD) ou se for binário/erro."""
+    if rev == EMPTY_TREE:
+        return ""
+    ok, out = _git_out(["git", "show", f"{rev}:{path}"], folder, timeout=10)
+    return out if ok else ""
 
 
 def _parse_name_status_z(raw: str) -> list[tuple[str, str]]:

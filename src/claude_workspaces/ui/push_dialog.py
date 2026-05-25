@@ -123,22 +123,35 @@ class PushCommitsDialog(QDialog):
         tree.setHeaderHidden(True)
         tree.setRootIsDecorated(True)
         tree.setStyleSheet(_TREE_QSS)
-        multi = len(self._previews) > 1
+        tree.setToolTip("Duplo clique num arquivo abre o diff lado-a-lado")
+        tree.itemDoubleClicked.connect(self._on_file_double_clicked)
         for pv in self._previews:
             root = QTreeWidgetItem([f"{pv.name}  {len(pv.files)} files"])
             _bold(root)
             root.setForeground(0, QBrush(QColor("#bbb")))
-            self._populate_dir_tree(root, pv.files)
+            self._populate_dir_tree(root, pv, pv.files)
             tree.addTopLevelItem(root)
             _expand_all(root)
-            if not multi:
-                # Mono-repo: sobe os filhos da raiz pro topo (sem nó do repo),
-                # mas mantém o cabeçalho com a contagem.
-                pass
         return tree
 
+    def _on_file_double_clicked(self, item: QTreeWidgetItem, _col: int) -> None:
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        from .diff_viewer_dialog import DiffViewerDialog
+
+        DiffViewerDialog(
+            folder=data["folder"],
+            base=data["base"],
+            head=data["head"],
+            path=data["path"],
+            base_label=data["base"][:7] if data["base"] else "base",
+            head_label="HEAD",
+            parent=self,
+        ).exec()
+
     def _populate_dir_tree(
-        self, root: QTreeWidgetItem, files: list[tuple[str, str]]
+        self, root: QTreeWidgetItem, pv: PushPreview, files: list[tuple[str, str]]
     ) -> None:
         """Agrupa arquivos por diretório, criando nós de pasta com contagem."""
         dir_nodes: dict[str, QTreeWidgetItem] = {"": root}
@@ -175,7 +188,23 @@ class PushCommitsDialog(QDialog):
             mono = leaf.font(0)
             mono.setFamily("monospace")
             leaf.setFont(0, mono)
-            leaf.setToolTip(0, f"{_STATUS_LABEL.get(code, status)} · {rel}")
+            leaf.setToolTip(
+                0,
+                f"{_STATUS_LABEL.get(code, status)} · {rel}\n"
+                "(duplo clique abre o diff)",
+            )
+            # Arquivos deletados não têm conteúdo novo pra comparar; ainda
+            # assim deixamos abrir (mostra o lado esquerdo).
+            leaf.setData(
+                0,
+                Qt.ItemDataRole.UserRole,
+                {
+                    "folder": pv.folder,
+                    "base": pv.base,
+                    "head": pv.head,
+                    "path": rel,
+                },
+            )
             parent.addChild(leaf)
 
         # Anota contagem nos nós de pasta.
