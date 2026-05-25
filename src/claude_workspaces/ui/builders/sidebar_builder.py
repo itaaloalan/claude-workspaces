@@ -635,6 +635,13 @@ class SidebarBuilder:
             )
         layout.addWidget(self.find_file_input)
 
+        # Faixa "Minimizados" — workspaces minimizados saem da lista acima
+        # e viram chips aqui; clicar restaura. Escondida (height 0) quando
+        # vazia. Mesmo widget usado no rodapé do pane central.
+        from ..minimize_tray import MinimizeTray
+        self.minimized_tray = MinimizeTray()
+        layout.addWidget(self.minimized_tray)
+
         self.add_btn = QPushButton("＋  Novo Workspace")
         self.add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
         self.add_btn.setStyleSheet(_PRIMARY_ACTION_QSS)

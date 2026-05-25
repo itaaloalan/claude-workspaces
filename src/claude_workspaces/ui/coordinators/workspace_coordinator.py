@@ -75,6 +75,15 @@ class WorkspaceCoordinator(QObject):
         self.workspaces_changed.emit()
         return True
 
+    def set_minimized(self, workspace_id: str, minimized: bool) -> bool:
+        ws = self.find_by_id(workspace_id)
+        if ws is None or ws.minimized == minimized:
+            return False
+        ws.minimized = minimized
+        save_workspaces(self.workspaces)
+        self.workspaces_changed.emit()
+        return True
+
     def find_by_id(self, workspace_id: str) -> Workspace | None:
         return next(
             (w for w in self.workspaces if w.id == workspace_id), None

@@ -68,6 +68,7 @@ class WorkspaceItemWidget(QWidget):
         on_add_claude: Callable[[], None],
         on_toggle_collapse: Callable[[], None],
         on_toggle_pin: Callable[[], None] | None = None,
+        on_minimize: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -76,6 +77,7 @@ class WorkspaceItemWidget(QWidget):
         self._on_add_claude = on_add_claude
         self._on_toggle_collapse = on_toggle_collapse
         self._on_toggle_pin = on_toggle_pin
+        self._on_minimize = on_minimize
         self._pinned = False
         # Enable hover tracking pro reveal das ações secundárias.
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
@@ -201,6 +203,8 @@ class WorkspaceItemWidget(QWidget):
             menu.addSeparator()
             pin_label = "📌  Desafixar workspace" if self._pinned else "📌  Fixar workspace"
             menu.addAction(pin_label).triggered.connect(self._on_toggle_pin)
+        if self._on_minimize is not None:
+            menu.addAction("—  Minimizar workspace").triggered.connect(self._on_minimize)
         menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
 
     def event(self, e: QEvent) -> bool:  # type: ignore[override]

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.36] — 2026-05-25
+
+### Adicionado
+- **Minimizar workspaces**: cada workspace agora pode ser minimizado pelo
+  menu ⋯ do card ou pelo clique-direito na sidebar ("— Minimizar workspace").
+  Ao minimizar, o workspace sai da lista da sidebar e vira um chip na faixa
+  "Minimizados" no rodapé — clicar no chip restaura ele a qualquer hora.
+  Mesmo padrão visual dos painéis minimizados do pane central. O estado
+  persiste entre sessões (campo `minimized` no `models.Workspace`).
+
 ## [0.76.35] — 2026-05-25
 
 ### Alterado

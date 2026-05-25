@@ -1611,6 +1611,10 @@ class MainWindow(QMainWindow):
         ).build()
         self._sidebar_search_input = builder.search_input
         self._find_file_input = builder.find_file_input
+        self._minimized_ws_tray = builder.minimized_tray
+        self._minimized_ws_tray.restore_requested.connect(
+            self._on_minimized_workspace_restore
+        )
         self.list_widget = builder.list_widget
         self.version_label = builder.version_label
         self._context_status_label = builder.context_status_label
@@ -1720,6 +1724,34 @@ class MainWindow(QMainWindow):
         disparado via workspaces_coord.workspaces_changed)."""
         self.workspaces_coord.set_pinned(ws.id, not ws.pinned)
 
+    def _minimize_workspace(self, ws: "Workspace") -> None:
+        """Tira o workspace da lista da sidebar; ele vira um chip na faixa
+        'Minimizados' no rodapé. Restauração via clique no chip."""
+        self.workspaces_coord.set_minimized(ws.id, True)
+
+    def _on_minimized_workspace_restore(self, workspace_id: str) -> None:
+        """Click no chip da faixa 'Minimizados' → workspace volta pra lista."""
+        if self.workspaces_coord.set_minimized(workspace_id, False):
+            item = self._find_workspace_item(workspace_id)
+            if item is not None:
+                self.list_widget.setCurrentItem(item)
+
+    def _refresh_minimized_tray(self) -> None:
+        """Sincroniza os chips da faixa 'Minimizados' com os workspaces que
+        têm minimized=True. Idempotente — chamado em todo refresh_list."""
+        tray = getattr(self, "_minimized_ws_tray", None)
+        if tray is None:
+            return
+        minimized = {ws.id: ws for ws in self.workspaces if ws.minimized}
+        # Remove chips de workspaces que não estão mais minimizados/existem.
+        for chip_id in list(tray._chips.keys()):
+            if chip_id not in minimized:
+                tray.remove_chip(chip_id)
+        # Adiciona/atualiza chips dos minimizados (add_chip é idempotente).
+        for ws_id, ws in minimized.items():
+            if not tray.has_chip(ws_id):
+                tray.add_chip(ws_id, ws.name, "fa5s.folder")
+
     def _on_sidebar_context_menu(self, pos) -> None:
         """Menu de contexto da sidebar — atalhos pra retomar trabalho do
         Claude sem precisar focar a aba e digitar 'continue' manualmente.
@@ -1786,6 +1818,13 @@ class MainWindow(QMainWindow):
             )
             pin_act.triggered.connect(lambda _c=False, w=ws: self._toggle_pin_workspace(w))
             menu.addAction(pin_act)
+            min_act = QAction("— Minimizar workspace", menu)
+            min_act.setToolTip(
+                "Remove o workspace da lista; vira um chip em 'Minimizados' "
+                "no rodapé. Clique no chip pra restaurar."
+            )
+            min_act.triggered.connect(lambda _c=False, w=ws: self._minimize_workspace(w))
+            menu.addAction(min_act)
             terms = self._running_terminals_for_workspace(ws.id)
             if terms:
                 menu.addSeparator()
@@ -1889,10 +1928,16 @@ class MainWindow(QMainWindow):
         ws_font = QFont(self.list_widget.font())
         ws_font.setBold(True)
 
+        # Workspaces minimizados saem da lista e viram chips na faixa
+        # "Minimizados" no rodapé da sidebar.
+        self._refresh_minimized_tray()
+
         # Particiona: workspaces fixados aparecem em "FIXADOS" no topo,
-        # fora da lista principal (não duplica).
-        pinned = [ws for ws in self.workspaces if ws.pinned]
-        regular = [ws for ws in self.workspaces if not ws.pinned]
+        # fora da lista principal (não duplica). Minimizados ficam fora
+        # de ambas as seções (só viram chip).
+        visible = [ws for ws in self.workspaces if not ws.minimized]
+        pinned = [ws for ws in visible if ws.pinned]
+        regular = [ws for ws in visible if not ws.pinned]
 
         def _add_workspace(ws: Workspace) -> None:
             item = QTreeWidgetItem([""])
@@ -2440,9 +2485,14 @@ class MainWindow(QMainWindow):
         def on_toggle_pin() -> None:
             self._toggle_pin_workspace(ws)
 
+        def on_minimize() -> None:
+            self._minimize_workspace(ws)
+
         from PySide6.QtCore import QSize as _QS
 
-        widget = WorkspaceItemWidget(ws.name, on_add, on_toggle, on_toggle_pin)
+        widget = WorkspaceItemWidget(
+            ws.name, on_add, on_toggle, on_toggle_pin, on_minimize
+        )
         widget.set_collapsed(not item.isExpanded())
         widget.set_expanded_visual(item.isExpanded())
         widget.set_pinned(ws.pinned)

@@ -89,6 +89,10 @@ class Workspace:
     # Workspaces fixados aparecem na seção "FIXADOS" no topo da sidebar
     # (saem da lista principal pra não duplicar visualmente).
     pinned: bool = False
+    # Workspaces minimizados saem da lista da sidebar e viram um chip na
+    # faixa "Minimizados" no rodapé — clicar no chip restaura. Independente
+    # de pinned: minimizado ganha prioridade (não aparece como card).
+    minimized: bool = False
 
     @property
     def primary_folder(self) -> str | None:
@@ -142,4 +146,5 @@ class Workspace:
             default_create_new_branch=create_branch,
             runners=runners,
             pinned=bool(data.get("pinned", False)),
+            minimized=bool(data.get("minimized", False)),
         )
