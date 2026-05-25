@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.76.29] — 2026-05-25
+
+### Corrigido — botões do header de Runners quebram linha (sem scroll)
+- **`ui/flow_layout.py`** (novo): `FlowLayout` — layout que dispõe os
+  widgets em linha e quebra pra a próxima quando não cabem na largura
+  (`hasHeightForWidth`/`heightForWidth` pra o pai reservar a altura certa).
+  Suporta `align_right` (cada linha encostada à direita) e pula widgets
+  escondidos.
+- **`ui/runner_area.py`**: o header (Rodar todos / Parar todos / Remover
+  todos / Importar / Exportar / Recarregar / + Novo) era um `QHBoxLayout`
+  único, que gerava scroll horizontal quando os botões não cabiam. Agora os
+  botões vivem num container com `FlowLayout` (alinhado à direita): quando
+  não cabem, quebram pra uma segunda linha em vez de scrollar.
+
+### Corrigido — frame de seleção do workspace no fim do scroll
+- **`ui/builders/sidebar_builder.py`**: a base do frame de cada workspace
+  (`_WorkspaceBorderOverlay`) era calculada pelo `visualItemRect` do último
+  descendente, que com o scroll no fim vinha curto demais (fechava o frame
+  cedo, deixando a sessão de fora) ou comprido demais (invadia o vizinho).
+  Agora a base é o topo do PRÓXIMO item top-level (workspace ou divisória),
+  que é a fronteira visual real — e só cai pro último descendente quando não
+  há próximo. Também não pula mais o frame quando o último descendente está
+  rolado pra fora do viewport.
+
 ## [0.76.28] — 2026-05-25
 
 ### Corrigido — frame do workspace vazando pro vizinho no fim do scroll

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QCursor,
@@ -202,11 +202,9 @@ class _WorkspaceBorderOverlay(QWidget):
             top_rect = tree.visualItemRect(top)
             if not top_rect.isValid() or top_rect.height() == 0:
                 continue
-            last = tree._last_visible_descendant(top)
-            if last is None:
-                continue
-            last_rect = tree.visualItemRect(last)
-            if not last_rect.isValid():
+            if tree._last_visible_descendant(top) is None:
+                # Workspace expandido mas sem nenhum descendente visível —
+                # não há "card contínuo" pra fechar.
                 continue
             selected = self._workspace_selected(top)
             pen = QPen(
@@ -220,18 +218,32 @@ class _WorkspaceBorderOverlay(QWidget):
             # Começa LOGO antes do bottom do widget do header pra cobrir
             # a junção e não deixar gap visível.
             y_top = top_rect.bottom() - self._PAD_Y
-            y_bottom = last_rect.bottom() - self._PAD_Y
-            # Invariante: o frame de um workspace NUNCA pode passar do topo
-            # do próximo workspace nem da base do viewport. Sem isso, com o
-            # scroll no fim o `visualItemRect` do último descendente devolve
-            # uma base que cruza pra dentro do workspace seguinte — a "linha
-            # que invade outro workspace". Limita a base ao menor entre:
-            # base natural, topo do próximo top-level e fundo do viewport.
+            # A base do frame é o LIMITE do workspace, não o
+            # `visualItemRect` do último descendente: com o scroll no fim
+            # esse rect às vezes vem curto demais (fecha o frame cedo e
+            # deixa a sessão de fora) ou comprido demais (invade o próximo).
+            # Como os filhos são contíguos, o topo do PRÓXIMO item top-level
+            # (workspace OU divisória "WORKSPACES") é a fronteira real.
+            next_top: int | None = None
             for j in range(i + 1, count):
                 nxt_rect = tree.visualItemRect(tree.topLevelItem(j))
                 if nxt_rect.isValid() and nxt_rect.height() > 0:
-                    y_bottom = min(y_bottom, nxt_rect.top() - self._PAD_Y)
+                    next_top = nxt_rect.top()
                     break
+            if next_top is not None:
+                y_bottom = next_top - self._PAD_Y
+            else:
+                # Último item visível (sem próximo top-level): usa a base do
+                # último descendente, ou o fundo do viewport se ele estiver
+                # rolado pra fora (rect inválido).
+                last = tree._last_visible_descendant(top)
+                last_rect = tree.visualItemRect(last) if last is not None else QRect()
+                y_bottom = (
+                    last_rect.bottom() - self._PAD_Y
+                    if last_rect.isValid()
+                    else vp_bottom
+                )
+            # Nunca passa do fundo do viewport.
             y_bottom = min(y_bottom, vp_bottom)
             if y_bottom <= y_top:
                 continue

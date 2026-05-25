@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..models import RunnerConfig, Workspace
 from ..settings import Settings
+from .flow_layout import FlowLayout
 from .runner_widget import RunnerWidget
 
 
@@ -70,15 +72,31 @@ class RunnerArea(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Header com ações de área
+        # Header com ações de área. Label fixo à esquerda + container com
+        # FlowLayout pros botões: quando não cabem numa linha, quebram pra a
+        # próxima (alinhados à direita) em vez de gerar scroll horizontal.
         header = QWidget()
+        # heightForWidth no header faz o QVBoxLayout-pai reservar a altura
+        # extra quando o flow dos botões quebra pra mais de uma linha.
+        hdr_sp = header.sizePolicy()
+        hdr_sp.setHeightForWidth(True)
+        header.setSizePolicy(hdr_sp)
         h = QHBoxLayout(header)
         h.setContentsMargins(8, 4, 8, 4)
         h.setSpacing(6)
 
         label = "Runners (console)" if console_session_id else "Runners"
-        h.addWidget(QLabel(label))
-        h.addStretch()
+        h.addWidget(QLabel(label), 0, Qt.AlignmentFlag.AlignTop)
+
+        btn_host = QWidget()
+        h.addWidget(btn_host, 1)
+        # heightForWidth=True faz o QHBoxLayout reservar a altura de N linhas
+        # quando o flow quebra — sem isso o header travaria em 1 linha.
+        bh_sp = btn_host.sizePolicy()
+        bh_sp.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        bh_sp.setHeightForWidth(True)
+        btn_host.setSizePolicy(bh_sp)
+        h = FlowLayout(btn_host, margin=0, h_spacing=6, v_spacing=6, align_right=True)
 
         self._run_all_btn = QPushButton("▶ Rodar todos")
         self._run_all_btn.clicked.connect(self._run_all)
