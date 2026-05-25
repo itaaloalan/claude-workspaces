@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.27] — 2026-05-25
+
+### Adicionado — botão de minimizar no painel "Ferramentas"
+- **`ui/main_window.py`**: a title bar do dock direito ("Ferramentas":
+  Git/Skills/Arquivos/Memória) agora tem um botão **"—"** no canto superior
+  direito que esconde o painel. Usa o mesmo toggle do botão da topbar e do
+  atalho `Ctrl+Shift+B`, então o painel volta pelos mesmos caminhos. Novo
+  método `_install_ferramentas_minimize_btn()` insere o botão via
+  `CDockAreaTitleBar.insertWidget`.
+
 ## [0.76.26] — 2026-05-25
 
 ### Corrigido — scroll horizontal cortando a UI

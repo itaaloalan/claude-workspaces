@@ -483,6 +483,11 @@ class MainWindow(QMainWindow):
             if area is not None:
                 area.titleBar().setVisible(False)
 
+        # Botão de minimizar na title bar do dock "Ferramentas" — esconde o
+        # painel (mesmo toggle do botão da topbar / Ctrl+Shift+B), simétrico
+        # ao fato de a sidebar ter o toggle de bars na topbar esquerda.
+        self._install_ferramentas_minimize_btn()
+
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.
         # Catálogo / Hooks / MCP têm seus próprios widgets que ocupam o
@@ -819,6 +824,33 @@ class MainWindow(QMainWindow):
             if default_pid is not None:
                 self.right_dock.set_panel_open(default_pid, True)
         self._schedule_layout_save()
+
+    def _install_ferramentas_minimize_btn(self) -> None:
+        """Insere um botão '—' na title bar do dock Ferramentas que esconde o
+        painel. Reusa o mesmo toggle do botão da topbar."""
+        from .icons import ic as _ic
+
+        area = self._right_panel_dock.dockAreaWidget()
+        if area is None:
+            return
+        title_bar = area.titleBar()
+        if title_bar is None:
+            return
+        btn = QPushButton(title_bar)
+        btn.setIcon(_ic("fa5s.minus", color="#c8c8c8"))
+        btn.setIconSize(QSize(13, 13))
+        btn.setFlat(True)
+        btn.setFixedSize(22, 22)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip("Minimizar painel de ferramentas (Ctrl+Shift+B)")
+        btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
+            "QPushButton:hover { background: #2a2a2a; }"
+        )
+        btn.clicked.connect(self._toggle_right_dock)
+        # Insere no fim do layout da title bar → fica no canto superior direito,
+        # depois do stretch que separa as abas dos botões.
+        title_bar.insertWidget(title_bar.layout().count(), btn)
 
     def _current_workspace(self) -> Workspace | None:
         current = self.list_widget.currentItem()
