@@ -248,6 +248,10 @@ class WorkspaceDialog(QDialog):
                 branch_prefix=branch_prefix,
                 default_isolate_worktree=isolate,
                 default_create_new_branch=create_branch,
+                # Preserva estado que o diálogo não edita — senão editar o
+                # workspace (ex: adicionar pasta) zerava todos os runners.
+                runners=self._original.runners,
+                pinned=self._original.pinned,
             )
         return Workspace(
             name=self.name_edit.text().strip(),

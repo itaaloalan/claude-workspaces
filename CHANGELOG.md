@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.76.33] — 2026-05-25
+
+### Corrigido
+- **`ui/workspace_dialog.py`**: editar um workspace existente (ex: adicionar
+  uma pasta) zerava todos os runners — o construtor do `Workspace` no branch de
+  edição não preservava `runners` nem `pinned`. Agora os dois são copiados do
+  workspace original. Era a causa do MAP aparecer sem nenhum runner.
+
 ## [0.76.32] — 2026-05-25
 
 ### Adicionado
