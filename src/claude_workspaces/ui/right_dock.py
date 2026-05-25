@@ -116,7 +116,18 @@ class PanelFrame(QWidget):
             f"color: {theme.TEXT_MUTED}; font-size: 10px; "
             f"font-weight: 700; letter-spacing: 0.5px;"
         )
-        hl.addWidget(title_lbl, stretch=1)
+        hl.addWidget(title_lbl, stretch=0)
+
+        # Texto extra ao lado do título (ex.: branch + nº de mudanças do
+        # Git). O painel empurra via PanelFrame.set_header_extra(); fica
+        # vazio/escondido por padrão. Aproveita o espaço livre do header.
+        self._extra_lbl = QLabel("")
+        self._extra_lbl.setTextFormat(Qt.TextFormat.RichText)
+        self._extra_lbl.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px; font-weight: 600;"
+        )
+        self._extra_lbl.setVisible(False)
+        hl.addWidget(self._extra_lbl, stretch=1)
 
         self._minimize_btn = QPushButton("—")
         self._minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -135,6 +146,12 @@ class PanelFrame(QWidget):
 
         outer.addWidget(header)
         outer.addWidget(content, stretch=1)
+
+    def set_header_extra(self, text: str) -> None:
+        """Mostra texto rico ao lado do título do painel (ex.: branch +
+        nº de mudanças). Vazio esconde."""
+        self._extra_lbl.setText(text or "")
+        self._extra_lbl.setVisible(bool(text))
 
 
 class PanelStripButton(QPushButton):
@@ -236,6 +253,11 @@ class RightDock(QWidget):
         frame.minimize_requested.connect(
             lambda pid=panel_id: self.set_panel_open(pid, False)
         )
+        # Painéis que expõem `header_summary_changed(str)` (ex.: GitPanel)
+        # alimentam o texto extra do header (branch + nº de mudanças).
+        sig = getattr(content, "header_summary_changed", None)
+        if sig is not None:
+            sig.connect(frame.set_header_extra)
 
         self._panels[panel_id] = (btn, frame)
         self._panel_order.append(panel_id)

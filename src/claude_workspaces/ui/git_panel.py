@@ -47,6 +47,7 @@ from ..git_actions import (
 )
 from ..git_status import GitFile, GitStatus, get_diff, get_status
 from ..models import Workspace
+from . import theme
 
 log = logging.getLogger(__name__)
 
@@ -136,6 +137,9 @@ class GitPanel(QWidget):
     # sha vai vazio se não conseguirmos resolver o HEAD pós-commit — assinante
     # deve tratar como "houve commit mesmo sem detalhe".
     commit_created = Signal(str, str, str, str)
+    # Resumo pro header do painel (branch + nº de mudanças). RichText.
+    # O RightDock conecta isso no PanelFrame.set_header_extra.
+    header_summary_changed = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -400,6 +404,7 @@ class GitPanel(QWidget):
 
         if not self.workspace or not self.workspace.folders:
             self._counter.setText("")
+            self.header_summary_changed.emit("")
             self._has_any_repo = False
             self._update_watches([])
             self._tree.blockSignals(False)
@@ -424,6 +429,7 @@ class GitPanel(QWidget):
             self._counter.setText("")
             self._branch_btn.setText("  —")
             self._branch_btn.setEnabled(False)
+            self.header_summary_changed.emit("")
             self._poll_timer.stop()
         else:
             if total_files == 0:
@@ -439,16 +445,38 @@ class GitPanel(QWidget):
             if not branches:
                 self._branch_btn.setText("  —")
                 self._branch_btn.setEnabled(False)
+                branch_text = ""
             elif len(branches) == 1:
                 br = next(iter(branches))
                 self._branch_btn.setText(f"  {br[:24]}")
                 self._branch_btn.setEnabled(True)
+                branch_text = br
             else:
                 self._branch_btn.setText("  (multi)")
                 self._branch_btn.setToolTip(
                     "Multi-repo com branches diferentes — click pra escolher repo"
                 )
                 self._branch_btn.setEnabled(True)
+                branch_text = "(multi)"
+            # Resumo pro header do painel: "⎇ branch · N mudança(s)" ou
+            # "⎇ branch · ✓ limpo". Cores espelham o toolbar (branch âmbar,
+            # contador âmbar, limpo verde).
+            if branch_text:
+                br_html = (
+                    f"<span style='color:{theme.WARNING}'>⎇ {branch_text[:24]}</span>"
+                )
+                if total_files == 0:
+                    self.header_summary_changed.emit(
+                        f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
+                        f"<span style='color:{theme.SUCCESS}'>✓ limpo</span>"
+                    )
+                else:
+                    self.header_summary_changed.emit(
+                        f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
+                        f"<span style='color:{theme.WARNING}'>● {total_files} mudança(s)</span>"
+                    )
+            else:
+                self.header_summary_changed.emit("")
             if not self._poll_timer.isActive():
                 self._poll_timer.start()
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.22] — 2026-05-25
+
+### Melhorado — branch + nº de mudanças ao lado do título "Git"
+- **`ui/right_dock.py`**: `PanelFrame` ganhou um label extra no header
+  (`set_header_extra`), preenchido por painéis que expõem o sinal
+  `header_summary_changed(str)`.
+- **`ui/git_panel.py`**: emite `header_summary_changed` com
+  "⎇ branch · N mudança(s)" (ou "✓ limpo") — aproveita o espaço livre ao
+  lado do título "Git" no header do dock.
+
 ## [0.76.21] — 2026-05-25
 
 ### Removido — detach/flutuar dos docks (sidebar e ferramentas)
