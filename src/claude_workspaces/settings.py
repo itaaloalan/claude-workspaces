@@ -126,6 +126,14 @@ class Settings:
     # >0 = força esse tempo em ms, ignorando o default do SO.
     # Default 10000ms (10s) pra dar tempo de ler sem ficar sticky.
     notify_timeout_ms: int = 10000
+    # Webhook do Discord — espelha as notificações da central num canal.
+    # Quando `discord_webhook_enabled` é True e a URL está preenchida, cada
+    # notificação emitida pelo NotificationService vira uma mensagem
+    # (POST JSON) no webhook configurado, respeitando os mesmos mutes por
+    # tipo/workspace da central. A URL tem o formato
+    # https://discord.com/api/webhooks/<id>/<token>. Vazio = desligado.
+    discord_webhook_enabled: bool = False
+    discord_webhook_url: str = ""
     # Debounce da transição working→idle no status da sidebar. Why: o parser
     # de status oscila entre is_working True/False enquanto o Claude alterna
     # tool calls e geração de texto dentro do mesmo turno. O app só mostra

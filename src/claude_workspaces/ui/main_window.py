@@ -194,6 +194,21 @@ class MainWindow(QMainWindow):
         # existe, injeta pra ativar a sub-seção "Centro de Notificações".
         self.settings_panel.set_notification_service(self.notif_service)
 
+        # Webhook do Discord — espelha notification_added num canal. Lê as
+        # settings via providers, então toggle/URL passam a valer sem recriar
+        # o adapter (basta salvar nas Configurações).
+        try:
+            from ..notifications.discord import DiscordWebhookAdapter
+            self._discord_adapter = DiscordWebhookAdapter(
+                self.notif_service,
+                enabled_provider=lambda: self.settings.discord_webhook_enabled,
+                url_provider=lambda: self.settings.discord_webhook_url,
+                workspace_name_provider=self._workspace_name_for_notif,
+                parent=self,
+            )
+        except Exception:
+            log.exception("falha ao montar DiscordWebhookAdapter")
+
         # Long-running detection: tab_id → epoch em que entrou em "working".
         # Limpo quando volta pra idle/done. Timer abaixo escaneia a cada
         # 30s e emite `long_running` ao passar do threshold (5 min).

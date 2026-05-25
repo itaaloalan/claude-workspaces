@@ -206,6 +206,34 @@ class SettingsPanel(QWidget):
         self._notify_hook_title_fmt.setText(self.settings.notify_hook_title_format)
         self._notify_hook_default_body.setText(self.settings.notify_hook_default_body)
         self._idle_debounce_secs.setValue(self.settings.idle_debounce_seconds)
+        self._discord_enabled_chk.setChecked(self.settings.discord_webhook_enabled)
+        self._discord_webhook_url.setText(self.settings.discord_webhook_url)
+
+    def _on_discord_test(self) -> None:
+        url = self._discord_webhook_url.text().strip()
+        if not url:
+            QMessageBox.warning(
+                self, "Webhook vazio", "Cole a URL do webhook antes de testar."
+            )
+            return
+        from ..notifications.discord import build_embed_payload, send_webhook
+        from ..notifications import NotificationPriority
+
+        payload = build_embed_payload(
+            title="✅ Teste do Claude Workspaces",
+            body="Webhook configurado com sucesso — as notificações chegarão aqui.",
+            priority=NotificationPriority.NORMAL,
+            workspace=self.settings.notify_app_name or "Claude Workspaces",
+        )
+        ok, msg = send_webhook(url, payload)
+        if ok:
+            QMessageBox.information(
+                self, "Webhook OK", f"Mensagem de teste enviada ({msg})."
+            )
+        else:
+            QMessageBox.critical(
+                self, "Falha no webhook", f"Não consegui enviar:\n{msg}"
+            )
 
     def _on_save(self) -> None:
         self.settings.claude_command = self._claude_cmd.text().strip() or "claude"
@@ -259,6 +287,8 @@ class SettingsPanel(QWidget):
             self._notify_hook_default_body.text().strip() or "(turno encerrado)"
         )
         self.settings.idle_debounce_seconds = int(self._idle_debounce_secs.value())
+        self.settings.discord_webhook_enabled = self._discord_enabled_chk.isChecked()
+        self.settings.discord_webhook_url = self._discord_webhook_url.text().strip()
 
         try:
             self.settings.save()
@@ -582,6 +612,45 @@ class SettingsPanel(QWidget):
         texts_form.addRow("Body padrão do hook:", self._notify_hook_default_body)
 
         layout.addLayout(texts_form)
+
+        # --------------- Discord (webhook) ---------------
+        layout.addSpacing(10)
+        layout.addWidget(QLabel("<b>Discord</b>"))
+        dc_intro = QLabel(
+            "Espelha cada notificação da central num canal do Discord. Crie um "
+            "webhook em <i>Configurações do canal → Integrações → Webhooks</i> e "
+            "cole a URL (formato <code>https://discord.com/api/webhooks/&lt;id&gt;/"
+            "&lt;token&gt;</code>). Os mutes por tipo da central também valem aqui."
+        )
+        dc_intro.setWordWrap(True)
+        dc_intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(dc_intro)
+
+        self._discord_enabled_chk = QCheckBox(
+            "Enviar notificações para o webhook do Discord"
+        )
+        layout.addWidget(self._discord_enabled_chk)
+
+        dc_form = QFormLayout()
+        self._discord_webhook_url = QLineEdit()
+        self._discord_webhook_url.setPlaceholderText(
+            "https://discord.com/api/webhooks/..."
+        )
+        self._discord_webhook_url.setToolTip(
+            "URL completa do webhook do canal. Fica salva em settings.json."
+        )
+        dc_form.addRow("URL do webhook:", self._discord_webhook_url)
+        layout.addLayout(dc_form)
+
+        dc_row = QHBoxLayout()
+        self._discord_test_btn = QPushButton("Testar webhook")
+        self._discord_test_btn.setToolTip(
+            "Envia uma mensagem de teste pra URL preenchida acima."
+        )
+        self._discord_test_btn.clicked.connect(self._on_discord_test)
+        dc_row.addWidget(self._discord_test_btn)
+        dc_row.addStretch()
+        layout.addLayout(dc_row)
 
         # --------------- Centro de Notificações (novo) ---------------
         # Preferências persistidas em notifications.json (NotificationService),

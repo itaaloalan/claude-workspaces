@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.76.47] — 2026-05-25
+
+### Adicionado — notificações no Discord via webhook
+- **`settings.py`**: novos campos `discord_webhook_enabled` (bool, default
+  `False`) e `discord_webhook_url` (str). Persistidos em `settings.json`.
+- **`notifications/discord.py`** (novo): `DiscordWebhookAdapter` escuta
+  `notification_added` do `NotificationService` e faz POST de um *embed*
+  (título, corpo, cor por prioridade, workspace no rodapé) no webhook
+  configurado. POST roda em thread daemon (`urllib`, sem dependência nova) e
+  respeita os mutes por tipo da central. Inclui `send_webhook()` e
+  `build_embed_payload()` reutilizáveis.
+- **`ui/settings_panel.py`**: nova sub-seção **Discord** em Notificações —
+  checkbox de liga/desliga, campo da URL do webhook e botão **Testar webhook**
+  que envia uma mensagem de teste e reporta sucesso/erro.
+- **`ui/main_window.py`**: monta o `DiscordWebhookAdapter` ligado ao
+  `NotificationService`, lendo `enabled`/`url` via providers (toggle e URL
+  passam a valer ao salvar, sem recriar o adapter).
+
 ## [0.76.46] — 2026-05-25
 
 ### Adicionado — MCPs visíveis no cabeçalho do console e no rodapé
