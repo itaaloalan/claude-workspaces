@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.23] — 2026-05-25
+
+### Adicionado — abrir/editar arquivo com editor externo (painel Arquivos)
+- **`ui/files_panel.py`**: menu de botão direito com "Abrir/editar arquivo
+  com VS Code" (e "Abrir no editor interno" pra arquivos). Funciona em
+  arquivos e pastas.
+- **`launchers.py`**: `open_file_in_editor()` lança o editor configurado
+  com o caminho; aceita comando com args (`code -r`, `subl`, etc.) e valida
+  o executável no PATH.
+- **`settings.py`** + **`ui/settings_panel.py`**: nova config
+  `file_open_command` (default `code`/VS Code), editável em Configurações
+  no campo "Abrir arquivo com:" — permite trocar quem abre/edita.
+
 ## [0.76.22] — 2026-05-25
 
 ### Melhorado — branch + nº de mudanças ao lado do título "Git"

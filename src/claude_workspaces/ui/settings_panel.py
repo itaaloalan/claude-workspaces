@@ -86,6 +86,14 @@ class SettingsPanel(QWidget):
         self._vscode_cmd.setPlaceholderText("code")
         form.addRow("VS Code:", self._vscode_cmd)
 
+        self._file_open_cmd = QLineEdit()
+        self._file_open_cmd.setPlaceholderText("code")
+        self._file_open_cmd.setToolTip(
+            "Comando do menu de contexto 'Abrir/editar arquivo' no painel "
+            "Arquivos. Aceita args, ex.: 'code -r', 'subl', 'gedit'."
+        )
+        form.addRow("Abrir arquivo com:", self._file_open_cmd)
+
         self._intellij_cmd = QLineEdit()
         self._intellij_cmd.setPlaceholderText("idea")
         form.addRow("IntelliJ IDEA:", self._intellij_cmd)
@@ -175,6 +183,7 @@ class SettingsPanel(QWidget):
         self._terminal_cmd.setText(self.settings.terminal_command)
         self._shell_cmd.setText(self.settings.shell_command)
         self._vscode_cmd.setText(self.settings.vscode_command)
+        self._file_open_cmd.setText(self.settings.file_open_command)
         self._intellij_cmd.setText(self.settings.intellij_command)
         self._webstorm_cmd.setText(self.settings.webstorm_command)
         self._pycharm_cmd.setText(self.settings.pycharm_command)
@@ -219,6 +228,7 @@ class SettingsPanel(QWidget):
         self.settings.terminal_command = self._terminal_cmd.text().strip() or "konsole"
         self.settings.shell_command = self._shell_cmd.text().strip()
         self.settings.vscode_command = self._vscode_cmd.text().strip() or "code"
+        self.settings.file_open_command = self._file_open_cmd.text().strip() or "code"
         self.settings.intellij_command = self._intellij_cmd.text().strip() or "idea"
         self.settings.webstorm_command = self._webstorm_cmd.text().strip() or "webstorm"
         self.settings.pycharm_command = self._pycharm_cmd.text().strip() or "pycharm"

@@ -39,9 +39,10 @@ class FilesPanel(QWidget):
 
     open_file_requested = Signal(str)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, settings=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._workspace: Workspace | None = None
+        self._settings = settings
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -121,6 +122,8 @@ class FilesPanel(QWidget):
             "QTreeView::branch { background: transparent; }"
         )
         self._tree.doubleClicked.connect(self._on_double_click)
+        self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._tree.customContextMenuRequested.connect(self._on_context_menu)
         # Esconde colunas extras (size, type, date) — só o nome.
         for col in (1, 2, 3):
             self._tree.setColumnHidden(col, True)
@@ -195,3 +198,53 @@ class FilesPanel(QWidget):
         path = self._model.filePath(src_idx)
         if path and not self._model.isDir(src_idx):
             self.open_file_requested.emit(path)
+
+    def _path_at(self, pos) -> tuple[str, bool] | None:
+        """Resolve (path, is_dir) do item sob o cursor; None se vazio."""
+        index = self._tree.indexAt(pos)
+        if not index.isValid():
+            return None
+        src_idx = self._proxy.mapToSource(index)
+        path = self._model.filePath(src_idx)
+        if not path:
+            return None
+        return path, self._model.isDir(src_idx)
+
+    def _on_context_menu(self, pos) -> None:
+        from PySide6.QtWidgets import QMenu
+        hit = self._path_at(pos)
+        if hit is None:
+            return
+        path, is_dir = hit
+        menu = QMenu(self._tree)
+        menu.setStyleSheet(
+            "QMenu { background: #1f1f1f; color: #e6e6e6; "
+            "border: 1px solid #2c2c2c; }"
+            "QMenu::item { padding: 6px 16px; }"
+            "QMenu::item:selected { background: #3d6ea8; color: #fff; }"
+        )
+        # Editor configurável (settings.file_open_command, default "code").
+        cmd = "code"
+        if self._settings is not None:
+            cmd = (getattr(self._settings, "file_open_command", "") or "code").strip() or "code"
+        verb = "Abrir pasta" if is_dir else "Abrir/editar arquivo"
+        editor_name = "VS Code" if cmd.split()[0] == "code" else cmd.split()[0]
+        act_editor = menu.addAction(f"{verb} com {editor_name}")
+        act_editor.triggered.connect(lambda: self._open_with_editor(path))
+        if not is_dir:
+            menu.addSeparator()
+            act_internal = menu.addAction("Abrir no editor interno")
+            act_internal.triggered.connect(
+                lambda: self.open_file_requested.emit(path)
+            )
+        menu.exec_(self._tree.viewport().mapToGlobal(pos))
+
+    def _open_with_editor(self, path: str) -> None:
+        from ..launchers import LauncherError, open_file_in_editor
+        from ..settings import Settings
+        settings = self._settings or Settings.load()
+        try:
+            open_file_in_editor(path, settings)
+        except LauncherError as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Abrir arquivo", str(e))

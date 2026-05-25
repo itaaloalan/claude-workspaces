@@ -123,6 +123,24 @@ def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
     _spawn([cmd, *workspace.folders], cwd)
 
 
+def open_file_in_editor(path: str | Path, settings: Settings) -> None:
+    """Abre um arquivo individual no editor configurado (settings.
+    file_open_command — default 'code'/VS Code). Aceita comando com args,
+    ex.: 'code -r', 'subl -n', 'nvim'. Lança LauncherError se o executável
+    não estiver no PATH."""
+    cmd = (settings.file_open_command or "code").strip()
+    if not cmd:
+        raise LauncherError("Comando de abertura de arquivo não definido — ajuste em Configurações")
+    parts = shlex.split(cmd)
+    exe = parts[0]
+    if not shutil.which(exe):
+        raise LauncherError(
+            f"'{exe}' não encontrado no PATH — ajuste o comando de abrir arquivo em Configurações"
+        )
+    p = Path(path)
+    _spawn([*parts, str(p)], p.parent)
+
+
 def launch_claude_for_runner_gen(
     workspace: Workspace, settings: Settings, prompt: str
 ) -> None:

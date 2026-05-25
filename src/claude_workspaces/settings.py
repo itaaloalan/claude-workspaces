@@ -36,6 +36,11 @@ class Settings:
     terminal_command: str = "konsole"
     shell_command: str = ""  # "" = autodetect from /etc/passwd (login shell)
     vscode_command: str = "code"
+    # Comando usado pelo menu de contexto do painel Arquivos pra abrir/editar
+    # um arquivo individual. Default "code" (VS Code), mas configurável pra
+    # qualquer editor que aceite `<cmd> <arquivo>` (ex.: "subl", "gedit",
+    # "code -r", "nvim" num terminal, etc.).
+    file_open_command: str = "code"
     intellij_command: str = "idea"
     webstorm_command: str = "webstorm"
     pycharm_command: str = "pycharm"

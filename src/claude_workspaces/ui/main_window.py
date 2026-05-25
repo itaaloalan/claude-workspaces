@@ -1040,7 +1040,7 @@ class MainWindow(QMainWindow):
         """Factory pro FilesPanel no right dock. Duplo-click num arquivo
         abre como aba central (EditorTab dentro do _bottom_tabs)."""
         from .files_panel import FilesPanel
-        panel = FilesPanel()
+        panel = FilesPanel(settings=self.settings)
         panel.open_file_requested.connect(self._open_file_as_central_tab)
         return panel
 
