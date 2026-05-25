@@ -57,6 +57,9 @@ class PushCommitsDialog(QDialog):
         super().__init__(parent)
         # Só repos que de fato têm algo a enviar.
         self._previews = [p for p in previews if not p.error and not p.is_empty]
+        # Lista achatada de arquivos na ordem da árvore — usada pra navegação
+        # entre arquivos no visualizador de diff.
+        self._file_entries: list[dict] = []
         remotes = {p.remote for p in self._previews} or {"origin"}
         remote_label = next(iter(remotes)) if len(remotes) == 1 else "remotos"
         self.setWindowTitle(f"Push Commits to {remote_label}")
@@ -145,13 +148,7 @@ class PushCommitsDialog(QDialog):
             from .diff_viewer_dialog import DiffViewerDialog
 
             DiffViewerDialog(
-                folder=data["folder"],
-                base=data["base"],
-                head=data["head"],
-                path=data["path"],
-                base_label=data["base"][:7] if data["base"] else "base",
-                head_label="HEAD",
-                parent=self,
+                self._file_entries, index=data.get("index", 0), parent=self
             ).exec()
         except Exception as e:  # nunca falhar em silêncio no duplo clique
             from PySide6.QtWidgets import QMessageBox
@@ -246,17 +243,16 @@ class PushCommitsDialog(QDialog):
             )
             # Arquivos deletados não têm conteúdo novo pra comparar; ainda
             # assim deixamos abrir (mostra o lado esquerdo).
-            leaf.setData(
-                0,
-                Qt.ItemDataRole.UserRole,
-                {
-                    "folder": pv.folder,
-                    "base": pv.base,
-                    "head": pv.head,
-                    "path": rel,
-                    "full": str(Path(pv.folder) / rel),
-                },
-            )
+            entry = {
+                "folder": pv.folder,
+                "base": pv.base,
+                "head": pv.head,
+                "path": rel,
+                "full": str(Path(pv.folder) / rel),
+                "index": len(self._file_entries),
+            }
+            self._file_entries.append(entry)
+            leaf.setData(0, Qt.ItemDataRole.UserRole, entry)
             parent.addChild(leaf)
 
         # Anota contagem nos nós de pasta.

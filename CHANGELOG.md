@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.76.39] — 2026-05-25
+
+### Adicionado — navegação entre diferenças e word-level diff
+- **`ui/diff_viewer_dialog.py`**: toolbar com setas ▲/▼ (atalhos Shift+F7 /
+  F7) que navegam entre as diferenças do arquivo e, ao chegar no fim/início,
+  pulam pro próximo/anterior arquivo. Contador "arquivo i/N · M diferenças".
+  O diálogo passa a receber a lista ordenada de arquivos + índice.
+- **`ui/diff_viewer_dialog.py`**: realce word-level (estilo "Highlight words"
+  do IntelliJ) — além do fundo da linha alterada, as palavras que de fato
+  mudaram ganham uma cor mais forte, calculadas por diff de tokens.
+- **`ui/push_dialog.py`**: monta a lista achatada de arquivos na ordem da
+  árvore e abre o visualizador já no arquivo clicado, permitindo navegar
+  entre todos eles.
+
 ## [0.76.38] — 2026-05-25
 
 ### Adicionado
