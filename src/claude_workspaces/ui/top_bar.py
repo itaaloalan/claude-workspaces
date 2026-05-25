@@ -16,6 +16,7 @@ class TopBar(QWidget):
     settings_clicked = Signal()
     home_clicked = Signal()
     toggle_sidebar_clicked = Signal()
+    toggle_right_dock_clicked = Signal()
     inbox_clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -106,6 +107,23 @@ class TopBar(QWidget):
         self._refresh_inbox_btn_style()
         self._inbox_btn.clicked.connect(self.inbox_clicked.emit)
         row.addWidget(self._inbox_btn)
+
+        # Toggle do dock direito (Ferramentas: Git/Skills/Arquivos/Memória).
+        # Simétrico ao toggle da sidebar esquerda — antes só dava pra
+        # exibir/esconder via Ctrl+Shift+B, sem botão visível.
+        right_dock_btn = QPushButton()
+        right_dock_btn.setIcon(_ic("fa5s.columns", color="#c8c8c8"))
+        right_dock_btn.setIconSize(_QS(15, 15))
+        right_dock_btn.setFlat(True)
+        right_dock_btn.setFixedSize(32, 32)
+        right_dock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        right_dock_btn.setToolTip("Esconder / mostrar painel de ferramentas (Ctrl+Shift+B)")
+        right_dock_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
+            "QPushButton:hover { background: #2a2a2a; }"
+        )
+        right_dock_btn.clicked.connect(self.toggle_right_dock_clicked.emit)
+        row.addWidget(right_dock_btn)
 
         settings_btn = QPushButton("  Configurar")
         settings_btn.setIcon(_ic("fa5s.cog", color="#c8c8c8"))

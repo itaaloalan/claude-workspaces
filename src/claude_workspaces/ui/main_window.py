@@ -97,6 +97,7 @@ from .terminal_child_widget import (
 from .terminal_widget import TerminalWidget
 from .theme import (
     LAYOUT_SAVE_DEBOUNCE_MS,
+    RIGHT_DOCK_DEFAULT_W,
     SIDEBAR_DEFAULT_W,
     SPLITTER_HANDLE_W,
     TERMINAL_HEADER_MIN_H,
@@ -306,6 +307,7 @@ class MainWindow(QMainWindow):
         self.top_bar.settings_clicked.connect(self._show_settings)
         self.top_bar.home_clicked.connect(self._show_workspaces)
         self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
+        self.top_bar.toggle_right_dock_clicked.connect(self._toggle_right_dock)
         self.top_bar.inbox_clicked.connect(self._show_inbox)
         outer.addWidget(self.top_bar)
 
@@ -391,9 +393,13 @@ class MainWindow(QMainWindow):
         else:
             self.right_splitter.setSizes([380, 520])
 
-        # Dock direito (3ª coluna): Tarefas + Git + Skills colapsáveis
+        # Dock direito (3ª coluna): Tarefas + Git + Skills colapsáveis.
+        # NÃO forçamos minimumWidth aqui — o próprio RightDock controla seu
+        # min/max (strip de 36px quando colapsado, ≥256px com painel aberto).
+        # Forçar min aqui conflitava com o maxWidth(36) interno e quebrava o
+        # layout. A garantia de "sempre visível" é feita no startup abrindo
+        # um painel default + botão na activity bar.
         self.right_dock = self._build_right_dock()
-        self.right_dock.setMinimumWidth(0)
 
         # Container do center: right_splitter (painéis verticais) +
         # MinimizeTray fixa na base. Cada painel minimizado vira chip
@@ -452,6 +458,20 @@ class MainWindow(QMainWindow):
             if d is not None:
                 d.toggleView(True)
                 d.setAsCurrentTab()
+        # Garante que o dock "Ferramentas" da direita SEMPRE apareça com
+        # conteúdo: se nenhum painel estiver aberto (todos colapsados no
+        # state salvo), abre o primeiro painel default_open. Sem isso o dock
+        # virava uma faixa de 36px que o usuário não achava como exibir.
+        if not self.right_dock.open_panels():
+            default_pid = next(
+                (s.panel_id for s in self.DOCK_PANEL_SPECS if s.default_open),
+                self.DOCK_PANEL_SPECS[0].panel_id if self.DOCK_PANEL_SPECS else None,
+            )
+            if default_pid is not None:
+                self.right_dock.set_panel_open(default_pid, True)
+        ra = self._right_panel_dock.dockAreaWidget()
+        if ra is not None and ra.width() < 120:
+            ra.resize(RIGHT_DOCK_DEFAULT_W, ra.height() or 600)
 
         # AGORA esconde as title bars (precisa ser após o toggleView,
         # senão o area recriado restaura a barra visível).
@@ -783,7 +803,18 @@ class MainWindow(QMainWindow):
         self._launch_claude_for(ws, "", "")
 
     def _toggle_right_dock(self) -> None:
+        d = self.body_dock.dock("ferramentas")
+        was_closed = d is not None and d.isClosed()
         self.body_dock.toggle("ferramentas")
+        # Ao reexibir, garante que pelo menos um painel esteja aberto — senão
+        # o dock volta como faixa de 36px e parece que "não abriu".
+        if was_closed and not self.right_dock.open_panels():
+            default_pid = next(
+                (s.panel_id for s in self.DOCK_PANEL_SPECS if s.default_open),
+                self.DOCK_PANEL_SPECS[0].panel_id if self.DOCK_PANEL_SPECS else None,
+            )
+            if default_pid is not None:
+                self.right_dock.set_panel_open(default_pid, True)
         self._schedule_layout_save()
 
     def _current_workspace(self) -> Workspace | None:
@@ -2362,9 +2393,12 @@ class MainWindow(QMainWindow):
                 widget.set_collapsed(not item.isExpanded())
                 widget.set_expanded_visual(item.isExpanded())
 
+        def on_toggle_pin() -> None:
+            self._toggle_pin_workspace(ws)
+
         from PySide6.QtCore import QSize as _QS
 
-        widget = WorkspaceItemWidget(ws.name, on_add, on_toggle)
+        widget = WorkspaceItemWidget(ws.name, on_add, on_toggle, on_toggle_pin)
         widget.set_collapsed(not item.isExpanded())
         widget.set_expanded_visual(item.isExpanded())
         widget.set_pinned(ws.pinned)
@@ -3361,9 +3395,10 @@ class MainWindow(QMainWindow):
         self.content_stack.setCurrentIndex(0)
         current = self.list_widget.currentItem()
         if current:
-            ws = current.data(Qt.ItemDataRole.UserRole)
-            self.details.show_workspace(ws)
-            self._sync_terminal_for(ws)
+            ws = current.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(ws, Workspace):
+                self.details.show_workspace(ws)
+                self._sync_terminal_for(ws)
 
     # ---------- terminal ----------
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.76.19] — 2026-05-25
+
+### Adicionado — Fixar/desafixar no menu ⋯ do card do workspace
+- **`ui/workspace_item_widget.py`**: o menu `⋯` de cada workspace na
+  sidebar agora tem **"📌 Fixar workspace"** / **"📌 Desafixar workspace"**
+  (label reativo ao estado), reusando `_toggle_pin_workspace` do
+  `main_window`. Antes só dava pra fixar pelo clique-direito.
+
+### Melhorado — dock direito (Ferramentas) sempre visível
+- **`ui/main_window.py`**: no startup, se nenhum painel do dock direito
+  estiver aberto, abre o primeiro `default_open` (Git) — o dock aparecia
+  como faixa de 36px e o usuário não achava como exibir. `_toggle_right_dock`
+  também garante um painel aberto ao reexibir.
+- **`ui/top_bar.py`**: novo botão (ícone de colunas) ao lado de
+  Configurar que alterna o painel de ferramentas — antes só via
+  `Ctrl+Shift+B`, sem botão visível.
+
+### Removido — botões inúteis da title bar do dock (QtAds)
+- **`ui/dock_manager.py`**: desligados `DockAreaHasTabsMenuButton` (⋮),
+  `DockAreaHasUndockButton` e o pin de auto-hide
+  (`DockAreaHasAutoHideButton`) — poluíam o canto superior direito da aba
+  sem servir pra nada (sem múltiplas abas, sem flutuar).
+
 ## [0.76.18] — 2026-05-23
 
 ### Corrigido — borda do workspace fechando antes dos runners

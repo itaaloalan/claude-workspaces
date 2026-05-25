@@ -67,6 +67,7 @@ class WorkspaceItemWidget(QWidget):
         name: str,
         on_add_claude: Callable[[], None],
         on_toggle_collapse: Callable[[], None],
+        on_toggle_pin: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -74,6 +75,8 @@ class WorkspaceItemWidget(QWidget):
         self.setMinimumHeight(38)
         self._on_add_claude = on_add_claude
         self._on_toggle_collapse = on_toggle_collapse
+        self._on_toggle_pin = on_toggle_pin
+        self._pinned = False
         # Enable hover tracking pro reveal das ações secundárias.
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
@@ -194,6 +197,10 @@ class WorkspaceItemWidget(QWidget):
         )
         menu.addAction("＋  Abrir Claude novo").triggered.connect(self._on_add_claude)
         menu.addAction("Recolher / expandir").triggered.connect(self._on_toggle_collapse)
+        if self._on_toggle_pin is not None:
+            menu.addSeparator()
+            pin_label = "📌  Desafixar workspace" if self._pinned else "📌  Fixar workspace"
+            menu.addAction(pin_label).triggered.connect(self._on_toggle_pin)
         menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
 
     def event(self, e: QEvent) -> bool:  # type: ignore[override]
@@ -232,6 +239,7 @@ class WorkspaceItemWidget(QWidget):
 
     def set_pinned(self, pinned: bool) -> None:
         """Mostra/esconde o indicador 📌 ao lado do nome."""
+        self._pinned = pinned
         self._pin_icon.setVisible(pinned)
 
     def set_selected(self, selected: bool) -> None:

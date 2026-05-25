@@ -119,9 +119,18 @@ class WorkspaceDockManager(QObject):
         ads.CDockManager.setConfigFlag(ads.CDockManager.FocusHighlighting, False)
         # Desliga botão de fechar no dock area (independe das features do
         # CDockWidget — o area sempre desenha close se isso for True).
-        # Manter undock/menu — auto-hide vem via toggle externo.
         ads.CDockManager.setConfigFlag(ads.CDockManager.DockAreaHasCloseButton, False)
+        # Remove os botões inúteis da title bar do dock central: ⋮ (tabs menu)
+        # e undock — não temos múltiplas abas pra menu nem suporte a flutuar,
+        # então só poluíam o canto superior direito.
+        ads.CDockManager.setConfigFlag(ads.CDockManager.DockAreaHasTabsMenuButton, False)
+        ads.CDockManager.setConfigFlag(ads.CDockManager.DockAreaHasUndockButton, False)
         ads.CDockManager.setAutoHideConfigFlags(ads.CDockManager.DefaultAutoHideConfig)
+        # Remove o pin de auto-hide da title bar — auto-hide é controlado por
+        # toggle externo, o botão na aba não servia.
+        ads.CDockManager.setAutoHideConfigFlag(
+            ads.CDockManager.DockAreaHasAutoHideButton, False
+        )
 
         self._manager = ads.CDockManager(host)
         _install_dark_icons()
