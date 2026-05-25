@@ -131,18 +131,29 @@ class PushCommitsDialog(QDialog):
     def _on_file_double_clicked(self, item: QTreeWidgetItem, _col: int) -> None:
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if not data:
+            # Nó de pasta/repo: alterna expansão (comportamento esperado).
+            item.setExpanded(not item.isExpanded())
             return
-        from .diff_viewer_dialog import DiffViewerDialog
+        try:
+            from .diff_viewer_dialog import DiffViewerDialog
 
-        DiffViewerDialog(
-            folder=data["folder"],
-            base=data["base"],
-            head=data["head"],
-            path=data["path"],
-            base_label=data["base"][:7] if data["base"] else "base",
-            head_label="HEAD",
-            parent=self,
-        ).exec()
+            DiffViewerDialog(
+                folder=data["folder"],
+                base=data["base"],
+                head=data["head"],
+                path=data["path"],
+                base_label=data["base"][:7] if data["base"] else "base",
+                head_label="HEAD",
+                parent=self,
+            ).exec()
+        except Exception as e:  # nunca falhar em silêncio no duplo clique
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(
+                self,
+                "Falha ao abrir o diff",
+                f"{data.get('path', '')}\n\n{type(e).__name__}: {e}",
+            )
 
     def _populate_dir_tree(
         self, root: QTreeWidgetItem, pv: PushPreview, files: list[tuple[str, str]]

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.37] — 2026-05-25
+
+### Corrigido
+- **`ui/push_dialog.py`**: o duplo clique num arquivo nunca falha em silêncio
+  — se a abertura do diff lança erro, mostra um aviso com o motivo em vez de
+  não fazer nada. Duplo clique em nó de pasta/repo passa a alternar a expansão.
+
 ## [0.76.36] — 2026-05-25
 
 ### Adicionado
