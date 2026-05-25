@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.42] — 2026-05-25
+
+### Alterado — layout do painel git: toolbar em duas linhas e áreas redimensionáveis
+- **`ui/git_panel.py`**: a toolbar passa a ter **duas linhas** — branch atual +
+  contador de mudanças em cima, e os botões de ação (atualizar, fetch, pull,
+  PR, push, diff, console) embaixo, pra não espremerem a branch num painel
+  estreito.
+- **`ui/git_panel.py`**: árvore/diff, área de commit e console de atividade
+  agora ficam num **QSplitter vertical** — dá pra arrastar os handles e
+  redimensionar cada um. A mensagem de commit cresce junto com a área e o
+  console deixa de ter altura fixa (colapsa quando oculto, ganha espaço ao
+  abrir).
+
 ## [0.76.41] — 2026-05-25
 
 ### Adicionado — console de atividade git no painel

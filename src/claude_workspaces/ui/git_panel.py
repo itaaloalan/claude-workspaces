@@ -158,11 +158,19 @@ class GitPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(4)
 
-        # Toolbar topo
-        toolbar = QHBoxLayout()
+        # Toolbar topo — duas linhas: branch/contador em cima, ações de git
+        # (refresh, fetch, pull, PR, push, diff, console) embaixo, pra caberem
+        # sem espremer a branch num painel estreito.
+        toolbar = QVBoxLayout()
         toolbar.setContentsMargins(4, 4, 4, 4)
-        toolbar.setSpacing(6)
-        self._make_toolbar(toolbar)
+        toolbar.setSpacing(4)
+        branch_row = QHBoxLayout()
+        branch_row.setSpacing(6)
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(6)
+        self._make_toolbar(branch_row, actions_row)
+        toolbar.addLayout(branch_row)
+        toolbar.addLayout(actions_row)
         outer.addLayout(toolbar)
 
         # Splitter vertical: tree em cima, diff embaixo (oculto por padrão)
@@ -212,11 +220,9 @@ class GitPanel(QWidget):
         split.addWidget(self._diff)
         split.setSizes([400, 0])
         self._tree_diff_split = split
-        outer.addWidget(split, stretch=1)
 
         # Área de commit
         commit_area = self._build_commit_area()
-        outer.addWidget(commit_area)
 
         # Console de atividade git (commits, merges, checkouts, pulls, fetch)
         # — alimentado pelas ações do app e pelo reflog (captura também o que
@@ -224,7 +230,7 @@ class GitPanel(QWidget):
         self._activity = QPlainTextEdit()
         self._activity.setReadOnly(True)
         self._activity.setVisible(False)
-        self._activity.setFixedHeight(120)
+        self._activity.setMinimumHeight(60)
         self._activity.setPlaceholderText(
             "Atividade git aparece aqui (commits, merges, checkouts, pulls)…"
         )
@@ -237,7 +243,26 @@ class GitPanel(QWidget):
             "  border-radius: 6px; color: #cfcfcf; padding: 4px;"
             "}"
         )
-        outer.addWidget(self._activity)
+
+        # Splitter vertical maior: tree/diff, área de commit e console de
+        # atividade — todos redimensionáveis arrastando os handles. O console
+        # fica colapsado (size 0) enquanto oculto.
+        main_split = QSplitter(Qt.Orientation.Vertical)
+        main_split.setChildrenCollapsible(False)
+        main_split.setHandleWidth(6)
+        main_split.setStyleSheet(
+            "QSplitter::handle { background: #2a2a2a; }"
+            "QSplitter::handle:hover { background: #3d6ea8; }"
+        )
+        main_split.addWidget(split)
+        main_split.addWidget(commit_area)
+        main_split.addWidget(self._activity)
+        main_split.setStretchFactor(0, 1)
+        main_split.setStretchFactor(1, 0)
+        main_split.setStretchFactor(2, 0)
+        main_split.setSizes([400, 110, 0])
+        self._main_split = main_split
+        outer.addWidget(main_split, stretch=1)
         # Byte offset já lido de cada reflog (.git/logs/HEAD) por repo.
         self._reflog_pos: dict[str, int] = {}
 
@@ -255,7 +280,7 @@ class GitPanel(QWidget):
 
     # ---------- construção ----------
 
-    def _make_toolbar(self, layout: QHBoxLayout) -> None:
+    def _make_toolbar(self, branch_row: QHBoxLayout, actions_row: QHBoxLayout) -> None:
         from PySide6.QtCore import QSize as _QS
 
         from .icons import ic as _ic
@@ -279,12 +304,12 @@ class GitPanel(QWidget):
             "background: transparent; font-weight: 400; }"
         )
         self._branch_btn.clicked.connect(self._on_branch_btn_clicked)
-        layout.addWidget(self._branch_btn)
+        branch_row.addWidget(self._branch_btn)
 
         self._counter = QLabel()
         self._counter.setStyleSheet("color: #b0b0b0; font-size: 11px; padding: 0 4px;")
-        layout.addWidget(self._counter)
-        layout.addStretch()
+        branch_row.addWidget(self._counter)
+        branch_row.addStretch()
 
         btn_css = (
             "QPushButton { background: transparent; color: #aaa; "
@@ -306,9 +331,9 @@ class GitPanel(QWidget):
             b.clicked.connect(slot)
             return b
 
-        layout.addWidget(_icon_btn("fa5s.sync-alt", "Atualizar", self.refresh))
-        layout.addWidget(_icon_btn("fa5s.exchange-alt", "Fetch (todos os repos)", self._do_fetch_all))
-        layout.addWidget(_icon_btn("fa5s.cloud-download-alt", "Pull ff-only (todos os repos)", self._do_pull_all))
+        actions_row.addWidget(_icon_btn("fa5s.sync-alt", "Atualizar", self.refresh))
+        actions_row.addWidget(_icon_btn("fa5s.exchange-alt", "Fetch (todos os repos)", self._do_fetch_all))
+        actions_row.addWidget(_icon_btn("fa5s.cloud-download-alt", "Pull ff-only (todos os repos)", self._do_pull_all))
         # PR button guardado em self pra poder desabilitar enquanto gh roda
         self._pr_btn = _icon_btn(
             "fa5s.code-branch",
@@ -316,8 +341,8 @@ class GitPanel(QWidget):
             self._do_open_pr,
             label="PR",
         )
-        layout.addWidget(self._pr_btn)
-        layout.addWidget(
+        actions_row.addWidget(self._pr_btn)
+        actions_row.addWidget(
             _icon_btn(
                 "fa5s.cloud-upload-alt",
                 "Push — mostra commits e arquivos antes de enviar",
@@ -328,13 +353,14 @@ class GitPanel(QWidget):
         self._toggle_diff_btn = _icon_btn(
             "fa5s.eye", "Mostrar / esconder diff", self._toggle_diff
         )
-        layout.addWidget(self._toggle_diff_btn)
+        actions_row.addWidget(self._toggle_diff_btn)
         self._toggle_log_btn = _icon_btn(
             "fa5s.terminal",
             "Mostrar / esconder console de atividade git",
             self._toggle_activity,
         )
-        layout.addWidget(self._toggle_log_btn)
+        actions_row.addWidget(self._toggle_log_btn)
+        actions_row.addStretch()
 
     def _build_commit_area(self) -> QWidget:
         box = QWidget()
@@ -344,7 +370,7 @@ class GitPanel(QWidget):
 
         self._msg = QPlainTextEdit()
         self._msg.setPlaceholderText("Mensagem do commit…")
-        self._msg.setFixedHeight(56)
+        self._msg.setMinimumHeight(56)
         self._msg.setStyleSheet(
             "QPlainTextEdit {"
             "  background: #181818; border: 1px solid #2c2c2c;"
@@ -352,7 +378,7 @@ class GitPanel(QWidget):
             "}"
             "QPlainTextEdit:focus { border-color: #3d6ea8; }"
         )
-        v.addWidget(self._msg)
+        v.addWidget(self._msg, stretch=1)
 
         bottom = QHBoxLayout()
         bottom.setSpacing(4)
@@ -577,7 +603,20 @@ class GitPanel(QWidget):
     # ---------- console de atividade ----------
 
     def _toggle_activity(self) -> None:
-        self._activity.setVisible(not self._activity.isVisible())
+        show = not self._activity.isVisible()
+        self._activity.setVisible(show)
+        # Ao mostrar, garante uma altura inicial no splitter (do contrário Qt
+        # daria só o minimumHeight); ao esconder, colapsa o painel.
+        sizes = self._main_split.sizes()
+        if len(sizes) == 3:
+            if show and sizes[2] == 0:
+                take = max(120, sizes[0] // 4)
+                sizes[0] = max(120, sizes[0] - take)
+                sizes[2] = take
+            elif not show:
+                sizes[0] += sizes[2]
+                sizes[2] = 0
+            self._main_split.setSizes(sizes)
 
     def _log_activity(self, text: str, color: str | None = None) -> None:
         """Acrescenta uma linha ao console de atividade (auto-mostra)."""
@@ -594,7 +633,7 @@ class GitPanel(QWidget):
             self._activity.verticalScrollBar().maximum()
         )
         if not self._activity.isVisible():
-            self._activity.setVisible(True)
+            self._toggle_activity()
 
     def _drain_reflogs(self) -> None:
         """Lê o que foi acrescentado a cada `.git/logs/HEAD` desde a última
