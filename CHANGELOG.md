@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.76.44] — 2026-05-25
+
+### Adicionado — escolher a branch base ("Saindo de") no diálogo Abrir Claude
+- **`ui/launch_claude_dialog.py`**: o campo **"Saindo de"** deixa de ser texto
+  livre e vira um combo editável com as branches locais, permitindo escolher
+  outra branch como base da nova branch sem precisar sair da branch atual
+  (trabalho em andamento fica intacto). O padrão continua sendo a branch atual,
+  e o valor já flui pro `git checkout -b <nova> <base>` / worktree.
+
 ## [0.76.43] — 2026-05-25
 
 ### Alterado — botão "ver diff" abre o diálogo de mudanças (igual ao Push)

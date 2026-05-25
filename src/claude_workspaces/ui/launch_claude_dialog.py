@@ -150,10 +150,18 @@ class LaunchClaudeDialog(QDialog):
         self.branch_edit.setEnabled(False)
         form.addRow("Nome da nova branch:", self.branch_edit)
 
-        # "Saindo de" — text edit (base pra nova branch)
-        self.base_edit = QLineEdit(self._current_branch)
-        self.base_edit.setEnabled(False)
-        form.addRow("Saindo de:", self.base_edit)
+        # "Saindo de" — combo editável (base pra nova branch). Permite
+        # escolher outra branch como base sem sair da branch atual.
+        self.base_combo = QComboBox()
+        self.base_combo.setEditable(True)
+        if self._branches:
+            self.base_combo.addItems(self._branches)
+        if self._current_branch:
+            if self._current_branch not in self._branches:
+                self.base_combo.insertItem(0, self._current_branch)
+            self.base_combo.setCurrentText(self._current_branch)
+        self.base_combo.setEnabled(False)
+        form.addRow("Saindo de:", self.base_combo)
 
         # "Branch existente" — combo
         self.existing_combo = QComboBox()
@@ -193,6 +201,7 @@ class LaunchClaudeDialog(QDialog):
         self.isolate_chk.toggled.connect(self._on_isolate_toggled)
         self.new_branch_chk.toggled.connect(self._on_new_branch_toggled)
         self.branch_edit.textChanged.connect(self._refresh_preview)
+        self.base_combo.currentTextChanged.connect(self._refresh_preview)
         self.existing_combo.currentTextChanged.connect(self._refresh_preview)
 
         buttons = QDialogButtonBox(
@@ -229,7 +238,7 @@ class LaunchClaudeDialog(QDialog):
         self.new_branch_chk.setEnabled(self._is_repo)
         # branch_edit + base_edit: relevantes quando create_branch=True
         self.branch_edit.setEnabled(self._is_repo and new_branch)
-        self.base_edit.setEnabled(self._is_repo and new_branch)
+        self.base_combo.setEnabled(self._is_repo and new_branch)
         # existing_combo: só faz sentido em worktree (sem isolate, ficamos
         # na branch atual; o combo não muda nada)
         self.existing_combo.setEnabled(isolating and not new_branch)
@@ -265,7 +274,7 @@ class LaunchClaudeDialog(QDialog):
         return self.existing_combo.currentText().strip()
 
     def result_base_branch(self) -> str:
-        return self.base_edit.text().strip()
+        return self.base_combo.currentText().strip()
 
     def result_initial_prompt(self) -> str:
         return self.initial_prompt_edit.toPlainText().strip()
