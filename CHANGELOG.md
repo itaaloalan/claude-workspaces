@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.28] — 2026-05-25
+
+### Corrigido — frame do workspace vazando pro vizinho no fim do scroll
+- **`ui/builders/sidebar_builder.py`**: o `_WorkspaceBorderOverlay` (que
+  pinta as laterais + base do "card contínuo" de cada workspace expandido)
+  não limitava a base do frame. Com a árvore rolada até o fim, o
+  `visualItemRect` do último descendente devolvia uma base que cruzava pra
+  dentro do workspace seguinte — a "linha que invadia outro workspace".
+  Agora `y_bottom` é limitado ao menor entre a base natural, o topo do
+  próximo workspace top-level e o fundo do viewport, garantindo que o frame
+  de um workspace nunca entre na área de outro.
+
 ## [0.76.27] — 2026-05-25
 
 ### Adicionado — botão de minimizar no painel "Ferramentas"

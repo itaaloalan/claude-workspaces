@@ -193,7 +193,9 @@ class _WorkspaceBorderOverlay(QWidget):
         tree = self._tree
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        for i in range(tree.topLevelItemCount()):
+        vp_bottom = tree.viewport().height()
+        count = tree.topLevelItemCount()
+        for i in range(count):
             top = tree.topLevelItem(i)
             if not top.isExpanded():
                 continue
@@ -219,6 +221,18 @@ class _WorkspaceBorderOverlay(QWidget):
             # a junção e não deixar gap visível.
             y_top = top_rect.bottom() - self._PAD_Y
             y_bottom = last_rect.bottom() - self._PAD_Y
+            # Invariante: o frame de um workspace NUNCA pode passar do topo
+            # do próximo workspace nem da base do viewport. Sem isso, com o
+            # scroll no fim o `visualItemRect` do último descendente devolve
+            # uma base que cruza pra dentro do workspace seguinte — a "linha
+            # que invade outro workspace". Limita a base ao menor entre:
+            # base natural, topo do próximo top-level e fundo do viewport.
+            for j in range(i + 1, count):
+                nxt_rect = tree.visualItemRect(tree.topLevelItem(j))
+                if nxt_rect.isValid() and nxt_rect.height() > 0:
+                    y_bottom = min(y_bottom, nxt_rect.top() - self._PAD_Y)
+                    break
+            y_bottom = min(y_bottom, vp_bottom)
             if y_bottom <= y_top:
                 continue
             r = self._BORDER_RADIUS
