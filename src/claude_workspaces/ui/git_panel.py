@@ -71,6 +71,10 @@ T_FILE = "file"
 T_REPO = "repo"
 
 
+def _html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _fingerprint_statuses(statuses: dict[str, GitStatus]) -> tuple:
     """Tupla hashável que captura o estado visível dos repos no painel.
     Usado pra pular rebuild da árvore quando o poll dispara sem mudanças."""
@@ -214,6 +218,29 @@ class GitPanel(QWidget):
         commit_area = self._build_commit_area()
         outer.addWidget(commit_area)
 
+        # Console de atividade git (commits, merges, checkouts, pulls, fetch)
+        # — alimentado pelas ações do app e pelo reflog (captura também o que
+        # as skills/terminal fazem). Oculto até ter algo / toggle na toolbar.
+        self._activity = QPlainTextEdit()
+        self._activity.setReadOnly(True)
+        self._activity.setVisible(False)
+        self._activity.setFixedHeight(120)
+        self._activity.setPlaceholderText(
+            "Atividade git aparece aqui (commits, merges, checkouts, pulls)…"
+        )
+        amono = QFont("monospace")
+        amono.setStyleHint(QFont.StyleHint.Monospace)
+        self._activity.setFont(amono)
+        self._activity.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #0e0e0e; border: 1px solid #2c2c2c;"
+            "  border-radius: 6px; color: #cfcfcf; padding: 4px;"
+            "}"
+        )
+        outer.addWidget(self._activity)
+        # Byte offset já lido de cada reflog (.git/logs/HEAD) por repo.
+        self._reflog_pos: dict[str, int] = {}
+
         # Watchers + poll
         self._watcher = QFileSystemWatcher(self)
         self._watcher.fileChanged.connect(self._schedule_refresh)
@@ -302,6 +329,12 @@ class GitPanel(QWidget):
             "fa5s.eye", "Mostrar / esconder diff", self._toggle_diff
         )
         layout.addWidget(self._toggle_diff_btn)
+        self._toggle_log_btn = _icon_btn(
+            "fa5s.terminal",
+            "Mostrar / esconder console de atividade git",
+            self._toggle_activity,
+        )
+        layout.addWidget(self._toggle_log_btn)
 
     def _build_commit_area(self) -> QWidget:
         box = QWidget()
@@ -386,6 +419,10 @@ class GitPanel(QWidget):
         self._refresh_timer.start()
 
     def refresh(self) -> None:
+        # Drena reflogs antes de qualquer early-return — captura atividade
+        # (merge/commit/checkout/pull) de qualquer origem, inclusive skills.
+        self._drain_reflogs()
+
         # Preserva o estado de checked dos arquivos (rel_path) por repo
         prev_unchecked: dict[str, set[str]] = {}
         for i in range(self._tree.topLevelItemCount()):
@@ -530,8 +567,98 @@ class GitPanel(QWidget):
             heads = git_dir / "refs" / "heads"
             if heads.is_dir():
                 targets.append(str(heads))
+            # Reflog: dispara o drain quando merge/commit/checkout/pull ocorre.
+            reflog = git_dir / "logs" / "HEAD"
+            if reflog.exists():
+                targets.append(str(reflog))
         if targets:
             self._watcher.addPaths(targets)
+
+    # ---------- console de atividade ----------
+
+    def _toggle_activity(self) -> None:
+        self._activity.setVisible(not self._activity.isVisible())
+
+    def _log_activity(self, text: str, color: str | None = None) -> None:
+        """Acrescenta uma linha ao console de atividade (auto-mostra)."""
+        from datetime import datetime
+
+        ts = datetime.now().strftime("%H:%M:%S")
+        body = _html(text)
+        line = (
+            f"<span style='color:#666'>{ts}</span> "
+            + (f"<span style='color:{color}'>{body}</span>" if color else body)
+        )
+        self._activity.appendHtml(line)
+        self._activity.verticalScrollBar().setValue(
+            self._activity.verticalScrollBar().maximum()
+        )
+        if not self._activity.isVisible():
+            self._activity.setVisible(True)
+
+    def _drain_reflogs(self) -> None:
+        """Lê o que foi acrescentado a cada `.git/logs/HEAD` desde a última
+        leitura e joga no console. Na primeira vez só registra o tamanho
+        (não reproduz histórico). Captura atividade de qualquer origem."""
+        if not self.workspace:
+            return
+        for folder in self.workspace.folders:
+            reflog = Path(folder) / ".git" / "logs" / "HEAD"
+            if not reflog.is_file():
+                continue
+            key = str(reflog)
+            try:
+                size = reflog.stat().st_size
+            except OSError:
+                continue
+            prev = self._reflog_pos.get(key)
+            if prev is None or size < prev:
+                # Primeiro contato (ou reflog truncado por gc): sincroniza
+                # sem reproduzir o que já existia.
+                self._reflog_pos[key] = size
+                continue
+            if size == prev:
+                continue
+            try:
+                with open(reflog, "rb") as f:
+                    f.seek(prev)
+                    data = f.read()
+            except OSError:
+                continue
+            self._reflog_pos[key] = size
+            repo = Path(folder).name
+            for raw in data.decode("utf-8", "replace").splitlines():
+                formatted = self._format_reflog(raw, repo)
+                if formatted:
+                    self._log_activity(*formatted)
+
+    @staticmethod
+    def _format_reflog(line: str, repo: str) -> tuple[str, str] | None:
+        """Converte uma linha de reflog em (texto, cor). None se inválida.
+
+        Formato: `<old> <new> <ident...> <ts> <tz>\\t<mensagem>` onde a
+        mensagem é tipo "merge x: ...", "commit: ...", "checkout: ...".
+        """
+        if "\t" not in line:
+            return None
+        meta, msg = line.split("\t", 1)
+        parts = meta.split(" ")
+        if len(parts) < 2:
+            return None
+        new_sha = parts[1][:7]
+        action = msg.split(":", 1)[0].split(" ", 1)[0].lower()
+        color = {
+            "merge": "#7aa6e6",
+            "pull": "#7aa6e6",
+            "rebase": "#7aa6e6",
+            "commit": theme.SUCCESS if hasattr(theme, "SUCCESS") else "#5ac35a",
+            "checkout": "#e0b86a",
+            "reset": "#d57272",
+            "revert": "#d57272",
+            "cherry-pick": "#7aa6e6",
+            "clone": "#5ac35a",
+        }.get(action, "#b0b0b0")
+        return (f"⎇ {repo}: {msg}  ({new_sha})", color)
 
     # ---------- árvore ----------
 
@@ -1039,6 +1166,11 @@ class GitPanel(QWidget):
 
     def _do_fetch_one(self, folder: str) -> None:
         ok, out = git_fetch(folder)
+        repo = Path(folder).name
+        self._log_activity(
+            f"⇣ {repo}: fetch {'ok' if ok else 'falhou'}",
+            theme.SUCCESS if ok else theme.DANGER,
+        )
         self._notify("Fetch", folder, ok, out)
         self.refresh()
 

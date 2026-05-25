@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.41] — 2026-05-25
+
+### Adicionado — console de atividade git no painel
+- **`ui/git_panel.py`**: novo console (toggle ⌨ na toolbar) que registra a
+  atividade git do workspace. Captura `fetch` disparado pelo app e, lendo o
+  reflog (`.git/logs/HEAD`) via watcher + poll, reflete automaticamente
+  merges, commits, checkouts, pulls, rebases e resets de **qualquer origem** —
+  inclusive os feitos pelas skills ou pelo git no terminal. Cada linha tem
+  hora, repo, mensagem do reflog e SHA, colorida por tipo de ação.
+
 ## [0.76.40] — 2026-05-25
 
 ### Adicionado — console de log no diálogo de push
