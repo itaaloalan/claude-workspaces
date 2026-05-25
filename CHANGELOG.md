@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.30] — 2026-05-25
+
+### Adicionado — robô do card pulsa enquanto está Trabalhando
+- **`ui/terminal_child_widget.py`**: o ícone do robô (Claude) à esquerda de
+  cada card de sessão agora anima quando o estado é `STATE_WORKING`. Troca
+  pra variante âmbar (cor do estado "Trabalhando") e pulsa a opacidade em
+  loop (1.0↔0.35, `InOutSine`, 750ms) via `QGraphicsOpacityEffect` +
+  `QPropertyAnimation`. Ao sair do estado a animação para, a opacidade volta
+  ao cheio e o pixmap retorna conforme a seleção. `set_selected` não troca o
+  ícone enquanto a sessão está trabalhando (o robô pulsante manda).
+
 ## [0.76.29] — 2026-05-25
 
 ### Corrigido — botões do header de Runners quebram linha (sem scroll)

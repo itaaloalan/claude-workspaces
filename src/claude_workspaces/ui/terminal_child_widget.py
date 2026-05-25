@@ -10,9 +10,10 @@ import re
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -198,10 +199,31 @@ class TerminalChildWidget(QWidget):
         self._claude_icon_selected_pix = _ic(
             "fa5s.robot", color=theme.PRIMARY_HOVER
         ).pixmap(14, 14)
+        # Variante âmbar usada enquanto a sessão está Trabalhando — pulsa
+        # via _working_anim pra dar feedback de "robô trabalhando".
+        self._claude_icon_working_pix = _ic(
+            "fa5s.robot", color=theme.WARNING
+        ).pixmap(14, 14)
         self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
         outer.addWidget(
             self._claude_icon, 0, Qt.AlignmentFlag.AlignVCenter
         )
+
+        # Animação de pulso (opacidade) do robô — só roda em STATE_WORKING.
+        # Heartbeat suave 1.0↔0.35 em loop; ativada/desativada por
+        # _set_working_anim a partir de update_state.
+        self._claude_icon_opacity = QGraphicsOpacityEffect(self._claude_icon)
+        self._claude_icon_opacity.setOpacity(1.0)
+        self._claude_icon.setGraphicsEffect(self._claude_icon_opacity)
+        self._working_anim = QPropertyAnimation(
+            self._claude_icon_opacity, b"opacity", self
+        )
+        self._working_anim.setDuration(750)
+        self._working_anim.setStartValue(1.0)
+        self._working_anim.setKeyValueAt(0.5, 0.35)
+        self._working_anim.setEndValue(1.0)
+        self._working_anim.setLoopCount(-1)
+        self._working_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
         vbox = QVBoxLayout()
         vbox.setContentsMargins(0, 0, 0, 0)
@@ -468,6 +490,7 @@ class TerminalChildWidget(QWidget):
         # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
         # em sessão restaurada+ociosa.
         self._current_state = state
+        self._set_working_anim(state == STATE_WORKING)
         self._refresh_continue_visibility()
         # Atualiza a borda lateral colorida (state-driven).
         self._apply_card_qss()
@@ -580,12 +603,32 @@ class TerminalChildWidget(QWidget):
             f"#ConsoleCard QWidget {{ background: transparent; }}"
         )
 
+    def _set_working_anim(self, active: bool) -> None:
+        """Liga/desliga o pulso do robô. Ativo: troca pro robô âmbar e
+        roda a animação em loop. Inativo: para, restaura opacidade cheia
+        e volta o pixmap conforme a seleção atual."""
+        if active:
+            self._claude_icon.setPixmap(self._claude_icon_working_pix)
+            if self._working_anim.state() != QPropertyAnimation.State.Running:
+                self._working_anim.start()
+        else:
+            self._working_anim.stop()
+            self._claude_icon_opacity.setOpacity(1.0)
+            self._claude_icon.setPixmap(
+                self._claude_icon_selected_pix
+                if self._selected
+                else self._claude_icon_unselected_pix
+            )
+
     def set_selected(self, selected: bool) -> None:
         """Pinta o background do card com tint discreto quando selecionado.
         Mantém a barra lateral colorida pelo estado — seleção vira só
         diferença de bg/borda externa."""
         self._selected = selected
         self._apply_card_qss()
+        # Trabalhando? o robô âmbar pulsante manda — seleção não troca o pix.
+        if getattr(self, "_current_state", STATE_IDLE) == STATE_WORKING:
+            return
         if selected:
             self._claude_icon.setPixmap(self._claude_icon_selected_pix)
         else:
