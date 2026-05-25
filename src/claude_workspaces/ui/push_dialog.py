@@ -13,11 +13,13 @@ from pathlib import Path
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction, QBrush, QColor, QFont
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QMenu,
+    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QTreeWidget,
@@ -26,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..git_actions import PushPreview
+from ..git_actions import PushPreview, push
 from . import theme
 
 # Cor por letra de status do `git diff --name-status`.
@@ -84,6 +86,24 @@ class PushCommitsDialog(QDialog):
         split.setSizes([330, 490])
         outer.addWidget(split, stretch=1)
 
+        # Console com a saída do push — oculto até o usuário disparar o push.
+        self._console = QPlainTextEdit()
+        self._console.setReadOnly(True)
+        self._console.setVisible(False)
+        self._console.setFixedHeight(150)
+        mono = QFont("monospace")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self._console.setFont(mono)
+        self._console.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #0e0e0e; border: 1px solid #2c2c2c;"
+            "  border-radius: 6px; color: #d0d0d0; padding: 4px;"
+            "}"
+        )
+        outer.addWidget(self._console)
+
+        self._pushing = False
+        self._push_done = False
         outer.addLayout(self._build_buttons())
 
     # ---------- painel esquerdo: commits ----------
@@ -281,18 +301,85 @@ class PushCommitsDialog(QDialog):
 
         row.addStretch()
 
-        cancel = QPushButton("Cancel")
-        cancel.setStyleSheet(_GHOST_QSS)
-        cancel.clicked.connect(self.reject)
-        row.addWidget(cancel)
+        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.setStyleSheet(_GHOST_QSS)
+        self._cancel_btn.clicked.connect(self._on_cancel)
+        row.addWidget(self._cancel_btn)
 
-        push = QPushButton("Push")
-        push.setStyleSheet(_PRIMARY_QSS)
-        push.setDefault(True)
-        push.clicked.connect(self.accept)
-        push.setEnabled(bool(self._previews))
-        row.addWidget(push)
+        self._push_btn = QPushButton("Push")
+        self._push_btn.setStyleSheet(_PRIMARY_QSS)
+        self._push_btn.setDefault(True)
+        self._push_btn.clicked.connect(self._run_push)
+        self._push_btn.setEnabled(bool(self._previews))
+        row.addWidget(self._push_btn)
         return row
+
+    # ---------- execução do push + console ----------
+
+    def _on_cancel(self) -> None:
+        # Depois do push concluído o "Cancel" vira "Fechar" → fecha aceitando
+        # pra o painel saber que houve push e dar refresh.
+        if self._push_done:
+            self.accept()
+        else:
+            self.reject()
+
+    def _log(self, text: str, color: str | None = None) -> None:
+        if color:
+            self._console.appendHtml(
+                f"<span style='color:{color}'>{_html(text)}</span>"
+            )
+        else:
+            self._console.appendPlainText(text)
+        self._console.verticalScrollBar().setValue(
+            self._console.verticalScrollBar().maximum()
+        )
+        QApplication.processEvents()
+
+    def _run_push(self) -> None:
+        if self._pushing or not self._previews:
+            return
+        self._pushing = True
+        self._push_btn.setEnabled(False)
+        self.push_tags.setEnabled(False)
+        self._console.setVisible(True)
+        self._console.clear()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+
+        follow_tags = self.push_tags.isChecked()
+        ok_all = True
+        try:
+            for pv in self._previews:
+                label = f"{pv.name} ({pv.branch} → {pv.remote})"
+                self._log(f"$ git push {pv.remote} {pv.branch}"
+                          + (" --follow-tags" if follow_tags else ""), "#6aa9e0")
+                ok_push, out = push(
+                    pv.folder,
+                    pv.branch,
+                    remote=pv.remote,
+                    set_upstream=not pv.has_upstream,
+                    follow_tags=follow_tags,
+                )
+                if out.strip():
+                    self._log(out.strip())
+                if ok_push:
+                    self._log(f"✓ {label}: push concluído", theme.SUCCESS)
+                else:
+                    ok_all = False
+                    self._log(f"✗ {label}: push falhou", theme.DANGER)
+                self._log("")
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        self._pushing = False
+        self._push_done = True
+        self._log(
+            "Tudo enviado." if ok_all else "Concluído com erros — revise acima.",
+            theme.SUCCESS if ok_all else theme.WARNING,
+        )
+        # Push não volta a ficar disponível; usuário fecha o diálogo.
+        self._cancel_btn.setText("Fechar")
+        self._cancel_btn.setDefault(True)
 
     # ---------- API ----------
 
@@ -301,6 +388,12 @@ class PushCommitsDialog(QDialog):
 
     def follow_tags(self) -> bool:
         return self.push_tags.isChecked()
+
+
+def _html(text: str) -> str:
+    return (
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    )
 
 
 def _bold(item: QTreeWidgetItem) -> None:

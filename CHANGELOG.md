@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.76.40] — 2026-05-25
+
+### Adicionado — console de log no diálogo de push
+- **`ui/push_dialog.py`**: o push agora roda dentro do próprio diálogo e a
+  saída do `git push` de cada repo aparece num console interno (comando,
+  output e ✓/✗ por repo, em cores). O botão "Cancel" vira "Fechar" ao terminar.
+- **`ui/git_panel.py`**: `_do_push` deixa de empurrar por conta própria — só
+  abre o diálogo (que executa o push) e dá refresh ao fechar.
+
 ## [0.76.39] — 2026-05-25
 
 ### Adicionado — navegação entre diferenças e word-level diff

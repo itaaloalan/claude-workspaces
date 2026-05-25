@@ -14,7 +14,6 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -35,7 +34,6 @@ from ..git_actions import (
     head_sha,
     list_branches,
     pull_ff_only,
-    push,
     push_preview,
     stage_all,
     stage_file,
@@ -1143,24 +1141,10 @@ class GitPanel(QWidget):
 
         from .push_dialog import PushCommitsDialog
 
+        # O diálogo executa o push e mostra a saída num console interno;
+        # aqui só damos refresh ao fechar.
         dlg = PushCommitsDialog(previews, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        follow_tags = dlg.follow_tags()
-        errors: list[str] = []
-        for pv in dlg.previews_to_push():
-            ok_push, out = push(
-                pv.folder,
-                pv.branch,
-                remote=pv.remote,
-                set_upstream=not pv.has_upstream,
-                follow_tags=follow_tags,
-            )
-            if not ok_push:
-                errors.append(f"{pv.name}: push falhou — {out}")
-        if errors:
-            QMessageBox.warning(self, "Erros no push", "\n\n".join(errors)[:2000])
+        dlg.exec()
         self.refresh()
 
     def _do_fetch_all(self) -> None:
