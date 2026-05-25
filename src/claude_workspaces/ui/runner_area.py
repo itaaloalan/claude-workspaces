@@ -174,6 +174,14 @@ class RunnerArea(QWidget):
     def workspace(self) -> Workspace:
         return self._ws
 
+    def recent_output_for(self, runner_id: str, max_lines: int = 200) -> str:
+        """Saída recente do widget do runner `runner_id`, se existir aba viva."""
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget) and w.runner_id() == runner_id:
+                return w.recent_output(max_lines)
+        return ""
+
     def console_session_id(self) -> str:
         return self._console_session_id
 

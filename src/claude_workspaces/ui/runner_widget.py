@@ -182,6 +182,21 @@ class RunnerWidget(QWidget):
     def config(self) -> RunnerConfig:
         return self._runner
 
+    def recent_output(self, max_lines: int = 200) -> str:
+        """Últimas linhas do log (ANSI removido) pra dar contexto ao Claude.
+
+        Usado pelo "Editar com Claude" — passa o erro/saída recente do
+        runner pro Claude diagnosticar (ex: 'invalid target release: 25').
+        Vazio se o runner nunca rodou.
+        """
+        from ..services.runner_url_detect import strip_ansi
+
+        if not self._log_buf:
+            return ""
+        text = strip_ansi(self._log_buf)
+        lines = text.splitlines()
+        return "\n".join(lines[-max_lines:])
+
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
         old_url = (self._runner.browser_url or "").strip()

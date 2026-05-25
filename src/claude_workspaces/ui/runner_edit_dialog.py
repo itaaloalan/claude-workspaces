@@ -79,9 +79,11 @@ class RunnerEditDialog(QDialog):
         runner: RunnerConfig | None,
         on_generate_with_claude=None,
         on_resume_gen=None,
+        on_edit_with_claude=None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._on_edit_with_claude = on_edit_with_claude
         self.setWindowTitle("Editar Runner" if runner else "Novo Runner")
         self.resize(620, 480)
 
@@ -165,7 +167,19 @@ class RunnerEditDialog(QDialog):
 
         layout.addLayout(form)
 
-        if on_generate_with_claude is not None:
+        # Editando um runner existente → "Editar com Claude" (ajusta SÓ este
+        # runner, mandando a config atual + erro recente pro Claude). Criando
+        # um novo → "Gerar com Claude" (investiga o workspace e gera do zero).
+        if runner is not None and on_edit_with_claude is not None:
+            edit_ai_btn = QPushButton("✨ Editar com Claude")
+            edit_ai_btn.setToolTip(
+                "Abre o Claude com a config atual deste runner + a saída/erro "
+                "recente dele e pede um ajuste. O Claude salva um rascunho; "
+                "feche este dialog e clique em 'Recarregar' pra aplicar."
+            )
+            edit_ai_btn.clicked.connect(self._on_edit_with_claude_clicked)
+            layout.addWidget(edit_ai_btn)
+        elif on_generate_with_claude is not None:
             gen_btn = QPushButton("✨ Gerar com Claude")
             gen_btn.setToolTip(
                 "Abre o Claude no contexto do claude-workspaces pra gerar os "
@@ -201,6 +215,15 @@ class RunnerEditDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _on_edit_with_claude_clicked(self) -> None:
+        # Manda os valores ATUAIS do dialog (não só o original) — assim o
+        # Claude edita o que o usuário está vendo. Fecha o dialog em seguida
+        # pra liberar o acesso ao botão "Recarregar" (dialog é modal).
+        if self._on_edit_with_claude is None:
+            return
+        self._on_edit_with_claude(self.result_runner())
+        self.reject()
 
     def _on_edit_script(self) -> None:
         start_cmd = self._start.toPlainText().strip()

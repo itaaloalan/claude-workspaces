@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.76.25] — 2026-05-25
+
+### Adicionado — "Editar com Claude" no dialog de runner
+- **`ui/runner_edit_dialog.py`**: ao editar um runner existente, o botão
+  agora é **"✨ Editar com Claude"** (no lugar de "Gerar com Claude", que
+  segue só pra runners novos). Ele manda os valores atuais do dialog pro
+  Claude e fecha o dialog pra liberar o "Recarregar".
+- **`services/runner_prompt.py`**: novo `build_edit_prompt()` — passa a
+  config atual do runner + a saída/erro recente dele + as pastas do
+  workspace + `docs/runners-spec.md`, e pede que o Claude ajuste **só esse
+  runner** (mantendo o `name` pra o merge-por-nome substituir no lugar).
+- **`ui/runner_widget.py`** / **`ui/runner_area.py`**: `recent_output()` /
+  `recent_output_for()` expõem o tail do log (ANSI removido) pra dar
+  contexto do erro ao Claude (ex: `invalid target release: 25`).
+- **`ui/main_window.py`**: `_edit_runner_with_claude()` — pede um hint
+  opcional, monta o prompt, abre o Claude num terminal embutido (cwd = pasta
+  do runner) e registra no histórico de gen pra permitir "Retomar". O fluxo
+  de aplicar continua via rascunho + "Recarregar".
+
 ## [0.76.24] — 2026-05-25
 
 ### Adicionado — abrir repo no editor pelo menu do painel Git

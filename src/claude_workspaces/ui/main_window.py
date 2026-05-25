@@ -3623,6 +3623,8 @@ class MainWindow(QMainWindow):
             ),
             on_resume_gen=lambda sid, cwd, w=workspace:
                 self._resume_runner_gen_session(w, sid, cwd),
+            on_edit_with_claude=lambda cfg, w=workspace, csid=console_session_id:
+                self._edit_runner_with_claude(w, cfg, csid),
             parent=self,
         )
         if dlg.exec() != dlg.DialogCode.Accepted:
@@ -3851,6 +3853,108 @@ class MainWindow(QMainWindow):
             return
         self._bottom_tabs.setCurrentWidget(self.terminal_host)
         self.terminal_host.setCurrentWidget(area)
+
+    def _recent_runner_output(self, workspace, runner_id: str) -> str:
+        """Saída recente do runner `runner_id` em qualquer área que o mostre
+        (painel do workspace ou painéis de console)."""
+        area = self._runner_areas.get(workspace.id)
+        if area is not None:
+            out = area.recent_output_for(runner_id)
+            if out:
+                return out
+        for area in self._console_runner_areas.get(workspace.id, {}).values():
+            out = area.recent_output_for(runner_id)
+            if out:
+                return out
+        return ""
+
+    def _edit_runner_with_claude(self, workspace, runner, console_session_id="") -> None:
+        from ..launchers import find_app_repo_root
+        from ..services.runner_gen_history import RunnerGenEntry, add_entry
+        from ..services.runner_prompt import build_edit_prompt
+
+        repo = find_app_repo_root()
+        if repo is None:
+            QMessageBox.warning(
+                self,
+                "Não foi possível abrir o Claude",
+                "Repositório do claude-workspaces não encontrado — o editor "
+                "precisa rodar no diretório do projeto pra ler docs/runners-spec.md",
+            )
+            return
+        if not workspace.folders:
+            QMessageBox.warning(
+                self,
+                "Workspace sem pastas",
+                "Adicione ao menos uma pasta no workspace antes de editar runner.",
+            )
+            return
+
+        hint, ok = QInputDialog.getText(
+            self,
+            "Editar com Claude",
+            f"O que você quer ajustar no runner '{runner.name}'?\n"
+            "(opcional — o erro/saída recente já vai junto)",
+        )
+        if not ok:
+            return
+
+        recent = self._recent_runner_output(workspace, runner.id)
+        spec_path = Path(repo) / "docs" / "runners-spec.md"
+        prompt = build_edit_prompt(
+            workspace, runner, hint=hint, recent_output=recent, spec_path=spec_path
+        )
+
+        area = self.terminals_coord.get_or_create_area(workspace)
+        ws_cwd, _extras = workspace.launch_paths()
+        # cwd do Claude: a pasta do runner quando definida (melhor contexto pro
+        # diagnóstico), senão o cwd padrão do workspace.
+        cwd = (runner.cwd or "").strip() or ws_cwd
+        argv = [
+            self.settings.claude_command,
+            *self.settings.claude_launch_args(),
+            prompt,
+        ]
+        title = f"runner-edit #{area.count() + 1}"
+        terminal = area.add_terminal(title)
+        terminal.configure_claude(cwd)
+        label = f"claude (runner-edit) — {workspace.name}"
+
+        ws_id = workspace.id
+
+        def _record_once(sid: str, *, _t=terminal, _cwd=cwd, _ws=ws_id, _hint=hint) -> None:
+            if not sid:
+                return
+            try:
+                add_entry(RunnerGenEntry(
+                    workspace_id=_ws, session_id=sid, cwd=_cwd, hint=_hint,
+                ))
+            except Exception:
+                log.exception("Falha ao registrar runner-edit no histórico")
+            try:
+                _t.claimed_session_id_changed.disconnect(_record_once)
+            except (TypeError, RuntimeError):
+                pass
+
+        terminal.claimed_session_id_changed.connect(_record_once)
+
+        try:
+            terminal.start_shell_command(
+                argv,
+                cwd,
+                label=label,
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+            return
+        self._bottom_tabs.setCurrentWidget(self.terminal_host)
+        self.terminal_host.setCurrentWidget(area)
+        from .persistent_toast import flash_toast
+        flash_toast(
+            "Claude aberto pra editar o runner. Quando ele salvar o rascunho, "
+            "clique em 'Recarregar' na aba de runners pra aplicar."
+        )
 
     def _resume_runner_gen_session(self, workspace, session_id: str, cwd: str) -> None:
         """Reabre uma sessão Claude de runner-gen via `--resume`.
