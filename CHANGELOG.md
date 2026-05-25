@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.76.43] — 2026-05-25
+
+### Alterado — botão "ver diff" abre o diálogo de mudanças (igual ao Push)
+- **`ui/git_panel.py`**: o botão do olho (👁) na toolbar deixa de alternar o
+  diff inline e passa a abrir um diálogo de **Changes** com o mesmo visual do
+  diálogo de Push — uma seção por repositório, arquivos agrupados por pasta e
+  coloridos por status. Duplo clique abre o diff lado-a-lado das mudanças e o
+  botão direito abre no editor.
+- **`ui/changes_dialog.py`** (novo): diálogo que lista as mudanças **não
+  commitadas** de todos os repos do workspace e compara `HEAD → working tree`
+  no visualizador lado-a-lado, reaproveitando a árvore/QSS do `push_dialog`.
+- **`git_actions.py`**: `file_blob` aceita a sentinela `WORKTREE` pra ler o
+  arquivo direto do disco (mudanças não commitadas) em vez de uma revisão git.
+- **`ui/diff_viewer_dialog.py`**: o rótulo de comparação mostra `HEAD → working`
+  quando o lado direito é o working tree.
+
 ## [0.76.42] — 2026-05-25
 
 ### Alterado — layout do painel git: toolbar em duas linhas e áreas redimensionáveis

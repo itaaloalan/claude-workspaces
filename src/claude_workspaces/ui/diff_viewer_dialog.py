@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..git_actions import file_blob
+from ..git_actions import WORKTREE, file_blob
 from . import theme
 
 # Fundos por tipo de linha (sutis, sobre o #0e0e0e do editor).
@@ -166,11 +166,12 @@ class DiffViewerDialog(QDialog):
         n_diffs = self._render(old_text, new_text)
 
         n_files = len(self._files)
-        bl = base[:7] if base else "base"
+        bl = "HEAD" if base == "HEAD" else (base[:7] if base else "base")
+        hl = "working" if head == WORKTREE else "HEAD"
         diff_word = "diferença" if n_diffs == 1 else "diferenças"
         self._info.setText(
             f"arquivo {self._idx + 1}/{n_files}  ·  {n_diffs} {diff_word}  ·  "
-            f"{bl} → HEAD"
+            f"{bl} → {hl}"
         )
         self._prev_btn.setEnabled(self._idx > 0 or bool(self._hunks))
         self._next_btn.setEnabled(

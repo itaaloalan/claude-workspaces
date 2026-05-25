@@ -75,6 +75,17 @@ def _html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _status_code(xy: str) -> str:
+    """Reduz o status porcelain de 2 chars (XY) a uma letra A/M/D/R/C pra
+    colorir o arquivo igual ao diálogo de push (que usa `--name-status`)."""
+    if xy == "??":
+        return "A"  # novo no working tree → trata como adicionado
+    for code in ("D", "R", "C", "A", "M", "T"):
+        if code in xy:
+            return code
+    return (xy.strip() or "M")[0]
+
+
 def _fingerprint_statuses(statuses: dict[str, GitStatus]) -> tuple:
     """Tupla hashável que captura o estado visível dos repos no painel.
     Usado pra pular rebuild da árvore quando o poll dispara sem mudanças."""
@@ -351,7 +362,9 @@ class GitPanel(QWidget):
             )
         )
         self._toggle_diff_btn = _icon_btn(
-            "fa5s.eye", "Mostrar / esconder diff", self._toggle_diff
+            "fa5s.eye",
+            "Ver diff das mudanças não commitadas (HEAD → working tree)",
+            self._open_changes_diff,
         )
         actions_row.addWidget(self._toggle_diff_btn)
         self._toggle_log_btn = _icon_btn(
@@ -842,6 +855,26 @@ class GitPanel(QWidget):
         if not self._diff_visible:
             self._toggle_diff()
         self._on_single_click(item, 0)
+
+    def _open_changes_diff(self) -> None:
+        """Abre o diálogo de Changes (mesmo visual do Push) com as mudanças
+        não commitadas de todos os repos; diff lado-a-lado no duplo clique."""
+        repos: list[tuple[str, str, list[tuple[str, str]]]] = []
+        for folder, st in self._statuses.items():
+            if not st.is_repo or not st.files:
+                continue
+            files = [(_status_code(f.status), f.path) for f in st.files]
+            repos.append((Path(folder).name, folder, files))
+        if not repos:
+            QMessageBox.information(
+                self,
+                "Sem mudanças",
+                "Nenhuma mudança não commitada nos repositórios do workspace.",
+            )
+            return
+        from .changes_dialog import ChangesDialog
+
+        ChangesDialog(repos, self).exec()
 
     def _toggle_diff(self) -> None:
         self._diff_visible = not self._diff_visible

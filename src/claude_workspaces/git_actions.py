@@ -18,6 +18,10 @@ PUSH_TIMEOUT_S = 120
 # SHA da árvore vazia do git — base de diff quando o commit é raiz (sem pai).
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
+# Sentinela de revisão pra `file_blob` ler o arquivo direto do disco (working
+# tree) em vez de uma revisão git — usado pra diff de mudanças não commitadas.
+WORKTREE = "\x00WORKTREE\x00"
+
 
 def _run(args: list[str], cwd: str) -> tuple[bool, str]:
     if not Path(cwd).is_dir():
@@ -315,6 +319,12 @@ def file_blob(folder: str, rev: str, path: str) -> str:
     fontes legados (ex.: Java BR) não são UTF-8 e quebravam o `text=True`."""
     if rev == EMPTY_TREE or not Path(folder).is_dir():
         return ""
+    if rev == WORKTREE:
+        # Conteúdo atual no disco (mudanças não commitadas); vazio se sumiu.
+        try:
+            return _decode_bytes((Path(folder) / path).read_bytes())
+        except OSError:
+            return ""
     try:
         r = subprocess.run(
             ["git", "show", f"{rev}:{path}"],
