@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.20] — 2026-05-25
+
+### Corrigido — dock direito aparecia "fora do app" (janela flutuante)
+- **`ui/dock_manager.py`** + **`ui/main_window.py`**: o state salvo do
+  QtAds gravava o dock "Ferramentas" num container **flutuante** e
+  `Closed="1"` — ao subir, `toggleView(True)` desfechava ele numa janela
+  flutuante separada (fora da janela principal) em vez de ancorado na
+  coluna direita. Novo `WorkspaceDockManager.redock_right()` detecta o
+  dock flutuante (ou fora do container principal) e re-ancora ele à
+  direita no startup. Resolve o painel que "não aparecia".
+
 ## [0.76.19] — 2026-05-25
 
 ### Adicionado — Fixar/desafixar no menu ⋯ do card do workspace

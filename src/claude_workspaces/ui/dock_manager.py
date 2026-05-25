@@ -171,6 +171,19 @@ class WorkspaceDockManager(QObject):
         d = self._docks.get(key)
         return bool(d and not d.isClosed())
 
+    def redock_right(self, key: str) -> None:
+        """Re-ancora um dock que se soltou pra um container flutuante de
+        volta à direita da janela principal. Estados salvos antigos às vezes
+        gravavam o dock como floating+closed — aí ele 'aparecia fora do app'
+        numa janela flutuante separada, em vez de ancorado na coluna."""
+        d = self._docks.get(key)
+        if d is None:
+            return
+        if d.isFloating() or d.dockContainer() is not self._manager:
+            self._manager.removeDockWidget(d)
+            self._manager.addDockWidget(ads.RightDockWidgetArea, d)
+        d.toggleView(True)
+
     # ---------- persistência ----------
 
     def save_state_b64(self) -> str:

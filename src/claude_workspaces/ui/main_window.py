@@ -458,6 +458,9 @@ class MainWindow(QMainWindow):
             if d is not None:
                 d.toggleView(True)
                 d.setAsCurrentTab()
+        # Re-ancora o dock direito à janela principal se o state salvo o
+        # tiver deixado num container FLUTUANTE (aparecia "fora do app").
+        self.body_dock.redock_right("ferramentas")
         # Garante que o dock "Ferramentas" da direita SEMPRE apareça com
         # conteúdo: se nenhum painel estiver aberto (todos colapsados no
         # state salvo), abre o primeiro painel default_open. Sem isso o dock
