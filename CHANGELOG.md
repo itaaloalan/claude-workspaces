@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.26] — 2026-05-25
+
+### Corrigido — scroll horizontal cortando a UI
+- **`ui/main_window.py`**: o título do painel do terminal
+  (`_terminal_pane_title`) era um `QLabel` rich-text sem word-wrap nem
+  limite de largura. Com um branch longo no breadcrumb (ex:
+  `italo/chamado_RITM0024535_auditar_melhor_registro_parada`) o `sizeHint`
+  do label empurrava a largura mínima do header → painel → dock central,
+  disparando um scroll horizontal que cortava a interface nos dois lados.
+  Agora o label tem `wordWrap=True` e `sizePolicy` horizontal `Ignored`
+  (largura mínima 0): ele quebra a linha e se ajusta ao espaço disponível
+  em vez de forçar a largura. Removido o `addStretch` redundante.
+
 ## [0.76.25] — 2026-05-25
 
 ### Adicionado — "Editar com Claude" no dialog de runner

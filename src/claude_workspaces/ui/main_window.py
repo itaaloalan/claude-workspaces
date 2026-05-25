@@ -1209,8 +1209,17 @@ class MainWindow(QMainWindow):
         self._terminal_pane_title.setStyleSheet(
             "color: #c8c8c8; font-size: 12px;"
         )
-        th_layout.addWidget(self._terminal_pane_title)
-        th_layout.addStretch(1)
+        # Branch longo no breadcrumb empurrava o sizeHint do label, forçando
+        # a largura mínima do header → painel → dock central e disparando um
+        # scroll horizontal que cortava a UI nos dois lados. wordWrap deixa
+        # quebrar em 2+ linhas e a policy Ignored impede o label de exigir
+        # mais largura que a disponível (ele se ajusta ao espaço, não o contrário).
+        self._terminal_pane_title.setWordWrap(True)
+        self._terminal_pane_title.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._terminal_pane_title.setMinimumWidth(0)
+        th_layout.addWidget(self._terminal_pane_title, stretch=1)
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB2
         self._terminal_pane_minimize_btn = _QPB2()
