@@ -852,6 +852,15 @@ class GitPanel(QWidget):
             )
         )
         menu.addSeparator()
+        from ..settings import Settings
+        cmd = (Settings.load().file_open_command or "code").strip() or "code"
+        editor_name = "VS Code" if cmd.split()[0] == "code" else cmd.split()[0]
+        menu.addAction(
+            self._action(
+                f"⧉ Abrir com {editor_name}",
+                lambda: self._open_in_editor(folder),
+            )
+        )
         menu.addAction(
             self._action(
                 "📁 Abrir pasta",
@@ -902,6 +911,14 @@ class GitPanel(QWidget):
                 f"{Path(folder).name} → {branch}\n\n{out[:2000]}",
             )
         self.refresh()
+
+    def _open_in_editor(self, folder: str) -> None:
+        from ..launchers import LauncherError, open_file_in_editor
+        from ..settings import Settings
+        try:
+            open_file_in_editor(folder, Settings.load())
+        except LauncherError as e:
+            QMessageBox.warning(self, "Abrir no editor", str(e))
 
     def _open_folder(self, folder: str) -> None:
         from ..errors import LaunchError

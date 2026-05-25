@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.24] — 2026-05-25
+
+### Adicionado — abrir repo no editor pelo menu do painel Git
+- **`ui/git_panel.py`**: menu de botão direito no repo ganhou "Abrir com
+  VS Code" (ou editor configurado em `file_open_command`), ao lado de
+  "Abrir pasta". Reusa `open_file_in_editor()` passando a pasta do repo.
+
 ## [0.76.23] — 2026-05-25
 
 ### Adicionado — abrir/editar arquivo com editor externo (painel Arquivos)
