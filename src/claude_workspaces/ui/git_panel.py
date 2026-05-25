@@ -14,6 +14,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -34,6 +35,8 @@ from ..git_actions import (
     head_sha,
     list_branches,
     pull_ff_only,
+    push,
+    push_preview,
     stage_all,
     stage_file,
     unstage_all,
@@ -289,6 +292,14 @@ class GitPanel(QWidget):
             label="PR",
         )
         layout.addWidget(self._pr_btn)
+        layout.addWidget(
+            _icon_btn(
+                "fa5s.cloud-upload-alt",
+                "Push — mostra commits e arquivos antes de enviar",
+                self._do_push,
+                label="Push",
+            )
+        )
         self._toggle_diff_btn = _icon_btn(
             "fa5s.eye", "Mostrar / esconder diff", self._toggle_diff
         )
@@ -1085,32 +1096,58 @@ class GitPanel(QWidget):
         return (not errors, committed_folders)
 
     def _do_commit_and_push(self) -> None:
-        """Faz commit e em seguida push da branch atual em cada folder
-        que recebeu commit. Cria upstream automaticamente se faltar."""
+        """Faz commit e em seguida abre o diálogo de push pros folders que
+        receberam commit (mostra commits + arquivos antes de enviar)."""
         ok, folders = self._do_commit()
         if not folders:
             return
-        from ..git_actions import push_with_upstream
-        # Re-fetch status pra pegar a branch atual (que pode ter mudado
-        # entre commit e push).
-        self._statuses = {}
-        for f in folders:
-            from ..git_status import get_status
-            self._statuses[f] = get_status(f)
-        push_errors: list[str] = []
-        for folder in folders:
-            status = self._statuses.get(folder)
-            branch = status.branch if status else ""
-            if not branch:
-                push_errors.append(f"{Path(folder).name}: branch indefinida")
+        self._do_push(folders=folders)
+
+    def _do_push(self, folders: list[str] | None = None) -> None:
+        """Abre o diálogo estilo IntelliJ com os commits/arquivos a enviar e,
+        se confirmado, faz o push de cada repo.
+
+        `folders` restringe aos repos passados (usado pelo Commit+Push);
+        senão considera todos os repos do workspace.
+        """
+        if not self.workspace:
+            return
+        targets = folders if folders is not None else list(self.workspace.folders)
+        previews = []
+        for folder in targets:
+            pv = push_preview(folder)
+            if pv.error or pv.is_empty:
                 continue
-            ok_push, out = push_with_upstream(folder, branch)
-            if not ok_push:
-                push_errors.append(f"{Path(folder).name}: push falhou — {out}")
-        if push_errors:
-            QMessageBox.warning(
-                self, "Erros no push", "\n\n".join(push_errors)[:2000]
+            previews.append(pv)
+
+        if not previews:
+            QMessageBox.information(
+                self,
+                "Nada a enviar",
+                "Nenhum commit pendente de push nos repositórios do workspace.",
             )
+            return
+
+        from .push_dialog import PushCommitsDialog
+
+        dlg = PushCommitsDialog(previews, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        follow_tags = dlg.follow_tags()
+        errors: list[str] = []
+        for pv in dlg.previews_to_push():
+            ok_push, out = push(
+                pv.folder,
+                pv.branch,
+                remote=pv.remote,
+                set_upstream=not pv.has_upstream,
+                follow_tags=follow_tags,
+            )
+            if not ok_push:
+                errors.append(f"{pv.name}: push falhou — {out}")
+        if errors:
+            QMessageBox.warning(self, "Erros no push", "\n\n".join(errors)[:2000])
         self.refresh()
 
     def _do_fetch_all(self) -> None:

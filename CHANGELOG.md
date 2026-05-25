@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.76.31] — 2026-05-25
+
+### Adicionado — diálogo "Push Commits" estilo IntelliJ
+- **`ui/push_dialog.py`** (novo): `PushCommitsDialog` mostra, antes do push,
+  os commits que vão subir (painel esquerdo, com chip da branch) e a árvore
+  de arquivos alterados por eles agrupada por pasta com contagem e cor por
+  status (painel direito), além da opção "Push tags". Título
+  "Push Commits to &lt;remote&gt;". Suporta multi-repo (uma seção por repo).
+- **`git_actions.py`**: `push_preview(folder)` monta os commits/arquivos não
+  enviados (range `<upstream>..HEAD`, ou `HEAD --not --remotes` sem upstream),
+  com `PushPreview`/`PushCommit` e parser de `--name-status -z`. Nova função
+  `push(...)` com `-u`/`--follow-tags`.
+- **`ui/git_panel.py`**: botão "Push" na toolbar abre o diálogo; o
+  "Commit + Push" agora passa pelo mesmo diálogo de confirmação.
+
+### Corrigido
+- **`ui/git_panel.py`**: "Commit + Push" importava `push_with_upstream` de
+  `git_actions` (só existe em `pr_actions`) e quebrava com `ImportError` ao
+  ser clicado — agora usa `git_actions.push`.
+
 ## [0.76.30] — 2026-05-25
 
 ### Adicionado — robô do card pulsa enquanto está Trabalhando
