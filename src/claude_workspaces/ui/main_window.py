@@ -2344,9 +2344,15 @@ class MainWindow(QMainWindow):
         stacks = detect_stacks(ws.folders)
         stack_label = ", ".join(sorted(STACK_LABEL.get(s, s) for s in stacks))
         self.status_widgets.set_stack(stack_label)
-        # MCP — exists pra este workspace?
-        from ..mcp_manager import mcp_exists
-        self.status_widgets.set_mcp(1 if mcp_exists(ws.name) else 0)
+        # MCP — lista real (user globais + .mcp.json do projeto), igual ao
+        # que o Claude enxerga e à barra de contexto do console. Passa os
+        # nomes pro footer mostrar inline + tooltip.
+        try:
+            from ..services.mcp_inspector import list_servers
+            mcp_names = sorted({s.name for s in list_servers(list(ws.folders))})
+        except Exception:
+            mcp_names = []
+        self.status_widgets.set_mcp(len(mcp_names), mcp_names)
         # Runners
         active = self.terminals_coord.state.running_counts.get(ws.id, 0)
         total = len(ws.runners)
@@ -3599,11 +3605,28 @@ class MainWindow(QMainWindow):
                         )
         except Exception:
             pass
+        # MCPs ativos pra este workspace — mesma fonte do footer / barra de
+        # contexto do console. Só aparece quando há algum plugado.
+        mcp_html = ""
+        try:
+            from ..services.mcp_inspector import list_servers
+            mcp_names = sorted({s.name for s in list_servers(list(ws.folders))})
+        except Exception:
+            mcp_names = []
+        if mcp_names:
+            shown = ", ".join(mcp_names[:4])
+            if len(mcp_names) > 4:
+                shown += f" +{len(mcp_names) - 4}"
+            mcp_html = (
+                f" <span style='color:#555'>·</span> "
+                f"<span style='color:#9aa0a6'>mcp</span> "
+                f"<span style='color:#6cc7ce;font-weight:600'>🔌 {shown}</span>"
+            )
         new_text = (
             f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
             f"<span style='color:#555'>·</span> "
             f"<span style='color:#9aa0a6'>console</span> {console_html}"
-            f"{branch_html}{model_html}"
+            f"{branch_html}{model_html}{mcp_html}"
         )
         # Curtocircuita: setText em QLabel rich-text força relayout e
         # re-render. Sem essa cache, sinais frequentes (currentChanged
@@ -3612,6 +3635,9 @@ class MainWindow(QMainWindow):
         if getattr(self, "_terminal_pane_title_last", None) == new_text:
             return
         self._terminal_pane_title.setText(new_text)
+        self._terminal_pane_title.setToolTip(
+            "MCPs ativos:\n• " + "\n• ".join(mcp_names) if mcp_names else ""
+        )
         self._terminal_pane_title_last = new_text
 
     def _sync_console_runner_host(self) -> None:

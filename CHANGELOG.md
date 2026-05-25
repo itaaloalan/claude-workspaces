@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.46] — 2026-05-25
+
+### Adicionado — MCPs visíveis no cabeçalho do console e no rodapé
+- **`ui/main_window.py`**: o cabeçalho do painel do console (`workspace · console`)
+  agora mostra os **MCPs ativos** (`🔌 nome1, nome2 …`) quando há algum plugado,
+  resolvidos via `mcp_inspector` (globais do `~/.claude.json` + `.mcp.json` do
+  projeto). Tooltip lista todos os nomes.
+- **`ui/status_bar.py`** / **`ui/main_window.py`**: o segmento **MCP** do rodapé
+  passa a usar a lista real de servidores (em vez de só checar se existe
+  `.mcp.json`), mostra os primeiros nomes inline e expõe a lista completa no
+  **tooltip** ao passar o mouse.
+
 ## [0.76.45] — 2026-05-25
 
 ### Adicionado — barra de contexto no topo do console do Claude

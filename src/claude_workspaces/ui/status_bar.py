@@ -156,18 +156,30 @@ class StatusBarWidgets(QWidget):
         self.stack.setText(label or "")
         self.stack.setVisible(bool(label))
 
-    def set_mcp(self, count: int) -> None:
+    def set_mcp(self, count: int, names: list[str] | None = None) -> None:
         # MCP: cinza quando 0, ciano quando há plugados — facilita
         # confirmar de relance se o workspace tem MCP configurado.
+        # O tooltip lista os nomes pra dar pra ver quais sem abrir o diálogo.
+        names = names or []
+        if names:
+            self.mcp.setToolTip("MCPs configurados:\n• " + "\n• ".join(names))
+        else:
+            self.mcp.setToolTip("MCPs configurados pra este workspace")
         if count <= 0:
             self.mcp.setText("MCP: —")
             self.mcp._text.setStyleSheet(
                 "QLabel { color: #9aa0a6; font-size: 11px; background: transparent; }"
             )
         else:
-            self.mcp.setText(
-                f"MCP: {count} configurado{'s' if count != 1 else ''}"
-            )
+            # Mostra os primeiros nomes inline quando couber; senão só a contagem.
+            if names:
+                shown = ", ".join(names[:3])
+                if len(names) > 3:
+                    shown += f" +{len(names) - 3}"
+                label = f"MCP: {shown}"
+            else:
+                label = f"MCP: {count} configurado{'s' if count != 1 else ''}"
+            self.mcp.setText(label)
             self.mcp._text.setStyleSheet(
                 "QLabel { color: #6cc7ce; font-size: 11px; background: transparent; }"
             )
