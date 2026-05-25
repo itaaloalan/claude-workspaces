@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.35] — 2026-05-25
+
+### Alterado
+- **`ui/push_dialog.py`**: no painel de commits do diálogo de push, a branch
+  vira um nó pai (chip ⎇, âmbar) e cada commit fica numa linha indentada
+  abaixo — antes a branch e a mensagem ficavam na mesma linha e truncavam.
+
 ## [0.76.34] — 2026-05-25
 
 ### Adicionado — diff lado-a-lado no diálogo de push

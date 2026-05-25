@@ -91,29 +91,23 @@ class PushCommitsDialog(QDialog):
         tree.setStyleSheet(_TREE_QSS)
         multi = len(self._previews) > 1
         for pv in self._previews:
+            # Nó da branch (com chip ⎇) como pai; commits ficam indentados
+            # abaixo, um por linha — como no IntelliJ.
+            label = f"⎇ {pv.branch}"
             if multi:
-                parent = QTreeWidgetItem(
-                    [f"{pv.name}  ·  {pv.branch}  ({len(pv.commits)})"]
-                )
-                _bold(parent)
-                parent.setForeground(0, QBrush(QColor("#bbb")))
-                tree.addTopLevelItem(parent)
-            else:
-                parent = None
-            for idx, c in enumerate(pv.commits):
-                # Primeiro commit (o mais recente, topo) ganha o chip da branch,
-                # como no IntelliJ.
-                prefix = f"⎇ {pv.branch}  " if (idx == 0 and not multi) else ""
-                item = QTreeWidgetItem([f"{prefix}{c.subject}"])
+                label = f"{pv.name}  ·  {label}"
+            branch_node = QTreeWidgetItem([f"{label}  ({len(pv.commits)})"])
+            _bold(branch_node)
+            branch_node.setForeground(0, QBrush(QColor(theme.WARNING)))
+            tree.addTopLevelItem(branch_node)
+            for c in pv.commits:
+                item = QTreeWidgetItem([c.subject])
+                item.setForeground(0, QBrush(QColor("#d0d0d0")))
                 item.setToolTip(
                     0, f"{c.short} · {c.author} · {c.date}\n{c.subject}"
                 )
-                if parent is not None:
-                    parent.addChild(item)
-                else:
-                    tree.addTopLevelItem(item)
-            if parent is not None:
-                parent.setExpanded(True)
+                branch_node.addChild(item)
+            branch_node.setExpanded(True)
         return tree
 
     # ---------- painel direito: arquivos por pasta ----------
