@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QAction, QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QSplitter,
     QTreeWidget,
@@ -117,8 +118,14 @@ class PushCommitsDialog(QDialog):
         tree.setHeaderHidden(True)
         tree.setRootIsDecorated(True)
         tree.setStyleSheet(_TREE_QSS)
-        tree.setToolTip("Duplo clique num arquivo abre o diff lado-a-lado")
+        tree.setToolTip(
+            "Duplo clique abre o diff lado-a-lado · botão direito abre no editor"
+        )
         tree.itemDoubleClicked.connect(self._on_file_double_clicked)
+        tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        tree.customContextMenuRequested.connect(
+            lambda pos, t=tree: self._on_files_context_menu(t, pos)
+        )
         for pv in self._previews:
             root = QTreeWidgetItem([f"{pv.name}  {len(pv.files)} files"])
             _bold(root)
@@ -153,6 +160,45 @@ class PushCommitsDialog(QDialog):
                 self,
                 "Falha ao abrir o diff",
                 f"{data.get('path', '')}\n\n{type(e).__name__}: {e}",
+            )
+
+    def _on_files_context_menu(self, tree: QTreeWidget, pos: QPoint) -> None:
+        item = tree.itemAt(pos)
+        if item is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:  # nó de pasta/repo
+            return
+        menu = QMenu(self)
+        from ..settings import Settings
+
+        cmd = (Settings.load().file_open_command or "code").strip() or "code"
+        editor = "VS Code" if cmd.split()[0] == "code" else cmd.split()[0]
+
+        act_diff = QAction("👁 Ver diff lado-a-lado", self)
+        act_diff.triggered.connect(lambda: self._on_file_double_clicked(item, 0))
+        menu.addAction(act_diff)
+
+        act_open = QAction(f"⧉ Abrir com {editor}", self)
+        act_open.triggered.connect(lambda: self._open_in_editor(data["full"]))
+        menu.addAction(act_open)
+
+        menu.exec(tree.viewport().mapToGlobal(pos))
+
+    def _open_in_editor(self, full_path: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from ..services.system_open import open_in_editor
+        from ..settings import Settings
+
+        cmd = (Settings.load().file_open_command or "code").strip() or "code"
+        try:
+            open_in_editor(full_path, cmd)
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Falha ao abrir no editor",
+                f"{full_path}\n\n{type(e).__name__}: {e}",
             )
 
     def _populate_dir_tree(
@@ -208,6 +254,7 @@ class PushCommitsDialog(QDialog):
                     "base": pv.base,
                     "head": pv.head,
                     "path": rel,
+                    "full": str(Path(pv.folder) / rel),
                 },
             )
             parent.addChild(leaf)

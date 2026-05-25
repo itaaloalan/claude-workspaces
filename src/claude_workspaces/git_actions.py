@@ -309,11 +309,35 @@ def file_blob(folder: str, rev: str, path: str) -> str:
     """Conteúdo do arquivo na revisão `rev` (`git show <rev>:<path>`).
 
     Vazio se o arquivo não existe naquela revisão (ex.: arquivo novo na base,
-    ou deletado no HEAD) ou se for binário/erro."""
-    if rev == EMPTY_TREE:
+    ou deletado no HEAD) ou se for binário/erro.
+
+    Lê em bytes e decodifica tolerante (UTF-8 → fallback Latin-1) — muitos
+    fontes legados (ex.: Java BR) não são UTF-8 e quebravam o `text=True`."""
+    if rev == EMPTY_TREE or not Path(folder).is_dir():
         return ""
-    ok, out = _git_out(["git", "show", f"{rev}:{path}"], folder, timeout=10)
-    return out if ok else ""
+    try:
+        r = subprocess.run(
+            ["git", "show", f"{rev}:{path}"],
+            cwd=folder,
+            capture_output=True,
+            timeout=10,
+            env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if r.returncode != 0:
+        return ""
+    return _decode_bytes(r.stdout)
+
+
+def _decode_bytes(data: bytes) -> str:
+    """Decodifica tentando UTF-8 e caindo pra Latin-1 (nunca lança)."""
+    for enc in ("utf-8", "latin-1"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
 
 
 def _parse_name_status_z(raw: str) -> list[tuple[str, str]]:

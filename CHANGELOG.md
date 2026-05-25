@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.38] — 2026-05-25
+
+### Adicionado
+- **`ui/push_dialog.py`**: botão direito num arquivo da árvore do diálogo de
+  push abre um menu com "Ver diff lado-a-lado" e "Abrir com &lt;editor&gt;"
+  (usa o `file_open_command` das configurações).
+
+### Corrigido
+- **`git_actions.py`**: `file_blob` lia o conteúdo com `text=True` e estourava
+  `UnicodeDecodeError` em fontes não-UTF-8 (ex.: Java BR em Latin-1) — agora lê
+  em bytes e decodifica tolerante (UTF-8 → fallback Latin-1), então o diff
+  lado-a-lado abre nesses arquivos.
+
 ## [0.76.37] — 2026-05-25
 
 ### Corrigido
