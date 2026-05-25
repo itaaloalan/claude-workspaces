@@ -59,6 +59,7 @@ class LaunchCoordinator(QObject):
 
         cwd, extras = workspace.launch_paths()
         worktree_label = ""
+        is_worktree = False
         initial_prompt = ""
         if cwd_override:
             cwd = cwd_override
@@ -87,6 +88,7 @@ class LaunchCoordinator(QObject):
                 return None
             cwd, extras = plan.cwd, plan.extras
             worktree_label = plan.worktree_label
+            is_worktree = plan.is_worktree
             initial_prompt = dialog.result_initial_prompt()
 
         argv = build_claude_argv(
@@ -101,6 +103,9 @@ class LaunchCoordinator(QObject):
         title = f"{title} #{area.count() + 1}{worktree_label}"
         terminal = area.add_terminal(title)
         terminal.configure_claude(cwd, resume_session_id or None)
+        terminal.set_context_info(
+            cwd, extras, worktree_label=worktree_label, is_worktree=is_worktree
+        )
         label = f"claude — {workspace.name}{worktree_label}"
         try:
             terminal.start_shell_command(

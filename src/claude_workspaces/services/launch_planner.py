@@ -17,6 +17,10 @@ class LaunchPlan:
     cwd: str
     extras: list[str]
     worktree_label: str = ""
+    # True quando o cwd é um git worktree isolado (isolate_worktree).
+    # Distingue do caso "branch in-place" — ambos têm worktree_label, mas
+    # só o worktree roda numa árvore separada.
+    is_worktree: bool = False
     error: str | None = None
 
     @property
@@ -68,6 +72,9 @@ def plan_from_dialog(
             )
         cwd = str(dest)
         label = f" · {branch}"
+        return LaunchPlan(
+            cwd=cwd, extras=extras, worktree_label=label, is_worktree=True
+        )
     elif create_branch:
         # Sem worktree, criar branch in-place via `git checkout -b`
         if not branch:

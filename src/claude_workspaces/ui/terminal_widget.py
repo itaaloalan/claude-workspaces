@@ -228,6 +228,23 @@ class TerminalWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # Barra de contexto no topo: mostra os MCPs ativos, os diretórios
+        # (cwd + --add-dir) e se a sessão roda num worktree isolado. Fica
+        # oculta até `set_context_info` ser chamado (shell puro não tem
+        # contexto Claude pra exibir).
+        self._ctx_bar = QLabel()
+        self._ctx_bar.setObjectName("TerminalContextBar")
+        self._ctx_bar.setTextFormat(Qt.TextFormat.RichText)
+        self._ctx_bar.setWordWrap(False)
+        self._ctx_bar.setStyleSheet(
+            "QLabel#TerminalContextBar {"
+            " background: #141414; color: #9aa0a6;"
+            " border-bottom: 1px solid #262626;"
+            " padding: 3px 8px; font-size: 11px; }"
+        )
+        self._ctx_bar.setVisible(False)
+        outer.addWidget(self._ctx_bar)
+
         # Toolbar fica num QWidget próprio pra poder setar bg sem
         # afetar o resto. Sem border-bottom pra não duplicar com a
         # underline azul da tab ativa acima dele.
@@ -375,6 +392,62 @@ class TerminalWidget(QWidget):
                 self._pre_existing_session_ids = set()
         else:
             self._pre_existing_session_ids = set()
+
+    def set_context_info(
+        self,
+        cwd: str,
+        extras: list[str] | None = None,
+        *,
+        worktree_label: str = "",
+        is_worktree: bool = False,
+    ) -> None:
+        """Preenche a barra de contexto no topo do terminal com os MCPs
+        ativos, os diretórios da sessão e o estado de worktree.
+
+        MCPs são resolvidos via mcp_inspector pra este cwd (user globais +
+        .mcp.json do projeto), espelhando o que o Claude enxerga."""
+        from html import escape
+
+        extras = extras or []
+        parts: list[str] = []
+
+        # MCPs ativos pra este cwd
+        try:
+            from ..services.mcp_inspector import list_servers
+            names = sorted({s.name for s in list_servers([cwd, *extras])})
+        except Exception:
+            log.debug("falha ao listar MCPs pro ctx bar", exc_info=True)
+            names = []
+        if names:
+            shown = ", ".join(names[:6])
+            if len(names) > 6:
+                shown += f" +{len(names) - 6}"
+            parts.append(f"🔌 {escape(shown)}")
+        else:
+            parts.append("🔌 <i>sem MCP</i>")
+
+        # Diretórios: cwd + extras (--add-dir)
+        cwd_name = Path(cwd).name or cwd
+        dirs = f"📁 {escape(cwd_name)}"
+        if extras:
+            dirs += f" <span style='color:#7a7f85'>+{len(extras)} dir</span>"
+        parts.append(dirs)
+
+        # Worktree / branch
+        branch = worktree_label.lstrip(" ·").strip()
+        if is_worktree:
+            label = f"🌿 worktree: {escape(branch)}" if branch else "🌿 worktree"
+            parts.append(f"<span style='color:#7ec699'>{label}</span>")
+        elif branch:
+            parts.append(f"🌿 {escape(branch)}")
+
+        self._ctx_bar.setText(
+            "<span style='color:#5a5f64'>  •  </span>".join(parts)
+        )
+        # Tooltip com os caminhos completos (o label só mostra o basename)
+        tip_dirs = "\n".join([cwd, *extras])
+        self._ctx_bar.setToolTip(tip_dirs)
+        self._ctx_bar.setVisible(True)
 
     def effective_title(self) -> str:
         """Título preferido — nome custom (se houver), senão preview da

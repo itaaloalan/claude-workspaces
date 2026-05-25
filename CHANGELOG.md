@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.45] — 2026-05-25
+
+### Adicionado — barra de contexto no topo do console do Claude
+- **`ui/terminal_widget.py`**: novo `set_context_info()` desenha uma barra fina
+  no topo de cada console mostrando os **MCPs ativos** (resolvidos via
+  `mcp_inspector` pro cwd: globais do `~/.claude.json` + `.mcp.json` do projeto),
+  os **diretórios** da sessão (cwd + `--add-dir`, com tooltip dos caminhos
+  completos) e se a sessão roda num **worktree** isolado ou numa branch.
+- **`services/launch_planner.py`**: `LaunchPlan` ganha `is_worktree` pra
+  distinguir worktree isolado de branch criada in-place (ambos têm label).
+- **`ui/coordinators/launch_coordinator.py`**: chama `set_context_info` ao abrir
+  o Claude, repassando cwd, extras, label e flag de worktree do plano.
+
 ## [0.76.44] — 2026-05-25
 
 ### Adicionado — escolher a branch base ("Saindo de") no diálogo Abrir Claude
