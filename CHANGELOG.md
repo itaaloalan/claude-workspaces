@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.21] — 2026-05-25
+
+### Removido — detach/flutuar dos docks (sidebar e ferramentas)
+- **`ui/dock_manager.py`**: sidebar e dock direito agora são
+  `movable=False, floatable=False` — não podem mais ser arrastados pra
+  fora nem virar janela flutuante. Adicionado também
+  `DoubleClickUndocksWidget=False` no config global (duplo-clique no
+  título não destaca). Elimina de vez o cenário do dock "soltar" da
+  janela principal que motivou o `redock_right` da 0.76.20.
+
 ## [0.76.20] — 2026-05-25
 
 ### Corrigido — dock direito aparecia "fora do app" (janela flutuante)

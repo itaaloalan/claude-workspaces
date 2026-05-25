@@ -125,6 +125,9 @@ class WorkspaceDockManager(QObject):
         # então só poluíam o canto superior direito.
         ads.CDockManager.setConfigFlag(ads.CDockManager.DockAreaHasTabsMenuButton, False)
         ads.CDockManager.setConfigFlag(ads.CDockManager.DockAreaHasUndockButton, False)
+        # Duplo-clique no título NÃO destaca o dock pra janela flutuante —
+        # complementa movable/floatable=False dos docks pra impedir detach.
+        ads.CDockManager.setConfigFlag(ads.CDockManager.DoubleClickUndocksWidget, False)
         ads.CDockManager.setAutoHideConfigFlags(ads.CDockManager.DefaultAutoHideConfig)
         # Remove o pin de auto-hide da title bar — auto-hide é controlado por
         # toggle externo, o botão na aba não servia.
@@ -149,12 +152,15 @@ class WorkspaceDockManager(QObject):
         return dock
 
     def add_left(self, widget: QWidget, title: str = "Workspaces") -> ads.CDockWidget:
-        dock = self._make_dock(title, widget, closable=False)
+        # movable/floatable=False: a sidebar não pode ser arrastada pra fora
+        # nem flutuar — fica sempre ancorada (evita o dock "soltar" da janela).
+        dock = self._make_dock(title, widget, closable=False, movable=False, floatable=False)
         self._manager.addDockWidget(ads.LeftDockWidgetArea, dock)
         return dock
 
     def add_right(self, widget: QWidget, title: str = "Ferramentas") -> ads.CDockWidget:
-        dock = self._make_dock(title, widget, closable=False)
+        # Idem sidebar: dock direito não destaca nem flutua.
+        dock = self._make_dock(title, widget, closable=False, movable=False, floatable=False)
         self._manager.addDockWidget(ads.RightDockWidgetArea, dock)
         return dock
 
