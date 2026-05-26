@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.52] — 2026-05-26
+
+### Corrigido — chips de workspaces minimizados forçavam scroll horizontal
+- **`minimize_tray.py`**: trocou `QHBoxLayout` + `setFixedHeight(26)` por
+  `FlowLayout` + `setVisible` — com muitos workspaces minimizados (ex.: 5+)
+  os chips extravasavam a largura da sidebar e forçavam scroll horizontal.
+  Agora quebram de linha automaticamente e o widget cresce verticalmente
+  conforme necessário. Adicionado `setMinimumWidth(0)` pra não propagar
+  largura mínima pra cima da hierarquia.
+
 ## [0.76.51] — 2026-05-26
 
 ### Corrigido — scroll horizontal ao abrir painel de runners
