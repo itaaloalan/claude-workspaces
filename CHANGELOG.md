@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.50] — 2026-05-26
+
+### Corrigido — scroll horizontal eliminado por mínimos de largura excessivos
+- **`main_window.py`**: `_settings_scroll.setMinimumWidth(0)` impede que o
+  `QScrollArea` que envolve o `SettingsPanel` (~870px de mínimo) propague esse
+  valor pro `QStackedWidget` (`content_stack`) — sem isso a janela toda exigia
+  ≥1194px de largura mesmo mostrando workspace/console, não settings.
+- **`terminal_widget.py`**: `_ctx_bar` (barra de MCPs + branch) e `_status`
+  (mensagem de estado do Claude) recebem `QSizePolicy.Ignored + setMinimumWidth(0)`,
+  mesmo padrão já aplicado ao `_terminal_pane_title` — textos variáveis longos
+  deixam de propagar largura mínima grande pro dock central.
+
 ## [0.76.49] — 2026-05-25
 
 ### Adicionado — módulo testável pro resumo da skill /notificar-discord + skills versionadas
