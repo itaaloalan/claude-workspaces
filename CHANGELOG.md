@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.48] — 2026-05-25
+
+### Corrigido — popup do S.O. não deve tocar som
+- **`notifications/desktop.py`**: corrigida inconsistência onde o adaptador
+  passava `sound_name="message-new-instant"` e `suppress_sound=False` ao
+  `DesktopNotifier`, fazendo o popup nativo tocar som mesmo que o comentário
+  dissesse o contrário. Agora `sound_name=None` e `suppress_sound=True`
+  garantem que som e som-padrão do servidor sejam suprimidos no popup do S.O.
+  Som e botões continuam presentes apenas na central in-app.
+
 ## [0.76.47] — 2026-05-25
 
 ### Adicionado — notificações no Discord via webhook
