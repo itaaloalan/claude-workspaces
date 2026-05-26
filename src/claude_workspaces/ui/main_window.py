@@ -351,6 +351,9 @@ class MainWindow(QMainWindow):
         self.right_splitter.setChildrenCollapsible(False)
         self.right_splitter.setHandleWidth(SPLITTER_HANDLE_W)
         self.right_splitter.setStyleSheet(splitter_css)
+        # Impede que larguras mínimas dos filhos (TerminalArea, RunnerArea…)
+        # se propaguem pra cima do splitter e forcem scroll horizontal.
+        self.right_splitter.setMinimumWidth(0)
 
         self.content_stack = QStackedWidget()
         self.details = WorkspaceDetailsPanel(self.settings)
@@ -396,6 +399,7 @@ class MainWindow(QMainWindow):
         self._terminal_pane.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Ignored
         )
+        self._terminal_pane.setMinimumWidth(0)
         self.right_splitter.addWidget(self._terminal_pane)
 
         self.right_splitter.setStretchFactor(0, 1)
@@ -426,6 +430,10 @@ class MainWindow(QMainWindow):
         # na tray; click no chip restaura.
         from .minimize_tray import MinimizeTray
         center_host = QWidget()
+        # Barreira de topo: nenhum filho do centro propaga largura mínima
+        # pra o dock manager — sem isso qualquer widget profundo (runner
+        # toolbar, label longo de branch…) pode forçar scroll horizontal.
+        center_host.setMinimumWidth(0)
         ch_layout = QVBoxLayout(center_host)
         ch_layout.setContentsMargins(0, 0, 0, 0)
         ch_layout.setSpacing(0)
@@ -1199,6 +1207,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QSplitter as _QSp
         self._bottom_sub_splitter = _QSp(Qt.Orientation.Vertical)
         self._bottom_sub_splitter.setHandleWidth(SPLITTER_HANDLE_W)
+        self._bottom_sub_splitter.setMinimumWidth(0)
         self._bottom_sub_splitter.setStyleSheet(
             "QSplitter::handle { background: #2a2a2a; }"
             "QSplitter::handle:hover { background: #3d6ea8; }"
@@ -1242,6 +1251,7 @@ class MainWindow(QMainWindow):
         # runners pane logo abaixo). Header tem só um botão de
         # minimizar no canto direito — visual idêntico ao do runners.
         self._terminal_pane_widget = QWidget()
+        self._terminal_pane_widget.setMinimumWidth(0)
         tp_layout = QVBoxLayout(self._terminal_pane_widget)
         tp_layout.setContentsMargins(0, 0, 0, 0)
         tp_layout.setSpacing(0)
@@ -1325,6 +1335,7 @@ class MainWindow(QMainWindow):
             on_click,
         ) -> tuple[QWidget, _QPB]:
             container = QWidget()
+            container.setMinimumWidth(0)
             cl = QVBoxLayout(container)
             cl.setContentsMargins(0, 0, 0, 0)
             cl.setSpacing(0)

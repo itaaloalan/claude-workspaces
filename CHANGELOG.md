@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.53] — 2026-05-26
+
+### Corrigido — scroll horizontal no painel central (workspaces / terminal / runners)
+- **`main_window.py`**: `setMinimumWidth(0)` em todos os contêineres da área central:
+  `center_host`, `right_splitter`, `_terminal_pane`, `_bottom_sub_splitter`,
+  `_terminal_pane_widget` e cada pane gerado por `_build_pane` (runners e runners
+  console). Qualquer widget profundo (toolbar de runner, label de branch longo…)
+  que propague largura mínima pra cima agora é bloqueado nessas fronteiras,
+  impedindo scroll horizontal na janela principal.
+
 ## [0.76.52] — 2026-05-26
 
 ### Corrigido — chips de workspaces minimizados forçavam scroll horizontal
