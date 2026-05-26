@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.56] — 2026-05-26
+
+### Melhorado — remove borda ao redor dos cards de sessão Claude na sidebar
+- **`terminal_child_widget.py`**: `_apply_card_qss` remove `border: 1px solid` ao redor do card — mantém apenas `border-left: 3px solid {accent}` como indicador de estado. Ícone do robô perde a borda do quadradinho (ficava criando caixinhas visuais em cada item da lista).
+
 ## [0.76.55] — 2026-05-26
 
 ### Melhorado — remoção de bordas desnecessárias na sidebar

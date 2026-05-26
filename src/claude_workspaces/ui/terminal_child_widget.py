@@ -189,9 +189,7 @@ class TerminalChildWidget(QWidget):
         self._claude_icon.setFixedSize(26, 26)
         self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._claude_icon.setStyleSheet(
-            f"QLabel {{ background: {theme.BG_DEEP}; "
-            f"border: 1px solid {theme.BORDER_SOFT}; "
-            f"border-radius: {theme.RADIUS_SM}px; }}"
+            f"QLabel {{ background: transparent; border: 0; }}"
         )
         self._claude_icon_unselected_pix = _ic(
             "fa5s.robot", color=theme.TEXT_FADED
@@ -567,38 +565,27 @@ class TerminalChildWidget(QWidget):
             self._rename_btn.clicked.connect(lambda _=False: on_rename())
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o card com borda lateral colorida pelo estado atual.
-        Estados que pedem atenção (awaiting/error) tintam o bg também
-        — match com o mockup onde a sessão 'Waiting for permission'
-        ganha tom avermelhado."""
+        """Renderiza o card sem borda ao redor — só accent-left colorido.
+        Estados atenção (awaiting/error) tintam o bg; selecionado usa tint
+        azul. Sem caixa completa: reduz poluição visual na sidebar."""
         state = getattr(self, "_current_state", STATE_IDLE)
         accent = STATE_COLOR.get(state, theme.TEXT_FAINT)
         if self._selected:
             bg = "rgba(61, 110, 168, 38)"
-            border = theme.PRIMARY
         elif state == STATE_AWAITING:
             bg = "rgba(224, 144, 96, 26)"
-            border = "rgba(224, 144, 96, 70)"
         elif state == STATE_ERROR:
             bg = "rgba(213, 114, 114, 26)"
-            border = "rgba(213, 114, 114, 70)"
         else:
             bg = theme.BG_SURFACE
-            border = theme.BORDER_INPUT
         self._card.setStyleSheet(
             f"#ConsoleCard {{"
             f"  background: {bg};"
-            f"  border: 1px solid {border};"
+            f"  border: 0;"
             f"  border-left: 3px solid {accent};"
             f"  border-radius: 6px;"
             f"}}"
-            # Filhos transparentes pra QPalette.Window não vazar bg cinza
-            # sobre o card e criar ilusão de "dois backgrounds" (ícone
-            # do robot tem stylesheet próprio que sobrepõe esse).
             f"#ConsoleCard QLabel {{ background: transparent; }}"
-            # Mesmo fix pros botões inline (▶ ⚙ ✖) e widgets-container
-            # — sem isso o QPalette.Window vaza atrás dos botões e cria
-            # quadradinhos de bg diferente do card.
             f"#ConsoleCard QPushButton {{ background: transparent; }}"
             f"#ConsoleCard QWidget {{ background: transparent; }}"
         )
