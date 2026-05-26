@@ -17,7 +17,7 @@ header ficaria com altura de 1 linha e cortaria as demais.
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt
-from PySide6.QtWidgets import QLayout, QLayoutItem, QSizePolicy
+from PySide6.QtWidgets import QLayout, QLayoutItem
 
 
 class FlowLayout(QLayout):

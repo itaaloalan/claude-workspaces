@@ -216,8 +216,8 @@ class SettingsPanel(QWidget):
                 self, "Webhook vazio", "Cole a URL do webhook antes de testar."
             )
             return
-        from ..notifications.discord import build_embed_payload, send_webhook
         from ..notifications import NotificationPriority
+        from ..notifications.discord import build_embed_payload, send_webhook
 
         payload = build_embed_payload(
             title="✅ Teste do Claude Workspaces",
