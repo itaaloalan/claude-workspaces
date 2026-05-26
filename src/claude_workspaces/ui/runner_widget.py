@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -81,6 +82,12 @@ class RunnerWidget(QWidget):
         # o texto do _status; emitida via status_changed pra sidebar.
         self._status_label: str = "parado"
 
+        # A toolbar tem muitos botões (~8) em linha — a soma dos sizeHints
+        # passa de 700px e propagaria mínimo de largura pra toda a hierarquia,
+        # forçando scroll horizontal na janela ao abrir o painel de runners.
+        # setMinimumWidth(0) quebra essa propagação no nível do widget raiz.
+        self.setMinimumWidth(0)
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -89,6 +96,11 @@ class RunnerWidget(QWidget):
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(parado)")
         self._status.setStyleSheet("color: #b0b0b0;")
+        # Status pode ser longo; Ignored evita que empurre o mínimo horizontal.
+        self._status.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._status.setMinimumWidth(0)
         toolbar.addWidget(self._status)
         toolbar.addStretch()
 

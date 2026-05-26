@@ -1300,6 +1300,9 @@ class MainWindow(QMainWindow):
         # independente no `_bottom_sub_splitter` — chip próprio na tray.
         self.runner_host = QStackedWidget()
         self.runner_host.setMinimumHeight(0)
+        # RunnerArea propagaria mínimo de largura >600px (toolbar com ~8
+        # botões) pra cima até a janela. Quebra aqui na fronteira do host.
+        self.runner_host.setMinimumWidth(0)
         runner_empty = QLabel("Selecione um workspace para ver seus runners.")
         runner_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         runner_empty.setStyleSheet(
@@ -1309,6 +1312,7 @@ class MainWindow(QMainWindow):
 
         self.console_runner_host = QStackedWidget()
         self.console_runner_host.setMinimumHeight(0)
+        self.console_runner_host.setMinimumWidth(0)
         self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
             self._build_console_runner_placeholder()
         )

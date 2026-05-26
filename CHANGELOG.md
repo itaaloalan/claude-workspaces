@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.76.51] — 2026-05-26
+
+### Corrigido — scroll horizontal ao abrir painel de runners
+- **`runner_widget.py`**: `setMinimumWidth(0)` no widget raiz + `QSizePolicy.Ignored`
+  no `_status` — a toolbar com ~8 botões em linha somava >700px de mínimo e propagava
+  pra toda a hierarquia, forçando scroll horizontal ao abrir o pane de runners.
+- **`runner_area.py`**: `setMinimumWidth(0)` no `RunnerArea` quebra a propagação
+  antes que chegue ao `runner_host` e ao splitter externo.
+- **`main_window.py`**: `runner_host.setMinimumWidth(0)` e
+  `console_runner_host.setMinimumWidth(0)` — linha de defesa adicional na fronteira
+  dos hosts, mesmo padrão já aplicado aos `setMinimumHeight(0)` existentes.
+
 ## [0.76.50] — 2026-05-26
 
 ### Corrigido — scroll horizontal eliminado por mínimos de largura excessivos
