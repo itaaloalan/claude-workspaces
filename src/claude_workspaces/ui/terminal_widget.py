@@ -415,21 +415,25 @@ class TerminalWidget(QWidget):
         *,
         worktree_label: str = "",
         is_worktree: bool = False,
+        workspace_folders: list[str] | None = None,
     ) -> None:
         """Preenche a barra de contexto no topo do terminal com os MCPs
         ativos, os diretórios da sessão e o estado de worktree.
 
-        MCPs são resolvidos via mcp_inspector pra este cwd (user globais +
-        .mcp.json do projeto), espelhando o que o Claude enxerga."""
+        MCPs são resolvidos a partir de `workspace_folders` (quando fornecido)
+        para mostrar só os MCPs do workspace — mesmo conjunto exibido no top
+        bar. Se não fornecido, cai pra `[cwd, *extras]` como antes."""
         from html import escape
 
         extras = extras or []
         parts: list[str] = []
 
-        # MCPs ativos pra este cwd
+        # MCPs: usa workspace_folders pra alinhar com o top bar (evita
+        # mostrar MCPs de outros projetos que estejam no cwd da sessão).
+        mcp_lookup = workspace_folders if workspace_folders else [cwd, *extras]
         try:
             from ..services.mcp_inspector import list_servers
-            names = sorted({s.name for s in list_servers([cwd, *extras])})
+            names = sorted({s.name for s in list_servers(mcp_lookup)})
         except Exception:
             log.debug("falha ao listar MCPs pro ctx bar", exc_info=True)
             names = []

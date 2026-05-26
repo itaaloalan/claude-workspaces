@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.58] — 2026-05-26
+
+### Corrigido — barra de contexto do console mostra só MCPs do workspace
+- **`terminal_widget.py`**: `set_context_info` recebe `workspace_folders` opcional; quando fornecido, usa esses diretórios pro lookup de MCP em vez de `cwd` da sessão — evita que MCPs de outros projetos (e globais irrelevantes) apareçam na barra.
+- **`launch_coordinator.py`**: passa `workspace.folders` pra `set_context_info` na abertura de cada console Claude, alinhando o conjunto de MCPs exibido com o do top bar.
+
 ## [0.76.57] — 2026-05-26
 
 ### Corrigido — remove overlay de bordas dos workspaces na sidebar

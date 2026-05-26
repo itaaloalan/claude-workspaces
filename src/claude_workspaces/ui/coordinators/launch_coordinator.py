@@ -104,7 +104,10 @@ class LaunchCoordinator(QObject):
         terminal = area.add_terminal(title)
         terminal.configure_claude(cwd, resume_session_id or None)
         terminal.set_context_info(
-            cwd, extras, worktree_label=worktree_label, is_worktree=is_worktree
+            cwd, extras,
+            worktree_label=worktree_label,
+            is_worktree=is_worktree,
+            workspace_folders=list(workspace.folders),
         )
         label = f"claude — {workspace.name}{worktree_label}"
         try:
