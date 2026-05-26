@@ -215,13 +215,13 @@ def left_accent_qss(
     object_name: str = "AccentCard",
 ) -> str:
     """Card com barra colorida de 3px à esquerda — sinaliza estado sem
-    poluir com badge grande. O resto do card mantém bg/borda padrão."""
+    poluir com badge grande. Sem borda ao redor (borda completa criava
+    poluição visual quando muitos cards estão listados)."""
     bg = bg or BG_SURFACE
-    border = border or BORDER_INPUT
     return (
         f"QFrame#{object_name} {{"
         f"  background: {bg};"
-        f"  border: 1px solid {border};"
+        f"  border: 0;"
         f"  border-left: 3px solid {state_color};"
         f"  border-radius: {radius}px;"
         f"}}"

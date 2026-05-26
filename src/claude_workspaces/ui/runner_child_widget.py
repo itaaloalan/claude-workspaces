@@ -54,13 +54,17 @@ _BTN_QSS = (
 )
 
 _CARD_QSS = (
+    # Flat row: sem borda, só bg sutil. Hover vira um tint mais claro.
+    # A borda ao redor de cada item criava poluição visual quando muitos
+    # runners estão listados — removida em 0.76.55.
     f"#RunnerCard {{"
-    f"  background: #232323;"
-    f"  border: 1px solid #333333;"
+    f"  background: transparent;"
+    f"  border: 0;"
     f"  border-radius: {theme.RADIUS_MD}px;"
     f"}}"
-    # Filhos transparentes — evita QPalette.Window dos QLabels vazar
-    # bg cinza escuro sobre o card e criar ilusão de "dois backgrounds".
+    f"#RunnerCard:hover {{"
+    f"  background: {theme.BG_SURFACE};"
+    f"}}"
     f"#RunnerCard QLabel {{ background: transparent; }}"
     f"#RunnerCard QPushButton {{ background: transparent; }}"
     f"#RunnerCard QWidget {{ background: transparent; }}"
@@ -101,6 +105,7 @@ class RunnerChildWidget(QWidget):
         self._card = QFrame()
         self._card.setObjectName("RunnerCard")
         self._card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._card.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self._card.setStyleSheet(_CARD_QSS)
         wrapper.addWidget(self._card)
 
@@ -114,9 +119,7 @@ class RunnerChildWidget(QWidget):
         self._icon.setFixedSize(20, 20)
         self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon.setStyleSheet(
-            f"QLabel {{ background: {theme.BG_DEEP}; "
-            f"border: 1px solid {theme.BORDER_SOFT}; "
-            f"border-radius: {theme.RADIUS_SM}px; }}"
+            f"QLabel {{ background: transparent; border: 0; }}"
         )
         self._icon.setPixmap(
             _ic("mdi6.cube-outline", color=theme.TEXT_FADED).pixmap(QSize(14, 14))

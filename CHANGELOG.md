@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.55] — 2026-05-26
+
+### Melhorado — remoção de bordas desnecessárias na sidebar
+- **`runner_child_widget.py`**: cards de runner viram linhas flat — sem borda ao redor, fundo transparente com hover sutil (`BG_SURFACE`). Ícone do cube também perde a borda.
+- **`theme.py` / `session_card.py`**: `left_accent_qss` remove `border` ao redor do card e mantém apenas `border-left: 3px solid {state_color}` como indicador de estado — sessões Claude ficam visualmente mais leves.
+- **`workspace_item_widget.py`**: workspace não-selecionado vira linha flat sem borda; selecionado ganha apenas borda-esquerda azul (accent) sem caixa completa.
+
 ## [0.76.54] — 2026-05-26
 
 ### Melhorado — redução de poluição visual nos cards de runner e toolbar

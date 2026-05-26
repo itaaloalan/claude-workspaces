@@ -256,45 +256,43 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o widget como card (bg + borda + radius), igual
-        mockup. Quando expandido, achata o canto inferior + remove a
-        borda de baixo — assim o card visualmente "continua" descendo
-        pra englobar os children (Sessões Claude, Runners, etc)."""
+        """Renderiza o workspace como linha flat ou card selecionado.
+
+        Não-selecionado: sem borda, bg sutil. Hover: tint leve.
+        Selecionado: borda esquerda azul (accent) + bg tintado.
+        Sem caixa completa pra reduzir poluição visual.
+        """
+        expanded = getattr(self, "_expanded", False)
         if self._selected:
             bg = "rgba(61, 110, 168, 38)"
-            border = theme.PRIMARY
+            # Borda esquerda como accent (seleção) — sem caixa completa.
+            if expanded:
+                border_qss = (
+                    f"border: 0;"
+                    f"border-left: 3px solid {theme.PRIMARY};"
+                    f"border-top-left-radius: 6px;"
+                    f"border-top-right-radius: 6px;"
+                    f"border-bottom-left-radius: 0;"
+                    f"border-bottom-right-radius: 0;"
+                )
+            else:
+                border_qss = (
+                    f"border: 0;"
+                    f"border-left: 3px solid {theme.PRIMARY};"
+                    f"border-radius: 6px;"
+                )
+            hover_extra = f"border-left-color: {theme.PRIMARY_HOVER};"
         else:
-            bg = "#232323"
-            border = "#333333"
-        expanded = getattr(self, "_expanded", False)
-        # Quando expandido, zera raio + borda inferior → ilusão de card
-        # contínuo descendo pros children. Quando colapsado, card fechado
-        # nas 4 quinas.
-        if expanded:
-            border_radius = (
-                "border-top-left-radius: 6px;"
-                "border-top-right-radius: 6px;"
-                "border-bottom-left-radius: 0px;"
-                "border-bottom-right-radius: 0px;"
-            )
-            border_qss = (
-                f"border-top: 1px solid {border};"
-                f"border-left: 1px solid {border};"
-                f"border-right: 1px solid {border};"
-                f"border-bottom: 0;"
-            )
-        else:
-            border_radius = "border-radius: 6px;"
-            border_qss = f"border: 1px solid {border};"
+            bg = "transparent"
+            border_qss = "border: 0; border-radius: 6px;"
+            hover_extra = f"background: {theme.BG_SURFACE};"
+
         self.setStyleSheet(
             f"#WorkspaceCard {{"
             f"  background: {bg};"
             f"  {border_qss}"
-            f"  {border_radius}"
             f"}}"
-            f"#WorkspaceCard:hover {{"
-            f"  border-color: {theme.PRIMARY_HOVER if self._selected else '#404040'};"
-            f"}}"
+            f"#WorkspaceCard:hover {{ {hover_extra} }}"
             # Filhos transparentes — sem isso QLabel/QPushButton/QWidget
             # filhos caem em QPalette.Window e criam quadradinhos de bg
             # diferente sobre o card.
