@@ -164,14 +164,22 @@ class RunnerChildWidget(QWidget):
         self._toggle_btn.setStyleSheet(_BTN_QSS)
         self._toggle_btn.setToolTip("Iniciar runner")
         self._toggle_btn.clicked.connect(lambda _=False: on_toggle())
+        # Hidden by default — only visible on hover to reduce visual noise.
+        self._toggle_btn.setVisible(False)
         card_layout.addWidget(self._toggle_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-
-        # ⋯ removido por enquanto — não tem ações plumbadas via callback
-        # (start/stop/restart/edit/remove vivem no pane Runners, não no
-        # widget da sidebar). Voltar a adicionar quando houver hookup.
 
         self._state = "idle"
         self._apply_state()
+
+    # ---- hover: show/hide action buttons --------------------------------
+
+    def enterEvent(self, event) -> None:  # noqa: D401
+        self._toggle_btn.setVisible(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: D401
+        self._toggle_btn.setVisible(False)
+        super().leaveEvent(event)
 
     def set_name(self, name: str) -> None:
         self._name_label.setText(name)

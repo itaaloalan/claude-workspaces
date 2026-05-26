@@ -12,7 +12,7 @@ import re
 import shlex
 import subprocess
 
-from PySide6.QtCore import QTimer, QUrl, Signal
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
@@ -92,7 +92,11 @@ class RunnerWidget(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        toolbar = QHBoxLayout()
+        # Toolbar is a real QWidget so we can track hover and show/hide
+        # secondary buttons (⚙, 📋, 🧹, 🗑) only when hovered.
+        toolbar_widget = QWidget(self)
+        toolbar_widget.setMinimumWidth(0)
+        toolbar = QHBoxLayout(toolbar_widget)
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(parado)")
         self._status.setStyleSheet("color: #b0b0b0;")
@@ -161,7 +165,23 @@ class RunnerWidget(QWidget):
         )
         toolbar.addWidget(self._del_btn)
 
-        outer.addLayout(toolbar)
+        # Secondary buttons start hidden — revealed on toolbar hover.
+        self._secondary_btns = [
+            self._edit_btn,
+            self._copy_btn,
+            self._clear_btn,
+            self._del_btn,
+        ]
+        for _btn in self._secondary_btns:
+            _btn.setVisible(False)
+
+        toolbar_widget.setAttribute(
+            Qt.WidgetAttribute.WA_Hover, True
+        )
+        toolbar_widget.enterEvent = self._toolbar_enter  # type: ignore[assignment]
+        toolbar_widget.leaveEvent = self._toolbar_leave  # type: ignore[assignment]
+
+        outer.addWidget(toolbar_widget)
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)
@@ -185,6 +205,16 @@ class RunnerWidget(QWidget):
 
         self._bridge_ready = False
         self._pending_cmd: tuple[str, str] | None = None  # (cmd, intent)
+
+    # ---- toolbar hover ---------------------------------------------------
+
+    def _toolbar_enter(self, event) -> None:  # noqa: D401
+        for btn in self._secondary_btns:
+            btn.setVisible(True)
+
+    def _toolbar_leave(self, event) -> None:  # noqa: D401
+        for btn in self._secondary_btns:
+            btn.setVisible(False)
 
     # ---- config ----------------------------------------------------------
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.54] — 2026-05-26
+
+### Melhorado — redução de poluição visual nos cards de runner e toolbar
+- **`runner_child_widget.py`**: botão ▶/■ do card na sidebar fica oculto por padrão e aparece apenas no hover, eliminando duplicação com a toolbar do pane Runners.
+- **`runner_widget.py`**: botões secundários da toolbar (⚙ Editar, 📋 Copiar log, 🧹 Limpar log, 🗑 Remover) ficam ocultos por padrão e só aparecem ao passar o mouse sobre a toolbar. Controles primários (▶ Start, ■ Stop, ↻ Restart e filtro) permanecem sempre visíveis.
+
 ## [0.76.53] — 2026-05-26
 
 ### Corrigido — scroll horizontal no painel central (workspaces / terminal / runners)
