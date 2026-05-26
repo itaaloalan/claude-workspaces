@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.76.49] — 2026-05-25
+
+### Adicionado — módulo testável pro resumo da skill /notificar-discord + skills versionadas
+- **`notifications/discord_summary.py`** (novo): extrai a lógica que vivia
+  inline no snippet bash da skill `/notificar-discord` pra um módulo com
+  testes — `resolve_transcript()` (acha o transcript da sessão por
+  `session_id`/`CLAUDE_SESSION_ID`, com fallback pro `.jsonl` mais recente e
+  degradação silenciosa), `compute_metrics()`/`format_metrics()` (agrega
+  tokens/turnos/cache/duração do transcript), `split_body()` (quebra o corpo
+  respeitando o limite de 4096 do embed) e `make_title()` (preserva o marcador
+  `(parte i/n)` reservando espaço no título de 256 chars).
+- **`tests/test_discord_summary.py`** (novo): 16 testes cobrindo encode do
+  diretório de projeto, split em fronteiras, truncamento de título, agregação
+  de métricas (incluindo linhas JSON não-dict/malformadas) e resolução de
+  transcript (por id, via env, fallback e diretório ausente).
+- **`skills/`** (novo): snapshot versionado das skills de `~/.claude/skills`
+  (backup/histórico). A cópia executada pelo Claude Code continua em
+  `~/.claude/skills`; re-sincronizar com `cp -a` ao ajustar qualquer skill
+  (ver `skills/README.md`).
+
 ## [0.76.48] — 2026-05-25
 
 ### Corrigido — popup do S.O. não deve tocar som
