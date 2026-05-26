@@ -119,7 +119,11 @@ class DesktopNotifierAdapter(QObject):
         # Popup do S.O. fica sem botões e sem som — botões/som ficam só na
         # central in-app. Alguns servidores deixavam de exibir o popup quando
         # tinha action buttons, então tirar as actions destrava a entrega.
+        # suppress_sound=True pede ao servidor pra não tocar som; sound_name=None
+        # garante que _play_sound_async nunca seja chamado daqui.
         actions: list[tuple[str, str]] = []
+        _os_sound: str | None = None  # sem som no popup nativo
+        _os_suppress_sound = True
 
         key = n.dedup_key or f"_id:{n.id}"
         prev = self._active.get(key, 0)
@@ -147,10 +151,10 @@ class DesktopNotifierAdapter(QObject):
                 replaces_id=prev,
                 urgency=urgency,
                 desktop_entry="claude-workspaces",
-                sound_name="message-new-instant",
+                sound_name=_os_sound,
                 resident=False,
                 transient=False,
-                suppress_sound=False,
+                suppress_sound=_os_suppress_sound,
             )
         except Exception:
             log.exception("DesktopNotifier.notify falhou")
