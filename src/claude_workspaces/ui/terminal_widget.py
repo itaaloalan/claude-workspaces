@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -236,6 +237,13 @@ class TerminalWidget(QWidget):
         self._ctx_bar.setObjectName("TerminalContextBar")
         self._ctx_bar.setTextFormat(Qt.TextFormat.RichText)
         self._ctx_bar.setWordWrap(False)
+        # Conteúdo variável (MCPs + branch longo) pode ter sizeHint muito
+        # largo e propagar mínimo de largura pro centro do dock → janela.
+        # Ignorar a dimensão horizontal permite encolher sem forçar scroll.
+        self._ctx_bar.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._ctx_bar.setMinimumWidth(0)
         self._ctx_bar.setStyleSheet(
             "QLabel#TerminalContextBar {"
             " background: #141414; color: #9aa0a6;"
@@ -257,6 +265,13 @@ class TerminalWidget(QWidget):
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(terminal vazio)")
         self._status.setStyleSheet("color: #b0b0b0;")
+        # Status pode ser muito longo ("Scampering… 9.1k tokens still thinking
+        # with medium effort") — sem Ignored propaga largura mínima enorme pro
+        # dock central e dispara scroll horizontal na janela toda.
+        self._status.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._status.setMinimumWidth(0)
         toolbar.addWidget(self._status)
         toolbar.addStretch()
         self._continue_btn = QPushButton("▶ Continuar")

@@ -377,6 +377,11 @@ class MainWindow(QMainWindow):
         self._settings_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         self._settings_scroll.setWidgetResizable(True)
         self._settings_scroll.setWidget(self.settings_panel)
+        # setMinimumWidth(0) impede que o QScrollArea propague o mínimo
+        # do SettingsPanel (~870px) pro QStackedWidget acima — sem isso,
+        # content_stack sempre exige ≥870px de largura e força scroll
+        # horizontal na janela mesmo quando Settings não está visível.
+        self._settings_scroll.setMinimumWidth(0)
         self.content_stack.addWidget(self._settings_scroll)
         self.content_stack.setMinimumHeight(0)
         self.content_stack.setSizePolicy(
