@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.57] — 2026-05-26
+
+### Corrigido — remove overlay de bordas dos workspaces na sidebar
+- **`sidebar_builder.py`**: `_WorkspaceBorderOverlay` desativado — o overlay desenhava com `QPainter` as linhas laterais e a base de cada workspace expandido, criando caixas visíveis ao redor de todo o conteúdo da sidebar. Lista fica flat sem bordas.
+
 ## [0.76.56] — 2026-05-26
 
 ### Melhorado — remove borda ao redor dos cards de sessão Claude na sidebar

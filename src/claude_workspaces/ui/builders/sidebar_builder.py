@@ -96,35 +96,8 @@ class _StableTree(QTreeWidget):
     # os descendentes visíveis (Sessões Claude, Runners, etc).
 
     def setup_card_overlay(self) -> None:
-        """Instala overlay child da viewport que pinta as bordas
-        laterais+base de cada workspace expandido. Idempotente."""
-        if getattr(self, "_card_overlay", None) is not None:
-            return
-        self._card_overlay = _WorkspaceBorderOverlay(self)
-        self._card_overlay.setGeometry(self.viewport().rect())
-        self._card_overlay.show()
-        self._card_overlay.raise_()
-        # Repinta quando expand/collapse/scroll/resize muda a geometria.
-        self.itemExpanded.connect(lambda _i: self._card_overlay.update())
-        self.itemCollapsed.connect(lambda _i: self._card_overlay.update())
-        self.verticalScrollBar().valueChanged.connect(
-            lambda _v: self._card_overlay.update()
-        )
-        # Inserção/remoção dinâmica de filhos (runners detectados depois
-        # do expand, consoles abertos/fechados) também muda o "último
-        # descendant visível" — sem isso a borda lateral fica curta e
-        # cards novos aparecem fora do contorno do workspace.
-        model = self.model()
-        if model is not None:
-            model.rowsInserted.connect(
-                lambda *_a: self._card_overlay.update()
-            )
-            model.rowsRemoved.connect(
-                lambda *_a: self._card_overlay.update()
-            )
-            model.layoutChanged.connect(
-                lambda *_a: self._card_overlay.update()
-            )
+        """Overlay de bordas removido — a lista fica flat sem caixas."""
+        pass
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
