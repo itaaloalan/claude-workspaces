@@ -119,7 +119,7 @@ class RunnerChildWidget(QWidget):
         self._icon.setFixedSize(20, 20)
         self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon.setStyleSheet(
-            f"QLabel {{ background: transparent; border: 0; }}"
+            "QLabel { background: transparent; border: 0; }"
         )
         self._icon.setPixmap(
             _ic("mdi6.cube-outline", color=theme.TEXT_FADED).pixmap(QSize(14, 14))

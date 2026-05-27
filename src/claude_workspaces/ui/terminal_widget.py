@@ -814,12 +814,12 @@ class TerminalWidget(QWidget):
 
         menu = QMenu(self)
         menu.setStyleSheet(
-            f"QMenu {{ background: #1f1f1f; color: #e6e6e6; "
-            f"border: 1px solid #2c2c2c; border-radius: 6px; }}"
-            f"QMenu::item {{ padding: 6px 16px; }}"
-            f"QMenu::item:selected {{ background: #3d6ea8; color: #fff; }}"
-            f"QMenu::item:disabled {{ color: #555; }}"
-            f"QMenu::separator {{ height: 1px; background: #2a2a2a; margin: 3px 8px; }}"
+            "QMenu { background: #1f1f1f; color: #e6e6e6; "
+            "border: 1px solid #2c2c2c; border-radius: 6px; }"
+            "QMenu::item { padding: 6px 16px; }"
+            "QMenu::item:selected { background: #3d6ea8; color: #fff; }"
+            "QMenu::item:disabled { color: #555; }"
+            "QMenu::separator { height: 1px; background: #2a2a2a; margin: 3px 8px; }"
         )
 
         act_continue = menu.addAction("▶  Continuar")

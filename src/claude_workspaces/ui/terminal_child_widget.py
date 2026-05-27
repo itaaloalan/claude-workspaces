@@ -189,7 +189,7 @@ class TerminalChildWidget(QWidget):
         self._claude_icon.setFixedSize(26, 26)
         self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._claude_icon.setStyleSheet(
-            f"QLabel {{ background: transparent; border: 0; }}"
+            "QLabel { background: transparent; border: 0; }"
         )
         self._claude_icon_unselected_pix = _ic(
             "fa5s.robot", color=theme.TEXT_FADED

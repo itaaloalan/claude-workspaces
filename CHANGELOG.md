@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.60] — 2026-05-27
+
+### Corrigido — lint: f-strings sem placeholder
+- **`terminal_widget.py`**, **`terminal_child_widget.py`**, **`runner_child_widget.py`**: remove prefixo `f` de strings CSS que não contêm `{}` de interpolação (ruff F541).
+
 ## [0.76.59] — 2026-05-27
 
 ### Melhorado — botões da toolbar do console colapsados em menu ⋯
