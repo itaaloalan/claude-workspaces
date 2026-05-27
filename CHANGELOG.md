@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.64] — 2026-05-27
+
+### Corrigido — método `redock_left` faltando no DockManager
+- **`dock_manager.py`**: implementa `redock_left(key)` — re-ancora à esquerda qualquer dock floating/fora do container, espelho do `redock_right`. Necessário porque `main_window.py` já chamava `body_dock.redock_left("sidebar")` mas o método não existia (AttributeError no startup).
+
 ## [0.76.63] — 2026-05-27
 
 ### Corrigido — header e footer mostram só MCPs do workspace

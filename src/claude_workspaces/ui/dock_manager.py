@@ -190,6 +190,19 @@ class WorkspaceDockManager(QObject):
             self._manager.addDockWidget(ads.RightDockWidgetArea, d)
         d.toggleView(True)
 
+    def redock_left(self, key: str) -> None:
+        """Re-ancora um dock que se soltou pra um container flutuante de
+        volta à esquerda da janela principal. Mesma lógica do redock_right
+        mas usa LeftDockWidgetArea — necessário pro sidebar que deve ficar
+        fixo na coluna esquerda."""
+        d = self._docks.get(key)
+        if d is None:
+            return
+        if d.isFloating() or d.dockContainer() is not self._manager:
+            self._manager.removeDockWidget(d)
+            self._manager.addDockWidget(ads.LeftDockWidgetArea, d)
+        d.toggleView(True)
+
     # ---------- persistência ----------
 
     def save_state_b64(self) -> str:
