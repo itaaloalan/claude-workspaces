@@ -274,38 +274,32 @@ class TerminalWidget(QWidget):
         self._status.setMinimumWidth(0)
         toolbar.addWidget(self._status)
         toolbar.addStretch()
+        # Botões de ação mantidos como objetos ocultos pra preservar a
+        # lógica de estado (enabled/visible/checked) — não adicionados à
+        # toolbar. As ações ficam acessíveis via menu ⋯.
         self._continue_btn = QPushButton("▶ Continuar")
         self._continue_btn.setEnabled(False)
-        # Começa oculto — só vira visível quando a sessão foi restaurada
-        # no startup (--resume) e está em estado "Ocioso". Em sessão nova
-        # iniciada no app, "continue" não tem o que continuar.
         self._continue_btn.setVisible(False)
-        self._continue_btn.setToolTip(
-            "Manda 'continue' para o Claude — útil quando ele parou no meio "
-            "de uma tarefa (ex: ao reabrir uma sessão com --resume)"
-        )
         self._continue_btn.clicked.connect(self.send_continue)
-        toolbar.addWidget(self._continue_btn)
+
         self._mode_btn = QPushButton("⚙ Modo")
         self._mode_btn.setEnabled(False)
-        self._mode_btn.setToolTip(
-            "Trocar modo (plan/auto/…), effort ou modelo desta sessão"
-        )
         self._mode_btn.clicked.connect(self._open_mode_popup)
-        toolbar.addWidget(self._mode_btn)
+
         self._runners_btn = QPushButton("▤ Runners")
         self._runners_btn.setCheckable(True)
-        self._runners_btn.setToolTip(
-            "Mostrar/ocultar painel de runners deste console. Runners criados "
-            "aqui pertencem só a esta aba — pode rodar várias instâncias "
-            "(branches/portas diferentes) sem conflito com outros consoles."
-        )
         self._runners_btn.clicked.connect(self._on_runners_toggle)
-        toolbar.addWidget(self._runners_btn)
+
         self._stop_btn = QPushButton("Encerrar")
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.terminate)
-        toolbar.addWidget(self._stop_btn)
+
+        # Botão ⋯ — abre menu com todas as ações acima.
+        self._more_btn = QPushButton("⋯")
+        self._more_btn.setToolTip("Ações do console")
+        self._more_btn.setFixedWidth(32)
+        self._more_btn.clicked.connect(self._open_actions_menu)
+        toolbar.addWidget(self._more_btn)
         outer.addWidget(toolbar_host)
 
         self.session = PtySession(self)
@@ -813,6 +807,48 @@ class TerminalWidget(QWidget):
         """Abre o picker `/effort` no prompt do Claude (com Enter)."""
         self.send_text("/effort")
 
+    def _open_actions_menu(self) -> None:
+        """Abre QMenu com todas as ações do console (▶ Continuar, ⚙ Modo,
+        ▤ Runners, Encerrar) ancorado abaixo do botão ⋯."""
+        from PySide6.QtWidgets import QMenu
+
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu {{ background: #1f1f1f; color: #e6e6e6; "
+            f"border: 1px solid #2c2c2c; border-radius: 6px; }}"
+            f"QMenu::item {{ padding: 6px 16px; }}"
+            f"QMenu::item:selected {{ background: #3d6ea8; color: #fff; }}"
+            f"QMenu::item:disabled {{ color: #555; }}"
+            f"QMenu::separator {{ height: 1px; background: #2a2a2a; margin: 3px 8px; }}"
+        )
+
+        act_continue = menu.addAction("▶  Continuar")
+        act_continue.setEnabled(
+            self._continue_btn.isEnabled() and self._continue_btn.isVisible()
+        )
+        act_continue.triggered.connect(self.send_continue)
+
+        act_mode = menu.addAction("⚙  Modo")
+        act_mode.setEnabled(self._mode_btn.isEnabled())
+        act_mode.triggered.connect(self._open_mode_popup)
+
+        runners_checked = self._runners_btn.isChecked()
+        act_runners = menu.addAction(
+            "▤  Runners  ✓" if runners_checked else "▤  Runners"
+        )
+        act_runners.triggered.connect(self._on_runners_toggle)
+
+        menu.addSeparator()
+
+        act_stop = menu.addAction("⏹  Encerrar")
+        act_stop.setEnabled(self._stop_btn.isEnabled())
+        act_stop.triggered.connect(self.terminate)
+
+        pos = self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight())
+        pos.setX(pos.x() - menu.sizeHint().width())
+        pos.setY(pos.y() + 4)
+        menu.exec(pos)
+
     def _open_mode_popup(self) -> None:
         """Mostra o ModePopup ancorado abaixo do botão ⚙ Modo."""
         from .mode_popup import ModePopup
@@ -825,11 +861,10 @@ class TerminalWidget(QWidget):
             on_model=self.send_open_model,
             parent=self,
         )
-        # Ancorar abaixo-direita do botão (estilo dropdown)
-        anchor = self._mode_btn.mapToGlobal(
-            self._mode_btn.rect().bottomRight()
+        # Ancorar abaixo-direita do botão ⋯ (agora que _mode_btn é oculto)
+        anchor = self._more_btn.mapToGlobal(
+            self._more_btn.rect().bottomRight()
         )
-        # Desloca pra que a direita do popup alinhe com a direita do botão
         anchor.setX(anchor.x() - popup.sizeHint().width())
         anchor.setY(anchor.y() + 4)
         popup.show_at(anchor)

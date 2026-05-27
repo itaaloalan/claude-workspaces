@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.59] — 2026-05-27
+
+### Melhorado — botões da toolbar do console colapsados em menu ⋯
+- **`terminal_widget.py`**: ▶ Continuar, ⚙ Modo, ▤ Runners e Encerrar saem da toolbar e ficam acessíveis via botão `⋯` que abre QMenu ancorado abaixo. Elimina scroll horizontal causado pela soma dos sizeHints. Estado (enabled/disabled/checked) preservado nos objetos ocultos; o menu reflete o estado atual a cada abertura.
+
 ## [0.76.58] — 2026-05-26
 
 ### Corrigido — barra de contexto do console mostra só MCPs do workspace
