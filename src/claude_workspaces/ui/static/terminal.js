@@ -17,11 +17,21 @@
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
 
+    const termEl = document.getElementById('terminal');
+
     function safeFit() {
         try {
+            // Força o elemento a exatamente (viewport - padding) antes de
+            // medir — impede o loop inflate onde xterm renderiza mais largo
+            // que o viewport, expande o body e o próximo fit mede ainda mais.
+            const vw = window.innerWidth;
+            if (vw > 0) {
+                termEl.style.width = Math.max(0, vw - 8) + 'px';
+            }
             fitAddon.fit();
+            termEl.style.width = '';
         } catch (e) {
-            // Ignored: occurs when the host widget is still 0-sized during initial layout.
+            termEl.style.width = '';
         }
     }
 
@@ -82,21 +92,8 @@
         term.onResize(sendSize);
 
         window.addEventListener('resize', safeFit);
-        const ro = new ResizeObserver(function(entries) {
-            // Se o body ficou mais largo que o viewport (loop de inflate),
-            // força refit imediato com a largura correta do viewport.
-            for (const entry of entries) {
-                if (entry.target === document.body) {
-                    const vw = document.documentElement.clientWidth;
-                    if (document.body.scrollWidth > vw + 2) {
-                        safeFit();
-                        return;
-                    }
-                }
-            }
-            safeFit();
-        });
-        ro.observe(document.getElementById('terminal'));
+        const ro = new ResizeObserver(safeFit);
+        ro.observe(termEl);
         ro.observe(document.body);
 
         sendSize();

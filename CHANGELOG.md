@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.74] — 2026-05-27
+
+### Corrigido — xterm cols calculados pela largura real do viewport
+- **`terminal.js`**: `safeFit` força `termEl.style.width = (window.innerWidth - 8)px` antes de chamar `fitAddon.fit()` e reseta depois — FitAddon mede a largura exata do viewport (não a do DOM inflado) e nunca seta cols a mais.
+
 ## [0.76.73] — 2026-05-27
 
 ### Corrigido — scroll horizontal no xterm (feedback loop de largura)
