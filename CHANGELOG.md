@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.67] — 2026-05-27
+
+### Corrigido — botões ocultos inflacionavam minimumSizeHint (scroll horizontal)
+- **`terminal_widget.py`**: cria `_ghost` (`QWidget` 0×0 hidden) como parent dos botões ocultos; `setFixedSize(0,0)` zera a contribuição do `childrenRect()` ao `minimumSizeHint` do `TerminalWidget`, eliminando o scroll horizontal no dock pane.
+
 ## [0.76.66] — 2026-05-27
 
 ### Corrigido — botão ▶ Continuar flutuando (root cause)
