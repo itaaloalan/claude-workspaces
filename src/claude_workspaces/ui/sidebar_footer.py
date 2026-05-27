@@ -250,6 +250,14 @@ class SidebarFooter(QWidget):
             self._usage_panel.setVisible(False)
             self._usage_chip.setChecked(False)
         self._min_panel.setVisible(checked)
+        if checked:
+            # FlowLayout usa isVisible() que inclui a cadeia de parents.
+            # Chips adicionados com painel oculto ficam com height=0 em cache.
+            # invalidate()+activate() força recálculo depois que o painel aparece.
+            lay = self._min_panel.layout()
+            if lay:
+                lay.invalidate()
+                lay.activate()
 
     def _on_min_count_changed(self, count: int) -> None:
         if count:

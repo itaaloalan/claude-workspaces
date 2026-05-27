@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.77] — 2026-05-27
+
+### Corrigido — chips de minimizados não apareciam no painel do footer
+- `FlowLayout._visible_items()` usa `isVisible()` que inclui a cadeia de parents. Quando chips eram adicionados com `_min_panel` oculto, `heightForWidth()` retornava 0 e o layout ficava em cache com altura zero.
+- Fix: `_toggle_min()` chama `layout().invalidate() + activate()` ao abrir o painel, forçando recálculo correto da geometria.
+
 ## [0.76.76] — 2026-05-27
 
 ### Adicionado — sidebar compacta com activity bar icon-only e footer expansível
