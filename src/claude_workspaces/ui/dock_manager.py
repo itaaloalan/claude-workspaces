@@ -203,6 +203,20 @@ class WorkspaceDockManager(QObject):
             self._manager.addDockWidget(ads.LeftDockWidgetArea, d)
         d.toggleView(True)
 
+    def close_all_floating(self) -> int:
+        """Fecha todos os CFloatingDockContainer que sobraram soltos após
+        restoreState — evita janelas fantasmas com '▶ Continuar' aparecendo
+        fora da janela principal. Retorna o número de containers fechados."""
+        closed = 0
+        for fw in list(self._manager.floatingWidgets()):
+            try:
+                fw.hide()
+                fw.close()
+                closed += 1
+            except Exception:
+                pass
+        return closed
+
     # ---------- persistência ----------
 
     def save_state_b64(self) -> str:

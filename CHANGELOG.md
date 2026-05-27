@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.70] — 2026-05-27
+
+### Corrigido — janelas fantasmas floating no startup
+- **`dock_manager.py`**: adiciona `close_all_floating()` — itera `manager.floatingWidgets()` e fecha/oculta todos os `CFloatingDockContainer` que `restoreState` recria como janelas soltas.
+- **`main_window.py`**: chama `close_all_floating()` antes dos `redock_left/right` no safety net de startup — elimina as janelas "▶ Continuar" que apareciam fora da janela principal.
+
 ## [0.76.69] — 2026-05-27
 
 ### Corrigido — scroll horizontal no xterm + Configurar abre mesmo minimizado

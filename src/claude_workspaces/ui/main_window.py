@@ -486,6 +486,11 @@ class MainWindow(QMainWindow):
             if d is not None:
                 d.toggleView(True)
                 d.setAsCurrentTab()
+        # Fecha todos os containers flutuantes que restoreState possa ter
+        # criado — evita janelas "▶ Continuar" aparecendo fora do app.
+        n_closed = self.body_dock.close_all_floating()
+        if n_closed:
+            log.info("[DOCK] %d container(s) flutuante(s) fechados no startup", n_closed)
         # Re-ancora docks que state salvo possa ter deixado floating ou
         # fora do viewport (sidebar some da tela, ferramentas vira janela
         # flutuante separada).
