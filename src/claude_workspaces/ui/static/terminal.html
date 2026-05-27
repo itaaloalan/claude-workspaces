@@ -18,7 +18,19 @@
             left: 4px;
             right: 4px;
         }
-        /* Scrollbar do viewport do xterm com visual minimalista —
+        /* Sem scroll horizontal — o FitAddon garante que cols caiba na
+         * largura disponível; qualquer overflow horizontal é artefato de
+         * timing de resize e não deve mostrar barra. */
+        .xterm-viewport,
+        .xterm-screen,
+        .xterm {
+            overflow-x: hidden !important;
+        }
+        .xterm-viewport::-webkit-scrollbar:horizontal {
+            display: none;
+            height: 0;
+        }
+        /* Scrollbar vertical do viewport do xterm com visual minimalista —
          * thumb sutil, sem track, fica fora do caminho. Hover destaca
          * sem chamar atenção desnecessária. */
         .xterm-viewport::-webkit-scrollbar {

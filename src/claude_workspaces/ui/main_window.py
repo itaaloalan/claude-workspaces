@@ -3526,6 +3526,10 @@ class MainWindow(QMainWindow):
         # Garante que estamos na view de workspaces (settings vive no
         # content_stack interno do body_splitter)
         self.main_stack.setCurrentWidget(self.body_view)
+        # Se o painel central estiver minimizado, restaura antes de exibir
+        # as settings — caso contrário a tela aparece em área 0×0.
+        if hasattr(self, "_bottom_sub_splitter") and self._terminal_pane_is_minimized():
+            self._toggle_terminal_pane_minimized()
         self.activity_bar.set_active(VIEW_SETTINGS)
         self.content_stack.setCurrentWidget(self._settings_scroll)
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.69] — 2026-05-27
+
+### Corrigido — scroll horizontal no xterm + Configurar abre mesmo minimizado
+- **`terminal.html`**: `overflow-x: hidden` em `.xterm-viewport`, `.xterm-screen` e `.xterm`; oculta scrollbar horizontal via `::-webkit-scrollbar:horizontal { height: 0 }`.
+- **`main_window.py`**: `_show_settings` restaura o terminal pane se estiver minimizado antes de exibir as configurações.
+
 ## [0.76.68] — 2026-05-27
 
 ### Corrigido — scroll horizontal eliminado (cadeia completa de setMinimumWidth)
