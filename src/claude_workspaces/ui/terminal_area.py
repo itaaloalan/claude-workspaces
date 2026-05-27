@@ -53,11 +53,9 @@ class TerminalArea(QWidget):
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
-        # Tab bar interna é redundante com a listagem do sidebar
-        # ("Sessões Claude"). Esconde a barra — `setCurrentIndex` continua
-        # funcionando, então o switch via sidebar (`_focus_terminal_tab`)
-        # segue valendo. O header do `_terminal_pane_widget` agora mostra
-        # workspace + console ativos em destaque.
+        # Tab bar visível quando há ≥2 consoles — permite trocar de console
+        # sem depender de sub-itens na sidebar (que agora é flat).
+        # Começa oculta; _refresh_tab_bar_visibility() ajusta ao add/remove.
         self.tabs.tabBar().setVisible(False)
         # QSS pra match com a tab bar externa do _terminal_tabs — sem
         # bordas estranhas. Tab ativa com underline azul fino. Pane com
@@ -77,6 +75,7 @@ class TerminalArea(QWidget):
             "  border-bottom: 2px solid #3d6ea8; }"
         )
         self.tabs.tabCloseRequested.connect(self._close_tab)
+        self.tabs.currentChanged.connect(lambda _: self._refresh_tab_bar_visibility())
         layout.addWidget(self.tabs)
 
     def add_terminal(self, title: str) -> TerminalWidget:
@@ -104,6 +103,7 @@ class TerminalArea(QWidget):
         # Texto inicial já com `#N` (mesmo formato do sidebar).
         self.tabs.setTabText(idx, f"✓ {self._compute_tab_display(widget)}")
         self._apply_tab_color(idx, widget)
+        self._refresh_tab_bar_visibility()
         # Emite estado inicial
         self.tab_activity_changed.emit(id(widget), title, "", False, False, False)
         return widget
@@ -200,6 +200,13 @@ class TerminalArea(QWidget):
         # Renumera os tabs restantes: ao fechar #1, #2 vira #1, etc.
         # Sem isso, posições ficariam "furadas" até a próxima atividade.
         self._refresh_all_tab_texts()
+        self._refresh_tab_bar_visibility()
+
+    def _refresh_tab_bar_visibility(self) -> None:
+        """Mostra a tab bar quando há ≥2 consoles; esconde quando há apenas 1.
+        Com a sidebar flat (sem sub-itens), a tab bar é o único meio de
+        alternar entre consoles de um workspace."""
+        self.tabs.tabBar().setVisible(self.tabs.count() > 1)
 
     def _refresh_all_tab_texts(self) -> None:
         for i in range(self.tabs.count()):

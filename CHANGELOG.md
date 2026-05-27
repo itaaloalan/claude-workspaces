@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.79] — 2026-05-27
+
+### Adicionado — tab bar de consoles na área do terminal
+- `TerminalArea`: tab bar aparece automaticamente quando há ≥2 consoles abertos no workspace ativo, permitindo alternar entre eles sem depender dos sub-itens da sidebar (que agora é flat). Esconde quando há apenas 1 console.
+
 ## [0.76.78] — 2026-05-27
 
 ### Alterado — árvore de workspaces flat (sem sub-itens expandidos)
