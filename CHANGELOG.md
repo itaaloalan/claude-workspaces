@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.81] — 2026-05-27
+
+### Alterado — workspace items mais compactos na sidebar
+- `WorkspaceItemWidget`: altura mínima 38→30px, padding vertical 6→3px, espaçamento interno 8→6px.
+
 ## [0.76.80] — 2026-05-27
 
 ### Corrigido — runner panel e status bar não atualizavam ao clicar no workspace

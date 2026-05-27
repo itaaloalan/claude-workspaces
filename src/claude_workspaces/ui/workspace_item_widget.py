@@ -74,7 +74,7 @@ class WorkspaceItemWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(38)
+        self.setMinimumHeight(30)
         self._on_add_claude = on_add_claude
         self._on_toggle_collapse = on_toggle_collapse
         self._on_toggle_pin = on_toggle_pin
@@ -93,8 +93,8 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(10, 6, 8, 6)
-        row.setSpacing(8)
+        row.setContentsMargins(10, 3, 8, 3)
+        row.setSpacing(6)
 
         # Ícone do workspace antes do nome — match com mockup que mostra
         # um pequeno avatar/logo. fa5s.folder é o default; podia ser
