@@ -274,24 +274,27 @@ class TerminalWidget(QWidget):
         self._status.setMinimumWidth(0)
         toolbar.addWidget(self._status)
         toolbar.addStretch()
-        # Botões de ação mantidos como objetos ocultos pra preservar a
-        # lógica de estado (enabled/visible/checked) — não adicionados à
-        # toolbar. As ações ficam acessíveis via menu ⋯.
-        self._continue_btn = QPushButton("▶ Continuar")
+        # Botões de ação com `self` como parent — nunca adicionados a um
+        # layout, mas ter parent impede que Qt os trate como top-level window
+        # e os exiba flutuando sobre a UI. As ações ficam acessíveis via ⋯.
+        self._continue_btn = QPushButton("▶ Continuar", self)
         self._continue_btn.setEnabled(False)
-        self._continue_btn.setVisible(False)
+        self._continue_btn.hide()
         self._continue_btn.clicked.connect(self.send_continue)
 
-        self._mode_btn = QPushButton("⚙ Modo")
+        self._mode_btn = QPushButton("⚙ Modo", self)
         self._mode_btn.setEnabled(False)
+        self._mode_btn.hide()
         self._mode_btn.clicked.connect(self._open_mode_popup)
 
-        self._runners_btn = QPushButton("▤ Runners")
+        self._runners_btn = QPushButton("▤ Runners", self)
         self._runners_btn.setCheckable(True)
+        self._runners_btn.hide()
         self._runners_btn.clicked.connect(self._on_runners_toggle)
 
-        self._stop_btn = QPushButton("Encerrar")
+        self._stop_btn = QPushButton("Encerrar", self)
         self._stop_btn.setEnabled(False)
+        self._stop_btn.hide()
         self._stop_btn.clicked.connect(self.terminate)
 
         # Botão ⋯ — abre menu com todas as ações acima.

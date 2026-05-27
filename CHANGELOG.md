@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.66] — 2026-05-27
+
+### Corrigido — botão ▶ Continuar flutuando (root cause)
+- **`terminal_widget.py`**: botões ocultos (`_continue_btn`, `_mode_btn`, `_runners_btn`, `_stop_btn`) passam a usar `self` como parent — impede Qt de tratá-los como top-level window e exibi-los flutuando sobre a UI. Usa `hide()` em vez de `setVisible(False)`.
+
 ## [0.76.65] — 2026-05-27
 
 ### Corrigido — título do console truncado no header (evita scroll)
