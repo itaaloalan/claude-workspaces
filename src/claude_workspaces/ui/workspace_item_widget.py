@@ -57,6 +57,7 @@ _DOT_QSS = (
 # (state_badge_qss) pra ficar consistente com o resto da sidebar.
 _BADGE_QSS = theme.state_badge_qss(theme.STATE_DONE)
 _NOTIF_BADGE_QSS = theme.state_badge_qss(theme.STATE_AWAITING)
+_RUNNER_BADGE_QSS = theme.state_badge_qss(theme.INFO)
 
 
 class WorkspaceItemWidget(QWidget):
@@ -143,6 +144,13 @@ class WorkspaceItemWidget(QWidget):
         self._notif_badge.hide()
         row.addWidget(self._notif_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        self._runner_badge = QLabel("")
+        self._runner_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._runner_badge.setStyleSheet(_RUNNER_BADGE_QSS)
+        self._runner_badge.setToolTip("Runners em execução neste workspace")
+        self._runner_badge.hide()
+        row.addWidget(self._runner_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
         # Pin indicator — aparece à direita do nome quando pinned=True.
         # Empurra os botões de ação pro fim, junto da borda direita.
         from PySide6.QtCore import QSize
@@ -180,13 +188,10 @@ class WorkspaceItemWidget(QWidget):
         self._more_btn.setVisible(False)  # reveal on hover
         row.addWidget(self._more_btn)
 
+        # Botão de colapsar removido do layout — árvore é flat (sem sub-itens).
         self._collapse_btn = QPushButton("⌄")
-        self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._collapse_btn.setFixedSize(22, 22)
-        self._collapse_btn.setToolTip("Recolher / expandir os consoles deste workspace")
-        self._collapse_btn.setStyleSheet(_BTN_QSS)
+        self._collapse_btn.hide()
         self._collapse_btn.clicked.connect(on_toggle_collapse)
-        row.addWidget(self._collapse_btn)
 
     def _open_menu(self) -> None:
         menu = QMenu(self._more_btn)
@@ -198,7 +203,6 @@ class WorkspaceItemWidget(QWidget):
             f"color: {theme.TEXT_BRIGHT}; }}"
         )
         menu.addAction("＋  Abrir Claude novo").triggered.connect(self._on_add_claude)
-        menu.addAction("Recolher / expandir").triggered.connect(self._on_toggle_collapse)
         if self._on_toggle_pin is not None:
             menu.addSeparator()
             pin_label = "📌  Desafixar workspace" if self._pinned else "📌  Fixar workspace"
@@ -321,6 +325,14 @@ class WorkspaceItemWidget(QWidget):
         self._ws_icon.setPixmap(
             _ic("fa5s.folder", color=icon_color).pixmap(self._ws_icon_size)
         )
+
+    def set_runner_count(self, count: int) -> None:
+        """Mostra badge azul com quantidade de runners em execução."""
+        if count <= 0:
+            self._runner_badge.hide()
+        else:
+            self._runner_badge.setText(f"{count}▶")
+            self._runner_badge.show()
 
     def set_collapsed(self, collapsed: bool) -> None:
         """Atualiza o ícone do botão de colapsar pra refletir o estado

@@ -1993,9 +1993,11 @@ class MainWindow(QMainWindow):
             if tip:
                 item.setToolTip(0, tip)
             self.list_widget.addTopLevelItem(item)
-            # Restaura estado colapsado persistido (default = expandido).
-            collapsed = bool(self.settings.workspace_collapsed.get(ws.id, False))
-            item.setExpanded(not collapsed)
+            # Árvore flat: sem sub-itens visíveis — oculta indicador de expansão.
+            item.setChildIndicatorPolicy(
+                QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicator
+            )
+            item.setExpanded(False)
             self._install_workspace_item_widget(item, ws)
 
         if pinned:
@@ -3032,13 +3034,20 @@ class MainWindow(QMainWindow):
 
     def _update_runner_group_badges(self, workspace_id: str) -> None:
         from .runner_group_widget import RunnerGroupWidget
+        from .workspace_item_widget import WorkspaceItemWidget
 
         group = self._runner_group_items.get(workspace_id)
-        if group is None:
-            return
-        header = self.list_widget.itemWidget(group, 0)
-        if isinstance(header, RunnerGroupWidget):
-            header.set_running_count(self._running_runner_count(workspace_id))
+        if group is not None:
+            header = self.list_widget.itemWidget(group, 0)
+            if isinstance(header, RunnerGroupWidget):
+                header.set_running_count(self._running_runner_count(workspace_id))
+
+        # Atualiza badge de runners no workspace item (árvore flat).
+        ws_item = self._find_workspace_item(workspace_id)
+        if ws_item is not None:
+            widget = self.list_widget.itemWidget(ws_item, 0)
+            if isinstance(widget, WorkspaceItemWidget):
+                widget.set_runner_count(self._running_runner_count(workspace_id))
 
     def _on_runner_state_changed(
         self, workspace_id: str, runner_id: str, state: str
@@ -3224,22 +3233,11 @@ class MainWindow(QMainWindow):
             if isinstance(label, str):
                 self._toggle_section_collapsed(label)
             return
-        # Clique no nome do workspace (top-level) → toggle expand/collapse.
-        # Botões inline (+ / chevron) consomem o evento antes; aqui só
-        # chega quando o click é no nome/área vazia do row.
+        # Clique no nome do workspace (top-level) → navega ao terminal.
+        # Árvore flat: workspace não expande, click seleciona e foca terminal.
         if item.parent() is None and isinstance(raw_data, Workspace):
-            new_expanded = not item.isExpanded()
-            item.setExpanded(new_expanded)
-            from .workspace_item_widget import WorkspaceItemWidget
-            w = self.list_widget.itemWidget(item, 0)
-            if isinstance(w, WorkspaceItemWidget):
-                w.set_collapsed(not new_expanded)
-            # Persiste o estado.
-            self.settings.workspace_collapsed[raw_data.id] = not new_expanded
-            try:
-                self.settings.save()
-            except OSError:
-                pass
+            self._ensure_terminal_pane_visible()
+            self._sync_terminal_for(raw_data)
             return
         # Clique simples numa aba ativa/em ação (tab_id) já foca a aba.
         if item.parent() is None:
@@ -4893,14 +4891,9 @@ class MainWindow(QMainWindow):
         # row do console destacado, não só o workspace selecionado.
         target_item = ws_item
         if ws_item is not None:
-            if not ws_item.isExpanded():
-                ws_item.setExpanded(True)
-            for child in self._iter_terminal_items(ws_item):
-                if child.data(0, Qt.ItemDataRole.UserRole) == tab_id:
-                    target_item = child
-                    break
-            self.list_widget.setCurrentItem(target_item)
-            self.list_widget.scrollToItem(target_item)
+            # Árvore flat: não expande — seleciona apenas o workspace item.
+            self.list_widget.setCurrentItem(ws_item)
+            self.list_widget.scrollToItem(ws_item)
         area = self.terminals_coord.area_for(workspace_id)
         if area is None:
             return
@@ -5080,7 +5073,7 @@ class MainWindow(QMainWindow):
         )
         # Tarefas concluídas (processo finalizado) ficam ocultas na sidebar.
         child.setHidden(state == STATE_DONE)
-        ws_item.setExpanded(True)
+        # Árvore flat: não expande o workspace (sub-itens ficam ocultos).
         self.terminals_coord.state.tree_items[tab_id] = child
         # Reaplica sufixos de desambiguação no workspace inteiro (cobre o
         # caso de a nova aba colidir com outra que já estava sem sufixo).

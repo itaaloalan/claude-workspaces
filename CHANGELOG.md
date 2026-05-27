@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.78] — 2026-05-27
+
+### Alterado — árvore de workspaces flat (sem sub-itens expandidos)
+- `WorkspaceItemWidget`: novo badge azul `N▶` para runners em execução; botão de colapsar removido do layout; opção "Recolher / expandir" removida do menu.
+- `main_window`: workspace items nunca expandem (`DontShowIndicator` + `setExpanded(False)`); click no nome navega diretamente ao terminal do workspace (`_sync_terminal_for`) em vez de expandir sub-itens.
+- `_update_runner_group_badges()` agora também atualiza o badge de runners no workspace item da sidebar.
+
 ## [0.76.77] — 2026-05-27
 
 ### Corrigido — chips de minimizados não apareciam no painel do footer
