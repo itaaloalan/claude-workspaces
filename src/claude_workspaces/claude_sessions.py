@@ -9,6 +9,40 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
+class BackendSession:
+    """União dos campos comuns entre ClaudeSession e OpencodeSession.
+    Usado pelo dispatch `list_sessions(backend=...)` pra que os consumers
+    não precisem saber qual backend está ativo."""
+    id: str
+    mtime: float
+    preview: str
+    path: Path | str
+    origin_cwd: str
+
+    def label(self, max_preview: int = 70, include_origin: bool = False) -> str:
+        from datetime import datetime
+        when = datetime.fromtimestamp(self.mtime)
+        now = datetime.now()
+        if when.date() == now.date():
+            time_str = "hoje " + when.strftime("%H:%M")
+        elif (now.date() - when.date()).days == 1:
+            time_str = "ontem " + when.strftime("%H:%M")
+        else:
+            time_str = when.strftime("%d/%m %H:%M")
+
+        prefix = ""
+        if include_origin:
+            prefix = f"[{Path(self.origin_cwd).name}] "
+
+        preview = (self.preview or "").replace("\n", " ").strip()
+        if len(preview) > max_preview:
+            preview = preview[: max_preview - 1] + "…"
+        if preview:
+            return f"{prefix}{time_str} — {preview}"
+        return f"{prefix}{time_str} — (sem prompt registrado)"
+
+
+@dataclass
 class ClaudeSession:
     id: str
     mtime: float
@@ -150,6 +184,45 @@ def list_sessions(project_path: str, limit: int = 15) -> list[ClaudeSession]:
             )
         )
     return sessions
+
+
+# ----- Dispatch multi-backend -----
+
+def list_sessions_backend(
+    project_path: str, backend: str = "claude", limit: int = 15
+) -> list[BackendSession]:
+    """Lista sessões do backend ativo. Retorna BackendSession pra unificar
+    ClaudeSession e OpencodeSession."""
+    if backend == "opencode":
+        from .opencode_sessions import list_sessions as _oc_list
+        raw = _oc_list(project_path, limit=limit)
+        return [
+            BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd)
+            for s in raw
+        ]
+    raw = list_sessions(project_path, limit=limit)
+    return [
+        BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd)
+        for s in raw
+    ]
+
+
+def list_sessions_for_paths_backend(
+    paths: list[str], backend: str = "claude", limit: int = 20
+) -> list[BackendSession]:
+    """Agrega sessões de múltiplos caminhos pro backend ativo."""
+    if backend == "opencode":
+        from .opencode_sessions import list_sessions_for_paths as _oc_list
+        raw = _oc_list(paths, limit=limit)
+        return [
+            BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd)
+            for s in raw
+        ]
+    raw = list_sessions_for_paths(paths, limit=limit)
+    return [
+        BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd)
+        for s in raw
+    ]
 
 
 def list_sessions_for_paths(paths: list[str], limit: int = 20) -> list[ClaudeSession]:

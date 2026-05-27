@@ -26,6 +26,13 @@ def claude_config_file() -> Path:
     return Path.home() / ".claude.json"
 
 
+def ai_config_file(backend: str = "claude") -> Path:
+    """Retorna o arquivo de config MCP pro backend ativo."""
+    if backend == "opencode":
+        return Path.home() / ".config" / "opencode" / "opencode.jsonc"
+    return Path.home() / ".claude.json"
+
+
 PG_PACKAGE = "@modelcontextprotocol/server-postgres"
 
 

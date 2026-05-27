@@ -1,4 +1,4 @@
-"""Gerencia o hook Stop do Claude Code em ~/.claude/settings.json,
+"""Gerencia o hook Stop do backend ativo (Claude Code ou opencode),
 preservando outros hooks que o usuário tenha configurado."""
 
 import json
@@ -13,6 +13,10 @@ HOOK_FILENAME = "notify-hook.py"
 
 def claude_settings_file() -> Path:
     return Path.home() / ".claude" / "settings.json"
+
+
+def opencode_config_file() -> Path:
+    return Path.home() / ".config" / "opencode" / "opencode.jsonc"
 
 
 def app_data_dir() -> Path:
@@ -42,7 +46,13 @@ def _hook_command_matches(cmd: str) -> bool:
     return cmd.endswith(HOOK_FILENAME)
 
 
-def is_hook_installed() -> bool:
+def is_hook_installed(backend: str = "claude") -> bool:
+    if backend == "opencode":
+        return _is_opencode_hook_installed()
+    return _is_claude_hook_installed()
+
+
+def _is_claude_hook_installed() -> bool:
     settings_path = claude_settings_file()
     if not settings_path.exists():
         return False
@@ -62,15 +72,16 @@ def is_hook_installed() -> bool:
     return False
 
 
-def refresh_installed_hook() -> bool:
-    """Re-copia o script packaged sobre o instalado se eles diferirem.
+def _is_opencode_hook_installed() -> bool:
+    """opencode usa opencode.jsonc pra hooks (ainda não implementado)."""
+    # TODO: implementar quando opencode suportar hooks Stop
+    return False
 
-    Why: o hook é copiado pro ~/.config no install_hook(); quando o app é
-    atualizado e o script mudou (ex: ganhou ações D-Bus), o instalado fica
-    desatualizado até o usuário toggleeer a opção. Esta função é chamada no
-    startup pra manter o script em sincronia sem exigir reinstalação manual.
-    """
-    if not is_hook_installed():
+
+def refresh_installed_hook(backend: str = "claude") -> bool:
+    if backend == "opencode":
+        return False  # TODO: opencode hook support
+    if not is_hook_installed(backend):
         return False
     try:
         src = _package_hook_script()
@@ -92,15 +103,19 @@ def refresh_installed_hook() -> bool:
         return False
 
 
-def install_hook() -> Path:
+def install_hook(backend: str = "claude") -> Path:
     """Copia o script pra ~/.config/claude-workspaces/ e adiciona o hook
-    Stop em ~/.claude/settings.json."""
+    Stop no config do backend ativo."""
     app_data_dir().mkdir(parents=True, exist_ok=True)
     src = _package_hook_script()
     dst = installed_hook_script()
     shutil.copy(src, dst)
     dst.chmod(0o755)
     log.info("Hook copiado pra %s", dst)
+
+    if backend == "opencode":
+        log.warning("opencode hook support not yet implemented")
+        return dst
 
     settings_path = claude_settings_file()
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,7 +162,11 @@ def install_hook() -> Path:
     return dst
 
 
-def uninstall_hook() -> None:
+def uninstall_hook(backend: str = "claude") -> None:
+    if backend == "opencode":
+        log.warning("opencode hook support not yet implemented")
+        return
+
     settings_path = claude_settings_file()
     if settings_path.exists():
         try:

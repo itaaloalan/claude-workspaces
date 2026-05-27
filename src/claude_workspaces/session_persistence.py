@@ -30,6 +30,7 @@ class SavedSession:
     workspace_id: str
     session_id: str
     cwd: str
+    backend: str = "claude"  # "claude" ou "opencode"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -40,12 +41,15 @@ class SavedSession:
             workspace_id=str(data.get("workspace_id") or ""),
             session_id=str(data.get("session_id") or ""),
             cwd=str(data.get("cwd") or ""),
+            backend=str(data.get("backend") or "claude"),
         )
 
     def is_valid(self) -> bool:
         return bool(self.workspace_id and self.session_id and self.cwd)
 
     def session_file(self) -> Path:
+        if self.backend == "opencode":
+            return Path(self.cwd)  # opencode não tem JSONL por sessão
         return project_sessions_dir(self.cwd) / f"{self.session_id}.jsonl"
 
 

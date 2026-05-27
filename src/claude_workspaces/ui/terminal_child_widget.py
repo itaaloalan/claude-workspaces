@@ -561,7 +561,6 @@ class TerminalChildWidget(QWidget):
         Estados atenção (awaiting/error) tintam o bg; selecionado usa tint
         azul. Sem caixa completa: reduz poluição visual na sidebar."""
         state = getattr(self, "_current_state", STATE_IDLE)
-        accent = STATE_COLOR.get(state, theme.TEXT_FAINT)
         if self._selected:
             bg = "rgba(61, 110, 168, 38)"
         elif state == STATE_AWAITING:
@@ -725,5 +724,4 @@ def _fmt_elapsed(seconds: int) -> str:
     h, rem = divmod(seconds, 3600)
     m, _ = divmod(rem, 60)
     return f"{h}h {m:02d}m"
-
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.76.84] — 2026-05-27
+
+### Adicionado — suporte inicial a Claude e OpenCode
+- Configuração de backend ativo entre Claude Code e OpenCode, com comandos, args extras e flags específicas por backend.
+- Probe unificado de versão para Claude Code/OpenCode e compatibilidade preservada para imports antigos de `claude_probe.py`.
+- Listagem e retomada de sessões do OpenCode lendo o SQLite local em `~/.local/share/opencode/opencode.db`.
+- Telemetria de uso do OpenCode por workspace, usando tokens/custo registrados no banco local.
+
+### Corrigido — integração OpenCode
+- Preview das sessões OpenCode passa a ler os textos da tabela `part`, exibindo o primeiro prompt real do usuário.
+- Labels de sessões OpenCode usam timestamp em segundos corretamente.
+- Launcher externo do OpenCode passa apenas o diretório principal como posicional, evitando argumentos inválidos para múltiplas pastas.
+- Lint e testes ajustados após a refatoração multi-backend.
+
 ## [0.76.83] — 2026-05-27
 
 ### Alterado — console items mais compactos na sidebar

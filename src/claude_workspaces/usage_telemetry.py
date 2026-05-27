@@ -108,9 +108,68 @@ def _model_cost(model: str, u: dict) -> float:
     )
 
 
+def aggregate_usage_opencode(since: datetime | None = None) -> dict[str, UsageStats]:
+    """Aggregate token usage from opencode SQLite database."""
+    import sqlite3
+    db_path = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
+    if not db_path.exists():
+        return {}
+    out: dict[str, UsageStats] = {}
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        since_ts = int(since.timestamp() * 1000) if since else 0
+        cursor.execute(
+            """SELECT s.directory, s.model, s.tokens_input, s.tokens_output,
+                      s.tokens_reasoning, s.tokens_cache_read, s.tokens_cache_write,
+                      s.cost, s.time_updated
+               FROM session s
+               WHERE s.time_updated >= ?
+               ORDER BY s.time_updated ASC""",
+            (since_ts,),
+        )
+        for row in cursor.fetchall():
+            cwd = row["directory"]
+            if cwd not in out:
+                out[cwd] = UsageStats()
+            s = out[cwd]
+            s.input_tokens += row["tokens_input"] or 0
+            s.output_tokens += row["tokens_output"] or 0
+            s.cache_read_tokens += row["tokens_cache_read"] or 0
+            s.cache_creation_tokens += row["tokens_cache_write"] or 0
+            s.cost_usd += row["cost"] or 0.0
+            s.sessions += 1
+            updated = datetime.fromtimestamp(row["time_updated"] / 1000, tz=UTC)
+            if s.last_used is None or updated > s.last_used:
+                s.last_used = updated
+            model_raw = row["model"]
+            if model_raw:
+                try:
+                    m = json.loads(model_raw)
+                    model_id = m.get("id", str(model_raw))
+                except (json.JSONDecodeError, TypeError):
+                    model_id = str(model_raw)
+                total = (
+                    (row["tokens_input"] or 0)
+                    + (row["tokens_output"] or 0)
+                    + (row["tokens_cache_read"] or 0)
+                    + (row["tokens_cache_write"] or 0)
+                )
+                s.by_model[model_id] = s.by_model.get(model_id, 0) + total
+                s.last_model = model_id
+        conn.close()
+    except (sqlite3.Error, OSError) as e:
+        log.warning("Falha ao ler telemetria opencode: %s", e)
+    return out
+
+
 def aggregate_usage_by_workspace(
     since: datetime | None = None,
+    backend: str = "claude",
 ) -> dict[str, UsageStats]:
+    if backend == "opencode":
+        return aggregate_usage_opencode(since)
     """Devolve {cwd: UsageStats}. since limita por timestamp da mensagem.
     Cwd vem do campo 'cwd' dentro da mensagem — confiável, vs reverter
     o encoding do nome do diretório (lossy quando o path tem hífen)."""

@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QMessageBox, QWidget
 from ...briefing_builder import build_briefing
 from ...claude_sessions import ClaudeSession
 from ...models import Workspace
-from ...services.launch_planner import build_claude_argv, plan_from_dialog
+from ...services.launch_planner import build_ai_argv, plan_from_dialog
 from ...settings import Settings
 from ..terminal_widget import TerminalWidget
 from .terminal_coordinator import TerminalCoordinator
@@ -91,25 +91,28 @@ class LaunchCoordinator(QObject):
             is_worktree = plan.is_worktree
             initial_prompt = dialog.result_initial_prompt()
 
-        argv = build_claude_argv(
-            self.settings.claude_command,
-            self.settings.claude_launch_args(),
+        backend = self.settings.ai_backend
+        argv = build_ai_argv(
+            backend,
+            self.settings.ai_command(),
+            self.settings.ai_launch_args(),
             extras,
             resume_session_id,
         )
 
         area = self.terminals.get_or_create_area(workspace)
-        title = "claude (resume)" if resume_session_id else "claude"
+        backend_short = "opencode" if backend == "opencode" else "claude"
+        title = f"{backend_short} (resume)" if resume_session_id else backend_short
         title = f"{title} #{area.count() + 1}{worktree_label}"
         terminal = area.add_terminal(title)
-        terminal.configure_claude(cwd, resume_session_id or None)
+        terminal.configure_claude(cwd, resume_session_id or None, backend=backend)
         terminal.set_context_info(
             cwd, extras,
             worktree_label=worktree_label,
             is_worktree=is_worktree,
             workspace_folders=list(workspace.folders),
         )
-        label = f"claude — {workspace.name}{worktree_label}"
+        label = f"{backend_short} — {workspace.name}{worktree_label}"
         try:
             terminal.start_shell_command(
                 argv,
@@ -174,17 +177,18 @@ class LaunchCoordinator(QObject):
         if terminal is None:
             return
 
+        ai_name = self.settings.ai_command()
         def _on_ready(success: bool) -> None:
             if success:
                 self._send_briefing(terminal, briefing)
             else:
                 log.warning(
-                    "Claude não ficou pronto a tempo — briefing fica no clipboard"
+                    "%s não ficou pronto a tempo — briefing fica no clipboard", ai_name
                 )
                 QMessageBox.information(
                     self._parent_window,
                     "Briefing no clipboard",
-                    "Não consegui detectar o Claude pronto pra receber input. "
+                    f"Não consegui detectar o {ai_name} pronto pra receber input. "
                     "O briefing está no clipboard — cole quando ele subir.",
                 )
 

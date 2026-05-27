@@ -106,3 +106,31 @@ def build_claude_argv(
     for extra in extras:
         argv.extend(["--add-dir", extra])
     return argv
+
+
+def build_opencode_argv(
+    command: str,
+    extra_args: list[str],
+    extras: list[str],
+    resume_session_id: str = "",
+) -> list[str]:
+    """Monta argv pra rodar opencode.
+    opencode aceita o diretório como posicional e usa -s/--session pra
+    continuar uma sessão. Sem --add-dir — usa o cwd + posicional."""
+    argv: list[str] = [command, *extra_args]
+    if resume_session_id:
+        argv.extend(["-s", resume_session_id])
+    return argv
+
+
+def build_ai_argv(
+    backend: str,
+    command: str,
+    extra_args: list[str],
+    extras: list[str],
+    resume_session_id: str = "",
+) -> list[str]:
+    """Monta argv pro backend ativo."""
+    if backend == "opencode":
+        return build_opencode_argv(command, extra_args, extras, resume_session_id)
+    return build_claude_argv(command, extra_args, extras, resume_session_id)

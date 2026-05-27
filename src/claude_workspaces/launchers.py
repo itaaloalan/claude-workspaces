@@ -70,35 +70,61 @@ def _run_in_terminal(
     )
 
 
-def launch_claude(workspace: Workspace, settings: Settings) -> None:
+def launch_ai(workspace: Workspace, settings: Settings) -> None:
+    """Launch the configured AI backend in external terminal."""
     if not workspace.folders:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
     _require(settings.terminal_command, "terminal")
+    _require(settings.ai_command(), "ai")
     cwd, extras = workspace.launch_paths()
-    cmd = [settings.claude_command, *settings.claude_launch_args()]
-    for extra in extras:
-        cmd += ["--add-dir", extra]
+    if settings.ai_backend == "opencode":
+        cmd = [settings.ai_command(), *settings.ai_launch_args(), cwd]
+    else:
+        cmd = [settings.ai_command(), *settings.ai_launch_args()]
+        for extra in extras:
+            cmd += ["--add-dir", extra]
     _run_in_terminal(settings, cmd, cwd)
 
 
-def launch_claude_resume(
+def launch_ai_resume(
     workspace: Workspace, settings: Settings, session_id: str, cwd: str | None = None
 ) -> None:
     if not workspace.folders:
         raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
     _require(settings.terminal_command, "terminal")
+    _require(settings.ai_command(), "ai")
     ws_cwd, extras = workspace.launch_paths()
     effective_cwd = cwd or ws_cwd
-    cmd = [settings.claude_command, *settings.claude_launch_args(), "--resume", session_id]
-    for extra in extras:
-        cmd += ["--add-dir", extra]
+    if settings.ai_backend == "opencode":
+        cmd = [settings.ai_command(), *settings.ai_launch_args(), "-s", session_id, effective_cwd]
+    else:
+        cmd = [settings.ai_command(), *settings.ai_launch_args(), "--resume", session_id]
+        for extra in extras:
+            cmd += ["--add-dir", extra]
     _run_in_terminal(settings, cmd, effective_cwd)
 
 
-def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
+def launch_ai_in_dir(directory: str | Path, settings: Settings) -> None:
     _require(settings.terminal_command, "terminal")
-    cmd = [settings.claude_command, *settings.claude_launch_args()]
+    _require(settings.ai_command(), "ai")
+    cmd = [settings.ai_command(), *settings.ai_launch_args()]
+    if settings.ai_backend == "opencode":
+        cmd.append(str(directory))
     _run_in_terminal(settings, cmd, directory)
+
+
+def launch_claude(workspace: Workspace, settings: Settings) -> None:
+    return launch_ai(workspace, settings)
+
+
+def launch_claude_resume(
+    workspace: Workspace, settings: Settings, session_id: str, cwd: str | None = None
+) -> None:
+    return launch_ai_resume(workspace, settings, session_id, cwd)
+
+
+def launch_claude_in_dir(directory: str | Path, settings: Settings) -> None:
+    return launch_ai_in_dir(directory, settings)
 
 
 def launch_konsole(workspace: Workspace, settings: Settings) -> None:
@@ -144,21 +170,20 @@ def open_file_in_editor(path: str | Path, settings: Settings) -> None:
 def launch_claude_for_runner_gen(
     workspace: Workspace, settings: Settings, prompt: str
 ) -> None:
-    """Abre Claude no diretório do próprio claude-workspaces com um prompt
-    inicial pra gerar um RunnerConfig. Fica nesse cwd (não no workspace alvo)
-    porque é lá que mora a doc `docs/runners-spec.md` — o Claude lê a spec
-    em vez de raciocinar do zero, consumindo menos tokens.
-
-    Passa o prompt como argv final do `claude` (modo non-interactive seed).
-    """
+    """Abre o CLI configurado no diretório do próprio claude-workspaces com
+    um prompt inicial pra gerar um RunnerConfig."""
     _require(settings.terminal_command, "terminal")
+    _require(settings.ai_command(), "ai")
     repo = find_app_repo_root()
     if repo is None:
         raise LauncherError(
             "Repositório do claude-workspaces não encontrado — gerador "
             "precisa rodar no diretório do projeto pra ler docs/runners-spec.md"
         )
-    cmd = [settings.claude_command, *settings.claude_launch_args(), prompt]
+    if settings.ai_backend == "opencode":
+        cmd = [settings.ai_command(), *settings.ai_launch_args(), "--prompt", prompt, str(repo)]
+    else:
+        cmd = [settings.ai_command(), *settings.ai_launch_args(), prompt]
     _run_in_terminal(settings, cmd, repo)
 
 

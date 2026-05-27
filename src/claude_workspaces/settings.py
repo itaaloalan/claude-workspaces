@@ -13,6 +13,10 @@ def settings_file() -> Path:
 
 @dataclass
 class Settings:
+    # --- Backend: "claude" ou "opencode" ---
+    ai_backend: str = "claude"
+
+    # --- Claude CLI ---
     claude_command: str = "claude"
     claude_extra_args: list[str] = field(default_factory=list)
     # Flags injetadas em toda sessão Claude lançada pelo app (console embutido,
@@ -33,6 +37,12 @@ class Settings:
     claude_effort: str = ""
     claude_allowed_tools: str = ""
     claude_disallowed_tools: str = ""
+
+    # --- opencode CLI ---
+    opencode_command: str = "opencode"
+    opencode_extra_args: list[str] = field(default_factory=list)
+    opencode_model: str = ""
+    opencode_agent: str = ""
     terminal_command: str = "konsole"
     shell_command: str = ""  # "" = autodetect from /etc/passwd (login shell)
     vscode_command: str = "code"
@@ -194,6 +204,20 @@ class Settings:
         for f in fields(self):
             setattr(self, f.name, getattr(other, f.name))
 
+    # ----- Backend dispatch -----
+
+    def ai_command(self) -> str:
+        """Retorna o comando do backend ativo (claude ou opencode)."""
+        if self.ai_backend == "opencode":
+            return self.opencode_command or "opencode"
+        return self.claude_command or "claude"
+
+    def ai_extra_args(self) -> list[str]:
+        """Args extras configurados pelo usuário pro backend ativo."""
+        if self.ai_backend == "opencode":
+            return list(self.opencode_extra_args)
+        return list(self.claude_extra_args)
+
     def claude_session_flags(self) -> list[str]:
         """Flags derivadas das configurações 'Claude' do app — anexadas ao
         argv junto com `claude_extra_args` em todo launch de sessão.
@@ -211,10 +235,29 @@ class Settings:
             flags += ["--disallowedTools", self.claude_disallowed_tools.strip()]
         return flags
 
+    def opencode_session_flags(self) -> list[str]:
+        """Flags derivadas das configurações opencode."""
+        flags: list[str] = []
+        if self.opencode_model:
+            flags += ["-m", self.opencode_model]
+        if self.opencode_agent:
+            flags += ["--agent", self.opencode_agent]
+        return flags
+
+    def ai_session_flags(self) -> list[str]:
+        """Flags de sessão pro backend ativo."""
+        if self.ai_backend == "opencode":
+            return self.opencode_session_flags()
+        return self.claude_session_flags()
+
     def claude_launch_args(self) -> list[str]:
         """Args completos pra anexar após `claude_command`: extras configurados
         pelo usuário + flags derivadas das configurações 'Claude'."""
         return [*self.claude_extra_args, *self.claude_session_flags()]
+
+    def ai_launch_args(self) -> list[str]:
+        """Args completos pra anexar após `ai_command()` pro backend ativo."""
+        return [*self.ai_extra_args(), *self.ai_session_flags()]
 
     def ide_command(self, ide_key: str) -> str:
         return {

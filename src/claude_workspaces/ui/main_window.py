@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..claude_sessions import list_sessions_for_paths
+from ..claude_sessions import list_sessions_for_paths_backend
 from ..errors import LaunchError
 from ..hook_manager import refresh_installed_hook
 from ..launchers import (
@@ -1016,7 +1016,7 @@ class MainWindow(QMainWindow):
         try:
             cwd, _ = ws.launch_paths()
             paths = list({cwd, *ws.folders})
-            sessions = list_sessions_for_paths(paths, limit=1)
+            sessions = list_sessions_for_paths_backend(paths, backend=self.settings.ai_backend, limit=1)
         except Exception:
             log.exception("Falha ao listar última sessão do %s", ws.id)
             return
@@ -2392,7 +2392,7 @@ class MainWindow(QMainWindow):
         # que o Claude enxerga e à barra de contexto do console. Passa os
         # nomes pro footer mostrar inline + tooltip.
         try:
-            from ..services.mcp_inspector import list_servers, SCOPE_PROJECT
+            from ..services.mcp_inspector import SCOPE_PROJECT, list_servers
             mcp_names = sorted({
                 s.name for s in list_servers(list(ws.folders))
                 if s.scope == SCOPE_PROJECT
@@ -2572,7 +2572,6 @@ class MainWindow(QMainWindow):
         no topo) e antes do placeholder/outros."""
         from PySide6.QtCore import QSize as _QS
 
-        from .icons import ic as _ic
         # Procura existente
         for i in range(ws_item.childCount()):
             c = ws_item.child(i)
@@ -3633,7 +3632,7 @@ class MainWindow(QMainWindow):
         # (~/.claude.json) que são comuns a todos os workspaces e poluem.
         mcp_html = ""
         try:
-            from ..services.mcp_inspector import list_servers, SCOPE_PROJECT
+            from ..services.mcp_inspector import SCOPE_PROJECT, list_servers
             mcp_names = sorted({
                 s.name for s in list_servers(list(ws.folders))
                 if s.scope == SCOPE_PROJECT
@@ -3932,44 +3931,54 @@ class MainWindow(QMainWindow):
         area = self.terminals_coord.get_or_create_area(workspace)
         ws_cwd, extras = workspace.launch_paths()
 
+        backend = self.settings.ai_backend
         if mode == "resume":
             entry = dlg.selected_entry()
             if entry is None:
                 return
-            argv = [
-                self.settings.claude_command,
-                *self.settings.claude_launch_args(),
-                "--resume",
-                entry.session_id,
-            ]
-            # Re-anexa --add-dir igual à geração nova pra Claude ainda ler o spec
-            # e enxergar pastas extras.
-            argv += ["--add-dir", str(repo)]
-            for extra in extras:
-                argv += ["--add-dir", extra]
+            if backend == "opencode":
+                argv = [
+                    self.settings.ai_command(),
+                    *self.settings.ai_launch_args(),
+                    "-s", entry.session_id,
+                    entry.cwd,
+                ]
+            else:
+                argv = [
+                    self.settings.claude_command,
+                    *self.settings.claude_launch_args(),
+                    "--resume",
+                    entry.session_id,
+                ]
+                argv += ["--add-dir", str(repo)]
+                for extra in extras:
+                    argv += ["--add-dir", extra]
             title = f"runner-gen #{area.count() + 1} (resume)"
             terminal = area.add_terminal(title)
-            terminal.configure_claude(entry.cwd, resume_id=entry.session_id)
-            label = f"claude (runner-gen resume) — {workspace.name}"
+            terminal.configure_claude(entry.cwd, resume_id=entry.session_id, backend=backend)
+            label = f"{backend} (runner-gen resume) — {workspace.name}"
             cwd = entry.cwd
         else:
             hint = dlg.hint()
             spec_path = Path(repo) / "docs" / "runners-spec.md"
             prompt = build_generate_prompt(workspace, hint, spec_path=spec_path)
-            # NÃO usar --add-dir aqui: Claude CLI 2.1.x descarta o prompt
-            # posicional silenciosamente quando --add-dir está presente.
-            # Como passamos --dangerously-skip-permissions (extra_args), o
-            # claude consegue ler os paths absolutos do spec e das pastas
-            # extras via Read sem precisar de --add-dir.
-            argv = [
-                self.settings.claude_command,
-                *self.settings.claude_launch_args(),
-                prompt,
-            ]
+            if backend == "opencode":
+                argv = [
+                    self.settings.ai_command(),
+                    *self.settings.ai_launch_args(),
+                    "--prompt", prompt,
+                    ws_cwd,
+                ]
+            else:
+                argv = [
+                    self.settings.claude_command,
+                    *self.settings.claude_launch_args(),
+                    prompt,
+                ]
             title = f"runner-gen #{area.count() + 1}"
             terminal = area.add_terminal(title)
-            terminal.configure_claude(ws_cwd)
-            label = f"claude (runner-gen) — {workspace.name}"
+            terminal.configure_claude(ws_cwd, backend=backend)
+            label = f"{backend} (runner-gen) — {workspace.name}"
             cwd = ws_cwd
 
             ws_id = workspace.id
@@ -4066,15 +4075,24 @@ class MainWindow(QMainWindow):
         # cwd do Claude: a pasta do runner quando definida (melhor contexto pro
         # diagnóstico), senão o cwd padrão do workspace.
         cwd = (runner.cwd or "").strip() or ws_cwd
-        argv = [
-            self.settings.claude_command,
-            *self.settings.claude_launch_args(),
-            prompt,
-        ]
+        backend = self.settings.ai_backend
+        if backend == "opencode":
+            argv = [
+                self.settings.ai_command(),
+                *self.settings.ai_launch_args(),
+                "--prompt", prompt,
+                cwd,
+            ]
+        else:
+            argv = [
+                self.settings.claude_command,
+                *self.settings.claude_launch_args(),
+                prompt,
+            ]
         title = f"runner-edit #{area.count() + 1}"
         terminal = area.add_terminal(title)
-        terminal.configure_claude(cwd)
-        label = f"claude (runner-edit) — {workspace.name}"
+        terminal.configure_claude(cwd, backend=backend)
+        label = f"{backend} (runner-edit) — {workspace.name}"
 
         ws_id = workspace.id
 
@@ -4130,34 +4148,44 @@ class MainWindow(QMainWindow):
                 "foi criado manualmente ou antes desse recurso existir.",
             )
             return
-        jsonl = project_sessions_dir(cwd) / f"{session_id}.jsonl"
-        if not jsonl.exists():
-            QMessageBox.warning(
-                self,
-                "Sessão não encontrada",
-                f"O JSONL da sessão de geração não existe mais:\n{jsonl}",
-            )
-            return
-
-        repo = find_app_repo_root()
-        argv = [
-            self.settings.claude_command,
-            *self.settings.claude_launch_args(),
-            "--resume",
-            session_id,
-        ]
-        if repo is not None:
-            argv += ["--add-dir", str(repo)]
-        if workspace.folders:
-            _, extras = workspace.launch_paths()
-            for extra in extras:
-                argv += ["--add-dir", extra]
+        backend = self.settings.ai_backend
+        if backend == "opencode":
+            repo = find_app_repo_root()
+            argv = [
+                self.settings.ai_command(),
+                *self.settings.ai_launch_args(),
+                "-s", session_id,
+                cwd,
+            ]
+        else:
+            from ..claude_sessions import project_sessions_dir
+            jsonl = project_sessions_dir(cwd) / f"{session_id}.jsonl"
+            if not jsonl.exists():
+                QMessageBox.warning(
+                    self,
+                    "Sessão não encontrada",
+                    f"O JSONL da sessão de geração não existe mais:\n{jsonl}",
+                )
+                return
+            repo = find_app_repo_root()
+            argv = [
+                self.settings.claude_command,
+                *self.settings.claude_launch_args(),
+                "--resume",
+                session_id,
+            ]
+            if repo is not None:
+                argv += ["--add-dir", str(repo)]
+            if workspace.folders:
+                _, extras = workspace.launch_paths()
+                for extra in extras:
+                    argv += ["--add-dir", extra]
 
         area = self.terminals_coord.get_or_create_area(workspace)
         title = f"runner-gen #{area.count() + 1} (resume)"
         terminal = area.add_terminal(title)
-        terminal.configure_claude(cwd, resume_id=session_id)
-        label = f"claude (runner-gen resume) — {workspace.name}"
+        terminal.configure_claude(cwd, resume_id=session_id, backend=backend)
+        label = f"{backend} (runner-gen resume) — {workspace.name}"
         try:
             terminal.start_shell_command(
                 argv,
@@ -4856,7 +4884,6 @@ class MainWindow(QMainWindow):
         # Marca o console específico no sidebar (não só o workspace) —
         # ao clicar "Abrir console" na notif, o usuário espera ver o
         # row do console destacado, não só o workspace selecionado.
-        target_item = ws_item
         if ws_item is not None:
             # Árvore flat: não expande — seleciona apenas o workspace item.
             self.list_widget.setCurrentItem(ws_item)
@@ -5672,18 +5699,20 @@ class MainWindow(QMainWindow):
         self.terminal_host.setCurrentWidget(area)
 
     def _launch_claude_no_ctx(self) -> None:
-        """Abre o Claude embutido em $HOME como nova aba na area 'sem ctx'."""
+        """Abre o AI backend embutido em $HOME como nova aba na area 'sem ctx'."""
+        backend = self.settings.ai_backend
         area = self._ensure_no_ctx_area()
         home = str(Path.home())
-        title = f"claude (sem ctx) #{area.count() + 1}"
+        short = "opencode" if backend == "opencode" else "claude"
+        title = f"{short} (sem ctx) #{area.count() + 1}"
         terminal = area.add_terminal(title)
-        terminal.configure_claude(home)
-        argv = [self.settings.claude_command, *self.settings.claude_launch_args()]
+        terminal.configure_claude(home, backend=backend)
+        argv = [self.settings.ai_command(), *self.settings.ai_launch_args()]
         try:
             terminal.start_shell_command(
                 argv,
                 home,
-                label="claude (sem ctx)",
+                label=f"{self.settings.ai_backend} (sem ctx)",
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:

@@ -61,13 +61,19 @@ class SettingsPanel(QWidget):
         form = QFormLayout()
         form.setSpacing(8)
 
-        self._claude_cmd = QLineEdit()
-        self._claude_cmd.setPlaceholderText("claude")
-        form.addRow("Comando do Claude:", self._claude_cmd)
+        self._ai_backend = QComboBox()
+        self._ai_backend.addItem("Claude", "claude")
+        self._ai_backend.addItem("opencode", "opencode")
+        self._ai_backend.currentIndexChanged.connect(self._on_backend_changed)
+        form.addRow("Backend de IA:", self._ai_backend)
 
-        self._claude_args = QLineEdit()
-        self._claude_args.setPlaceholderText("(opcional) ex: --dangerously-skip-permissions")
-        form.addRow("Args extras do Claude:", self._claude_args)
+        self._ai_cmd = QLineEdit()
+        self._ai_cmd.setPlaceholderText("claude")
+        form.addRow("Comando do AI:", self._ai_cmd)
+
+        self._ai_args = QLineEdit()
+        self._ai_args.setPlaceholderText("(opcional) args extras")
+        form.addRow("Args extras do AI:", self._ai_args)
 
         self._terminal_cmd = QLineEdit()
         self._terminal_cmd.setPlaceholderText("konsole")
@@ -164,9 +170,36 @@ class SettingsPanel(QWidget):
 
         self._refresh_fields()
 
+    def _on_backend_changed(self) -> None:
+        """Atualiza visibilidade conforme backend selecionado."""
+        backend = self._ai_backend.currentData() or "claude"
+        self._claude_section.setVisible(backend != "opencode")
+        self._refresh_ai_fields_from_settings()
+
+    def _refresh_ai_fields_from_settings(self) -> None:
+        """Popula _ai_cmd / _ai_args conforme backend ativo."""
+        backend = self._ai_backend.currentData() or "claude"
+        if backend == "opencode":
+            self._ai_cmd.setPlaceholderText("opencode")
+            self._ai_cmd.setText(self.settings.opencode_command or "opencode")
+            self._ai_args.setText(
+                " ".join(shlex.quote(a) for a in self.settings.opencode_extra_args)
+            )
+        else:
+            self._ai_cmd.setPlaceholderText("claude")
+            self._ai_cmd.setText(self.settings.claude_command or "claude")
+            self._ai_args.setText(
+                " ".join(shlex.quote(a) for a in self.settings.claude_extra_args)
+            )
+
     def _refresh_fields(self) -> None:
-        self._claude_cmd.setText(self.settings.claude_command)
-        self._claude_args.setText(" ".join(shlex.quote(a) for a in self.settings.claude_extra_args))
+        self._set_combo_value(
+            self._ai_backend,
+            [("claude", "Claude"), ("opencode", "opencode")],
+            self.settings.ai_backend,
+        )
+        self._refresh_ai_fields_from_settings()
+        self._claude_section.setVisible(self.settings.ai_backend != "opencode")
         self._set_combo_value(
             self._claude_permission_mode,
             self._permission_mode_choices,
@@ -236,12 +269,20 @@ class SettingsPanel(QWidget):
             )
 
     def _on_save(self) -> None:
-        self.settings.claude_command = self._claude_cmd.text().strip() or "claude"
+        self.settings.ai_backend = self._ai_backend.currentData() or "claude"
+        # Salva comando e args no campo do backend ativo
+        cmd = self._ai_cmd.text().strip()
         try:
-            self.settings.claude_extra_args = shlex.split(self._claude_args.text())
+            extra_args = shlex.split(self._ai_args.text())
         except ValueError as e:
             QMessageBox.warning(self, "Args inválidos", f"Não consegui parsear: {e}")
             return
+        if self.settings.ai_backend == "opencode":
+            self.settings.opencode_command = cmd or "opencode"
+            self.settings.opencode_extra_args = extra_args
+        else:
+            self.settings.claude_command = cmd or "claude"
+            self.settings.claude_extra_args = extra_args
         self.settings.claude_permission_mode = self._get_combo_value(
             self._claude_permission_mode, self._permission_mode_choices
         )
@@ -851,9 +892,10 @@ class SettingsPanel(QWidget):
         self._workspace_getter = getter
 
     def _refresh_hook_status(self) -> None:
-        if is_hook_installed():
+        backend = self.settings.ai_backend
+        if is_hook_installed(backend):
             self._hook_status.setText(
-                "✓ Hook instalado — Claude notifica ao fim de cada turno"
+                f"✓ Hook instalado — {backend} notifica ao fim de cada turno"
             )
             self._hook_status.setStyleSheet("color: #5ac35a;")
             self._hook_toggle_btn.setText("Remover notificações")
@@ -863,11 +905,12 @@ class SettingsPanel(QWidget):
             self._hook_toggle_btn.setText("Ativar notificações")
 
     def _toggle_hook(self) -> None:
+        backend = self.settings.ai_backend
         try:
-            if is_hook_installed():
-                uninstall_hook()
+            if is_hook_installed(backend):
+                uninstall_hook(backend)
             else:
-                install_hook()
+                install_hook(backend)
         except Exception as e:
             log.exception("Falha ao alternar hook")
             QMessageBox.warning(self, "Erro com hook", str(e))

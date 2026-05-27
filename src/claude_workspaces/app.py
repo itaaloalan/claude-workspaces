@@ -212,8 +212,10 @@ def main() -> int:
     log = logging.getLogger(__name__)
     log.info("Iniciando Claude Workspaces")
 
-    from .claude_probe import run_probe
-    run_probe()
+    from .backend_probe import run_probe
+    from .settings import Settings
+    settings = Settings.load()
+    run_probe(backend=settings.ai_backend)
 
     app = QApplication(sys.argv)
     app.setApplicationName("Claude Workspaces")

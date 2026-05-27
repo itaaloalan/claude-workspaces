@@ -386,25 +386,21 @@ class TerminalWidget(QWidget):
     def is_running(self) -> bool:
         return self._is_running
 
-    def configure_claude(self, cwd: str, resume_id: str | None = None) -> None:
-        """Diz à TerminalWidget que o comando rodando é um Claude — assim
-        ela consegue resolver o título da sessão (primeiro user prompt)
-        olhando os JSONLs em ~/.claude/projects/<encoded-cwd>/."""
+    def configure_claude(self, cwd: str, resume_id: str | None = None, backend: str = "claude") -> None:
+        """Configura o terminal pra resolver sessões do backend ativo.
+        O nome ficou 'configure_claude' por compatibilidade mas aceita
+        'backend' pra suportar tanto claude quanto opencode."""
+        self._backend = backend
         self._claude_cwd = cwd
         self._claude_resume_id = resume_id
-        # time.time() (wall clock) pra comparar com os.path.getmtime; NÃO
-        # use monotonic aqui — referências diferentes, comparação errada
-        # acabaria casando sessões antigas e mostrando título reciclado
         self._claude_start_time = time.time()
         self._session_preview = None
         self._session_resolved = False
-        # Snapshot dos JSONLs já existentes — qualquer um que apareça aqui
-        # NÃO é nossa sessão (ou é resume, tratado pelo branch separado)
         if resume_id is None:
             try:
-                from ..claude_sessions import list_sessions
+                from ..claude_sessions import list_sessions_backend
                 self._pre_existing_session_ids = {
-                    s.id for s in list_sessions(cwd, limit=50)
+                    s.id for s in list_sessions_backend(cwd, backend=backend, limit=50)
                 }
             except Exception:
                 log.debug("snapshot pré-existente falhou", exc_info=True)
@@ -521,9 +517,10 @@ class TerminalWidget(QWidget):
     def _try_resolve_session(self) -> None:
         if self._session_resolved or not self._claude_cwd:
             return
+        backend = getattr(self, "_backend", "claude")
         try:
-            from ..claude_sessions import list_sessions
-            sessions = list_sessions(self._claude_cwd, limit=20)
+            from ..claude_sessions import list_sessions_backend
+            sessions = list_sessions_backend(self._claude_cwd, backend=backend, limit=20)
         except Exception:
             log.debug("session resolution falhou em %s", self._claude_cwd, exc_info=True)
             return
@@ -610,12 +607,15 @@ class TerminalWidget(QWidget):
         return self._claude_cwd
 
     def claimed_session_path(self) -> Path | None:
-        """Caminho absoluto do JSONL da sessão atualmente vinculada, ou
-        None se ainda não foi resolvida. Usado pra computar usage stats
-        no menu de contexto."""
+        """Caminho da sessão atualmente vinculada. Pra opencode retorna
+        o path da DB (usado como sentinela de existência)."""
         sid = self.claimed_session_id()
         if not sid or not self._claude_cwd:
             return None
+        backend = getattr(self, "_backend", "claude")
+        if backend == "opencode":
+            from ..opencode_sessions import OPCODE_DB_PATH
+            return OPCODE_DB_PATH if OPCODE_DB_PATH.exists() else None
         from ..claude_sessions import project_sessions_dir
         p = project_sessions_dir(self._claude_cwd) / f"{sid}.jsonl"
         return p if p.exists() else None
