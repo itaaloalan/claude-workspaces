@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.76] — 2026-05-27
+
+### Adicionado — sidebar compacta com activity bar icon-only e footer expansível
+- **`activity_bar.py`**: Remove labels de texto dos botões de navegação (icon-only, 52px de largura vs 68px); altura de cada botão reduzida de 54→44px. Tooltips existentes garantem discoverability.
+- **`sidebar_footer.py`** (novo): `SidebarFooter` — barra fixa de 28px com chips de uso (`"5h 72%"`) e minimizados (`"N min"`), cada chip abre painel expansível acima sem ocupar espaço permanente.
+- **`sidebar_builder.py`**: Remove do layout os blocos inline de stats, find-file, minimized_tray, add_btn e version_label; substitui por `SidebarFooter`; reassigna atributos para compatibilidade com `main_window.py` sem alterações.
+
+### Corrigido — janela fantasma ao iniciar
+- `_TrackedMinimizeTray.show()` era chamado antes de `addWidget` — sem parent, Qt exibia o widget como janela top-level. Fix: `show()` só após `addWidget` garantir o parent.
+- `_UsageVisibilityProxy.setVisible()` não chama `super()` para evitar o mesmo problema (proxy sem parent).
+
 ## [0.76.75] — 2026-05-27
 
 ### Corrigido — scroll no dock central (CDockWidget AutoScrollArea)

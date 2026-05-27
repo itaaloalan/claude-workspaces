@@ -40,7 +40,7 @@ _ICON_FONT_STACK = (
     ' "Segoe UI Symbol", monospace'
 )
 
-_NAV_BAR_WIDTH = 68
+_NAV_BAR_WIDTH = 52
 
 _NAV_BUTTON_QSS = (
     f"QFrame#NavButton {{"
@@ -113,7 +113,7 @@ class _NavButton(QFrame):
         self.setToolTip(tooltip)
         self._checked = False
         self.setProperty("nav_checked", "false")
-        self.setFixedHeight(54)
+        self.setFixedHeight(44)
 
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 6, 0, 6)
@@ -154,7 +154,7 @@ class _NavButton(QFrame):
         self._text_label = QLabel(label)
         self._text_label.setObjectName("NavLabel")
         self._text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(self._text_label)
+        # Labels removidos do layout — icon-only com tooltip.
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:

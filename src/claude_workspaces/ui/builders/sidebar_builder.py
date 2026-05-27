@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ... import __version__
 from .. import theme
 
 
@@ -302,51 +301,6 @@ _TREE_QSS = (
     f"QTreeWidget::branch {{ background: transparent; }}"
 )
 
-_PRIMARY_ACTION_QSS = (
-    f"QPushButton {{"
-    f"  background: {theme.BG_SURFACE};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border: 1px solid {theme.BORDER_INPUT};"
-    f"  border-radius: 6px;"
-    f"  padding: 6px 12px;"
-    f"  text-align: left;"
-    f"}}"
-    f"QPushButton:hover {{"
-    f"  border-color: {theme.PRIMARY};"
-    f"  color: {theme.TEXT_LINK};"
-    f"}}"
-    f"QPushButton:pressed {{"
-    f"  background: {theme.BG_PANEL};"
-    f"}}"
-)
-
-_GHOST_ACTION_QSS = (
-    f"QPushButton {{"
-    f"  background: transparent;"
-    f"  color: {theme.TEXT_FAINT};"
-    f"  border: 0;"
-    f"  border-radius: 4px;"
-    f"  padding: 5px 10px;"
-    f"  text-align: left;"
-    f"  font-size: 11px;"
-    f"}}"
-    f"QPushButton:hover {{"
-    f"  background: {theme.BG_SURFACE};"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"}}"
-)
-
-_VERSION_LABEL_QSS = (
-    f"QLabel {{"
-    f"  color: {theme.TEXT_FAINT};"
-    f"  font-size: 10px;"
-    f"  padding: 4px 10px 2px 10px;"
-    f"}}"
-    f"QLabel:hover {{"
-    f"  color: {theme.TEXT_LINK};"
-    f"}}"
-)
-
 _HEADER_ICON_BTN_QSS = (
     f"QPushButton {{"
     f"  background: transparent;"
@@ -361,15 +315,6 @@ _HEADER_ICON_BTN_QSS = (
     f"  color: {theme.TEXT_LINK};"
     f"}}"
 )
-
-_CONTEXT_STATUS_QSS = (
-    f"QLabel {{"
-    f"  color: {theme.TEXT_FADED};"
-    f"  font-size: 11px;"
-    f"  padding: 2px 4px 4px 4px;"
-    f"}}"
-)
-
 
 class SidebarBuilder:
     """Constrói a sidebar com lista de workspaces + botões.
@@ -531,110 +476,28 @@ class SidebarBuilder:
         # fechando visualmente o "card contínuo".
         self.list_widget.setup_card_overlay()
 
-        # Status do contexto da sessão Claude ativa (apenas % da janela
-        # de contexto + tokens absolutos). Atualizado pela MainWindow no
-        # mesmo poll que atualiza git/tokens (5s). Fica oculto enquanto
-        # não há sessão ativa pra evitar ruído visual.
-        # Linha 1: label do uso. Linha 2 (dentro da mesma row): botão
-        # refresh + timestamp do último sync. Tudo agrupado num container
-        # pra esconder/mostrar junto.
-        self.context_status_container = QWidget()
-        ctx_outer = QVBoxLayout(self.context_status_container)
-        ctx_outer.setContentsMargins(0, 0, 0, 0)
-        ctx_outer.setSpacing(0)
-
-        ctx_row_widget = QWidget()
-        ctx_row = QHBoxLayout(ctx_row_widget)
-        ctx_row.setContentsMargins(0, 0, 0, 0)
-        ctx_row.setSpacing(6)
-
-        self.context_status_label = QLabel("")
-        self.context_status_label.setStyleSheet(_CONTEXT_STATUS_QSS)
-        self.context_status_label.setTextFormat(Qt.TextFormat.RichText)
-        ctx_row.addWidget(self.context_status_label, stretch=1)
-
-        # Botão refresh — clicável, força chamada nova do
-        # /api/oauth/usage (ignora cache + cooldown). Discreto: só o
-        # ícone unicode "⟳", do mesmo tom faint do texto.
-        self.context_status_refresh_btn = QPushButton("⟳")
-        self.context_status_refresh_btn.setCursor(
-            QCursor(Qt.CursorShape.PointingHandCursor)
-        )
-        self.context_status_refresh_btn.setToolTip(
-            "Forçar sincronização do uso do plano com /api/oauth/usage"
-        )
-        self.context_status_refresh_btn.setFlat(True)
-        self.context_status_refresh_btn.setFixedSize(20, 20)
-        self.context_status_refresh_btn.setStyleSheet(
-            f"QPushButton {{ color: {theme.TEXT_FAINT}; "
-            "background: transparent; border: none; font-size: 13px; "
-            "padding: 0px; }"
-            f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-            "QPushButton:disabled { color: #555; }"
-        )
-        ctx_row.addWidget(
-            self.context_status_refresh_btn,
-            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
-        )
-        ctx_outer.addWidget(ctx_row_widget)
-
-        # Linha secundária: "atualizado há Xmin" — pequeno e discreto,
-        # só pra dar noção de quão recente está o snapshot exibido.
-        self.context_status_updated_label = QLabel("")
-        self.context_status_updated_label.setStyleSheet(
-            f"QLabel {{ color: {theme.TEXT_DISABLED}; "
-            "font-size: 9px; padding: 0px 4px 4px 4px; }}"
-        )
-        self.context_status_updated_label.setVisible(False)
-        ctx_outer.addWidget(self.context_status_updated_label)
-
-        self.context_status_container.setVisible(False)
-        layout.addWidget(self.context_status_container)
-
-        # Localizar arquivo — input compacto que abre um modal de busca
-        # com os resultados do workspace ativo. Mora aqui na sidebar
-        # (esquerda) pra ficar acessível independente da view atual.
+        # find_file_input — mantido como stub oculto (main_window acessa)
         self.find_file_input = QLineEdit()
-        self.find_file_input.setPlaceholderText("🔍  Localizar arquivo…")
-        self.find_file_input.setClearButtonEnabled(True)
-        self.find_file_input.setStyleSheet(
-            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
-            "border-radius: 4px; padding: 5px 8px; color: #e6e6e6; font-size: 11px; }"
-            "QLineEdit:focus { border-color: #3d6ea8; }"
-        )
+        self.find_file_input.setVisible(False)
         if self._on_find_file is not None:
             self.find_file_input.returnPressed.connect(
                 lambda: self._on_find_file(self.find_file_input.text())
             )
-        layout.addWidget(self.find_file_input)
 
-        # Faixa "Minimizados" — workspaces minimizados saem da lista acima
-        # e viram chips aqui; clicar restaura. Escondida (height 0) quando
-        # vazia. Mesmo widget usado no rodapé do pane central.
-        from ..minimize_tray import MinimizeTray
-        self.minimized_tray = MinimizeTray()
-        layout.addWidget(self.minimized_tray)
+        # Footer compacto: version, chip de uso, chip de minimizados.
+        # Expõe os mesmos atributos que o main_window espera.
+        from ..sidebar_footer import SidebarFooter
+        self._footer = SidebarFooter(on_version_clicked=self._on_version_clicked)
+        layout.addWidget(self._footer)
 
-        self.add_btn = QPushButton("＋  Novo Workspace")
-        self.add_btn.setToolTip("Criar novo workspace (Ctrl+N)")
-        self.add_btn.setStyleSheet(_PRIMARY_ACTION_QSS)
-        self.add_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.add_btn.clicked.connect(self._on_add_clicked)
-        layout.addWidget(self.add_btn)
-
-        # Os botões "Abrir Terminal", "Claude (sem contexto)" e
-        # "Hack este app" vivem na activity bar à esquerda — libera
-        # espaço vertical aqui pra lista de workspaces.
-
-        self.version_label = _ClickableLabel(f"v{__version__}  ·  notas")
-        self.version_label.setStyleSheet(_VERSION_LABEL_QSS)
-        self.version_label.setToolTip(
-            "Ver o que mudou nesta versão e o histórico completo"
-        )
-        self.version_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        if self._on_version_clicked is not None:
-            self.version_label.clicked.connect(self._on_version_clicked)
-        layout.addWidget(self.version_label)
+        # Reassign pra manter compatibilidade com main_window.py sem mudanças.
+        self.context_status_label = self._footer.context_status_label
+        self.context_status_container = self._footer.usage_detail_panel
+        self.context_status_refresh_btn = self._footer.context_status_refresh_btn
+        self.context_status_updated_label = self._footer.context_status_updated_label
+        self.version_label = self._footer.version_label
+        self.minimized_tray = self._footer.minimized_tray
+        self.add_btn = self.header_add_btn  # alias — header já tem o botão +
 
         return self
 
