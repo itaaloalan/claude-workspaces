@@ -130,7 +130,7 @@ class DesktopNotifierAdapter(QObject):
         # Popup do S.O. sempre auto-dismiss (mesmo HIGH/CRITICAL). A central
         # in-app preserva a notificação enquanto não vista; deixar o banner
         # nativo "grudado" só polui a área de notificações do Plasma.
-        timeout_ms = 10000
+        timeout_ms = 15000
         if self._timeout_ms_provider is not None:
             try:
                 timeout_ms = int(self._timeout_ms_provider())

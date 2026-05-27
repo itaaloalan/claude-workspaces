@@ -129,7 +129,7 @@ def _send_notify_send(app_name: str, title: str, body: str, icon: str) -> None:
                 "notify-send",
                 "-a", app_name,
                 "-i", icon,
-                "-t", "5000",
+                "-t", "15000",
                 title,
                 body,
             ]
@@ -150,12 +150,6 @@ def main() -> int:
     default_body = str(
         settings.get("notify_hook_default_body") or DEFAULT_BODY_PLACEHOLDER
     )
-    sound_enabled = bool(settings.get("notify_sound_enabled", True))
-    sound_name = (
-        str(settings.get("notify_sound_name") or "message-new-instant").strip()
-        if sound_enabled else ""
-    )
-
     transcript_path = data.get("transcript_path")
     cwd = data.get("cwd") or os.getcwd()
     project_name = os.path.basename(cwd.rstrip("/")) or cwd
@@ -176,11 +170,11 @@ def main() -> int:
         title = DEFAULT_TITLE_FORMAT.format(project=project_name)
     body = last_user_msg[:240]
 
-    action_key = f"{OPEN_ACTION_PREFIX}{session_id}" if session_id else ""
-    if sound_name:
-        _play_sound_async(sound_name)
+    # Sem som e sem botões: alguns servidores de notificação (KDE Plasma)
+    # deixam de exibir o popup quando há action buttons ou hints de som.
+    # A ação "Abrir console" fica disponível na central in-app do app.
     ok = _send_dbus(
-        app_name, title, body, action_key, "claude-workspaces", 8000, sound_name
+        app_name, title, body, "", "claude-workspaces", 15000, ""
     )
     if not ok:
         _send_notify_send(app_name, title, body, "claude-workspaces")
