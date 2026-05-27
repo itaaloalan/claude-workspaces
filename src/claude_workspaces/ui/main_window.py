@@ -1232,6 +1232,7 @@ class MainWindow(QMainWindow):
             "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
         )
         self._terminal_tabs = QTabWidget(pane)
+        self._terminal_tabs.setMinimumWidth(0)
         self._terminal_tabs.setDocumentMode(True)
         self._terminal_tabs.setTabPosition(QTabWidget.TabPosition.North)
         self._terminal_tabs.setStyleSheet(tabs_qss)
@@ -1263,6 +1264,7 @@ class MainWindow(QMainWindow):
         tp_layout.setContentsMargins(0, 0, 0, 0)
         tp_layout.setSpacing(0)
         terminal_header = QWidget()
+        terminal_header.setMinimumWidth(0)
         terminal_header.setStyleSheet(
             "background: #161616; border-bottom: 1px solid #2a2a2a;"
         )

@@ -262,6 +262,7 @@ class TerminalWidget(QWidget):
         # underline azul da tab ativa acima dele.
         toolbar_host = QWidget()
         toolbar_host.setObjectName("TerminalToolbar")
+        toolbar_host.setMinimumWidth(0)
         toolbar_host.setStyleSheet(
             "QWidget#TerminalToolbar { background: #0e0e0e; border: 0; }"
         )

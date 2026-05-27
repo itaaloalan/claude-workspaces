@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.72] — 2026-05-27
+
+### Corrigido — scroll horizontal no console (cadeia incompleta de setMinimumWidth)
+- **`main_window.py`**: `terminal_header` e `_terminal_tabs` recebem `setMinimumWidth(0)` — sem isso propagavam mínimo de largura pra cima e forçavam scroll na área central.
+- **`terminal_widget.py`**: `toolbar_host` recebe `setMinimumWidth(0)` — completa a cadeia de supressão do mínimo de largura no terminal.
+
 ## [0.76.71] — 2026-05-27
 
 ### Corrigido — Configurar não abria quando workspace estava minimizado
