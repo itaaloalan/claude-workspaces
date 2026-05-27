@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.61] — 2026-05-27
+
+### Melhorado — header do console em duas linhas
+- **`main_window.py`**: `_refresh_terminal_pane_title` quebra o header em linha 1 (`workspace · console`) e linha 2 (`branch · modelo · mcp`) com `<br>` explícito, eliminando scroll horizontal quando há muitos MCPs ou título longo.
+
 ## [0.76.60] — 2026-05-27
 
 ### Corrigido — lint: f-strings sem placeholder

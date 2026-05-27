@@ -3657,12 +3657,24 @@ class MainWindow(QMainWindow):
                 f"<span style='color:#9aa0a6'>mcp</span> "
                 f"<span style='color:#6cc7ce;font-weight:600'>🔌 {shown}</span>"
             )
-        new_text = (
+        # Linha 1: workspace · console
+        # Linha 2: branch · modelo · mcp  (só se houver algum desses campos)
+        line1 = (
             f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
             f"<span style='color:#555'>·</span> "
             f"<span style='color:#9aa0a6'>console</span> {console_html}"
-            f"{branch_html}{model_html}{mcp_html}"
         )
+        # Cada frag começa com " <span...>·</span> conteúdo" — extrai só
+        # o conteúdo removendo o prefixo " · " HTML pra montar a linha 2
+        # sem separador inicial desnecessário.
+        _DOT_PREFIX = " <span style='color:#555'>·</span> "
+        line2_parts: list[str] = [
+            frag[len(_DOT_PREFIX):] if frag.startswith(_DOT_PREFIX) else frag
+            for frag in (branch_html, model_html, mcp_html)
+            if frag
+        ]
+        line2 = _DOT_PREFIX.join(line2_parts)
+        new_text = line1 + ("<br>" + line2 if line2 else "")
         # Curtocircuita: setText em QLabel rich-text força relayout e
         # re-render. Sem essa cache, sinais frequentes (currentChanged
         # encadeados via `_sync_terminal_for`) ficam chamando setText
