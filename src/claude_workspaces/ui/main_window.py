@@ -3237,7 +3237,12 @@ class MainWindow(QMainWindow):
         # Árvore flat: workspace não expande, click seleciona e foca terminal.
         if item.parent() is None and isinstance(raw_data, Workspace):
             self._ensure_terminal_pane_visible()
+            # Reseta o short-circuit — click explícito deve sempre forçar
+            # runner_host e _refresh_runner_children, mesmo que o workspace
+            # já fosse o ativo (o panel pode estar mostrando estado desatualizado).
+            self._last_synced_ws_id = None
             self._sync_terminal_for(raw_data)
+            self._update_status_bar(raw_data)
             return
         # Clique simples numa aba ativa/em ação (tab_id) já foca a aba.
         if item.parent() is None:

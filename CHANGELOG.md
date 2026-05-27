@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.80] — 2026-05-27
+
+### Corrigido — runner panel e status bar não atualizavam ao clicar no workspace
+- Click direto no workspace item reseta `_last_synced_ws_id` antes de chamar `_sync_terminal_for`, forçando refresh completo do runner panel e `_refresh_runner_children` mesmo quando o workspace já era o ativo.
+- `_update_status_bar` agora é chamado no handler de click (não dependia de `_on_selection_changed` que pode não disparar se o item já estiver selecionado).
+
 ## [0.76.79] — 2026-05-27
 
 ### Adicionado — tab bar de consoles na área do terminal
