@@ -486,8 +486,10 @@ class MainWindow(QMainWindow):
             if d is not None:
                 d.toggleView(True)
                 d.setAsCurrentTab()
-        # Re-ancora o dock direito à janela principal se o state salvo o
-        # tiver deixado num container FLUTUANTE (aparecia "fora do app").
+        # Re-ancora docks que state salvo possa ter deixado floating ou
+        # fora do viewport (sidebar some da tela, ferramentas vira janela
+        # flutuante separada).
+        self.body_dock.redock_left("sidebar")
         self.body_dock.redock_right("ferramentas")
         # Garante que o dock "Ferramentas" da direita SEMPRE apareça com
         # conteúdo: se nenhum painel estiver aberto (todos colapsados no
@@ -2383,8 +2385,11 @@ class MainWindow(QMainWindow):
         # que o Claude enxerga e à barra de contexto do console. Passa os
         # nomes pro footer mostrar inline + tooltip.
         try:
-            from ..services.mcp_inspector import list_servers
-            mcp_names = sorted({s.name for s in list_servers(list(ws.folders))})
+            from ..services.mcp_inspector import list_servers, SCOPE_PROJECT
+            mcp_names = sorted({
+                s.name for s in list_servers(list(ws.folders))
+                if s.scope == SCOPE_PROJECT
+            })
         except Exception:
             mcp_names = []
         self.status_widgets.set_mcp(len(mcp_names), mcp_names)
@@ -3640,12 +3645,15 @@ class MainWindow(QMainWindow):
                         )
         except Exception:
             pass
-        # MCPs ativos pra este workspace — mesma fonte do footer / barra de
-        # contexto do console. Só aparece quando há algum plugado.
+        # MCPs do workspace (scope=project) — exclui MCPs globais do user
+        # (~/.claude.json) que são comuns a todos os workspaces e poluem.
         mcp_html = ""
         try:
-            from ..services.mcp_inspector import list_servers
-            mcp_names = sorted({s.name for s in list_servers(list(ws.folders))})
+            from ..services.mcp_inspector import list_servers, SCOPE_PROJECT
+            mcp_names = sorted({
+                s.name for s in list_servers(list(ws.folders))
+                if s.scope == SCOPE_PROJECT
+            })
         except Exception:
             mcp_names = []
         if mcp_names:

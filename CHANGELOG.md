@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.63] — 2026-05-27
+
+### Corrigido — header e footer mostram só MCPs do workspace
+- **`main_window.py`**: filtra `list_servers` por `scope == SCOPE_PROJECT` nos dois pontos que exibem MCPs (header do terminal pane e status bar), removendo MCPs globais de `~/.claude.json`.
+
 ## [0.76.62] — 2026-05-27
 
 ### Corrigido — botão ▶ Continuar flutuando sobre a janela
