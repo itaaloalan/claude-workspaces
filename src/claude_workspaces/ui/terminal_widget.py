@@ -782,15 +782,19 @@ class TerminalWidget(QWidget):
         return self._restored_on_startup
 
     def _refresh_continue_visibility(self) -> None:
-        """Mostra o ▶ Continuar só em sessão restaurada+ociosa. Sem
-        restaurada, fica oculto pra sempre. Sem ocioso, oculto até o
-        Claude voltar ao prompt."""
+        """Atualiza o estado 'Continuar disponível' (sessão restaurada+ociosa).
+        O botão em si nunca fica visível — foi removido da toolbar; o estado
+        é consultado pelo menu ⋯ via `continue_available`. Sem isso o botão
+        (parentless, fora de qualquer layout) aparecia flutuando sobre a janela."""
         idle = (
             self._is_running
             and not self._last_working
             and not self._last_needs_decision
         )
-        self._continue_btn.setVisible(self._restored_on_startup and idle)
+        self._continue_available = self._restored_on_startup and idle
+        # Nunca mostra o botão diretamente — ele não está em nenhum layout e
+        # setVisible(True) num widget parentless o faz flutuar sobre a UI.
+        self._continue_btn.setVisible(False)
 
     def send_cycle_mode(self) -> None:
         """Manda Shift+Tab (CSI Z) — cicla entre os modos do Claude Code
@@ -823,9 +827,7 @@ class TerminalWidget(QWidget):
         )
 
         act_continue = menu.addAction("▶  Continuar")
-        act_continue.setEnabled(
-            self._continue_btn.isEnabled() and self._continue_btn.isVisible()
-        )
+        act_continue.setEnabled(getattr(self, "_continue_available", False))
         act_continue.triggered.connect(self.send_continue)
 
         act_mode = menu.addAction("⚙  Modo")

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.62] — 2026-05-27
+
+### Corrigido — botão ▶ Continuar flutuando sobre a janela
+- **`terminal_widget.py`**: `_refresh_continue_visibility` nunca chama `setVisible(True)` no `_continue_btn` (que não está em nenhum layout desde 0.76.59); rastreia o estado em `_continue_available` e o menu ⋯ consulta essa flag — elimina botão fantasma sobreposto à UI.
+
 ## [0.76.61] — 2026-05-27
 
 ### Melhorado — header do console em duas linhas
