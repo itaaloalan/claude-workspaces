@@ -1993,11 +1993,9 @@ class MainWindow(QMainWindow):
             if tip:
                 item.setToolTip(0, tip)
             self.list_widget.addTopLevelItem(item)
-            # Árvore flat: sem sub-itens visíveis — oculta indicador de expansão.
-            item.setChildIndicatorPolicy(
-                QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicator
-            )
-            item.setExpanded(False)
+            # Restaura estado colapsado persistido (default = expandido).
+            collapsed = bool(self.settings.workspace_collapsed.get(ws.id, False))
+            item.setExpanded(not collapsed)
             self._install_workspace_item_widget(item, ws)
 
         if pinned:
@@ -2580,58 +2578,13 @@ class MainWindow(QMainWindow):
             c = ws_item.child(i)
             if c.data(0, Qt.ItemDataRole.UserRole) == self._SESSOES_BUCKET_ROLE:
                 return c
-        # Cria
+        # Cria — bucket sem header visível: altura 0, sempre expandido.
+        # Consoles ficam como filhos diretos visuais do workspace.
         bucket = QTreeWidgetItem()
         bucket.setData(0, Qt.ItemDataRole.UserRole, self._SESSOES_BUCKET_ROLE)
-        bucket.setSizeHint(0, _QS(0, 20))
+        bucket.setSizeHint(0, _QS(0, 0))
         ws_item.addChild(bucket)
-        ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
-        ws_id = ws_data.id if isinstance(ws_data, Workspace) else ""
-        collapsed = bool(self.settings.sessoes_collapsed.get(ws_id, False))
-        bucket.setExpanded(not collapsed)
-
-        # Widget do header do bucket: chevron + ícone + label + contagem.
-        # Chevron pra dar affordance visual de colapsar (igual aos outros
-        # grupos da sidebar). Clique no header alterna expandido/colapsado
-        # e persiste em settings.sessoes_collapsed[ws_id].
-        host = QWidget()
-        host.setStyleSheet("background: transparent;")
-        host.setCursor(Qt.CursorShape.PointingHandCursor)
-        h = QHBoxLayout(host)
-        h.setContentsMargins(8, 0, 6, 0)
-        h.setSpacing(6)
-        chevron_lbl = QLabel()
-        chevron_name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
-        chevron_lbl.setPixmap(_ic(chevron_name, color="#9aa0a6").pixmap(_QS(8, 8)))
-        h.addWidget(chevron_lbl)
-        icon_lbl = QLabel()
-        icon_lbl.setPixmap(_ic("fa5s.comments", color="#9aa0a6").pixmap(_QS(12, 12)))
-        h.addWidget(icon_lbl)
-        text_lbl = QLabel("Sessões Claude")
-        text_lbl.setStyleSheet(
-            "color: #c8c8c8; font-size: 11px; font-weight: 600;"
-        )
-        h.addWidget(text_lbl)
-        count_lbl = QLabel("0")
-        count_lbl.setStyleSheet(
-            "background: #2a2a2a; color: #9aa0a6; font-size: 9px; "
-            "font-weight: 700; padding: 1px 6px; border-radius: 6px;"
-        )
-        h.addWidget(count_lbl)
-        h.addStretch(1)
-        host.setProperty("_count_lbl", count_lbl)
-        host.setProperty("_chevron_lbl", chevron_lbl)
-
-        def _toggle(_ev=None, b=bucket, wid=ws_id, ch=chevron_lbl) -> None:
-            new_expanded = not b.isExpanded()
-            b.setExpanded(new_expanded)
-            self.settings.sessoes_collapsed[wid] = not new_expanded
-            self.settings.save()
-            name = "fa5s.chevron-down" if new_expanded else "fa5s.chevron-right"
-            ch.setPixmap(_ic(name, color="#9aa0a6").pixmap(_QS(8, 8)))
-
-        host.mousePressEvent = _toggle  # type: ignore[method-assign]
-        self.list_widget.setItemWidget(bucket, 0, host)
+        bucket.setExpanded(True)
         return bucket
 
     def _iter_terminal_items(self, ws_item: "QTreeWidgetItem"):
@@ -2833,6 +2786,8 @@ class MainWindow(QMainWindow):
             group.setExpanded(not collapsed)
             header.set_collapsed(collapsed)
             self._runner_group_items[ws.id] = group
+            # Runner group oculto na sidebar — runners acessíveis via painel Runners.
+            group.setHidden(True)
 
         # Atualiza badge sempre — header pode existir desde refresh anterior.
         existing_header = self.list_widget.itemWidget(group, 0)
@@ -3233,13 +3188,20 @@ class MainWindow(QMainWindow):
             if isinstance(label, str):
                 self._toggle_section_collapsed(label)
             return
-        # Clique no nome do workspace (top-level) → navega ao terminal.
-        # Árvore flat: workspace não expande, click seleciona e foca terminal.
+        # Clique no workspace (top-level) → toggle expand/collapse + navega ao terminal.
         if item.parent() is None and isinstance(raw_data, Workspace):
+            new_expanded = not item.isExpanded()
+            item.setExpanded(new_expanded)
+            from .workspace_item_widget import WorkspaceItemWidget
+            w = self.list_widget.itemWidget(item, 0)
+            if isinstance(w, WorkspaceItemWidget):
+                w.set_collapsed(not new_expanded)
+            self.settings.workspace_collapsed[raw_data.id] = not new_expanded
+            try:
+                self.settings.save()
+            except OSError:
+                pass
             self._ensure_terminal_pane_visible()
-            # Reseta o short-circuit — click explícito deve sempre forçar
-            # runner_host e _refresh_runner_children, mesmo que o workspace
-            # já fosse o ativo (o panel pode estar mostrando estado desatualizado).
             self._last_synced_ws_id = None
             self._sync_terminal_for(raw_data)
             self._update_status_bar(raw_data)

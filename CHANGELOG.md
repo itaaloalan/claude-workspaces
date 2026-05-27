@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.82] — 2026-05-27
+
+### Alterado — consoles voltam à sidebar sem header "Sessões Claude"
+- Bucket das sessões agora tem altura 0 (invisível) e fica sempre expandido — consoles aparecem diretamente sob o workspace sem nível extra de agrupamento.
+- Runner group oculto na sidebar (acessível via painel Runners na aba lateral).
+- Click no workspace alterna expand/collapse E navega ao terminal simultaneamente.
+
 ## [0.76.81] — 2026-05-27
 
 ### Alterado — workspace items mais compactos na sidebar
