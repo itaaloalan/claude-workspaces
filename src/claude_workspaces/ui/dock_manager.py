@@ -245,7 +245,7 @@ class WorkspaceDockManager(QObject):
         floatable: bool = True,
     ) -> ads.CDockWidget:
         dock = ads.CDockWidget(title)
-        dock.setWidget(widget)
+        dock.setWidget(widget, ads.CDockWidget.ForceNoScrollArea)
         feats = ads.CDockWidget.NoDockWidgetFeatures
         if closable:
             feats |= ads.CDockWidget.DockWidgetClosable

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.75] — 2026-05-27
+
+### Corrigido — scroll no dock central (CDockWidget AutoScrollArea)
+- **`dock_manager.py`**: `_make_dock` usa `ForceNoScrollArea` em `setWidget` — por padrão o QtAds envolve o widget numa `QScrollArea` interna, que era a fonte raiz do scroll no painel central.
+
 ## [0.76.74] — 2026-05-27
 
 ### Corrigido — xterm cols calculados pela largura real do viewport
