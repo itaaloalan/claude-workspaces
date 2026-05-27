@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.73] — 2026-05-27
+
+### Corrigido — scroll horizontal no xterm (feedback loop de largura)
+- **`terminal.html`**: adiciona `width:100%; max-width:100vw` em `html/body` e `max-width:calc(100vw - 8px)` no `#terminal` — impede que o xterm inflate a largura da página acima do viewport e quebre o loop fit→wider→fit.
+- **`terminal.js`**: `ResizeObserver` detecta `body.scrollWidth > clientWidth` e dispara refit imediato, corrigindo qualquer inflate residual antes que se acumule.
+
 ## [0.76.72] — 2026-05-27
 
 ### Corrigido — scroll horizontal no console (cadeia incompleta de setMinimumWidth)

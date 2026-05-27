@@ -82,7 +82,20 @@
         term.onResize(sendSize);
 
         window.addEventListener('resize', safeFit);
-        const ro = new ResizeObserver(safeFit);
+        const ro = new ResizeObserver(function(entries) {
+            // Se o body ficou mais largo que o viewport (loop de inflate),
+            // força refit imediato com a largura correta do viewport.
+            for (const entry of entries) {
+                if (entry.target === document.body) {
+                    const vw = document.documentElement.clientWidth;
+                    if (document.body.scrollWidth > vw + 2) {
+                        safeFit();
+                        return;
+                    }
+                }
+            }
+            safeFit();
+        });
         ro.observe(document.getElementById('terminal'));
         ro.observe(document.body);
 
