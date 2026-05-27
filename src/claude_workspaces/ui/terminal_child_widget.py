@@ -138,16 +138,11 @@ class TerminalChildWidget(QWidget):
         # altura efetiva do row no QTreeWidget é o setSizeHint no
         # `_CHILD_HEIGHT` lá no main_window — manter sincronizado
         # (row = widget + 8px de border+padding do item).
-        self.setMinimumHeight(44)
-        self.setMaximumHeight(44)
+        self.setMinimumHeight(36)
+        self.setMaximumHeight(36)
 
-        # Wrapper externo transparente com margem horizontal — afasta o
-        # card dos limites do workspace card pai. Sem isso o card ficava
-        # colado nas paredes do workspace ("inner colado"). O conteúdo
-        # real (icone + título + estado + ações) vive dentro do
-        # `self._card` (QFrame com bg/border).
         wrapper = QHBoxLayout(self)
-        wrapper.setContentsMargins(8, 0, 8, 0)
+        wrapper.setContentsMargins(2, 0, 2, 0)
         wrapper.setSpacing(0)
         self._card = QFrame()
         self._card.setObjectName("ConsoleCard")
@@ -155,8 +150,8 @@ class TerminalChildWidget(QWidget):
         wrapper.addWidget(self._card)
 
         outer = QHBoxLayout(self._card)
-        outer.setContentsMargins(8, 4, 8, 4)
-        outer.setSpacing(6)
+        outer.setContentsMargins(6, 2, 6, 2)
+        outer.setSpacing(4)
 
         # Seleção: em vez de barra vertical à esquerda, usa um tint
         # sutil no bg do widget inteiro (set_selected pinta um RGBA
@@ -186,22 +181,20 @@ class TerminalChildWidget(QWidget):
         # Ícone num quadradinho arredondado (padrão visual do mockup —
         # mesma estética dos runners). Cor reage à seleção.
         self._claude_icon = QLabel()
-        self._claude_icon.setFixedSize(26, 26)
+        self._claude_icon.setFixedSize(16, 16)
         self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._claude_icon.setStyleSheet(
             "QLabel { background: transparent; border: 0; }"
         )
         self._claude_icon_unselected_pix = _ic(
             "fa5s.robot", color=theme.TEXT_FADED
-        ).pixmap(14, 14)
+        ).pixmap(11, 11)
         self._claude_icon_selected_pix = _ic(
             "fa5s.robot", color=theme.PRIMARY_HOVER
-        ).pixmap(14, 14)
-        # Variante âmbar usada enquanto a sessão está Trabalhando — pulsa
-        # via _working_anim pra dar feedback de "robô trabalhando".
+        ).pixmap(11, 11)
         self._claude_icon_working_pix = _ic(
             "fa5s.robot", color=theme.WARNING
-        ).pixmap(14, 14)
+        ).pixmap(11, 11)
         self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
         outer.addWidget(
             self._claude_icon, 0, Qt.AlignmentFlag.AlignVCenter
@@ -236,8 +229,7 @@ class TerminalChildWidget(QWidget):
         title_row.setSpacing(4)
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet(
-            f"color: {STATE_TITLE_COLOR[STATE_IDLE]};"
-            f" font-weight: 600; font-size: 12px;"
+            f"color: {STATE_TITLE_COLOR[STATE_IDLE]}; font-size: 11px;"
         )
         self._title_label.setTextFormat(Qt.TextFormat.PlainText)
         self._title_label.setWordWrap(False)
@@ -582,8 +574,6 @@ class TerminalChildWidget(QWidget):
             f"#ConsoleCard {{"
             f"  background: {bg};"
             f"  border: 0;"
-            f"  border-left: 3px solid {accent};"
-            f"  border-radius: 6px;"
             f"}}"
             f"#ConsoleCard QLabel {{ background: transparent; }}"
             f"#ConsoleCard QPushButton {{ background: transparent; }}"

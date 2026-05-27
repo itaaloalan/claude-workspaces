@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.76.83] — 2026-05-27
+
+### Alterado — console items mais compactos na sidebar
+- `TerminalChildWidget`: altura 44→36px, padding (8,4)→(6,2), wrapper margin 8→2px.
+- Remove `font-weight: 600` do título (não-negrito), fonte 12→11px.
+- Remove `border-left` colorida e `border-radius` do ConsoleCard (sem bordas visíveis).
+- Ícone do robô 26×26→16×16px, pixmap 14→11px.
+
 ## [0.76.82] — 2026-05-27
 
 ### Alterado — consoles voltam à sidebar sem header "Sessões Claude"
