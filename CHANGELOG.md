@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.71] — 2026-05-27
+
+### Corrigido — Configurar não abria quando workspace estava minimizado
+- **`main_window.py`**: `_show_settings` verifica se `content_stack` está oculto e chama `_toggle_content_minimized()` antes de exibir as settings — evita que a tela apareça em área 0×0 invisível.
+
 ## [0.76.70] — 2026-05-27
 
 ### Corrigido — janelas fantasmas floating no startup

@@ -3535,6 +3535,10 @@ class MainWindow(QMainWindow):
         # as settings — caso contrário a tela aparece em área 0×0.
         if hasattr(self, "_bottom_sub_splitter") and self._terminal_pane_is_minimized():
             self._toggle_terminal_pane_minimized()
+        # Se o content_stack estiver oculto (workspace minimizado), mostra
+        # antes de exibir settings — sem isso a tela não aparece.
+        if not self.content_stack.isVisible():
+            self._toggle_content_minimized()
         self.activity_bar.set_active(VIEW_SETTINGS)
         self.content_stack.setCurrentWidget(self._settings_scroll)
 
