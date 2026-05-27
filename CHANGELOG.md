@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.65] — 2026-05-27
+
+### Corrigido — título do console truncado no header (evita scroll)
+- **`main_window.py`**: limita `display` do console a 48 chars com `…` — impede que títulos longos forcem scroll horizontal na janela.
+
 ## [0.76.64] — 2026-05-27
 
 ### Corrigido — método `redock_left` faltando no DockManager

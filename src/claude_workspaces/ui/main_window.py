@@ -3603,6 +3603,10 @@ class MainWindow(QMainWindow):
             display = area._compute_tab_display(term)
         except Exception:
             display = term.effective_title() or "console"
+        # Trunca o título do console pra evitar que empurre o sizeHint do
+        # label e force scroll horizontal na janela.
+        if len(display) > 48:
+            display = display[:47] + "…"
         ws_html = (
             f"<span style='color:#5ac35a;font-weight:600'>{ws.name}</span>"
         )
