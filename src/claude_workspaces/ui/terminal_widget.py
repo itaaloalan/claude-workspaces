@@ -225,6 +225,10 @@ class TerminalWidget(QWidget):
             "QLabel { background: transparent; }"
         )
 
+        # Zera o mínimo de largura do próprio widget — quebra a propagação
+        # de minimumSizeHint vinda de filhos (WebEngineView, ctx_bar longo).
+        self.setMinimumWidth(0)
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -318,6 +322,7 @@ class TerminalWidget(QWidget):
         self.bridge.ready.connect(self._on_bridge_ready)
 
         self.view = QWebEngineView(self)
+        self.view.setMinimumWidth(0)
         settings = self.view.settings()
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
@@ -335,6 +340,7 @@ class TerminalWidget(QWidget):
         # primeira vez que o botão "▤ Runners" é clicado — assim consoles
         # que nunca usam runners não pagam o custo de instanciar a área.
         self._main_splitter = QSplitter(Qt.Orientation.Vertical, self)
+        self._main_splitter.setMinimumWidth(0)
         self._main_splitter.addWidget(self.view)
         self._runner_panel_host = QWidget()
         self._runner_panel_host_layout = QVBoxLayout(self._runner_panel_host)

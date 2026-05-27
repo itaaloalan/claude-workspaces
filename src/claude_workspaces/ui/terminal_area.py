@@ -42,11 +42,14 @@ class TerminalArea(QWidget):
         super().__init__(parent)
         self._running_count = 0
 
+        self.setMinimumWidth(0)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         self.tabs = QTabWidget()
+        self.tabs.setMinimumWidth(0)
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)

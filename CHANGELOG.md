@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.68] — 2026-05-27
+
+### Corrigido — scroll horizontal eliminado (cadeia completa de setMinimumWidth)
+- **`terminal_widget.py`**: `setMinimumWidth(0)` no `TerminalWidget`, `QWebEngineView` e `QSplitter` — quebra propagação do minimumSizeHint do WebEngine.
+- **`terminal_area.py`**: `setMinimumWidth(0)` no `TerminalArea` e seu `QTabWidget`.
+
 ## [0.76.67] — 2026-05-27
 
 ### Corrigido — botões ocultos inflacionavam minimumSizeHint (scroll horizontal)
