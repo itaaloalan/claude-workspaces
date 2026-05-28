@@ -3576,7 +3576,7 @@ class MainWindow(QMainWindow):
                     modified = int(info.get("modified") or 0)
                     model = (info.get("model") or "").strip()
                     if branch:
-                        short = branch if len(branch) <= 22 else branch[:21] + "…"
+                        short = branch if len(branch) <= 35 else branch[:34] + "…"
                         mod_html = (
                             f" <span style='color:#ff9d3b'>●{modified}</span>"
                             if modified > 0 else ""
