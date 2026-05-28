@@ -133,9 +133,9 @@ class RunnerWidget(QWidget):
         self._stop_btn.clicked.connect(self.stop)
         toolbar.addWidget(self._stop_btn)
 
-        self._restart_btn = QPushButton("↻ Restart")
-        self._restart_btn.clicked.connect(self.restart)
-        toolbar.addWidget(self._restart_btn)
+        self._clear_log_btn = QPushButton("🧹 Limpar logs")
+        self._clear_log_btn.clicked.connect(self._clear_log)
+        toolbar.addWidget(self._clear_log_btn)
 
         self._more_btn = QPushButton("⋯")
         self._more_btn.setFixedWidth(32)
