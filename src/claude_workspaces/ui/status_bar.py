@@ -122,7 +122,7 @@ class StatusBarWidgets(QWidget):
         self.console_state.setTextFormat(Qt.TextFormat.RichText)
         self.console_state.setStyleSheet(_SEG_QSS)
         self.console_state.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.console_model = _IconSegment("fa5s.robot", "", "Modelo da sessão Claude selecionada")
+        self.console_model = _IconSegment("fa5s.robot", "", "Modelo da sessão IA selecionada")
         self.console_branch = QLabel("")
         self.console_branch.setTextFormat(Qt.TextFormat.RichText)
         self.console_branch.setStyleSheet(_SEG_QSS)
@@ -142,7 +142,7 @@ class StatusBarWidgets(QWidget):
         self.encoding = _segment("UTF-8", "Encoding")
         self.line_ending = _segment("LF", "Line ending")
         self.indent = _segment("Spaces: 4", "Indentação")
-        self.task = _segment("● Nenhuma tarefa em execução", "Estado da sessão Claude ativa")
+        self.task = _segment("● Nenhuma tarefa em execução", "Estado da sessão IA ativa")
         for w in (self.encoding, _separator(), self.line_ending, _separator(),
                   self.indent, _separator(), self.task):
             h.addWidget(w)

@@ -253,15 +253,15 @@ class ActivityBar(QWidget):
         layout.addWidget(self._open_terminal_btn)
 
         self._open_claude_btn = _NavButton(
-            "fa5s.robot", "Claude",
-            "Abre o Claude embutido numa aba nova, sem workspace (cwd = $HOME)",
+            "fa5s.robot", "IA",
+            "Escolhe e abre um agente embutido numa aba nova, sem workspace (cwd = $HOME)",
         )
         self._open_claude_btn.clicked.connect(self.open_claude_no_ctx_clicked)
         layout.addWidget(self._open_claude_btn)
 
         self._hack_btn = _NavButton(
             "fa5s.wrench", "Hack",
-            "Abre o Claude no diretório do próprio claude-workspaces pra iterar nele",
+            "Abre um agente no diretório do próprio claude-workspaces pra iterar nele",
         )
         self._hack_btn.clicked.connect(self.hack_app_clicked)
         layout.addWidget(self._hack_btn)

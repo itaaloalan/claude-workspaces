@@ -23,12 +23,12 @@ class TopBar(QWidget):
         super().__init__(parent)
         self.setObjectName("TopBar")
         self.setStyleSheet(
-            "QWidget#TopBar { background: #161616; border-bottom: 1px solid #2a2a2a; }"
+            "QWidget#TopBar { background: #151515; border-bottom: 1px solid #242424; }"
         )
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(8, 8, 12, 8)
-        row.setSpacing(10)
+        row.setContentsMargins(8, 6, 12, 6)
+        row.setSpacing(8)
 
         from PySide6.QtCore import QSize as _QS
 
@@ -38,12 +38,12 @@ class TopBar(QWidget):
         toggle_btn.setIcon(_ic("fa5s.bars", color="#c8c8c8"))
         toggle_btn.setIconSize(_QS(16, 16))
         toggle_btn.setFlat(True)
-        toggle_btn.setFixedSize(32, 32)
+        toggle_btn.setFixedSize(30, 30)
         toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         toggle_btn.setToolTip("Esconder / mostrar a barra lateral (Ctrl+B)")
         toggle_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
-            "QPushButton:hover { background: #2a2a2a; }"
+            "QPushButton:hover { background: #222; }"
         )
         toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)
         row.addWidget(toggle_btn)
@@ -55,10 +55,10 @@ class TopBar(QWidget):
         logo.setFlat(True)
         logo.setCursor(Qt.CursorShape.PointingHandCursor)
         logo.setStyleSheet(
-            "QPushButton { font-weight: 700; color: #e6e6e6; font-size: 13px; "
-            "padding: 4px 6px; background: transparent; border: 0; border-radius: 4px; "
+            "QPushButton { font-weight: 700; color: #dedede; font-size: 13px; "
+            "padding: 4px 6px; background: transparent; border: 0; border-radius: 6px; "
             "text-align: left; }"
-            "QPushButton:hover { color: #6aa9e0; background: #2a2a2a; }"
+            "QPushButton:hover { color: #6aa9e0; background: #222; }"
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
@@ -71,12 +71,12 @@ class TopBar(QWidget):
         self._ws_chip.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ws_chip.setToolTip("Workspace selecionado — click pra ir pra home")
         self._ws_chip.setStyleSheet(
-            "QPushButton { background: rgba(90, 195, 90, 28); "
-            "color: #e6e6e6; font-weight: 600; font-size: 12px; "
-            "border: 1px solid rgba(90, 195, 90, 60); border-radius: 12px; "
+            "QPushButton { background: rgba(90, 195, 90, 20); "
+            "color: #dfeee0; font-weight: 650; font-size: 12px; "
+            "border: 1px solid rgba(90, 195, 90, 42); border-radius: 12px; "
             "padding: 4px 12px; }"
-            "QPushButton:hover { background: rgba(90, 195, 90, 50); "
-            "border-color: #5ac35a; }"
+            "QPushButton:hover { background: rgba(90, 195, 90, 34); "
+            "border-color: rgba(90, 195, 90, 90); }"
         )
         self._ws_chip.clicked.connect(self.home_clicked.emit)
         self._ws_chip.setVisible(False)
@@ -87,9 +87,10 @@ class TopBar(QWidget):
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(380)
         self.search.setStyleSheet(
-            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "QLineEdit { background: #1b1b1b; border: 1px solid #292929; "
             "border-radius: 6px; padding: 6px 10px; color: #e6e6e6; }"
-            "QLineEdit:focus { border-color: #3d6ea8; }"
+            "QLineEdit:hover { border-color: #333; }"
+            "QLineEdit:focus { border-color: #3d6ea8; background: #1e1e1e; }"
         )
         self.search.textChanged.connect(self.search_changed.emit)
         self.search.returnPressed.connect(self.search_submitted.emit)
@@ -115,12 +116,12 @@ class TopBar(QWidget):
         right_dock_btn.setIcon(_ic("fa5s.columns", color="#c8c8c8"))
         right_dock_btn.setIconSize(_QS(15, 15))
         right_dock_btn.setFlat(True)
-        right_dock_btn.setFixedSize(32, 32)
+        right_dock_btn.setFixedSize(30, 30)
         right_dock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         right_dock_btn.setToolTip("Esconder / mostrar painel de ferramentas (Ctrl+Shift+B)")
         right_dock_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
-            "QPushButton:hover { background: #2a2a2a; }"
+            "QPushButton:hover { background: #222; }"
         )
         right_dock_btn.clicked.connect(self.toggle_right_dock_clicked.emit)
         row.addWidget(right_dock_btn)
@@ -131,8 +132,8 @@ class TopBar(QWidget):
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.setToolTip("Configurações (Ctrl+,)")
         settings_btn.setStyleSheet(
-            "QPushButton { background: #1f1f1f; color: #e6e6e6; "
-            "border: 1px solid #2c2c2c; border-radius: 6px; padding: 6px 12px; }"
+            "QPushButton { background: #1b1b1b; color: #d8d8d8; "
+            "border: 1px solid #2a2a2a; border-radius: 7px; padding: 6px 12px; }"
             "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
         )
         settings_btn.clicked.connect(self.settings_clicked.emit)
@@ -165,8 +166,8 @@ class TopBar(QWidget):
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
-                "  background: #c9772d; color: #fff; font-weight: 600;"
-                "  border: 1px solid #c9772d; border-radius: 6px;"
+                "  background: #b86d2a; color: #fff; font-weight: 650;"
+                "  border: 1px solid #b86d2a; border-radius: 7px;"
                 "  padding: 6px 10px;"
                 "}"
                 "QPushButton:hover { background: #e0892f; border-color: #e0892f; }"
@@ -176,8 +177,8 @@ class TopBar(QWidget):
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
-                "  background: #1f1f1f; color: #c8c8c8;"
-                "  border: 1px solid #2c2c2c; border-radius: 6px;"
+                "  background: #1b1b1b; color: #c8c8c8;"
+                "  border: 1px solid #2a2a2a; border-radius: 7px;"
                 "  padding: 6px 10px;"
                 "}"
                 "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"

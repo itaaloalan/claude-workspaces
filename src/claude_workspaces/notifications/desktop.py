@@ -40,6 +40,7 @@ class DesktopNotifierAdapter(QObject):
         is_app_focused: callable,
         timeout_ms_provider: callable | None = None,
         is_target_visible: callable | None = None,
+        fallback_notify: callable | None = None,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
@@ -47,6 +48,7 @@ class DesktopNotifierAdapter(QObject):
         self._desktop = desktop
         self._is_app_focused = is_app_focused
         self._timeout_ms_provider = timeout_ms_provider
+        self._fallback_notify = fallback_notify
         # Callable[[Notification], bool] — quando fornecida, decide a
         # supressão por foco baseada no alvo específico da notificação
         # (workspace/sessão/aba visível) em vez do app inteiro. Se a
@@ -158,9 +160,21 @@ class DesktopNotifierAdapter(QObject):
             )
         except Exception:
             log.exception("DesktopNotifier.notify falhou")
+            self._fallback(n)
             return
         if nid:
             self._active[key] = nid
+        else:
+            log.info("DesktopNotifier.notify não retornou id; usando fallback")
+            self._fallback(n)
+
+    def _fallback(self, n: Notification) -> None:
+        if self._fallback_notify is None:
+            return
+        try:
+            self._fallback_notify(n.title, n.body or "")
+        except Exception:
+            log.debug("fallback de notificação falhou", exc_info=True)
 
     def _close_for(self, n: Notification) -> None:
         key = n.dedup_key or f"_id:{n.id}"

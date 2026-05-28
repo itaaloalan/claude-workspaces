@@ -24,6 +24,16 @@ from .terminal_coordinator import TerminalCoordinator
 log = logging.getLogger(__name__)
 
 
+def _opencode_extra_dirs_prompt(extras: list[str]) -> str:
+    dirs = "\n".join(f"- {p}" for p in extras)
+    return (
+        "Contexto adicional deste workspace:\n"
+        f"{dirs}\n\n"
+        "Quando precisar consultar arquivos fora do diretório principal, use esses "
+        "caminhos absolutos como parte do contexto da tarefa."
+    )
+
+
 class LaunchCoordinator(QObject):
     sessions_refresh_requested = Signal()  # WorkspaceDetailsPanel reage
     workspace_focus_requested = Signal(str)  # MainWindow seleciona ws
@@ -46,6 +56,7 @@ class LaunchCoordinator(QObject):
         workspace: Workspace,
         resume_session_id: str = "",
         cwd_override: str = "",
+        backend_override: str = "",
     ) -> TerminalWidget | None:
         """Fluxo principal. Devolve o TerminalWidget criado ou None se
         usuário cancelou / falhou."""
@@ -61,6 +72,7 @@ class LaunchCoordinator(QObject):
         worktree_label = ""
         is_worktree = False
         initial_prompt = ""
+        submit_initial_prompt = False
         if cwd_override:
             cwd = cwd_override
             extras = []
@@ -90,12 +102,30 @@ class LaunchCoordinator(QObject):
             worktree_label = plan.worktree_label
             is_worktree = plan.is_worktree
             initial_prompt = dialog.result_initial_prompt()
+            submit_initial_prompt = bool(initial_prompt.strip())
 
-        backend = self.settings.ai_backend
+        backend = backend_override or self.settings.ai_backend
+        if backend == "opencode":
+            command = self.settings.opencode_command or "opencode"
+            launch_args = [
+                *self.settings.opencode_extra_args,
+                *self.settings.opencode_session_flags(),
+            ]
+        else:
+            command = self.settings.claude_command or "claude"
+            launch_args = self.settings.claude_launch_args()
+
+        if backend == "opencode" and extras:
+            extra_context = _opencode_extra_dirs_prompt(extras)
+            initial_prompt = (
+                f"{extra_context}\n\n{initial_prompt}"
+                if initial_prompt.strip()
+                else extra_context
+            )
         argv = build_ai_argv(
             backend,
-            self.settings.ai_command(),
-            self.settings.ai_launch_args(),
+            command,
+            launch_args,
             extras,
             resume_session_id,
         )
@@ -131,7 +161,10 @@ class LaunchCoordinator(QObject):
             # PTY, como se o usuário tivesse digitado.
             from PySide6.QtCore import QTimer
             QTimer.singleShot(
-                1500, lambda t=terminal, p=initial_prompt: t.send_text(p)
+                1500,
+                lambda t=terminal, p=initial_prompt, s=submit_initial_prompt: t.send_text(
+                    p, submit=s
+                ),
             )
         self.sessions_refresh_requested.emit()
         return terminal

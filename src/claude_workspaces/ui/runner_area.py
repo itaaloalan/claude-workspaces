@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
@@ -27,8 +26,27 @@ from PySide6.QtWidgets import (
 
 from ..models import RunnerConfig, Workspace
 from ..settings import Settings
-from .flow_layout import FlowLayout
+from . import theme
 from .runner_widget import RunnerWidget
+
+_RUNNER_BTN_QSS = (
+    "QPushButton { background: rgba(255,255,255,7); color: #c8c8c8; "
+    "border: 1px solid rgba(255,255,255,18); border-radius: 6px; "
+    "padding: 4px 10px; font-size: 11px; }"
+    "QPushButton:hover { background: rgba(255,255,255,11); "
+    "border-color: rgba(90,195,90,90); color: #e6e6e6; }"
+    "QPushButton:disabled { color: #555; border-color: rgba(255,255,255,10); }"
+)
+
+_RUNNER_TABS_QSS = (
+    "QTabWidget::pane { border: 0; background: #101010; }"
+    "QTabBar::tab { background: #171717; color: #9a9a9a; "
+    "border: 1px solid #282828; border-bottom: 0; padding: 6px 12px; "
+    "margin-right: 3px; border-top-left-radius: 7px; border-top-right-radius: 7px; }"
+    "QTabBar::tab:selected { background: #101010; color: #e6e6e6; "
+    "border-color: rgba(90,195,90,80); }"
+    "QTabBar::tab:hover:!selected { color: #d0d0d0; background: #1d1d1d; }"
+)
 
 
 def _logger():
@@ -77,79 +95,40 @@ class RunnerArea(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Header com ações de área. Label fixo à esquerda + container com
-        # FlowLayout pros botões: quando não cabem numa linha, quebram pra a
-        # próxima (alinhados à direita) em vez de gerar scroll horizontal.
+        # Header compacto: título | espaço | ▶ | ■ | ⋯
         header = QWidget()
-        # heightForWidth no header faz o QVBoxLayout-pai reservar a altura
-        # extra quando o flow dos botões quebra pra mais de uma linha.
-        hdr_sp = header.sizePolicy()
-        hdr_sp.setHeightForWidth(True)
-        header.setSizePolicy(hdr_sp)
+        header.setStyleSheet(
+            "QWidget { background: #151515; border-bottom: 1px solid #242424; }"
+            "QLabel { background: transparent; border: 0; }"
+        )
         h = QHBoxLayout(header)
         h.setContentsMargins(8, 4, 8, 4)
         h.setSpacing(6)
 
-        label = "Runners (console)" if console_session_id else "Runners"
-        h.addWidget(QLabel(label), 0, Qt.AlignmentFlag.AlignTop)
-
-        btn_host = QWidget()
-        h.addWidget(btn_host, 1)
-        # heightForWidth=True faz o QHBoxLayout reservar a altura de N linhas
-        # quando o flow quebra — sem isso o header travaria em 1 linha.
-        bh_sp = btn_host.sizePolicy()
-        bh_sp.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
-        bh_sp.setHeightForWidth(True)
-        btn_host.setSizePolicy(bh_sp)
-        h = FlowLayout(btn_host, margin=0, h_spacing=6, v_spacing=6, align_right=True)
+        label = "Runners do console" if console_session_id else "Runners"
+        title = QLabel(label)
+        title.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; font-size: 11px; font-weight: 700;"
+        )
+        h.addWidget(title)
+        h.addStretch(1)
 
         self._run_all_btn = QPushButton("▶ Rodar todos")
+        self._run_all_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._run_all_btn.clicked.connect(self._run_all)
         h.addWidget(self._run_all_btn)
 
         self._stop_all_btn = QPushButton("■ Parar todos")
+        self._stop_all_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._stop_all_btn.clicked.connect(self._stop_all)
         h.addWidget(self._stop_all_btn)
 
-        self._remove_all_btn = QPushButton("✕ Remover todos")
-        self._remove_all_btn.setToolTip(
-            "Remove todos os runners deste escopo (workspace ou console). "
-            "Runners em execução são parados antes."
-        )
-        self._remove_all_btn.clicked.connect(self._remove_all)
-        h.addWidget(self._remove_all_btn)
-
-        self._import_btn = QPushButton("Importar")
-        self._import_btn.clicked.connect(self._import_runners)
-        h.addWidget(self._import_btn)
-
-        self._export_btn = QPushButton("Exportar")
-        self._export_btn.clicked.connect(self._export_runners)
-        h.addWidget(self._export_btn)
-
-        # Só faz sentido em painel de console — copia runners workspace-scoped
-        # pro escopo deste console (novo id, console_session_id stampado).
-        self._copy_ws_btn = QPushButton("↗ Copiar do workspace")
-        self._copy_ws_btn.setToolTip(
-            "Copia um runner do workspace para este console (id novo, "
-            "console_session_id deste console). Se já existir um com o "
-            "mesmo nome neste console, ele é substituído."
-        )
-        self._copy_ws_btn.clicked.connect(self._open_copy_from_workspace_menu)
-        self._copy_ws_btn.setVisible(bool(console_session_id))
-        h.addWidget(self._copy_ws_btn)
-
-        self._reload_btn = QPushButton("↻ Recarregar runners")
-        self._reload_btn.setToolTip(
-            "Importa runners gerados pelo Claude a partir do rascunho salvo "
-            "em ~/.config/claude-workspaces/runner-drafts/<workspace>.json"
-        )
-        self._reload_btn.clicked.connect(self._reload_from_draft)
-        h.addWidget(self._reload_btn)
-
-        self._add_btn = QPushButton("+ Novo")
-        self._add_btn.clicked.connect(self._open_add_menu)
-        h.addWidget(self._add_btn)
+        self._more_btn = QPushButton("⋯")
+        self._more_btn.setStyleSheet(_RUNNER_BTN_QSS)
+        self._more_btn.setFixedWidth(32)
+        self._more_btn.setToolTip("Mais ações")
+        self._more_btn.clicked.connect(self._open_more_menu)
+        h.addWidget(self._more_btn)
 
         outer.addWidget(header)
 
@@ -157,7 +136,7 @@ class RunnerArea(QWidget):
         self._stack = QStackedWidget()
         self._empty = QLabel(
             "Nenhum runner configurado para este workspace.\n"
-            "Clique em '+ Novo' para adicionar — em branco ou gerar com Claude."
+            "Clique em '+ Novo' para adicionar — em branco ou gerar com IA."
         )
         self._empty.setStyleSheet("color: #777; padding: 24px;")
         self._empty.setWordWrap(True)
@@ -167,6 +146,7 @@ class RunnerArea(QWidget):
         self.tabs.setTabsClosable(False)
         self.tabs.setMovable(True)
         self.tabs.setDocumentMode(True)
+        self.tabs.setStyleSheet(_RUNNER_TABS_QSS)
         # Quando o user arrasta uma aba pra reordenar, sincroniza
         # `ws.runners` pra ordem dele virar a verdade — sem isso o
         # `_refresh_from_workspace` (chamado a cada add/remove) volta
@@ -177,7 +157,7 @@ class RunnerArea(QWidget):
         outer.addWidget(self._stack, stretch=1)
 
         # Callback definido por main_window para abrir o RunnerEditDialog
-        # e/ou disparar a geração via Claude. Mantém RunnerArea desacoplada
+        # e/ou disparar a geração via IA. Mantém RunnerArea desacoplada
         # da MainWindow.
         self._edit_handler: Callable[[RunnerConfig | None], None] | None = None
         self._generate_handler: Callable[[], None] | None = None
@@ -471,13 +451,21 @@ class RunnerArea(QWidget):
         self.runners_changed.emit()
         self._refresh_from_workspace()
 
-    def _open_add_menu(self) -> None:
+    def _open_more_menu(self) -> None:
         menu = QMenu(self)
-        a_blank = menu.addAction("Em branco")
+        menu.addAction("✕ Remover todos", self._remove_all)
+        menu.addSeparator()
+        menu.addAction("Importar", self._import_runners)
+        menu.addAction("Exportar", self._export_runners)
+        if self._console_session_id:
+            menu.addAction("↗ Copiar do workspace", self._open_copy_from_workspace_menu)
+        menu.addAction("↻ Recarregar runners", self._reload_from_draft)
+        menu.addSeparator()
+        a_blank = menu.addAction("+ Novo runner em branco")
         a_blank.triggered.connect(lambda: self._edit_handler and self._edit_handler(None))
-        a_gen = menu.addAction("Gerar com Claude")
+        a_gen = menu.addAction("Gerar com IA")
         a_gen.triggered.connect(lambda: self._generate_handler and self._generate_handler())
-        menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))
+        menu.exec(self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft()))
 
     def _on_edit_request(self, runner_id: str) -> None:
         if self._edit_handler is None:
@@ -538,7 +526,7 @@ class RunnerArea(QWidget):
                 self,
                 "Sem rascunho",
                 f"Nenhum rascunho encontrado em:\n{path}\n\n"
-                "Use '+ Novo → Gerar com Claude' e aguarde o Claude "
+                "Use '+ Novo → Gerar com IA' e aguarde o agente "
                 "salvar o arquivo antes de recarregar.",
             )
             return
@@ -586,7 +574,7 @@ class RunnerArea(QWidget):
                     lambda _checked=False, src=r: self._copy_runners_to_console([src])
                 )
         menu.exec(
-            self._copy_ws_btn.mapToGlobal(self._copy_ws_btn.rect().bottomLeft())
+            self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft())
         )
 
     def _copy_runners_to_console(self, sources: list[RunnerConfig]) -> None:

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -17,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..claude_sessions import ClaudeSession, list_sessions_for_paths
+from ..claude_sessions import ClaudeSession, list_sessions_for_paths_backend
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Workspace
@@ -37,7 +38,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
     delete_requested = Signal(Workspace)
     pin_toggle_requested = Signal(Workspace)
     minimize_toggle_requested = Signal()
-    launch_claude_requested = Signal(Workspace, str, str)  # workspace, resume_id, cwd_override
+    launch_claude_requested = Signal(Workspace, str, str, str)  # workspace, resume_id, cwd, backend
     launch_shell_requested = Signal(Workspace)
     handoff_requested = Signal(Workspace, ClaudeSession)
     export_session_requested = Signal(ClaudeSession)
@@ -181,7 +182,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # ---------- 4 botões grandes ----------
         big_row = QHBoxLayout()
         big_row.setSpacing(8)
-        self._claude_btn = self._make_big_button("claude", "Abrir Claude", primary=True)
+        self._claude_btn = self._make_big_button("claude", "Abrir agente…", primary=True)
         self._claude_btn.clicked.connect(self._on_launch_claude)
         big_row.addWidget(self._claude_btn, stretch=1)
 
@@ -488,7 +489,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
         )
         self._sessions_toggle_btn.clicked.connect(self._toggle_sessions_collapsed)
         header.addWidget(self._sessions_toggle_btn)
-        header.addWidget(QLabel("<b>Sessões recentes do Claude</b>"))
+        self._sessions_title = QLabel("<b>Sessões recentes</b>")
+        header.addWidget(self._sessions_title)
         self._sessions_filter = QLineEdit()
         self._sessions_filter.setPlaceholderText("Filtrar sessões…")
         self._sessions_filter.setClearButtonEnabled(True)
@@ -551,7 +553,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         for i in range(self._sessions_list.count()):
             item = self._sessions_list.item(i)
             session = item.data(Qt.ItemDataRole.UserRole)
-            if isinstance(session, ClaudeSession):
+            if hasattr(session, "preview"):
                 hay = (session.preview or "").lower()
                 hide = (bool(needle) and needle not in hay) or (
                     only_starred and not is_starred(session.id)
@@ -570,6 +572,13 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def show_workspace(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self._name.setText(workspace.name)
+        active_backend = self.settings.ai_backend
+        self._claude_btn.setText("  Abrir agente…")
+        self._sessions_title.setText(
+            "<b>Sessões recentes do OpenCode</b>"
+            if active_backend == "opencode"
+            else "<b>Sessões recentes do Claude Code</b>"
+        )
 
         # Chips: Stack | Path | MCP. Substitui os labels separados do
         # cabeçalho antigo (mantidos invisíveis pra compatibilidade interna).
@@ -638,7 +647,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
             return
         cwd, _ = self.workspace.launch_paths()
         candidate_paths = list({cwd, *self.workspace.folders})
-        sessions = list_sessions_for_paths(candidate_paths, limit=20)
+        sessions = list_sessions_for_paths_backend(
+            candidate_paths, backend=self.settings.ai_backend, limit=20
+        )
         if not sessions:
             placeholder = QListWidgetItem("(nenhuma sessão encontrada para esse projeto)")
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)
@@ -662,7 +673,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _on_handoff_card(self, session: ClaudeSession) -> None:
         if not self.workspace:
             return
-        self.handoff_requested.emit(self.workspace, session)
+        if isinstance(session, ClaudeSession):
+            self.handoff_requested.emit(self.workspace, session)
 
     def _on_star_toggled(self, _session: ClaudeSession, _starred: bool) -> None:
         # O filtro "só favoritas" precisa reagir quando uma sessão deixa de
@@ -681,7 +693,14 @@ class WorkspaceDetailsPanel(QStackedWidget):
         if not self.workspace or not self.workspace.folders:
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
             return
-        self.launch_claude_requested.emit(self.workspace, "", "")
+        menu = QMenu(self._claude_btn)
+        menu.addAction("Claude Code").triggered.connect(
+            lambda: self.launch_claude_requested.emit(self.workspace, "", "", "claude")
+        )
+        menu.addAction("OpenCode").triggered.connect(
+            lambda: self.launch_claude_requested.emit(self.workspace, "", "", "opencode")
+        )
+        menu.exec_(self._claude_btn.mapToGlobal(self._claude_btn.rect().bottomLeft()))
 
     def _on_launch_shell(self) -> None:
         if not self.workspace or not self.workspace.folders:
@@ -691,7 +710,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _on_resume_card(self, session) -> None:
         if not self.workspace:
             return
-        self.launch_claude_requested.emit(self.workspace, session.id, session.origin_cwd)
+        self.launch_claude_requested.emit(
+            self.workspace, session.id, session.origin_cwd, self.settings.ai_backend
+        )
 
     def _on_delete_session(self, session: ClaudeSession) -> None:
         when = datetime.fromtimestamp(session.mtime).strftime("%d/%m %H:%M")
@@ -709,11 +730,12 @@ class WorkspaceDetailsPanel(QStackedWidget):
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
-        try:
-            session.path.unlink(missing_ok=True)
-        except OSError as e:
-            QMessageBox.critical(self, "Falha ao remover sessão", str(e))
-            return
+        if not isinstance(session.path, str):
+            try:
+                session.path.unlink(missing_ok=True)
+            except OSError as e:
+                QMessageBox.critical(self, "Falha ao remover sessão", str(e))
+                return
         self._refresh_sessions()
 
     def _launch_ide(self, ide_key: str) -> None:

@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 class SettingsPanel(QWidget):
     settings_saved = Signal()
+    minimize_requested = Signal()
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -46,12 +47,19 @@ class SettingsPanel(QWidget):
         outer.setContentsMargins(20, 20, 20, 20)
         outer.setSpacing(12)
 
+        header = QHBoxLayout()
         title = QLabel("<h2>Configurações</h2>")
-        outer.addWidget(title)
+        header.addWidget(title)
+        header.addStretch()
+        minimize_btn = QPushButton("—  Minimizar")
+        minimize_btn.setToolTip("Minimiza as configurações e deixa o terminal ocupar o espaço")
+        minimize_btn.clicked.connect(self.minimize_requested.emit)
+        header.addWidget(minimize_btn)
+        outer.addLayout(header)
 
         intro = QLabel(
             "Customize os comandos usados pelos botões dos workspaces. "
-            "O Claude e o terminal são lançados através do seu shell interativo "
+            "A IA e o terminal são lançados através do seu shell interativo "
             "($SHELL -ic), então aliases como <code>ia</code> resolvem normalmente."
         )
         intro.setWordWrap(True)
@@ -63,17 +71,17 @@ class SettingsPanel(QWidget):
 
         self._ai_backend = QComboBox()
         self._ai_backend.addItem("Claude", "claude")
-        self._ai_backend.addItem("opencode", "opencode")
+        self._ai_backend.addItem("OpenCode", "opencode")
         self._ai_backend.currentIndexChanged.connect(self._on_backend_changed)
         form.addRow("Backend de IA:", self._ai_backend)
 
         self._ai_cmd = QLineEdit()
         self._ai_cmd.setPlaceholderText("claude")
-        form.addRow("Comando do AI:", self._ai_cmd)
+        form.addRow("Comando da IA:", self._ai_cmd)
 
         self._ai_args = QLineEdit()
         self._ai_args.setPlaceholderText("(opcional) args extras")
-        form.addRow("Args extras do AI:", self._ai_args)
+        form.addRow("Args extras da IA:", self._ai_args)
 
         self._terminal_cmd = QLineEdit()
         self._terminal_cmd.setPlaceholderText("konsole")
@@ -82,7 +90,7 @@ class SettingsPanel(QWidget):
         self._shell_cmd = QLineEdit()
         self._shell_cmd.setPlaceholderText("(vazio = shell de login do /etc/passwd)")
         self._shell_cmd.setToolTip(
-            "Shell usado pra rodar Claude/terminal interativo. Vazio = autodetectar "
+            "Shell usado pra rodar IA/terminal interativo. Vazio = autodetectar "
             "o shell de login do usuário (fish/zsh/bash). Aliases do shell são "
             "carregados porque rodamos com -i."
         )
@@ -121,7 +129,8 @@ class SettingsPanel(QWidget):
         self._browser_cmd.setToolTip(
             "Comando usado pelo 'Abrir browser ao carregar' dos runners. "
             "Vazio = QDesktopServices.openUrl (xdg-open no Linux). Aceita "
-            "binário no PATH ('chromium', 'firefox') ou caminho absoluto."
+            "binário no PATH ('chromium', 'firefox') ou caminho absoluto. "
+            "Browsers conhecidos recebem --new-tab automaticamente."
         )
         form.addRow("Browser:", self._browser_cmd)
 
@@ -355,6 +364,7 @@ class SettingsPanel(QWidget):
 
     def _build_claude_section(self) -> QWidget:
         box = QGroupBox("Claude — defaults da sessão")
+        self._claude_section = box
         layout = QVBoxLayout(box)
 
         intro = QLabel(

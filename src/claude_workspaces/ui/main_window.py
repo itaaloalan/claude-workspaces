@@ -6,6 +6,7 @@ from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
+    QCursor,
     QGuiApplication,
     QIcon,
 )
@@ -328,7 +329,7 @@ class MainWindow(QMainWindow):
 
         splitter_css = (
             "QSplitter::handle { background: #2a2a2a; }"
-            "QSplitter::handle:hover { background: #3d6ea8; }"
+            "QSplitter::handle:hover { background: #3a3a3a; }"
             "QSplitter::handle:pressed { background: #4a82c5; }"
         )
 
@@ -361,7 +362,11 @@ class MainWindow(QMainWindow):
         self.details.delete_requested.connect(self.delete_workspace)
         self.details.pin_toggle_requested.connect(self._toggle_pin_workspace)
         self.details.minimize_toggle_requested.connect(self._toggle_content_minimized)
-        self.details.launch_claude_requested.connect(self._launch_claude_for)
+        self.details.launch_claude_requested.connect(
+            lambda ws, sid, cwd, backend: self._launch_claude_for(
+                ws, sid, cwd, backend=backend
+            )
+        )
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.open_file_requested.connect(self._open_file_in_editor)
         self.details.handoff_requested.connect(self._handoff_session)
@@ -371,6 +376,7 @@ class MainWindow(QMainWindow):
         self.settings_panel = SettingsPanel(self.settings)
         self.settings_panel.set_workspace_getter(self._current_workspace)
         self.settings_panel.settings_saved.connect(self._on_settings_saved)
+        self.settings_panel.minimize_requested.connect(self._toggle_content_minimized)
         if hasattr(self, "notif_service"):
             self.settings_panel.set_notification_service(self.notif_service)
         # Wrap em QScrollArea — SettingsPanel tem várias rows de form
@@ -824,7 +830,7 @@ class MainWindow(QMainWindow):
         self._term_restore_btn.setEnabled(not (content_visible and terminal_full))
 
     def _launch_current_claude(self) -> None:
-        """Abre Claude novo no workspace selecionado. Tolera item-filho
+        """Abre um agente novo no workspace selecionado. Tolera item-filho
         (sobe pro parent) e cai pro details.workspace como último recurso
         — botão ＋ da tab bar funciona mesmo sem seleção explícita na sidebar."""
         ws: Workspace | None = None
@@ -843,7 +849,7 @@ class MainWindow(QMainWindow):
             ws = self.details.workspace
         if ws is None:
             return
-        self._launch_claude_for(ws, "", "")
+        self._show_ai_launch_menu(ws)
 
     def _toggle_right_dock(self) -> None:
         d = self.body_dock.dock("ferramentas")
@@ -1217,7 +1223,7 @@ class MainWindow(QMainWindow):
         self._bottom_sub_splitter.setMinimumWidth(0)
         self._bottom_sub_splitter.setStyleSheet(
             "QSplitter::handle { background: #2a2a2a; }"
-            "QSplitter::handle:hover { background: #3d6ea8; }"
+            "QSplitter::handle:hover { background: #3a3a3a; }"
         )
 
         # ----- Tabs do TERMINAL (só Claude console + EditorTabs) -----
@@ -1228,7 +1234,7 @@ class MainWindow(QMainWindow):
             "  padding: 6px 14px; border: 0; "
             "  border-right: 1px solid #2a2a2a; min-height: 22px; }"
             "QTabBar::tab:selected { background: #181818; color: #e6e6e6; "
-            "  border-bottom: 2px solid #3d6ea8; }"
+            "  border-bottom: 2px solid #5ac35a; }"
             "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
         )
         self._terminal_tabs = QTabWidget(pane)
@@ -1247,7 +1253,7 @@ class MainWindow(QMainWindow):
         self._terminal_tabs.tabBar().setVisible(False)
 
         from .icons import ICONS, ic
-        idx_console = self._terminal_tabs.addTab(self.terminal_host, "Claude console")
+        idx_console = self._terminal_tabs.addTab(self.terminal_host, "Console IA")
         self._terminal_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
 
         # Mantém alias _bottom_tabs apontando pro terminal_tabs pra evitar
@@ -1275,7 +1281,7 @@ class MainWindow(QMainWindow):
         # Substitui a tab bar interna do TerminalArea (que foi escondida)
         # — única fonte de "qual console estou olhando" agora é este header
         # + a seleção no sidebar (Sessões Claude).
-        self._terminal_pane_title = QLabel("Claude console")
+        self._terminal_pane_title = QLabel("Console IA")
         self._terminal_pane_title.setTextFormat(Qt.TextFormat.RichText)
         self._terminal_pane_title.setStyleSheet(
             "color: #c8c8c8; font-size: 12px;"
@@ -1397,17 +1403,18 @@ class MainWindow(QMainWindow):
 
         self._bottom_sub_splitter.addWidget(self._runners_pane)
         self._bottom_sub_splitter.addWidget(self._runners_console_pane)
-        # Restaura sizes salvos. Default: terminal 60% / runners 20% / runners_console 20%.
+        self._runners_console_pane.hide()
+        # Restaura sizes salvos. Default: terminal + runners; runners de
+        # console não ocupam mais painel separado.
         # Migração: salvos com 2 entradas (legado terminal+runners combinados)
         # → divide a antiga entrada de runners ao meio.
         saved_sub = list(self.settings.bottom_sub_splitter_sizes or [])
         if len(saved_sub) == 3 and sum(saved_sub) > 0:
-            self._bottom_sub_splitter.setSizes(saved_sub)
+            self._bottom_sub_splitter.setSizes([saved_sub[0], saved_sub[1], 0])
         elif len(saved_sub) == 2 and sum(saved_sub) > 0:
-            half = max(saved_sub[1] // 2, 80)
-            self._bottom_sub_splitter.setSizes([saved_sub[0], half, half])
+            self._bottom_sub_splitter.setSizes([saved_sub[0], saved_sub[1], 0])
         else:
-            self._bottom_sub_splitter.setSizes([600, 200, 200])
+            self._bottom_sub_splitter.setSizes([700, 260, 0])
 
         layout.addWidget(self._bottom_sub_splitter, stretch=1)
         return pane
@@ -1469,8 +1476,7 @@ class MainWindow(QMainWindow):
             if self._runners_pane_is_minimized():
                 self._toggle_runners_minimized()
         elif panel_id == "runners_console":
-            if self._runners_console_pane_is_minimized():
-                self._toggle_runners_console_minimized()
+            self._minimize_tray.remove_chip("runners_console")
         elif panel_id == "terminal_pane":
             if self._terminal_pane_is_minimized():
                 self._toggle_terminal_pane_minimized()
@@ -1487,12 +1493,7 @@ class MainWindow(QMainWindow):
         return len(sizes) >= 3 and sizes[1] <= 4
 
     def _runners_console_pane_is_minimized(self) -> bool:
-        sizes = (
-            self._bottom_sub_splitter.sizes()
-            if hasattr(self, "_bottom_sub_splitter")
-            else []
-        )
-        return len(sizes) >= 3 and sizes[2] <= 4
+        return True
 
     def _terminal_pane_is_minimized(self) -> bool:
         sizes = (
@@ -1606,18 +1607,9 @@ class MainWindow(QMainWindow):
         )
 
     def _toggle_runners_console_minimized(self) -> None:
-        self._toggle_pane_at(
-            2,
-            self._runners_console_pane,
-            self._runners_console_minimize_btn,
-            "runners_console",
-            "Runners console",
-            "fa5s.list-alt",
-            "Minimizar runners do console",
-            "Restaurar runners do console",
-            "_runners_console_last_size",
-            200,
-        )
+        if hasattr(self, "_minimize_tray"):
+            self._minimize_tray.remove_chip("runners_console")
+        self._runners_console_pane.hide()
 
     def _open_file_finder_dialog(self, initial_query: str = "") -> None:
         """Abre o modal de localizar arquivo usando as pastas do workspace
@@ -1668,6 +1660,9 @@ class MainWindow(QMainWindow):
             self._on_context_status_refresh_clicked
         )
         self._context_status_updated_label = builder.context_status_updated_label
+        self._set_console_runners_footer = builder.set_console_runners
+        builder.console_runner_requested.connect(self._open_footer_runner)
+        builder.runner_toggle_requested.connect(self._toggle_runner_from_sidebar)
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -1824,24 +1819,24 @@ class MainWindow(QMainWindow):
             if term.is_running():
                 self._add_session_info_actions(menu, term)
                 continue_act = QAction("▶ Continuar este console", menu)
-                continue_act.setToolTip("Manda 'continue' + Enter pro Claude desta aba")
+                continue_act.setToolTip("Manda 'continue' + Enter pro agente desta aba")
                 continue_act.triggered.connect(term.send_continue)
                 menu.addAction(continue_act)
                 menu.addSeparator()
                 cycle_act = QAction("↹ Ciclar modo (Plan / Auto / …)", menu)
                 cycle_act.setToolTip(
-                    "Manda Shift+Tab pro Claude — cicla entre Plan, Auto-accept "
+                    "Manda Shift+Tab pro agente — cicla entre Plan, Auto-accept "
                     "e Default. Olha o indicador embaixo-direita do TUI pra ver "
                     "onde parou."
                 )
                 cycle_act.triggered.connect(term.send_cycle_mode)
                 menu.addAction(cycle_act)
                 effort_act = QAction("⏻ Trocar effort (/effort)", menu)
-                effort_act.setToolTip("Abre o slash command /effort no prompt do Claude")
+                effort_act.setToolTip("Abre o slash command /effort no prompt do agente")
                 effort_act.triggered.connect(term.send_open_effort)
                 menu.addAction(effort_act)
                 model_act = QAction("✦ Trocar modelo (/model)", menu)
-                model_act.setToolTip("Abre o slash command /model no prompt do Claude")
+                model_act.setToolTip("Abre o slash command /model no prompt do agente")
                 model_act.triggered.connect(term.send_open_model)
                 menu.addAction(model_act)
                 menu.addSeparator()
@@ -1880,7 +1875,7 @@ class MainWindow(QMainWindow):
                 )
                 continue_all_act = QAction(label, menu)
                 continue_all_act.setToolTip(
-                    f"Manda 'continue' pra {count} console(s) Claude rodando neste workspace"
+                    f"Manda 'continue' pra {count} console(s) de IA rodando neste workspace"
                 )
                 continue_all_act.triggered.connect(
                     lambda _c=False, ts=terms: [t.send_continue() for t in ts]
@@ -2526,7 +2521,7 @@ class MainWindow(QMainWindow):
             # isso, o painel de detalhes/abas continua no projeto antigo
             # mesmo com o console novo sendo aberto neste workspace.
             self.list_widget.setCurrentItem(item)
-            self._launch_claude_for(ws, "", "")
+            self._show_ai_launch_menu(ws)
 
         def on_toggle() -> None:
             item.setExpanded(not item.isExpanded())
@@ -2700,11 +2695,11 @@ class MainWindow(QMainWindow):
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, self._EMPTY_PLACEHOLDER_ROLE)
         child.setSizeHint(0, QSize(0, 30))
-        btn = QPushButton("＋  Nova sessão do claude…")
+        btn = QPushButton("＋  Nova sessão…")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setMinimumHeight(24)
         btn.setToolTip(
-            "Abre um Claude novo neste workspace (mesma ação do botão + "
+            "Escolha Claude ou OpenCode para abrir neste workspace (mesma ação do botão + "
             "ao lado do nome)"
         )
         btn.setStyleSheet(
@@ -2715,7 +2710,7 @@ class MainWindow(QMainWindow):
             "QPushButton:hover { color: #e6e6e6; border-color: #5a5a5a; "
             "background: #1f1f1f; }"
         )
-        btn.clicked.connect(lambda: self._launch_claude_for(ws, "", ""))
+        btn.clicked.connect(lambda: self._show_ai_launch_menu(ws))
         ws_item.addChild(child)
         self.list_widget.setItemWidget(child, 0, btn)
 
@@ -2822,20 +2817,9 @@ class MainWindow(QMainWindow):
     def _install_console_runner_children(
         self, term_item: "QTreeWidgetItem", ws: Workspace, tab_id: int
     ) -> None:
-        """Cria/atualiza os runner-children como filhos do item do console,
-        agrupados sob um header colapsável "Runners console". Filtra pelo
-        `console_session_id` resolvido do terminal (ou pela chave pendente
-        quando o session_id ainda não chegou)."""
-        from .runner_child_widget import RunnerChildWidget
-        from .runner_group_widget import RunnerGroupWidget
-
+        """Remove a antiga seção visual de runners por console da sidebar."""
         gk = (ws.id, tab_id)
         group_old = self._console_runner_group_items.get(gk)
-
-        # Remove rows antigos vinculados a esse console. Limpa pelo parent
-        # (não confia no `_runner_tree_items` que pode dessincronizar e
-        # causar duplicação) — preserva runner-rows de outros consoles
-        # porque só varremos os filhos de group_old/term_item desse `gk`.
         if group_old is not None:
             while group_old.childCount() > 0:
                 child_item = group_old.child(0)
@@ -2843,6 +2827,8 @@ class MainWindow(QMainWindow):
                 if isinstance(data, tuple) and len(data) >= 3:
                     self._runner_tree_items.get(ws.id, {}).pop(data[2], None)
                 group_old.removeChild(child_item)
+            term_item.removeChild(group_old)
+            self._console_runner_group_items.pop(gk, None)
         for i in range(term_item.childCount() - 1, -1, -1):
             child_item = term_item.child(i)
             data = child_item.data(0, Qt.ItemDataRole.UserRole)
@@ -2850,87 +2836,7 @@ class MainWindow(QMainWindow):
                 if len(data) >= 3:
                     self._runner_tree_items.get(ws.id, {}).pop(data[2], None)
                 term_item.removeChild(child_item)
-
-        term = self._terminal_widget_for(tab_id)
-        if term is None:
-            if group_old is not None:
-                term_item.removeChild(group_old)
-                self._console_runner_group_items.pop(gk, None)
-            return
-        # Fonte da verdade: se a RunnerArea do console já existe, usamos
-        # exatamente os runners que ela mostra (mesmo escopo aplicado lá).
-        # Senão, filtra por sid do terminal (claim/pending).
-        existing_area = self._console_runner_areas.get(ws.id, {}).get(tab_id)
-        if existing_area is not None:
-            scoped = existing_area.runners_in_scope()
-        else:
-            sid = term.claimed_session_id() or self._pending_console_key(term)
-            scoped = [r for r in ws.runners if (r.console_session_id or "") == sid]
-        if not scoped:
-            if group_old is not None:
-                term_item.removeChild(group_old)
-                self._console_runner_group_items.pop(gk, None)
-            return
-
-        # Header "Runners console" como filho do term_item.
-        group = self._console_runner_group_items.get(gk)
-        if group is None:
-            group = QTreeWidgetItem()
-            group.setData(
-                0,
-                Qt.ItemDataRole.UserRole,
-                ("runner_group", ws.id, f"console:{tab_id}"),
-            )
-            group.setSizeHint(0, QSize(0, 24))
-            term_item.addChild(group)
-
-            def _toggle(*_, g=group):
-                g.setExpanded(not g.isExpanded())
-                w = self.list_widget.itemWidget(g, 0)
-                if isinstance(w, RunnerGroupWidget):
-                    w.set_collapsed(not g.isExpanded())
-
-            header = RunnerGroupWidget(
-                "Runners console",
-                on_toggle_collapse=_toggle,
-                on_stop_all=lambda _c=False, w=ws, t=term: self._stop_all_console_runners(w, t),
-                on_restart_all=lambda _c=False, w=ws, t=term: self._restart_all_console_runners(w, t),
-                on_run_all=lambda _c=False, w=ws, t=term: self._run_all_console_runners(w, t),
-            )
-            self.list_widget.setItemWidget(group, 0, header)
-            group.setExpanded(True)
-            header.set_collapsed(False)
-            self._console_runner_group_items[gk] = group
-
-        self._runner_tree_items.setdefault(ws.id, {})
-        for runner in scoped:
-            child = QTreeWidgetItem()
-            child.setData(0, Qt.ItemDataRole.UserRole, ("runner", ws.id, runner.id))
-            child.setSizeHint(0, QSize(0, 24))
-            widget = RunnerChildWidget(
-                runner.name or "(runner)",
-                lambda rid=runner.id, wid=ws.id: self._toggle_runner_from_sidebar(wid, rid),
-            )
-            # Estado inicial: runners de console ficam em _console_runner_areas.
-            url_set = False
-            for carea in self._console_runner_areas.get(ws.id, {}).values():
-                rw = carea.widget_for(runner.id)
-                if rw is not None:
-                    widget.set_state(rw.current_state())
-                    widget.set_url(rw.current_url())
-                    widget.set_status(rw.current_status_label())
-                    child.setSizeHint(0, QSize(0, widget.preferred_height() + 2))
-                    url_set = True
-                    break
-            if not url_set:
-                widget.set_url(runner.browser_url or "")
-            group.addChild(child)
-            self.list_widget.setItemWidget(child, 0, widget)
-            self._runner_tree_items[ws.id][runner.id] = child
-        # Tem runners no console — expande o item pro grupo ficar visível.
-        # Sem isso o grupo era criado mas ficava escondido dentro do item
-        # de console colapsado, dando a impressão de "não tem runners".
-        term_item.setExpanded(True)
+        return
 
     def _toggle_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
         """Inicia/para um runner pela sidebar. Cria a RunnerArea sob
@@ -3010,11 +2916,13 @@ class MainWindow(QMainWindow):
 
         item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
         if item is None:
+            self._refresh_console_runners_footer()
             return
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, RunnerChildWidget):
             widget.set_state(state)
         self._update_runner_group_badges(workspace_id)
+        self._refresh_console_runners_footer()
 
     def _on_runner_status_changed(
         self, workspace_id: str, runner_id: str, status: str
@@ -3023,11 +2931,13 @@ class MainWindow(QMainWindow):
 
         item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
         if item is None:
+            self._refresh_console_runners_footer()
             return
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, RunnerChildWidget):
             widget.set_status(status)
             item.setSizeHint(0, QSize(0, widget.preferred_height() + 2))
+        self._refresh_console_runners_footer()
 
     def _on_runner_url_changed(
         self, workspace_id: str, runner_id: str, url: str
@@ -3036,10 +2946,12 @@ class MainWindow(QMainWindow):
 
         item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
         if item is None:
+            self._refresh_console_runners_footer()
             return
         widget = self.list_widget.itemWidget(item, 0)
         if isinstance(widget, RunnerChildWidget):
             widget.set_url(url)
+        self._refresh_console_runners_footer()
 
     def _on_workspace_running(self, workspace_id: str, count: int) -> None:
         if count <= 0:
@@ -3140,6 +3052,7 @@ class MainWindow(QMainWindow):
             self._broadcast_workspace(None)
             self._update_status_bar(None)
             self._refresh_status_bar_console()
+            self._refresh_console_runners_footer(None)
             return
         ws = self._workspace_of_item(current)
         log.info(
@@ -3154,6 +3067,7 @@ class MainWindow(QMainWindow):
         self._sync_terminal_for(ws)
         self._update_status_bar(ws)
         self._refresh_status_bar_console()
+        self._refresh_console_runners_footer(current)
         self.plugin_coord.dispatch_workspace_opened(ws.id)
         # Safety net: clicks em RunnerChildWidget muitas vezes não
         # disparam `itemClicked` (o widget customizado intercepta o
@@ -3169,6 +3083,67 @@ class MainWindow(QMainWindow):
                 "redirecionando pro _open_runner_from_sidebar"
             )
             self._open_runner_from_sidebar(ws, current_data[2])
+
+    def _refresh_console_runners_footer(self, item=None) -> None:
+        setter = getattr(self, "_set_console_runners_footer", None)
+        if setter is None:
+            return
+        if item is None:
+            item = self.list_widget.currentItem() if hasattr(self, "list_widget") else None
+        if item is None:
+            setter([])
+            return
+        ws = self._workspace_of_item(item)
+        if ws is None:
+            setter([])
+            return
+        ws = self.workspaces_coord.find_by_id(ws.id) or ws
+        runners_by_id = {runner.id: runner for runner in (ws.runners or [])}
+        area = self._runner_areas.get(ws.id)
+        if area is not None:
+            for runner in area.runners_in_scope():
+                runners_by_id.setdefault(runner.id, runner)
+        for area in self._console_runner_areas.get(ws.id, {}).values():
+            for runner in area.runners_in_scope():
+                runners_by_id.setdefault(runner.id, runner)
+        runners = list(runners_by_id.values())
+        if not runners:
+            setter([])
+            return
+
+        def _area_for_runner(runner):
+            sid = runner.console_session_id or ""
+            if not sid:
+                return self._runner_areas.get(ws.id)
+            for area in self._console_runner_areas.get(ws.id, {}).values():
+                if area.console_session_id() == sid:
+                    return area
+            return None
+
+        rows: list[tuple[str, str, str, str, str, str]] = []
+        for runner in runners:
+            state = "idle"
+            status = "parado"
+            url = runner.browser_url or ""
+            scope = "console" if runner.console_session_id else "workspace"
+            area = _area_for_runner(runner)
+            if area is not None:
+                rw = area.widget_for(runner.id)
+                if rw is not None:
+                    state = rw.current_state()
+                    status = rw.current_status_label()
+                    url = rw.current_url() or url
+            rows.append(
+                (ws.id, runner.id, runner.name or "(runner)", state, f"{scope} · {status}", url)
+            )
+        setter(rows)
+
+    def _open_footer_runner(self, workspace_id: str, runner_id: str) -> None:
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is None:
+            return
+        self._open_runner_from_sidebar(ws, runner_id)
+        self._refresh_console_runners_footer()
 
     def _broadcast_workspace(self, workspace: Workspace | None) -> None:
         """Delega pro DockCoordinator."""
@@ -3322,7 +3297,7 @@ class MainWindow(QMainWindow):
         # garantir que estão visíveis antes de redimensionar.
         self._terminal_pane_widget.setVisible(True)
         self._runners_pane.setVisible(True)
-        self._runners_console_pane.setVisible(True)
+        self._runners_console_pane.setVisible(False)
 
         cur = self._bottom_sub_splitter.sizes()
         total = sum(cur)
@@ -3333,46 +3308,31 @@ class MainWindow(QMainWindow):
             total = 600
         # Garante len 3 — caso saved sizes ainda não tenham sido aplicados.
         if len(cur) != 3:
-            cur = [total // 2, total // 4, total // 4]
+            cur = [total // 2, total // 2, 0]
 
         # Salva last_size do pane focado antes de zerar — restauração
         # posterior precisa de um valor sensato.
         if pane == "terminal":
             if cur[1] > 4:
                 self._runners_last_size = cur[1]
-            if cur[2] > 4:
-                self._runners_console_last_size = cur[2]
             target = [total, 0, 0]
-            chips_add = [("runners", "Runners", "mdi6.source-branch"),
-                         ("runners_console", "Runners console", "fa5s.list-alt")]
+            chips_add = [("runners", "Runners", "mdi6.source-branch")]
             chips_remove = ["terminal_pane"]
-            btns_to_max = [self._runners_minimize_btn,
-                           self._runners_console_minimize_btn]
+            btns_to_max = [self._runners_minimize_btn]
             btns_to_min = [self._terminal_pane_minimize_btn]
         elif pane == "runners":
             if cur[0] > 4:
                 self._terminal_pane_last_size = cur[0]
-            if cur[2] > 4:
-                self._runners_console_last_size = cur[2]
-            target = [0, total, 0]
-            chips_add = [("terminal_pane", "Terminal", "fa5s.terminal"),
-                         ("runners_console", "Runners console", "fa5s.list-alt")]
-            chips_remove = ["runners"]
-            btns_to_max = [self._terminal_pane_minimize_btn,
-                           self._runners_console_minimize_btn]
-            btns_to_min = [self._runners_minimize_btn]
+            runner_target = getattr(self, "_runners_last_size", 320) or 320
+            runner_target = min(max(runner_target, 240), max(total // 2, 240))
+            runner_target = min(runner_target, max(total - 220, 120))
+            target = [max(total - runner_target, 220), runner_target, 0]
+            chips_add = []
+            chips_remove = ["terminal_pane", "runners"]
+            btns_to_max = []
+            btns_to_min = [self._terminal_pane_minimize_btn, self._runners_minimize_btn]
         elif pane == "runners_console":
-            if cur[0] > 4:
-                self._terminal_pane_last_size = cur[0]
-            if cur[1] > 4:
-                self._runners_last_size = cur[1]
-            target = [0, 0, total]
-            chips_add = [("terminal_pane", "Terminal", "fa5s.terminal"),
-                         ("runners", "Runners", "mdi6.source-branch")]
-            chips_remove = ["runners_console"]
-            btns_to_max = [self._terminal_pane_minimize_btn,
-                           self._runners_minimize_btn]
-            btns_to_min = [self._runners_console_minimize_btn]
+            return
         else:
             return
 
@@ -3380,6 +3340,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_minimize_tray"):
             for cid in chips_remove:
                 self._minimize_tray.remove_chip(cid)
+            self._minimize_tray.remove_chip("runners_console")
             for cid, lbl, ico in chips_add:
                 self._minimize_tray.add_chip(cid, lbl, ico)
         for b in btns_to_min:
@@ -3721,6 +3682,7 @@ class MainWindow(QMainWindow):
         area.runners_changed.connect(
             lambda wid=ws.id: self._refresh_runner_children(wid)
         )
+        area.runners_changed.connect(self._refresh_console_runners_footer)
         area.running_count_changed.connect(
             lambda count, wid=ws.id: self._on_runner_running(wid, count)
         )
@@ -3842,6 +3804,7 @@ class MainWindow(QMainWindow):
         area.runners_changed.connect(
             lambda wid=workspace.id: self._refresh_runner_children(wid)
         )
+        area.runners_changed.connect(self._refresh_console_runners_footer)
         area.runner_state_changed.connect(
             lambda rid, state, wid=workspace.id:
                 self._on_runner_state_changed(wid, rid, state)
@@ -3914,7 +3877,7 @@ class MainWindow(QMainWindow):
         if repo is None:
             QMessageBox.warning(
                 self,
-                "Não foi possível abrir o Claude",
+                "Não foi possível abrir a IA",
                 "Repositório do claude-workspaces não encontrado — gerador "
                 "precisa rodar no diretório do projeto pra ler docs/runners-spec.md",
             )
@@ -4007,10 +3970,10 @@ class MainWindow(QMainWindow):
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:
-            QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+            QMessageBox.warning(self, "Não foi possível abrir a IA", str(e))
             ws = self._current_workspace()
             self.emit_workspace_error(
-                "Falha ao abrir o Claude",
+                "Falha ao abrir a IA",
                 workspace_id=ws.id if ws else None,
                 body=str(e),
                 critical=True,
@@ -4042,7 +4005,7 @@ class MainWindow(QMainWindow):
         if repo is None:
             QMessageBox.warning(
                 self,
-                "Não foi possível abrir o Claude",
+                "Não foi possível abrir a IA",
                 "Repositório do claude-workspaces não encontrado — o editor "
                 "precisa rodar no diretório do projeto pra ler docs/runners-spec.md",
             )
@@ -4057,7 +4020,7 @@ class MainWindow(QMainWindow):
 
         hint, ok = QInputDialog.getText(
             self,
-            "Editar com Claude",
+            "Editar com IA",
             f"O que você quer ajustar no runner '{runner.name}'?\n"
             "(opcional — o erro/saída recente já vai junto)",
         )
@@ -4120,13 +4083,13 @@ class MainWindow(QMainWindow):
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:
-            QMessageBox.warning(self, "Não foi possível abrir o Claude", str(e))
+            QMessageBox.warning(self, "Não foi possível abrir a IA", str(e))
             return
         self._bottom_tabs.setCurrentWidget(self.terminal_host)
         self.terminal_host.setCurrentWidget(area)
         from .persistent_toast import flash_toast
         flash_toast(
-            "Claude aberto pra editar o runner. Quando ele salvar o rascunho, "
+            "Agente aberto pra editar o runner. Quando ele salvar o rascunho, "
             "clique em 'Recarregar' na aba de runners pra aplicar."
         )
 
@@ -4210,6 +4173,7 @@ class MainWindow(QMainWindow):
         else:
             self._runner_running_counts[workspace_id] = count
         self._refresh_item_label(workspace_id)
+        self._refresh_console_runners_footer()
 
     def _get_terminal_area(self, workspace: Workspace) -> TerminalArea:
         """Compat: delega pro TerminalCoordinator."""
@@ -4438,7 +4402,7 @@ class MainWindow(QMainWindow):
             app_name=self.settings.notify_app_name or "Claude Workspaces",
             parent=self,
         )
-        if notifier.available and notifier.supports_actions:
+        if notifier.available:
             self._desktop_notifier = notifier
             # Escuta ações disparadas em QUALQUER notificação D-Bus (inclusive
             # as emitidas pelo notify-hook.py rodando em subprocess do Claude
@@ -4456,6 +4420,7 @@ class MainWindow(QMainWindow):
                     is_app_focused=self._is_app_in_foreground,
                     timeout_ms_provider=lambda: self.settings.notify_timeout_ms,
                     is_target_visible=self._is_notification_target_visible,
+                    fallback_notify=self._show_tray_message,
                     parent=self,
                 )
                 self._desktop_adapter.open_target_requested.connect(
@@ -4470,6 +4435,19 @@ class MainWindow(QMainWindow):
                 "caindo pro tray.showMessage",
                 notifier.available, notifier.supports_actions,
             )
+
+    def _show_tray_message(self, title: str, body: str) -> None:
+        if not self.settings.notify_native_enabled or self._tray is None:
+            return
+        try:
+            self._tray.showMessage(
+                title,
+                body,
+                QSystemTrayIcon.MessageIcon.Information,
+                max(3000, int(self.settings.notify_timeout_ms or 6000)),
+            )
+        except Exception:
+            log.debug("showMessage falhou", exc_info=True)
 
     def _is_app_in_foreground(self) -> bool:
         """True se a MainWindow está ativa e visível."""
@@ -4956,10 +4934,9 @@ class MainWindow(QMainWindow):
                     area._close_tab(i)
                     return
 
-    # Altura fixa do row do QTreeWidget pro TerminalChildWidget. Inclui
-    # o overhead de padding 4px (top+bottom = 8px) do ::item — o widget
-    # interno mede 52px (sincronizado lá), então row = 52 + 8 = 60.
-    _CHILD_HEIGHT = 50
+    # Altura fixa do row do QTreeWidget pro TerminalChildWidget. Mantém a
+    # sidebar compacta, mas dá respiro suficiente pras duas linhas do card.
+    _CHILD_HEIGHT = 42
 
     def _wire_child_actions(
         self, widget: "TerminalChildWidget", tab_id: int
@@ -4981,6 +4958,7 @@ class MainWindow(QMainWindow):
                 on_cycle=term.send_cycle_mode,
                 on_effort=term.send_open_effort,
                 on_model=term.send_open_model,
+                backend=term.backend(),
                 parent=anchor_btn,
             )
             global_pos = anchor_btn.mapToGlobal(
@@ -5333,6 +5311,83 @@ class MainWindow(QMainWindow):
                 return theme.WARNING
             return theme.DANGER
 
+        opencode_line = ""
+        opencode_tooltip = ""
+
+        def _usage_text(text: str) -> str:
+            if not opencode_line:
+                return text
+            return opencode_line + "<br>" + text
+
+        def _usage_tooltip(text: str) -> str:
+            if not opencode_tooltip:
+                return text
+            return opencode_tooltip + "\n\n" + text
+
+        def _show_opencode_only() -> bool:
+            if not opencode_line:
+                return False
+            label.setText(opencode_line)
+            label.setToolTip(opencode_tooltip)
+            self._last_plan_usage_sync_at = datetime.now()
+            self._refresh_plan_usage_updated_label()
+            _set_container_visible(True)
+            return True
+
+        if self.settings.ai_backend == "opencode":
+            from ..usage_telemetry import aggregate_usage_opencode, format_tokens
+
+            try:
+                now = datetime.now(UTC)
+                recent = aggregate_usage_opencode(now - timedelta(hours=5))
+                weekly = aggregate_usage_opencode(now - timedelta(days=7))
+            except Exception:  # noqa: BLE001
+                log.debug("falha ao agregar uso do OpenCode", exc_info=True)
+                recent = {}
+                weekly = {}
+
+            def _sum(stats_map) -> tuple[int, float, str]:
+                tokens = sum(s.total_tokens for s in stats_map.values())
+                cost = sum(s.cost_usd for s in stats_map.values())
+                models: dict[str, int] = {}
+                for stats in stats_map.values():
+                    for model, count in stats.by_model.items():
+                        models[model] = models.get(model, 0) + count
+                top_model = max(models.items(), key=lambda kv: kv[1])[0] if models else ""
+                return tokens, cost, top_model
+
+            tokens_5h, cost_5h, model_5h = _sum(recent)
+            tokens_7d, cost_7d, model_7d = _sum(weekly)
+            if tokens_5h > 0 or tokens_7d > 0:
+                model = model_5h or model_7d or "modelo"
+                sep = f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
+                chips = [
+                    f"<span style='color: {theme.TEXT_FAINT};'>5h </span>"
+                    f"<span style='color: {theme.SUCCESS}; font-weight: 600;'>"
+                    f"{format_tokens(tokens_5h)}</span>",
+                    f"<span style='color: {theme.TEXT_FAINT};'>7d </span>"
+                    f"<span style='color: {theme.WARNING}; font-weight: 600;'>"
+                    f"{format_tokens(tokens_7d)}</span>",
+                ]
+                if cost_7d > 0:
+                    chips.append(
+                        f"<span style='color: {theme.TEXT_FAINT};'>custo </span>"
+                        f"<span style='color: {theme.TEXT_MUTED}; font-weight: 600;'>"
+                        f"${cost_7d:.2f}</span>"
+                    )
+                opencode_line = (
+                    f"<span style='color: {theme.TEXT_FAINT};'>OpenCode: </span>"
+                    + sep.join(chips)
+                )
+                opencode_tooltip = (
+                    "Uso local do OpenCode/OpenAI lido do banco SQLite do OpenCode.\n"
+                    "OpenAI não expõe aqui uma porcentagem de plano equivalente ao /status do Claude; "
+                    "por isso mostramos tokens/custo registrados localmente.\n"
+                    f"Modelo principal: {model}\n"
+                    f"5h: {format_tokens(tokens_5h)} tokens · ${cost_5h:.2f}\n"
+                    f"7d: {format_tokens(tokens_7d)} tokens · ${cost_7d:.2f}"
+                )
+
         # --- 1. Caminho preferido: API oficial ---
         snap = None
         try:
@@ -5420,9 +5475,9 @@ class MainWindow(QMainWindow):
                         f"<span style='color: {theme.TEXT_FAINT};'>resets in "
                         f"{five_hour_reset_str}</span>"
                     )
-                label.setText(prefix + sep.join(chips) + suffix)
+                label.setText(_usage_text(prefix + sep.join(chips) + suffix))
                 tooltip_lines.append(f"sync {sync_str} · fonte: API")
-                label.setToolTip("\n".join(tooltip_lines))
+                label.setToolTip(_usage_tooltip("\n".join(tooltip_lines)))
                 _set_container_visible(True)
                 return
 
@@ -5434,11 +5489,11 @@ class MainWindow(QMainWindow):
         cooldown_now = cooldown_remaining_seconds()
         if cooldown_now > 0:
             mins = max(1, cooldown_now // 60)
-            label.setText(
+            label.setText(_usage_text(
                 f"<span style='color: {theme.TEXT_FAINT};'>Usage: </span>"
                 f"<span style='color: {theme.WARNING};'>cooldown {mins}m</span>"
-            )
-            label.setToolTip(
+            ))
+            label.setToolTip(_usage_tooltip(
                 "/api/oauth/usage está rate-limited.\n"
                 f"Próxima tentativa permitida em {mins} minutos "
                 "(servidor manda Retry-After).\n"
@@ -5446,7 +5501,7 @@ class MainWindow(QMainWindow):
                 "Os números do fallback USD-baseado são imprecisos pra "
                 "Max 5x (não há mapeamento público token→cota), por isso "
                 "estão ocultos até a API responder."
-            )
+            ))
             _set_container_visible(True)
             return
 
@@ -5456,9 +5511,13 @@ class MainWindow(QMainWindow):
             weekly = weekly_plan_usage(7)
         except Exception:  # noqa: BLE001
             log.debug("falha ao agregar uso do plano", exc_info=True)
+            if _show_opencode_only():
+                return
             _set_container_visible(False)
             return
         if (usage.first_ts is None or usage.cost_usd <= 0) and weekly.all_cost_usd <= 0:
+            if _show_opencode_only():
+                return
             _set_container_visible(False)
             return
 
@@ -5522,8 +5581,8 @@ class MainWindow(QMainWindow):
                 f"<span style='color: {theme.TEXT_FAINT};'>resets in "
                 f"{reset_5h_str}</span>"
             )
-        label.setText(prefix + sep.join(chips) + suffix)
-        label.setToolTip(
+        label.setText(_usage_text(prefix + sep.join(chips) + suffix))
+        label.setToolTip(_usage_tooltip(
             "Plan usage limits (fallback USD-baseado — API indisponível)"
             + cooldown_note + "\n"
             f"Sessão 5h: ${usage.cost_usd:.2f} / ${self.settings.plan_usd_limit_5h:.0f}"
@@ -5543,7 +5602,7 @@ class MainWindow(QMainWindow):
             "Ajuste os limites `plan_usd_limit_5h`, "
             "`plan_weekly_usd_limit_all` e `plan_weekly_usd_limit_sonnet` "
             "em settings.json pra calibrar com claude.ai."
-        )
+        ))
         self._last_plan_usage_sync_at = datetime.now()
         self._refresh_plan_usage_updated_label()
         _set_container_visible(True)
@@ -5571,9 +5630,10 @@ class MainWindow(QMainWindow):
         resume_session_id: str,
         cwd_override: str,
         restored_on_startup: bool = False,
+        backend: str = "",
     ) -> None:
         terminal = self.launch_coord.launch_claude(
-            workspace, resume_session_id, cwd_override
+            workspace, resume_session_id, cwd_override, backend_override=backend
         )
         if terminal is not None:
             if restored_on_startup:
@@ -5597,6 +5657,24 @@ class MainWindow(QMainWindow):
             if area is not None:
                 self.terminal_host.setCurrentWidget(area)
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
+
+    def _show_ai_launch_menu(self, workspace: Workspace) -> None:
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background: #1f1f1f; color: #e6e6e6; "
+            "border: 1px solid #2c2c2c; border-radius: 6px; }"
+            "QMenu::item { padding: 6px 16px; }"
+            "QMenu::item:selected { background: #3d6ea8; color: #fff; }"
+        )
+        claude_act = menu.addAction("Claude Code")
+        claude_act.triggered.connect(
+            lambda _=False: self._launch_claude_for(workspace, "", "", backend="claude")
+        )
+        opencode_act = menu.addAction("OpenCode")
+        opencode_act.triggered.connect(
+            lambda _=False: self._launch_claude_for(workspace, "", "", backend="opencode")
+        )
+        menu.exec(QCursor.pos())
 
     def _handoff_session(self, workspace: Workspace, session) -> None:
         self.launch_coord.handoff_session(workspace, session)
@@ -5698,21 +5776,41 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.setCurrentWidget(self.terminal_host)
         self.terminal_host.setCurrentWidget(area)
 
-    def _launch_claude_no_ctx(self) -> None:
+    def _launch_claude_no_ctx(self, backend: str = "") -> None:
         """Abre o AI backend embutido em $HOME como nova aba na area 'sem ctx'."""
-        backend = self.settings.ai_backend
+        if not backend:
+            menu = QMenu(self)
+            menu.addAction("Claude Code").triggered.connect(
+                lambda _=False: self._launch_claude_no_ctx("claude")
+            )
+            menu.addAction("OpenCode").triggered.connect(
+                lambda _=False: self._launch_claude_no_ctx("opencode")
+            )
+            menu.exec(QCursor.pos())
+            return
         area = self._ensure_no_ctx_area()
         home = str(Path.home())
         short = "opencode" if backend == "opencode" else "claude"
         title = f"{short} (sem ctx) #{area.count() + 1}"
         terminal = area.add_terminal(title)
         terminal.configure_claude(home, backend=backend)
-        argv = [self.settings.ai_command(), *self.settings.ai_launch_args()]
+        if backend == "opencode":
+            argv = [
+                self.settings.opencode_command or "opencode",
+                *self.settings.opencode_extra_args,
+                *self.settings.opencode_session_flags(),
+                home,
+            ]
+        else:
+            argv = [
+                self.settings.claude_command or "claude",
+                *self.settings.claude_launch_args(),
+            ]
         try:
             terminal.start_shell_command(
                 argv,
                 home,
-                label=f"{self.settings.ai_backend} (sem ctx)",
+                label=f"{backend} (sem ctx)",
                 shell=self.settings.shell_command or None,
             )
         except Exception as e:
@@ -5824,6 +5922,7 @@ class MainWindow(QMainWindow):
                     workspace_id=ws_id,
                     session_id=session_id,
                     cwd=cwd,
+                    backend=widget.backend(),
                 ))
         save_sessions(saved)
 
@@ -5851,7 +5950,11 @@ class MainWindow(QMainWindow):
                 continue
             try:
                 self._launch_claude_for(
-                    ws, entry.session_id, entry.cwd, restored_on_startup=True
+                    ws,
+                    entry.session_id,
+                    entry.cwd,
+                    restored_on_startup=True,
+                    backend=entry.backend,
                 )
                 restored += 1
             except Exception:

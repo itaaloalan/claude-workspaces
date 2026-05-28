@@ -31,6 +31,9 @@ _NOISE_PATTERNS = [
     re.compile(r"Context\s*[·:]?\s*[▒░▓█▏▎▍▌▋▊▉|\-_=]+\s*\d+\s*%", re.IGNORECASE),
     re.compile(r"\bContext\s+\d+\s*%", re.IGNORECASE),
     re.compile(r"[▒░▓█▏▎▍▌▋▊▉]+\s*\d+\s*%"),
+    # OpenCode/GPT pode renderizar uma barra visual sem percentual no
+    # statusline; isso dominava a sidebar e empurrava branch/modelo.
+    re.compile(r"[·\s]*[█▉▊▋▌▍▎▏▒░▓■▪]+(?:[·\s]*[█▉▊▋▌▍▎▏▒░▓■▪]+){2,}"),
 ]
 
 
@@ -81,8 +84,9 @@ STATE_COLOR = {
     STATE_WORKING: theme.WARNING,
     # Aguardando = laranja forte (decisão pendente)
     STATE_AWAITING: theme.WAITING,
-    # Ocioso = vermelho (chamativo — Claude esperando ação do user)
-    STATE_IDLE: theme.DANGER,
+    # Ocioso = cinza. Vermelho fica reservado para erro; assim a lista não
+    # parece estar cheia de falhas quando só há sessões paradas no prompt.
+    STATE_IDLE: theme.TEXT_FAINT,
     # Concluído = verde
     STATE_DONE: theme.SUCCESS,
     # Erro = vermelho
@@ -138,11 +142,11 @@ class TerminalChildWidget(QWidget):
         # altura efetiva do row no QTreeWidget é o setSizeHint no
         # `_CHILD_HEIGHT` lá no main_window — manter sincronizado
         # (row = widget + 8px de border+padding do item).
-        self.setMinimumHeight(36)
-        self.setMaximumHeight(36)
+        self.setMinimumHeight(38)
+        self.setMaximumHeight(38)
 
         wrapper = QHBoxLayout(self)
-        wrapper.setContentsMargins(2, 0, 2, 0)
+        wrapper.setContentsMargins(13, 0, 2, 0)
         wrapper.setSpacing(0)
         self._card = QFrame()
         self._card.setObjectName("ConsoleCard")
@@ -150,7 +154,7 @@ class TerminalChildWidget(QWidget):
         wrapper.addWidget(self._card)
 
         outer = QHBoxLayout(self._card)
-        outer.setContentsMargins(6, 2, 6, 2)
+        outer.setContentsMargins(0, 1, 6, 1)
         outer.setSpacing(4)
 
         # Seleção: em vez de barra vertical à esquerda, usa um tint
@@ -162,15 +166,18 @@ class TerminalChildWidget(QWidget):
         self._selection_strip = QFrame()
         self._selection_strip.setVisible(False)
         self._status_strip = QFrame()
-        self._status_strip.setVisible(False)
+        self._status_strip.setFixedWidth(3)
+        self._status_strip.setObjectName("ConsoleStateStrip")
         self._selected = False
         self._apply_card_qss()
 
+        outer.addWidget(self._status_strip)
+
         # Coluna do ícone (spinner ‖/⠋) foi removida do layout — a faixa
-        # vertical de estado (`_status_strip`) já cumpre o papel de mostrar
-        # o estado do console em um glance, sem duplicar o sinal. O QLabel
-        # continua existindo (escondido) pra manter compatibilidade com
-        # `update_state` que ainda chama `setText` nele.
+        # vertical de estado (`_status_strip`) mostra o estado em um glance,
+        # sem duplicar sinal visual. O QLabel continua existindo (escondido)
+        # pra manter compatibilidade com `update_state` que ainda chama
+        # `setText` nele.
         self._icon = QLabel()
         self._icon.setVisible(False)
 
@@ -190,7 +197,7 @@ class TerminalChildWidget(QWidget):
             "fa5s.robot", color=theme.TEXT_FADED
         ).pixmap(11, 11)
         self._claude_icon_selected_pix = _ic(
-            "fa5s.robot", color=theme.PRIMARY_HOVER
+            "fa5s.robot", color=theme.SUCCESS
         ).pixmap(11, 11)
         self._claude_icon_working_pix = _ic(
             "fa5s.robot", color=theme.WARNING
@@ -226,7 +233,7 @@ class TerminalChildWidget(QWidget):
         # pelo MainWindow via set_action_callbacks.
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
-        title_row.setSpacing(4)
+        title_row.setSpacing(5)
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet(
             f"color: {STATE_TITLE_COLOR[STATE_IDLE]}; font-size: 11px;"
@@ -265,6 +272,7 @@ class TerminalChildWidget(QWidget):
         self._current_state: str = STATE_IDLE
         self._continue_eligible: bool = False
         self._actions_user_visible: bool = True
+        self._hovered: bool = False
         # Timestamp em que entrou em STATE_IDLE — usado pra exibir
         # "Ocioso · 2m 30s" na sidebar. Resetado a cada transição
         # de estado; quando volta pra idle, recomeça do zero.
@@ -304,7 +312,7 @@ class TerminalChildWidget(QWidget):
         self._continue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._continue_btn.setStyleSheet(_INLINE_BTN_QSS)
         self._continue_btn.setToolTip(
-            "Continuar este console — manda 'continue' + Enter pro Claude"
+            "Continuar este console — manda 'continue' + Enter pro agente"
         )
         self._continue_btn.setEnabled(False)
         self._continue_btn.setVisible(False)
@@ -354,6 +362,7 @@ class TerminalChildWidget(QWidget):
             self._actions_widget,
             alignment=Qt.AlignmentFlag.AlignVCenter,
         )
+        self._actions_widget.setVisible(False)
         vbox.addLayout(title_row)
 
         # 2a linha: estado à esquerda, chips de modelo + branch à direita.
@@ -400,6 +409,16 @@ class TerminalChildWidget(QWidget):
         vbox.addLayout(state_row)
 
         outer.addLayout(vbox, stretch=1)
+
+    def enterEvent(self, event) -> None:  # noqa: D401
+        self._hovered = True
+        self._refresh_actions_visibility()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: D401
+        self._hovered = False
+        self._refresh_actions_visibility()
+        super().leaveEvent(event)
 
     def set_unread_count(self, count: int) -> None:
         """Pinta badge laranja com nº de notificações pendentes nessa sessão."""
@@ -475,7 +494,7 @@ class TerminalChildWidget(QWidget):
         # ociosas em cinza desbotado.
         self._title_label.setStyleSheet(
             f"color: {STATE_TITLE_COLOR[state]};"
-            f" font-weight: 600; font-size: 12px;"
+            f" font-weight: 650; font-size: 11px;"
         )
         # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
         # em sessão restaurada+ociosa.
@@ -557,22 +576,28 @@ class TerminalChildWidget(QWidget):
             self._rename_btn.clicked.connect(lambda _=False: on_rename())
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o card sem borda ao redor — só accent-left colorido.
-        Estados atenção (awaiting/error) tintam o bg; selecionado usa tint
-        azul. Sem caixa completa: reduz poluição visual na sidebar."""
+        """Renderiza o console como item subordinado ao workspace."""
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
-            bg = "rgba(61, 110, 168, 38)"
+            bg = "rgba(90, 195, 90, 8)"
+        elif state == STATE_WORKING:
+            bg = "rgba(224, 184, 106, 7)"
         elif state == STATE_AWAITING:
-            bg = "rgba(224, 144, 96, 26)"
+            bg = "rgba(224, 144, 96, 12)"
         elif state == STATE_ERROR:
-            bg = "rgba(213, 114, 114, 26)"
+            bg = "rgba(213, 114, 114, 14)"
         else:
-            bg = theme.BG_SURFACE
+            bg = "transparent"
         self._card.setStyleSheet(
             f"#ConsoleCard {{"
             f"  background: {bg};"
             f"  border: 0;"
+            f"  border-radius: 0px;"
+            f"}}"
+            f"#ConsoleCard:hover {{ background: rgba(255, 255, 255, 6); }}"
+            f"#ConsoleStateStrip {{"
+            f"  background: {STATE_COLOR[state]};"
+            f"  border-radius: 0;"
             f"}}"
             f"#ConsoleCard QLabel {{ background: transparent; }}"
             f"#ConsoleCard QPushButton {{ background: transparent; }}"
@@ -615,7 +640,14 @@ class TerminalChildWidget(QWidget):
         header WORKSPACES. Quando oculto, o espaço é colapsado mas a
         altura total da row continua intacta."""
         self._actions_user_visible = visible
+        self._refresh_actions_visibility()
+
+    def _refresh_actions_visibility(self) -> None:
+        visible = self._actions_user_visible and self._hovered
         self._actions_widget.setVisible(visible)
+        self._mode_btn.setVisible(visible)
+        self._close_btn.setVisible(visible)
+        self._refresh_continue_visibility()
 
     def set_actions_enabled(self, enabled: bool) -> None:
         """Habilita/desabilita os botões conforme o terminal está rodando.
@@ -640,6 +672,8 @@ class TerminalChildWidget(QWidget):
         should_show = (
             self._continue_eligible
             and self._current_state == STATE_IDLE
+            and self._actions_user_visible
+            and self._hovered
         )
         self._continue_btn.setVisible(should_show)
 
@@ -724,4 +758,3 @@ def _fmt_elapsed(seconds: int) -> str:
     h, rem = divmod(seconds, 3600)
     m, _ = divmod(rem, 60)
     return f"{h}h {m:02d}m"
-

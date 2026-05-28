@@ -236,13 +236,13 @@ class _WorkspaceBorderOverlay(QWidget):
 
 
 _SECTION_HEADER_QSS = (
-    f"QLabel {{"
-    f"  color: {theme.TEXT_FAINT};"
-    f"  font-size: 10px;"
-    f"  font-weight: 700;"
-    f"  letter-spacing: 1.4px;"
-    f"  padding: 2px 4px 6px 4px;"
-    f"}}"
+    "QLabel {"
+    "  color: #7d838b;"
+    "  font-size: 10px;"
+    "  font-weight: 700;"
+    "  letter-spacing: 1.4px;"
+    "  padding: 2px 4px 4px 4px;"
+    "}"
 )
 
 _SECTION_HEADER_ROW_QSS = (
@@ -273,13 +273,10 @@ _TREE_QSS = (
     f"  color: {theme.TEXT_PRIMARY};"
     f"  outline: 0;"
     f"}}"
-    # Layout limpo: sem bordas no item, só mudança discreta de bg na
-    # seleção/hover. O respiro entre cards vem do `setSpacing` do tree
-    # (via showGridLines/padding interno do widget) e do padding-bottom
-    # do header de workspace. Removido o border-bottom separador (poluía
-    # visualmente quando combinado com a borda da seleção).
+    # Respiro vertical real entre workspaces. Os widgets internos desenham
+    # seus próprios cards; a árvore só fornece espaço.
     f"QTreeWidget::item {{"
-    f"  padding: 1px 2px;"
+    f"  padding: 3px 0px;"
     f"  border: 0;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
@@ -352,10 +349,10 @@ class SidebarBuilder:
         from ..icons import ic as _ic
 
         self.wrapper = QWidget()
-        self.wrapper.setStyleSheet(f"background: {theme.BG_PANEL};")
+        self.wrapper.setStyleSheet("background: #171717;")
         layout = QVBoxLayout(self.wrapper)
-        layout.setContentsMargins(8, 10, 8, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 8, 6)
+        layout.setSpacing(7)
 
         # Search row primeiro — search alinhado no topo igual ao mockup.
         self.search_input = QLineEdit()
@@ -380,9 +377,9 @@ class SidebarBuilder:
         self.filter_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.filter_btn.setToolTip("Filtros avançados (em breve)")
         self.filter_btn.setStyleSheet(
-            f"QPushButton {{ background: {theme.BG_SURFACE}; "
-            f"border: 1px solid {theme.BORDER_INPUT}; border-radius: {theme.RADIUS_SM}px; }}"
-            f"QPushButton:hover {{ border-color: {theme.PRIMARY}; }}"
+            "QPushButton { background: #1b1b1b; "
+            "border: 1px solid #292929; border-radius: 6px; }"
+            f"QPushButton:hover {{ border-color: {theme.PRIMARY}; background: #202020; }}"
         )
         search_row.addWidget(self.filter_btn)
         layout.addLayout(search_row)
@@ -401,7 +398,7 @@ class SidebarBuilder:
         header_row = QWidget()
         header_row.setObjectName("WorkspacesHeaderRow")
         header_layout = QHBoxLayout(header_row)
-        header_layout.setContentsMargins(0, 16, 0, 0)
+        header_layout.setContentsMargins(0, 12, 0, 0)
         header_layout.setSpacing(6)
         header = QLabel("WORKSPACES")
         header.setStyleSheet(theme.section_header_qss())
@@ -409,7 +406,7 @@ class SidebarBuilder:
 
         self.workspaces_count_label = QLabel("")
         self.workspaces_count_label.setStyleSheet(
-            f"QLabel {{ color: {theme.TEXT_FAINT}; background: {theme.BG_SURFACE}; "
+            f"QLabel {{ color: {theme.TEXT_FAINT}; background: rgba(255,255,255,16); "
             f"font-size: 9px; font-weight: 700; padding: 1px 6px; "
             f"border-radius: 7px; }}"
         )
@@ -449,10 +446,8 @@ class SidebarBuilder:
         self.list_widget = _StableTree()
         self.list_widget.setHeaderHidden(True)
         self.list_widget.setRootIsDecorated(True)
-        # Indentação 0 — os filhos (sessões, runners, etc) ficam alinhados
-        # nas duas laterais com o workspace, dando a sensação de "tudo
-        # dentro do mesmo card". A hierarquia já está clara pelo card
-        # visual + estado de expansão.
+        # Indentação leve: deixa claro que consoles/runners pertencem ao
+        # workspace sem criar uma árvore visual pesada.
         self.list_widget.setIndentation(0)
         self.list_widget.setUniformRowHeights(False)
         self.list_widget.setAnimated(True)
@@ -495,6 +490,9 @@ class SidebarBuilder:
         self.context_status_container = self._footer.usage_detail_panel
         self.context_status_refresh_btn = self._footer.context_status_refresh_btn
         self.context_status_updated_label = self._footer.context_status_updated_label
+        self.console_runner_requested = self._footer.console_runner_requested
+        self.runner_toggle_requested = self._footer.runner_toggle_requested
+        self.set_console_runners = self._footer.set_console_runners
         self.version_label = self._footer.version_label
         self.minimized_tray = self._footer.minimized_tray
         self.add_btn = self.header_add_btn  # alias — header já tem o botão +

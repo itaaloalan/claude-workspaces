@@ -74,7 +74,7 @@ class WorkspaceItemWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(30)
+        self.setMinimumHeight(36)
         self._on_add_claude = on_add_claude
         self._on_toggle_collapse = on_toggle_collapse
         self._on_toggle_pin = on_toggle_pin
@@ -93,7 +93,7 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(10, 3, 8, 3)
+        row.setContentsMargins(11, 5, 8, 5)
         row.setSpacing(6)
 
         # Ícone do workspace antes do nome — match com mockup que mostra
@@ -106,7 +106,7 @@ class WorkspaceItemWidget(QWidget):
         self._ws_icon_size = _QS(14, 14)
         # Cor da pasta reage à seleção (set_selected): azul quando
         # selecionado, branco "off" quando não.
-        self._ws_icon_color_selected = "#6aa9e0"
+        self._ws_icon_color_selected = theme.SUCCESS
         self._ws_icon_color_unselected = "#e6e6e6"
         self._ws_icon.setFixedSize(16, 16)
         row.addWidget(self._ws_icon, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -125,7 +125,7 @@ class WorkspaceItemWidget(QWidget):
         self._dot = QLabel("")
         self._dot.setFixedSize(8, 8)
         self._dot.setStyleSheet(_DOT_QSS)
-        self._dot.setToolTip("Há Claude rodando neste workspace")
+        self._dot.setToolTip("Há agente rodando neste workspace")
         self._dot.hide()
         row.addWidget(self._dot, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -171,8 +171,7 @@ class WorkspaceItemWidget(QWidget):
         self._add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._add_btn.setFixedSize(22, 22)
         self._add_btn.setToolTip(
-            "Abrir um Claude novo neste workspace (mesma ação do botão "
-            "'Abrir Claude')"
+            "Escolher Claude ou OpenCode para abrir neste workspace"
         )
         self._add_btn.setStyleSheet(_BTN_QSS)
         self._add_btn.clicked.connect(on_add_claude)
@@ -202,7 +201,7 @@ class WorkspaceItemWidget(QWidget):
             f"QMenu::item:selected {{ background: {theme.PRIMARY}; "
             f"color: {theme.TEXT_BRIGHT}; }}"
         )
-        menu.addAction("＋  Abrir Claude novo").triggered.connect(self._on_add_claude)
+        menu.addAction("＋  Abrir console novo…").triggered.connect(self._on_add_claude)
         if self._on_toggle_pin is not None:
             menu.addSeparator()
             pin_label = "📌  Desafixar workspace" if self._pinned else "📌  Fixar workspace"
@@ -260,36 +259,44 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o workspace como linha flat ou card selecionado.
-
-        Não-selecionado: sem borda, bg sutil. Hover: tint leve.
-        Selecionado: borda esquerda azul (accent) + bg tintado.
-        Sem caixa completa pra reduzir poluição visual.
-        """
+        """Renderiza o workspace como um bloco com hierarquia clara."""
         expanded = getattr(self, "_expanded", False)
         if self._selected:
-            bg = "rgba(61, 110, 168, 38)"
-            # Borda esquerda como accent (seleção) — sem caixa completa.
+            bg = "rgba(90, 195, 90, 13)"
             if expanded:
                 border_qss = (
-                    f"border: 0;"
-                    f"border-left: 3px solid {theme.PRIMARY};"
-                    f"border-top-left-radius: 6px;"
-                    f"border-top-right-radius: 6px;"
-                    f"border-bottom-left-radius: 0;"
-                    f"border-bottom-right-radius: 0;"
+                    "border: 1px solid rgba(90, 195, 90, 60);"
+                    "border-left: 2px solid rgba(90, 195, 90, 150);"
+                    "border-top-left-radius: 8px;"
+                    "border-top-right-radius: 8px;"
+                    "border-bottom-left-radius: 0;"
+                    "border-bottom-right-radius: 0;"
                 )
             else:
                 border_qss = (
-                    f"border: 0;"
-                    f"border-left: 3px solid {theme.PRIMARY};"
-                    f"border-radius: 6px;"
+                    "border: 1px solid rgba(90, 195, 90, 60);"
+                    "border-left: 2px solid rgba(90, 195, 90, 150);"
+                    "border-radius: 8px;"
                 )
-            hover_extra = f"border-left-color: {theme.PRIMARY_HOVER};"
+            hover_extra = "background: rgba(90, 195, 90, 18); border-left-color: #5ac35a;"
         else:
-            bg = "transparent"
-            border_qss = "border: 0; border-radius: 6px;"
-            hover_extra = f"background: {theme.BG_SURFACE};"
+            bg = "rgba(255, 255, 255, 7)"
+            if expanded:
+                border_qss = (
+                    "border: 1px solid rgba(255, 255, 255, 18);"
+                    "border-left: 2px solid rgba(255, 255, 255, 16);"
+                    "border-top-left-radius: 8px;"
+                    "border-top-right-radius: 8px;"
+                    "border-bottom-left-radius: 0;"
+                    "border-bottom-right-radius: 0;"
+                )
+            else:
+                border_qss = (
+                    "border: 1px solid rgba(255, 255, 255, 18);"
+                    "border-left: 2px solid rgba(255, 255, 255, 16);"
+                    "border-radius: 8px;"
+                )
+            hover_extra = "background: rgba(255, 255, 255, 12); border-color: rgba(255, 255, 255, 28);"
 
         self.setStyleSheet(
             f"#WorkspaceCard {{"

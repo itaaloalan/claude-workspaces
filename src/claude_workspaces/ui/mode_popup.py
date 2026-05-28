@@ -1,4 +1,4 @@
-"""Popup estilo VS Code pra trocar modo / effort / modelo da sessão Claude.
+"""Popup de ações do console de agente.
 
 Inspirado no popup do plugin Claude do VS Code (Modes / Effort / Model).
 Não temos API direta — só PTY, então:
@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from . import theme
 
-MODES = [
+CLAUDE_MODES = [
     ("✋", "Ask before edits", "Claude pede aprovação a cada edição"),
     ("⟨/⟩", "Edit automatically", "Edita direto sem pedir aprovação"),
     ("◧", "Plan mode", "Explora e apresenta plano antes de editar"),
@@ -100,6 +100,7 @@ class ModePopup(QWidget):
         on_cycle: Callable[[], None],
         on_effort: Callable[[], None],
         on_model: Callable[[], None],
+        backend: str = "claude",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -119,6 +120,7 @@ class ModePopup(QWidget):
         self._on_cycle = on_cycle
         self._on_effort = on_effort
         self._on_model = on_model
+        self._backend = backend
 
         v = QVBoxLayout(self)
         v.setContentsMargins(6, 6, 6, 6)
@@ -127,39 +129,38 @@ class ModePopup(QWidget):
         # ----- Header -----
         header_row = QHBoxLayout()
         header_row.setContentsMargins(8, 4, 8, 4)
-        title = QLabel("Modos")
+        title = QLabel("Ações do console")
         title.setStyleSheet(
             f"color: {theme.TEXT_FAINT}; font-size: 11px; font-weight: 600;"
             f" letter-spacing: 0.5px;"
         )
         header_row.addWidget(title)
         header_row.addStretch()
-        hint = QLabel("↹ Shift+Tab cicla")
+        hint = QLabel("Claude" if backend == "claude" else "OpenCode")
         hint.setStyleSheet(f"color: {theme.TEXT_DISABLED}; font-size: 10px;")
         header_row.addWidget(hint)
         v.addLayout(header_row)
 
-        # ----- Lista de modos (linhas clicáveis que ciclam) -----
-        for icon, name, desc in MODES:
-            row = _ModeRow(icon, name, desc)
-            row.setToolTip(
-                f"{name} — {desc}\n\nClique = Shift+Tab (cicla pra o próximo modo)."
-                "\nClique várias vezes até o Claude mostrar o modo desejado."
+        if backend == "claude":
+            for icon, name, desc in CLAUDE_MODES:
+                row = _ModeRow(icon, name, desc)
+                row.setToolTip(
+                    f"{name} — {desc}\n\nClique = Shift+Tab (cicla pra o próximo modo)."
+                    "\nClique várias vezes até o Claude mostrar o modo desejado."
+                )
+                row.clicked.connect(self._cycle_clicked)
+                v.addWidget(row)
+
+            v.addWidget(self._separator())
+
+            effort_btn = _ModeRow(
+                "⏻", "Trocar effort", "Abre /effort no prompt do Claude"
             )
-            row.clicked.connect(self._cycle_clicked)
-            v.addWidget(row)
-
-        v.addWidget(self._separator())
-
-        # ----- Effort + Modelo -----
-        effort_btn = _ModeRow(
-            "⏻", "Trocar effort", "Abre /effort no prompt do Claude"
-        )
-        effort_btn.clicked.connect(self._effort_clicked)
-        v.addWidget(effort_btn)
+            effort_btn.clicked.connect(self._effort_clicked)
+            v.addWidget(effort_btn)
 
         model_btn = _ModeRow(
-            "✦", "Trocar modelo", "Abre /model no prompt do Claude"
+            "✦", "Trocar modelo", "Abre o seletor/comando de modelo no console"
         )
         model_btn.clicked.connect(self._model_clicked)
         v.addWidget(model_btn)

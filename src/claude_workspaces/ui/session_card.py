@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..claude_sessions import ClaudeSession
 from ..session_marks import is_starred, set_starred
 from . import theme
 
@@ -38,17 +37,17 @@ _STATE_COLOR = {
 
 
 class SessionCard(QFrame):
-    """Card visual pra uma sessão do Claude. Substitui o item cru de QListWidget."""
+    """Card visual pra uma sessão de agente. Substitui item cru de QListWidget."""
 
-    resume_requested = Signal(ClaudeSession)
-    delete_requested = Signal(ClaudeSession)
-    handoff_requested = Signal(ClaudeSession)
-    export_requested = Signal(ClaudeSession)
-    star_toggled = Signal(ClaudeSession, bool)
+    resume_requested = Signal(object)
+    delete_requested = Signal(object)
+    handoff_requested = Signal(object)
+    export_requested = Signal(object)
+    star_toggled = Signal(object, bool)
 
     def __init__(
         self,
-        session: ClaudeSession,
+        session: object,
         show_origin: bool = False,
         state: SessionState | None = None,
         parent=None,
@@ -166,14 +165,17 @@ class SessionCard(QFrame):
             f"QMenu::item:selected {{ background: {theme.PRIMARY}; "
             f"color: {theme.TEXT_BRIGHT}; }}"
         )
-        menu.addAction("→  Handoff (novo Claude com briefing)").triggered.connect(
-            lambda: self.handoff_requested.emit(self.session)
-        )
-        menu.addAction("📝  Exportar como markdown").triggered.connect(
-            lambda: self.export_requested.emit(self.session)
-        )
+        path = getattr(self.session, "path", None)
+        is_jsonl = not isinstance(path, str)
+        handoff = menu.addAction("→  Handoff (novo agente com briefing)")
+        handoff.setEnabled(is_jsonl)
+        handoff.triggered.connect(lambda: self.handoff_requested.emit(self.session))
+        export = menu.addAction("📝  Exportar como markdown")
+        export.setEnabled(is_jsonl)
+        export.triggered.connect(lambda: self.export_requested.emit(self.session))
         menu.addSeparator()
-        del_action = menu.addAction("✕  Excluir sessão (.jsonl)")
+        del_action = menu.addAction("✕  Excluir sessão" + (" (.jsonl)" if is_jsonl else ""))
+        del_action.setEnabled(is_jsonl)
         del_action.triggered.connect(lambda: self.delete_requested.emit(self.session))
         menu.exec_(self._more_btn.mapToGlobal(self._more_btn.rect().bottomRight()))
 

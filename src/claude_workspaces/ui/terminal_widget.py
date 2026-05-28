@@ -606,6 +606,9 @@ class TerminalWidget(QWidget):
         diretório do JSONL no ~/.claude/projects/."""
         return self._claude_cwd
 
+    def backend(self) -> str:
+        return getattr(self, "_backend", "claude")
+
     def claimed_session_path(self) -> Path | None:
         """Caminho da sessão atualmente vinculada. Pra opencode retorna
         o path da DB (usado como sentinela de existência)."""
@@ -871,6 +874,7 @@ class TerminalWidget(QWidget):
             on_cycle=self.send_cycle_mode,
             on_effort=self.send_open_effort,
             on_model=self.send_open_model,
+            backend=getattr(self, "_backend", "claude"),
             parent=self,
         )
         # Ancorar abaixo-direita do botão ⋯ (agora que _mode_btn é oculto)

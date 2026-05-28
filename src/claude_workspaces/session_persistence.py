@@ -37,11 +37,19 @@ class SavedSession:
 
     @classmethod
     def from_dict(cls, data: dict) -> "SavedSession":
+        session_id = str(data.get("session_id") or "")
+        backend = str(data.get("backend") or "claude")
+        # Migração/defesa: sessões OpenCode usam IDs `ses_...`. Durante a
+        # primeira versão multi-backend alguns terminais podiam ser salvos
+        # como Claude e depois restaurados com `opencode -s <uuid>` ou o
+        # inverso, quebrando o startup.
+        if session_id.startswith("ses_"):
+            backend = "opencode"
         return cls(
             workspace_id=str(data.get("workspace_id") or ""),
-            session_id=str(data.get("session_id") or ""),
+            session_id=session_id,
             cwd=str(data.get("cwd") or ""),
-            backend=str(data.get("backend") or "claude"),
+            backend=backend,
         )
 
     def is_valid(self) -> bool:
@@ -80,6 +88,9 @@ def save_sessions(sessions: list[SavedSession]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"sessions": [s.to_dict() for s in sessions if s.is_valid()]}
     try:
+        if path.exists():
+            backup = path.with_suffix(".json.bak")
+            backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
         path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),
             encoding="utf-8",

@@ -9,11 +9,12 @@ os chips quebram de linha via FlowLayout pra nunca forçar scroll horizontal.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QCursor, QShowEvent
 from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -60,6 +61,9 @@ class MinimizeTray(QWidget):
         if panel_id in self._chips:
             return
         btn = QPushButton(label)
+        btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        btn.setMinimumWidth(0)
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         btn.setToolTip(f"Restaurar {label}")
         btn.setStyleSheet(
@@ -72,18 +76,27 @@ class MinimizeTray(QWidget):
             from .icons import ic
             btn.setIcon(ic(icon_name, color="#9aa0a6"))
             btn.setIconSize(QSize(11, 11))
+        hint = btn.sizeHint()
+        btn.setFixedSize(QSize(hint.width(), max(hint.height(), 22)))
         btn.clicked.connect(lambda _=False, pid=panel_id: self._on_chip_clicked(pid))
         self._flow.addWidget(btn)
         self._chips[panel_id] = btn
         self._refresh_visibility()
+        self._refresh_layout()
 
     def remove_chip(self, panel_id: str) -> None:
         """Tira o chip do workspace (após restaurar)."""
         btn = self._chips.pop(panel_id, None)
         if btn is not None:
+            for i in range(self._flow.count() - 1, -1, -1):
+                item = self._flow.itemAt(i)
+                if item is not None and item.widget() is btn:
+                    self._flow.takeAt(i)
+                    break
             btn.setParent(None)
             btn.deleteLater()
         self._refresh_visibility()
+        self._refresh_layout()
 
     def has_chip(self, panel_id: str) -> bool:
         return panel_id in self._chips
@@ -93,3 +106,15 @@ class MinimizeTray(QWidget):
 
     def _refresh_visibility(self) -> None:
         self.setVisible(bool(self._chips))
+
+    def _refresh_layout(self) -> None:
+        self._flow.invalidate()
+        self._chips_widget.updateGeometry()
+        self.updateGeometry()
+        if self.isVisible():
+            self.layout().activate()
+
+    def showEvent(self, event: QShowEvent) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        # Chips can be added while hidden; defer until Qt has final geometry.
+        QTimer.singleShot(0, self._refresh_layout)

@@ -8,6 +8,7 @@ ao vivo no xterm.js (mesmo HTML/JS da aba Terminal).
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import re
 import shlex
 import subprocess
@@ -442,7 +443,7 @@ class RunnerWidget(QWidget):
         log.info("Abrindo browser para runner %s: %s", self._runner.name, url)
         if cmd:
             try:
-                argv = shlex.split(cmd) + [url]
+                argv = self._browser_argv(cmd, url)
                 subprocess.Popen(  # noqa: S603
                     argv,
                     start_new_session=True,
@@ -453,6 +454,29 @@ class RunnerWidget(QWidget):
             except (OSError, ValueError) as e:
                 log.warning("browser_command falhou (%s), caindo em xdg-open", e)
         QDesktopServices.openUrl(QUrl(url))
+
+    def _browser_argv(self, cmd: str, url: str) -> list[str]:
+        argv = shlex.split(cmd)
+        if not argv:
+            return [url]
+        exe = Path(argv[0]).name.lower()
+        known_tab_browsers = (
+            "firefox",
+            "firefox-bin",
+            "google-chrome",
+            "chrome",
+            "chromium",
+            "chromium-browser",
+            "brave",
+            "brave-browser",
+            "microsoft-edge",
+            "microsoft-edge-stable",
+        )
+        if exe in known_tab_browsers and not any(
+            arg in {"--new-tab", "--new-window"} for arg in argv[1:]
+        ):
+            return [*argv, "--new-tab", url]
+        return [*argv, url]
 
     def _on_session_finished(self) -> None:
         # Quando o processo termina, o estado depende do que estava rodando:

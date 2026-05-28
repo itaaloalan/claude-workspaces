@@ -167,28 +167,28 @@ class RunnerEditDialog(QDialog):
 
         layout.addLayout(form)
 
-        # Editando um runner existente → "Editar com Claude" (ajusta SÓ este
-        # runner, mandando a config atual + erro recente pro Claude). Criando
-        # um novo → "Gerar com Claude" (investiga o workspace e gera do zero).
+        # Editando um runner existente → IA ajusta SÓ este runner, recebendo
+        # a config atual + erro recente. Criando um novo → IA investiga o
+        # workspace e gera do zero.
         if runner is not None and on_edit_with_claude is not None:
-            edit_ai_btn = QPushButton("✨ Editar com Claude")
+            edit_ai_btn = QPushButton("✨ Editar com IA")
             edit_ai_btn.setToolTip(
-                "Abre o Claude com a config atual deste runner + a saída/erro "
-                "recente dele e pede um ajuste. O Claude salva um rascunho; "
+                "Abre o agente com a config atual deste runner + a saída/erro "
+                "recente dele e pede um ajuste. A IA salva um rascunho; "
                 "feche este dialog e clique em 'Recarregar' pra aplicar."
             )
             edit_ai_btn.clicked.connect(self._on_edit_with_claude_clicked)
             layout.addWidget(edit_ai_btn)
         elif on_generate_with_claude is not None:
-            gen_btn = QPushButton("✨ Gerar com Claude")
+            gen_btn = QPushButton("✨ Gerar com IA")
             gen_btn.setToolTip(
-                "Abre o Claude no contexto do claude-workspaces pra gerar os "
+                "Abre o agente no contexto do claude-workspaces pra gerar os "
                 "comandos deste runner. Você copia o JSON e cola nos campos."
             )
             gen_btn.clicked.connect(on_generate_with_claude)
             layout.addWidget(gen_btn)
 
-        # Botão pra retomar a sessão Claude que originou este runner.
+        # Botão pra retomar a sessão IA que originou este runner.
         # Só aparece quando estamos editando (runner != None) e há
         # metadata de geração persistida.
         if (
@@ -197,7 +197,7 @@ class RunnerEditDialog(QDialog):
             and runner.gen_session_id
             and runner.gen_cwd
         ):
-            resume_btn = QPushButton("↻ Retomar geração com Claude")
+            resume_btn = QPushButton("↻ Retomar geração com IA")
             resume_btn.setToolTip(
                 "Reabre via `claude --resume` a sessão que gerou este runner — "
                 "use pra pedir ajustes sem perder o contexto da conversa."

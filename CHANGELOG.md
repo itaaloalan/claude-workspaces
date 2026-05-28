@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.85] — 2026-05-28
+
+### Alterado — menu compacto no header dos runners
+- `RunnerArea`: substituído FlowLayout com 8 botões por layout fixo com apenas `▶ Rodar todos`, `■ Parar todos` e botão `⋯` (mais ações). As ações secundárias (remover todos, importar, exportar, copiar do workspace, recarregar, + novo) ficam no menu dropdown — sem mais overflow/corte quando o painel é estreito.
+- `SidebarFooter._RunnerFooterRow`: removido botão "abrir" do hover (clicar na linha já abre o runner); botão `▶/■` agora sempre visível em vez de aparecer só no hover.
+
 ## [0.76.84] — 2026-05-27
 
 ### Adicionado — suporte inicial a Claude e OpenCode

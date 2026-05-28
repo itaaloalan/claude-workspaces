@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -83,10 +84,81 @@ class _UsageVisibilityProxy(QWidget):
             self._detail.setVisible(False)
 
 
+class _RunnerFooterRow(QWidget):
+    def __init__(
+        self,
+        workspace_id: str,
+        runner_id: str,
+        name: str,
+        state: str,
+        status: str,
+        url: str,
+        on_open: Callable[[str, str], None],
+        on_toggle: Callable[[str, str], None],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._workspace_id = workspace_id
+        self._runner_id = runner_id
+        self._on_open = on_open
+        self._on_toggle = on_toggle
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setToolTip("Abrir runner no painel central")
+        self.setStyleSheet(
+            "QWidget { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,14); "
+            "border-radius: 6px; } QWidget QLabel { background: transparent; border: 0; } "
+            "QWidget QPushButton { background: transparent; border: 0; }"
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(7, 4, 5, 4)
+        layout.setSpacing(6)
+
+        color = theme.SUCCESS if state == "running" else theme.TEXT_FAINT
+        dot = QLabel("●")
+        dot.setStyleSheet(f"color: {color}; font-size: 10px;")
+        layout.addWidget(dot)
+
+        sub = status or ("rodando" if state == "running" else "parado")
+        if url:
+            sub = f"{sub} · {url}"
+        text = QLabel(
+            f"<span style='color:{theme.TEXT_PRIMARY}; font-weight:650;'>{name or '(runner)'}</span>"
+            f"<br><span style='color:{theme.TEXT_FAINT}; font-size:10px;'>{sub}</span>"
+        )
+        text.setTextFormat(Qt.TextFormat.RichText)
+        text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        layout.addWidget(text, stretch=1)
+
+        action_text = "■" if state == "running" else "▶"
+        action_tip = "Parar runner" if state == "running" else "Iniciar runner"
+        self._toggle_btn = self._action_btn(action_text, action_tip)
+        self._toggle_btn.clicked.connect(
+            lambda _=False: self._on_toggle(self._workspace_id, self._runner_id)
+        )
+        layout.addWidget(self._toggle_btn)
+
+    def _action_btn(self, text: str, tooltip: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        btn.setToolTip(tooltip)
+        btn.setFixedHeight(20)
+        btn.setStyleSheet(
+            f"QPushButton {{ color: {theme.TEXT_FAINT}; font-size: 10px; padding: 1px 5px; }}"
+            f"QPushButton:hover {{ color: {theme.SUCCESS}; }}"
+        )
+        return btn
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._on_open(self._workspace_id, self._runner_id)
+        super().mousePressEvent(event)
+
+
 _CHIP_QSS = (
-    f"QPushButton {{ background: {theme.BG_SURFACE}; "
-    f"color: {theme.TEXT_FAINT}; border: 1px solid {theme.BORDER_INPUT}; "
-    f"border-radius: 3px; font-size: 9px; font-weight: 600; "
+    "QPushButton { background: #1b1b1b; "
+    f"color: {theme.TEXT_FAINT}; border: 1px solid #2a2a2a; "
+    f"border-radius: 5px; font-size: 9px; font-weight: 650; "
     f"padding: 1px 6px; max-height: 18px; }}"
     f"QPushButton:hover {{ border-color: {theme.PRIMARY}; color: {theme.TEXT_LINK}; }}"
     f"QPushButton:checked {{ background: {theme.BG_DARKER}; "
@@ -102,6 +174,9 @@ _PANEL_QSS = (
 class SidebarFooter(QWidget):
     """Rodapé compacto da sidebar com chips e painéis expansíveis."""
 
+    console_runner_requested = Signal(str, str)  # workspace_id, runner_id
+    runner_toggle_requested = Signal(str, str)  # workspace_id, runner_id
+
     def __init__(
         self,
         on_version_clicked: Callable[[], None] | None = None,
@@ -109,6 +184,8 @@ class SidebarFooter(QWidget):
     ) -> None:
         super().__init__(parent)
         self._on_version_clicked = on_version_clicked
+        self._runner_workspace_id = ""
+        self._runner_collapsed_workspace_id = ""
         self._build()
 
     def _build(self) -> None:
@@ -121,9 +198,17 @@ class SidebarFooter(QWidget):
         self._usage_chip.setCheckable(True)
         self._usage_chip.setVisible(False)
         self._usage_chip.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self._usage_chip.setToolTip("Ver detalhes de uso do plano Claude")
+        self._usage_chip.setToolTip("Ver detalhes de uso do backend de IA")
         self._usage_chip.setStyleSheet(_CHIP_QSS)
         self._usage_chip.clicked.connect(self._toggle_usage)
+
+        self._runner_chip = QPushButton("runners")
+        self._runner_chip.setCheckable(True)
+        self._runner_chip.setVisible(False)
+        self._runner_chip.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._runner_chip.setToolTip("Runners do workspace selecionado")
+        self._runner_chip.setStyleSheet(_CHIP_QSS)
+        self._runner_chip.clicked.connect(self._toggle_runners)
 
         # ── Painel: detalhe de uso ──────────────────────────────────────
         self._usage_panel = QWidget()
@@ -176,6 +261,28 @@ class SidebarFooter(QWidget):
 
         outer.addWidget(self._usage_panel)
 
+        self._runner_panel = QWidget()
+        self._runner_panel.setObjectName("FooterPanel")
+        self._runner_panel.setStyleSheet(_PANEL_QSS)
+        self._runner_panel.setVisible(False)
+        rp_layout = QVBoxLayout(self._runner_panel)
+        rp_layout.setContentsMargins(8, 6, 8, 6)
+        rp_layout.setSpacing(5)
+
+        runner_head = QLabel("Runners do workspace")
+        runner_head.setStyleSheet(
+            f"color: {theme.TEXT_FAINT}; font-size: 10px; font-weight: 700; "
+            "letter-spacing: 0.5px;"
+        )
+        rp_layout.addWidget(runner_head)
+
+        self._runner_rows_widget = QWidget()
+        self._runner_rows = QVBoxLayout(self._runner_rows_widget)
+        self._runner_rows.setContentsMargins(0, 0, 0, 0)
+        self._runner_rows.setSpacing(4)
+        rp_layout.addWidget(self._runner_rows_widget)
+        outer.addWidget(self._runner_panel)
+
         # ── Painel: minimizados ─────────────────────────────────────────
         self._min_panel = QWidget()
         self._min_panel.setObjectName("FooterPanel")
@@ -201,7 +308,7 @@ class SidebarFooter(QWidget):
         # ── Footer bar (sempre visível, 28px) ───────────────────────────
         footer_bar = QWidget()
         footer_bar.setFixedHeight(28)
-        footer_bar.setStyleSheet(f"QWidget {{ background: {theme.BG_PANEL}; }}")
+        footer_bar.setStyleSheet("QWidget { background: #171717; }")
         fb = QHBoxLayout(footer_bar)
         fb.setContentsMargins(8, 0, 6, 0)
         fb.setSpacing(4)
@@ -220,6 +327,7 @@ class SidebarFooter(QWidget):
         fb.addWidget(self.version_label, stretch=1)
 
         fb.addWidget(self._usage_chip, 0, Qt.AlignmentFlag.AlignVCenter)
+        fb.addWidget(self._runner_chip, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._min_chip = QPushButton("0 min")
         self._min_chip.setCheckable(True)
@@ -243,12 +351,31 @@ class SidebarFooter(QWidget):
         if checked and self._min_panel.isVisible():
             self._min_panel.setVisible(False)
             self._min_chip.setChecked(False)
+        if checked and self._runner_panel.isVisible():
+            self._runner_panel.setVisible(False)
+            self._runner_chip.setChecked(False)
         self._usage_panel.setVisible(checked)
+
+    def _toggle_runners(self, checked: bool) -> None:
+        if checked and self._usage_panel.isVisible():
+            self._usage_panel.setVisible(False)
+            self._usage_chip.setChecked(False)
+        if checked and self._min_panel.isVisible():
+            self._min_panel.setVisible(False)
+            self._min_chip.setChecked(False)
+        if checked:
+            self._runner_collapsed_workspace_id = ""
+        elif self._runner_workspace_id:
+            self._runner_collapsed_workspace_id = self._runner_workspace_id
+        self._runner_panel.setVisible(checked)
 
     def _toggle_min(self, checked: bool) -> None:
         if checked and self._usage_panel.isVisible():
             self._usage_panel.setVisible(False)
             self._usage_chip.setChecked(False)
+        if checked and self._runner_panel.isVisible():
+            self._runner_panel.setVisible(False)
+            self._runner_chip.setChecked(False)
         self._min_panel.setVisible(checked)
         if checked:
             # FlowLayout usa isVisible() que inclui a cadeia de parents.
@@ -267,6 +394,59 @@ class SidebarFooter(QWidget):
             self._min_chip.setChecked(False)
             self._min_panel.setVisible(False)
             self._min_chip.setVisible(False)
+
+    def set_console_runners(
+        self, runners: list[tuple[str, str, str, str, str, str]]
+    ) -> None:
+        """Atualiza a lista contextual de runners do workspace selecionado.
+
+        Tupla: (workspace_id, runner_id, name, state, status, url).
+        """
+        while self._runner_rows.count():
+            item = self._runner_rows.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+        if not runners:
+            self._runner_chip.setChecked(False)
+            self._runner_panel.setVisible(False)
+            self._runner_chip.setVisible(False)
+            self._runner_workspace_id = ""
+            return
+        workspace_id = runners[0][0]
+        workspace_changed = workspace_id != self._runner_workspace_id
+        self._runner_workspace_id = workspace_id
+        self._runner_chip.setText(f"{len(runners)} runner" + ("s" if len(runners) != 1 else ""))
+        self._runner_chip.setVisible(True)
+        for workspace_id, runner_id, name, state, status, url in runners:
+            self._runner_rows.addWidget(
+                self._make_runner_row(workspace_id, runner_id, name, state, status, url)
+            )
+        self._runner_rows.addStretch(1)
+        if workspace_changed or self._runner_collapsed_workspace_id != self._runner_workspace_id:
+            self._runner_chip.setChecked(True)
+            self._runner_panel.setVisible(True)
+
+    def _make_runner_row(
+        self,
+        workspace_id: str,
+        runner_id: str,
+        name: str,
+        state: str,
+        status: str,
+        url: str,
+    ) -> QWidget:
+        return _RunnerFooterRow(
+            workspace_id,
+            runner_id,
+            name,
+            state,
+            status,
+            url,
+            lambda wid, rid: self.console_runner_requested.emit(wid, rid),
+            lambda wid, rid: self.runner_toggle_requested.emit(wid, rid),
+        )
 
 
 class _TrackedMinimizeTray(MinimizeTray):
