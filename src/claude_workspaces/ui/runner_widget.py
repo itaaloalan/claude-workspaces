@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -136,51 +137,11 @@ class RunnerWidget(QWidget):
         self._restart_btn.clicked.connect(self.restart)
         toolbar.addWidget(self._restart_btn)
 
-        self._edit_btn = QPushButton("⚙ Editar")
-        self._edit_btn.clicked.connect(
-            lambda: self.edit_requested.emit(self._runner.id)
-        )
-        toolbar.addWidget(self._edit_btn)
-
-        self._copy_btn = QPushButton("📋 Copiar log")
-        self._copy_btn.setToolTip("Copia o log atual deste runner pro clipboard")
-        self._copy_btn.clicked.connect(self._copy_log)
-        toolbar.addWidget(self._copy_btn)
-
-        self._clear_btn = QPushButton("🧹 Limpar log")
-        self._clear_btn.setToolTip(
-            "Limpa o terminal e descarta o buffer de log deste runner"
-        )
-        self._clear_btn.clicked.connect(self._clear_log)
-        toolbar.addWidget(self._clear_btn)
-
-        # Altura igualada à dos botões irmãos — o glyph 🗑 sozinho
-        # renderiza com line-height maior em algumas fontes e empurra o
-        # botão pra cima dos demais. Width fixo mantém o look "icon-only".
-        btn_h = self._copy_btn.sizeHint().height()
-        self._del_btn = QPushButton("🗑")
-        self._del_btn.setToolTip("Remover runner")
-        self._del_btn.setFixedSize(36, btn_h)
-        self._del_btn.clicked.connect(
-            lambda: self.remove_requested.emit(self._runner.id)
-        )
-        toolbar.addWidget(self._del_btn)
-
-        # Secondary buttons start hidden — revealed on toolbar hover.
-        self._secondary_btns = [
-            self._edit_btn,
-            self._copy_btn,
-            self._clear_btn,
-            self._del_btn,
-        ]
-        for _btn in self._secondary_btns:
-            _btn.setVisible(False)
-
-        toolbar_widget.setAttribute(
-            Qt.WidgetAttribute.WA_Hover, True
-        )
-        toolbar_widget.enterEvent = self._toolbar_enter  # type: ignore[assignment]
-        toolbar_widget.leaveEvent = self._toolbar_leave  # type: ignore[assignment]
+        self._more_btn = QPushButton("⋯")
+        self._more_btn.setFixedWidth(32)
+        self._more_btn.setToolTip("Mais ações")
+        self._more_btn.clicked.connect(self._open_more_menu)
+        toolbar.addWidget(self._more_btn)
 
         outer.addWidget(toolbar_widget)
 
@@ -207,15 +168,16 @@ class RunnerWidget(QWidget):
         self._bridge_ready = False
         self._pending_cmd: tuple[str, str] | None = None  # (cmd, intent)
 
-    # ---- toolbar hover ---------------------------------------------------
+    # ---- toolbar menu ----------------------------------------------------
 
-    def _toolbar_enter(self, event) -> None:  # noqa: D401
-        for btn in self._secondary_btns:
-            btn.setVisible(True)
-
-    def _toolbar_leave(self, event) -> None:  # noqa: D401
-        for btn in self._secondary_btns:
-            btn.setVisible(False)
+    def _open_more_menu(self) -> None:
+        menu = QMenu(self)
+        menu.addAction("⚙ Editar", lambda: self.edit_requested.emit(self._runner.id))
+        menu.addAction("📋 Copiar log", self._copy_log)
+        menu.addAction("🧹 Limpar log", self._clear_log)
+        menu.addSeparator()
+        menu.addAction("🗑 Remover runner", lambda: self.remove_requested.emit(self._runner.id))
+        menu.exec(self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft()))
 
     # ---- config ----------------------------------------------------------
 

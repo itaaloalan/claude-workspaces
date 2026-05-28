@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.86] — 2026-05-28
+
+### Alterado — menu ⋯ na toolbar da aba individual de runner
+- `RunnerWidget`: botões secundários (⚙ Editar, 📋 Copiar log, 🧹 Limpar log, 🗑 Remover) saem do hover-reveal e vão para um dropdown `⋯` fixo ao lado de Start/Stop/Restart. Remove o mecanismo `_secondary_btns`/`_toolbar_enter`/`_toolbar_leave`.
+
 ## [0.76.85] — 2026-05-28
 
 ### Alterado — menu compacto no header dos runners
