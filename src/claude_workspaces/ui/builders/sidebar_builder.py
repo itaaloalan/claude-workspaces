@@ -276,7 +276,7 @@ _TREE_QSS = (
     # Respiro vertical real entre workspaces. Os widgets internos desenham
     # seus próprios cards; a árvore só fornece espaço.
     f"QTreeWidget::item {{"
-    f"  padding: 3px 0px;"
+    f"  padding: 1px 0px;"
     f"  border: 0;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"

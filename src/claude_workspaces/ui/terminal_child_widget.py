@@ -146,7 +146,7 @@ class TerminalChildWidget(QWidget):
         self.setMaximumHeight(38)
 
         wrapper = QHBoxLayout(self)
-        wrapper.setContentsMargins(13, 0, 2, 0)
+        wrapper.setContentsMargins(0, 0, 0, 0)
         wrapper.setSpacing(0)
         self._card = QFrame()
         self._card.setObjectName("ConsoleCard")

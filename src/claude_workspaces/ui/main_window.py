@@ -2594,7 +2594,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_sessoes_count(self, ws_item: "QTreeWidgetItem") -> None:
         """Atualiza o badge de contagem do bucket Sessões Claude. Se 0,
-        esconde o bucket pra não poluir o workspace sem sessões."""
+        esconde o bucket e colapsa o workspace automaticamente."""
         bucket = None
         for i in range(ws_item.childCount()):
             c = ws_item.child(i)
@@ -2610,6 +2610,8 @@ class MainWindow(QMainWindow):
             count_lbl = host.property("_count_lbl")
             if count_lbl is not None:
                 count_lbl.setText(str(count))
+        if count == 0 and ws_item.isExpanded():
+            ws_item.setExpanded(False)
 
     def _install_arquivos_bucket(self, ws_item: "QTreeWidgetItem", ws: Workspace) -> None:
         """Cria item 'Arquivos' como primeiro filho do workspace. Clicar
@@ -3508,6 +3510,14 @@ class MainWindow(QMainWindow):
         # resolvido depois da primeira instalação (signal não chegou ou
         # o JSONL só apareceu mais tarde).
         self._refresh_runner_children(workspace.id)
+        # Views contextuais (MCP, Catalog, Hooks) atualizam ao trocar workspace
+        # mesmo se já estiverem visíveis — evita mostrar dados do ws anterior.
+        if hasattr(self, "mcp_view") and self.main_stack.currentWidget() is self.mcp_view:
+            self.mcp_view.set_workspace(workspace)
+        if hasattr(self, "catalog_view") and self.main_stack.currentWidget() is self.catalog_view:
+            self.catalog_view.set_workspace(workspace)
+        if hasattr(self, "hooks_view") and self.main_stack.currentWidget() is self.hooks_view:
+            self.hooks_view.set_workspace(workspace)
 
     def _refresh_terminal_pane_title(self) -> None:
         """Atualiza o header do terminal pane com workspace + console

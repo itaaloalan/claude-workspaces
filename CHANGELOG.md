@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.76.87] — 2026-05-28
+
+### Alterado — sidebar: console colado ao workspace + colapso automático
+- `TerminalChildWidget`: margem esquerda do card removida (era 13px) — sessão fica visualmente "colada" (alinhada com a borda do workspace card).
+- `sidebar_builder._TREE_QSS`: padding dos itens da árvore reduzido de 3px para 1px — gap entre workspace e consoles minimizado.
+- `main_window._refresh_sessoes_count`: quando o workspace fica sem nenhum console, colapsa automaticamente o item da árvore.
+
+### Corrigido — MCP view não atualizava ao trocar workspace
+- `main_window._sync_terminal_for`: se `McpView`, `CatalogView` ou `HooksView` estiverem visíveis ao trocar workspace, atualizam o workspace contextual imediatamente — eliminando o bug de mostrar dados do workspace anterior.
+
 ## [0.76.86] — 2026-05-28
 
 ### Alterado — menu ⋯ na toolbar da aba individual de runner
