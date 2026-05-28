@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.88] — 2026-05-28
+
+### Corrigido — auto-collapse e indentação do console na sidebar
+- `main_window._refresh_sessoes_count`: removida a lógica de collapse daqui (era chamada antes do placeholder ser resetado, causando timing incorreto).
+- `main_window` (path de remoção de terminal): collapse explícito adicionado **após** `_refresh_empty_placeholder`, usando `_iter_terminal_items` para checar ausência de consoles e chamando `_update_workspace_collapsed_icon` diretamente — sem depender de signal chain.
+- `TerminalChildWidget`: wrapper margins ajustados de `(0,0,0,0)` para `(12, 0, 6, 0)` — 12px de recuo à esquerda cria visual de console "dentro" do workspace card.
+
 ## [0.76.87] — 2026-05-28
 
 ### Alterado — sidebar: console colado ao workspace + colapso automático

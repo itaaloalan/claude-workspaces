@@ -2593,8 +2593,7 @@ class MainWindow(QMainWindow):
                 yield c.child(j)
 
     def _refresh_sessoes_count(self, ws_item: "QTreeWidgetItem") -> None:
-        """Atualiza o badge de contagem do bucket Sessões Claude. Se 0,
-        esconde o bucket e colapsa o workspace automaticamente."""
+        """Atualiza o badge de contagem do bucket Sessões Claude. Se 0, esconde o bucket."""
         bucket = None
         for i in range(ws_item.childCount()):
             c = ws_item.child(i)
@@ -2610,8 +2609,6 @@ class MainWindow(QMainWindow):
             count_lbl = host.property("_count_lbl")
             if count_lbl is not None:
                 count_lbl.setText(str(count))
-        if count == 0 and ws_item.isExpanded():
-            ws_item.setExpanded(False)
 
     def _install_arquivos_bucket(self, ws_item: "QTreeWidgetItem", ws: Workspace) -> None:
         """Cria item 'Arquivos' como primeiro filho do workspace. Clicar
@@ -4291,6 +4288,10 @@ class MainWindow(QMainWindow):
             # Se o workspace ficou sem nenhum console, restaura o placeholder
             # com botão "Nova sessão do claude…" pra dar uma ação visível.
             self._refresh_empty_placeholder(ws_real)
+            # Auto-collapse: após tudo resetado, colapsa se não restam consoles.
+            if ws_real.isExpanded() and not list(self._iter_terminal_items(ws_real)):
+                ws_real.setExpanded(False)
+                self._update_workspace_collapsed_icon(ws_real, collapsed=True)
         # Limpa o RunnerArea do console fechado: agora o painel mora no
         # top tab "Runners (console)" (não mais embutido no terminal),
         # então é responsabilidade nossa remover do QStackedWidget.
