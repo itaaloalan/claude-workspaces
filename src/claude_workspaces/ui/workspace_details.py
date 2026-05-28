@@ -574,11 +574,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._name.setText(workspace.name)
         active_backend = self.settings.ai_backend
         self._claude_btn.setText("  Abrir agente…")
-        self._sessions_title.setText(
-            "<b>Sessões recentes do OpenCode</b>"
-            if active_backend == "opencode"
-            else "<b>Sessões recentes do Claude Code</b>"
-        )
+        self._sessions_title.setText("<b>Sessões recentes</b>")
 
         # Chips: Stack | Path | MCP. Substitui os labels separados do
         # cabeçalho antigo (mantidos invisíveis pra compatibilidade interna).
@@ -647,9 +643,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
             return
         cwd, _ = self.workspace.launch_paths()
         candidate_paths = list({cwd, *self.workspace.folders})
-        sessions = list_sessions_for_paths_backend(
-            candidate_paths, backend=self.settings.ai_backend, limit=20
-        )
+        sessions_claude = list_sessions_for_paths_backend(candidate_paths, backend="claude", limit=15)
+        sessions_oc = list_sessions_for_paths_backend(candidate_paths, backend="opencode", limit=15)
+        sessions = sorted(sessions_claude + sessions_oc, key=lambda s: s.mtime, reverse=True)[:20]
         if not sessions:
             placeholder = QListWidgetItem("(nenhuma sessão encontrada para esse projeto)")
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)
@@ -710,11 +706,17 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _on_resume_card(self, session) -> None:
         if not self.workspace:
             return
-        self.launch_claude_requested.emit(
-            self.workspace, session.id, session.origin_cwd, self.settings.ai_backend
-        )
+        backend = getattr(session, "backend", self.settings.ai_backend)
+        self.launch_claude_requested.emit(self.workspace, session.id, session.origin_cwd, backend)
 
     def _on_delete_session(self, session: ClaudeSession) -> None:
+        if getattr(session, "backend", "claude") == "opencode":
+            QMessageBox.information(
+                self, "Remover sessão",
+                "Remoção de sessões do OpenCode não é suportada aqui.\n"
+                "Gerencie-as diretamente no OpenCode."
+            )
+            return
         when = datetime.fromtimestamp(session.mtime).strftime("%d/%m %H:%M")
         preview = (session.preview or "(sem prompt registrado)").replace("\n", " ").strip()
         if len(preview) > 80:

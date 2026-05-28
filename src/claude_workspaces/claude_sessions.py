@@ -18,6 +18,7 @@ class BackendSession:
     preview: str
     path: Path | str
     origin_cwd: str
+    backend: str = "claude"
 
     def label(self, max_preview: int = 70, include_origin: bool = False) -> str:
         from datetime import datetime
@@ -215,12 +216,12 @@ def list_sessions_for_paths_backend(
         from .opencode_sessions import list_sessions_for_paths as _oc_list
         raw = _oc_list(paths, limit=limit)
         return [
-            BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd)
+            BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd, backend="opencode")
             for s in raw
         ]
     raw = list_sessions_for_paths(paths, limit=limit)
     return [
-        BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd)
+        BackendSession(id=s.id, mtime=s.mtime, preview=s.preview, path=s.path, origin_cwd=s.origin_cwd, backend="claude")
         for s in raw
     ]
 

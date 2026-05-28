@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.76.89] — 2026-05-28
+
+### Corrigido — workspace_details exibe sessões de ambos os backends
+- `BackendSession`: novo campo `backend: str = "claude"` propagado por `list_sessions_for_paths_backend`.
+- `workspace_details._refresh_sessions`: busca sessões do Claude Code E do OpenCode simultaneamente, combinadas e ordenadas por mtime — independe do backend ativo nas settings.
+- `_on_resume_card`: usa `session.backend` para decidir qual backend lançar (não mais o global `settings.ai_backend`).
+- `_on_delete_session`: sessões do OpenCode mostram aviso informativo em vez de tentar deletar arquivo inexistente.
+- Título da seção alterado de "Sessões recentes do Claude Code/OpenCode" para "Sessões recentes" (sempre).
+
 ## [0.76.88] — 2026-05-28
 
 ### Corrigido — auto-collapse e indentação do console na sidebar
