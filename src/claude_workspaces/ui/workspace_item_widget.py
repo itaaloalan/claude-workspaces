@@ -107,7 +107,7 @@ class WorkspaceItemWidget(QWidget):
         # Cor da pasta reage à seleção (set_selected): azul quando
         # selecionado, branco "off" quando não.
         self._ws_icon_color_selected = theme.SUCCESS
-        self._ws_icon_color_unselected = "#e6e6e6"
+        self._ws_icon_color_unselected = "#7aaad4"
         self._ws_icon.setFixedSize(16, 16)
         row.addWidget(self._ws_icon, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -263,40 +263,20 @@ class WorkspaceItemWidget(QWidget):
         expanded = getattr(self, "_expanded", False)
         if self._selected:
             bg = "rgba(90, 195, 90, 13)"
-            if expanded:
-                border_qss = (
-                    "border: 1px solid rgba(90, 195, 90, 60);"
-                    "border-left: 2px solid rgba(90, 195, 90, 150);"
-                    "border-top-left-radius: 8px;"
-                    "border-top-right-radius: 8px;"
-                    "border-bottom-left-radius: 0;"
-                    "border-bottom-right-radius: 0;"
-                )
-            else:
-                border_qss = (
-                    "border: 1px solid rgba(90, 195, 90, 60);"
-                    "border-left: 2px solid rgba(90, 195, 90, 150);"
-                    "border-radius: 8px;"
-                )
+            border_qss = (
+                "border: 1px solid rgba(90, 195, 90, 60);"
+                "border-left: 2px solid rgba(90, 195, 90, 150);"
+                "border-radius: 0;"
+            )
             hover_extra = "background: rgba(90, 195, 90, 18); border-left-color: #5ac35a;"
         else:
-            bg = "rgba(255, 255, 255, 7)"
-            if expanded:
-                border_qss = (
-                    "border: 1px solid rgba(255, 255, 255, 18);"
-                    "border-left: 2px solid rgba(255, 255, 255, 16);"
-                    "border-top-left-radius: 8px;"
-                    "border-top-right-radius: 8px;"
-                    "border-bottom-left-radius: 0;"
-                    "border-bottom-right-radius: 0;"
-                )
-            else:
-                border_qss = (
-                    "border: 1px solid rgba(255, 255, 255, 18);"
-                    "border-left: 2px solid rgba(255, 255, 255, 16);"
-                    "border-radius: 8px;"
-                )
-            hover_extra = "background: rgba(255, 255, 255, 12); border-color: rgba(255, 255, 255, 28);"
+            bg = "rgba(61, 110, 168, 15)"
+            border_qss = (
+                "border: 1px solid rgba(61, 110, 168, 45);"
+                "border-left: 2px solid rgba(61, 110, 168, 100);"
+                "border-radius: 0;"
+            )
+            hover_extra = "background: rgba(61, 110, 168, 22); border-left-color: #3d6ea8;"
 
         self.setStyleSheet(
             f"#WorkspaceCard {{"

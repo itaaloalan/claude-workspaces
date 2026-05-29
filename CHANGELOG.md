@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.90] — 2026-05-29
+
+### Novidades
+- Workspace items não-selecionados na sidebar exibem tint azul para distinguir visualmente de consoles filhos.
+- Footer: painéis "status de uso" e "runners" podem ficar abertos simultaneamente (não são mais mutuamente exclusivos entre si).
+
 ## [0.76.89] — 2026-05-28
 
 ### Corrigido — workspace_details exibe sessões de ambos os backends

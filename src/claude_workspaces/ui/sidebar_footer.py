@@ -351,15 +351,9 @@ class SidebarFooter(QWidget):
         if checked and self._min_panel.isVisible():
             self._min_panel.setVisible(False)
             self._min_chip.setChecked(False)
-        if checked and self._runner_panel.isVisible():
-            self._runner_panel.setVisible(False)
-            self._runner_chip.setChecked(False)
         self._usage_panel.setVisible(checked)
 
     def _toggle_runners(self, checked: bool) -> None:
-        if checked and self._usage_panel.isVisible():
-            self._usage_panel.setVisible(False)
-            self._usage_chip.setChecked(False)
         if checked and self._min_panel.isVisible():
             self._min_panel.setVisible(False)
             self._min_chip.setChecked(False)
