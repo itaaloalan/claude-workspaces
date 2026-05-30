@@ -3,15 +3,9 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from claude_workspaces.skills_discovery import KIND_AGENT, KIND_SKILL, ClaudeItem
 from claude_workspaces.ui.skill_editor_dialog import SkillEditorDialog
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    return QApplication.instance() or QApplication([])
 
 
 @pytest.fixture(autouse=True)

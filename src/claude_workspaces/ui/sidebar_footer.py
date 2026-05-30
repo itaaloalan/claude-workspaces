@@ -33,6 +33,10 @@ from .. import __version__
 from . import theme
 from .minimize_tray import MinimizeTray
 
+_RE_COOLDOWN = re.compile(r"cooldown\s+\d+[mh]")
+_RE_HOURS_PCT = re.compile(r"\d+h\s+\d+%")
+_RE_PCT = re.compile(r"\d+%")
+
 
 class _ClickableLabel(QLabel):
     clicked = Signal()
@@ -53,15 +57,15 @@ class _UsageLabel(QLabel):
     def setText(self, text: str) -> None:  # type: ignore[override]
         super().setText(text)
         plain = re.sub(r"<[^>]+>", "", text)
-        m = re.search(r"cooldown\s+\d+[mh]", plain)
+        m = _RE_COOLDOWN.search(plain)
         if m:
             self._chip.setText(m.group(0))
             return
-        m = re.search(r"\d+h\s+\d+%", plain)
+        m = _RE_HOURS_PCT.search(plain)
         if m:
             self._chip.setText(m.group(0))
             return
-        m = re.search(r"\d+%", plain)
+        m = _RE_PCT.search(plain)
         if m:
             self._chip.setText(m.group(0))
 

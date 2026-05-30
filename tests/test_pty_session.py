@@ -8,14 +8,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from claude_workspaces.pty_session import PtySession
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    return QApplication.instance() or QApplication([])
 
 
 @pytest.fixture

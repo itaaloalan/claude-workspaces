@@ -299,3 +299,39 @@ def test_picker_footer_nao_vira_status_display():
     a = parse_status(buf, last_output_age=5)
     assert "Enter to select" not in a.status
     assert a.status
+
+
+# ---------- regression: fix 2026-05-29 — decision prompt pre-computed ----------
+
+def test_decision_prompt_suppresses_working_during_tui_rerender():
+    """Re-render parcial (age < 2.5s) com decision prompt visível NÃO deve
+    virar is_working=True.
+
+    Bug: re-renders do TUI (spinner/cursor) com age < 2.5s disparariam
+    is_working=True mesmo com o prompt de permissão visível, derrubando
+    o status pra Ocioso quando o estado correto era 'Aguardando decisão'.
+    """
+    # Simula buffer com decision prompt + saída recente (age < 2.5s)
+    buf = (
+        "Escrevendo arquivo...\n"
+        "Do you want to create this file?\n"
+        "❯ 1. Yes\n"
+        "2. No\n"
+    ).encode()
+    # age < 2.5s → sem o fix, seria detectado como working
+    a = parse_status(buf, last_output_age=0.5)
+    assert a.is_working is False
+    assert a.needs_decision is True
+
+
+def test_decision_prompt_and_working_not_both_true():
+    """needs_decision não pode ser True enquanto is_working for True."""
+    buf = (
+        "Escrevendo arquivo...\n"
+        "Do you want to create this file?\n"
+        "❯ 1. Yes\n"
+        "2. No\n"
+    ).encode()
+    a = parse_status(buf, last_output_age=0.5)
+    # As duas propriedades são mutuamente exclusivas
+    assert not (a.is_working and a.needs_decision)

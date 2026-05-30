@@ -7,17 +7,10 @@ spinner liga/desliga; multi-tab tracking.
 
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from claude_workspaces.ui.coordinators.terminal_coordinator import (
     TerminalCoordinator,
 )
-
-
-@pytest.fixture(scope="module")
-def qapp():
-    app = QApplication.instance() or QApplication([])
-    return app
 
 
 @pytest.fixture
@@ -219,3 +212,38 @@ def test_inbox_entry_removed_on_clear_inbox(coord):
     coord.inbox_entry_removed.connect(lambda tid: removed.append(tid))
     coord.clear_inbox()
     assert sorted(removed) == [4, 5]
+
+
+# ---------- extra: sinal tab_activity_changed ----------
+
+def test_tab_activity_emits_tab_activity_changed(coord):
+    """O sinal público tab_activity_changed deve ser emitido com os dados corretos."""
+    emitted = []
+    coord.tab_activity_changed.connect(
+        lambda tab_id, title, status, working, running, ws_id, needs_decision:
+        emitted.append((tab_id, title, status, working, running, ws_id, needs_decision))
+    )
+    coord._on_tab_activity("ws1", 999, "claude #9", "Escrevendo", True, True)
+    assert len(emitted) == 1
+    tab_id, title, status, working, running, ws_id, needs_decision = emitted[0]
+    assert tab_id == 999
+    assert title == "claude #9"
+    assert working is True
+    assert ws_id == "ws1"
+
+
+def test_multiple_workspaces_running_counts_independent(coord):
+    """Contagens de running são independentes por workspace."""
+    coord._on_running_count_changed("wsA", 2)
+    coord._on_running_count_changed("wsB", 5)
+    assert coord.state.running_count_of("wsA") == 2
+    assert coord.state.running_count_of("wsB") == 5
+    coord._on_running_count_changed("wsA", 0)
+    assert coord.state.running_count_of("wsA") == 0
+    assert coord.state.running_count_of("wsB") == 5
+
+
+def test_inbox_does_not_count_terminated_sessions(coord):
+    """Sessão que termina sem ter passado por working não entra no inbox."""
+    coord._on_tab_activity("ws1", 8001, "claude #1", "idle", False, False)
+    assert coord.inbox_count() == 0
