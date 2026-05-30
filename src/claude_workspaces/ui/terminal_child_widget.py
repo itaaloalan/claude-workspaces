@@ -665,6 +665,7 @@ class TerminalChildWidget(QWidget):
 
     def set_pr_url(self, url: str) -> None:
         """Marca esta sessão com o PR/MR criado. Acumula chips na sidebar."""
+        url = (url or "").rstrip("/")
         if not url or url in self._pr_urls:
             return
         self._pr_urls.append(url)

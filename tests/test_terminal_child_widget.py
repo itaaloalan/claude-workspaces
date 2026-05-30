@@ -256,6 +256,14 @@ def test_set_pr_url_multiple_different_urls(widget_and_calls):
     assert w._pr_chips_layout.count() == 2
 
 
+def test_set_pr_url_trailing_slash_dedup(widget_and_calls):
+    """URL com trailing slash não deve criar chip duplicado (normalização)."""
+    w, _ = widget_and_calls
+    w.set_pr_url("https://github.com/foo/bar/pull/1")
+    w.set_pr_url("https://github.com/foo/bar/pull/1/")
+    assert w._pr_chips_layout.count() == 1
+
+
 # ---------- status_info snapshot ----------
 
 def test_status_info_keys(widget_and_calls):
