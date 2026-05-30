@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.94] — 2026-05-29
+
+### Ajuste visual
+- `WorkspaceItemWidget`: highlight do workspace selecionado trocado de tint verde (`rgba(90,195,90,...)`) para cinza neutro (`rgba(255,255,255,12)`) com borda sutil — mesma família visual do hover e do console selecionado.
+
 ## [0.76.93] — 2026-05-29
 
 ### Ajuste visual
