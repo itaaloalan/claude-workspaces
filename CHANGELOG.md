@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.77.0] — 2026-05-30
+
+### Novidade
+- MAP (e qualquer workspace com múltiplas pastas): a sidebar agora exibe **um chip por MR/PR**, lado a lado. Antes, a segunda chamada do poller sobrescrevia o primeiro chip; agora `_pr_urls` acumula as URLs e `set_pr_url` cria um novo `QLabel` chip para cada URL nova.
+
 ## [0.76.99] — 2026-05-30
 
 ### Correções

@@ -214,10 +214,9 @@ class TerminalWidget(QWidget):
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
         # o botão vira ruído. Set por main_window._restore_sessions.
         self._restored_on_startup: bool = False
-        # URL do PR detectado no output (ex: https://github.com/org/repo/pull/42).
-        # Persistido durante toda a vida da sessão — uma vez encontrado, não
-        # some mesmo após o terminal ser limpo.
-        self._pr_url: str | None = None
+        # URLs de PR/MR detectadas no output ou via poller. Persistidas durante
+        # toda a vida da sessão — acumulam, nunca somem mesmo após terminal limpo.
+        self._pr_urls: list[str] = []
         # Debounce do refit do xterm.js — durante drag de splitter / resize
         # de janela, evita disparar fits em rajada (cada um dispara 6 fits
         # com timeouts internos no JS → CPU thrash)
@@ -754,21 +753,20 @@ class TerminalWidget(QWidget):
 
         # Detecção de PR: escaneia o buffer inteiro (não só a última linha)
         # pra capturar a URL mesmo que ela tenha rolado para fora das 8k.
-        if self._pr_url is None:
-            from ..services.runner_url_detect import detect_pr_url
-            buf_text = bytes(self._output_buffer).decode("utf-8", errors="replace")
-            pr = detect_pr_url(buf_text)
-            if pr:
-                self._pr_url = pr
-                self._show_pr_banner(pr)
-                self.pr_detected.emit(pr)
+        from ..services.runner_url_detect import detect_pr_url
+        buf_text = bytes(self._output_buffer).decode("utf-8", errors="replace")
+        pr = detect_pr_url(buf_text)
+        if pr and pr not in self._pr_urls:
+            self._pr_urls.append(pr)
+            self._show_pr_banner(pr)
+            self.pr_detected.emit(pr)
 
     def set_detected_pr_url(self, url: str) -> None:
-        """Injeta URL de PR detectado externamente (PrStatusPoller).
-        Idempotente — não re-emite se a URL já é a mesma."""
-        if not url or url == self._pr_url:
+        """Injeta URL de PR/MR detectado externamente (PrStatusPoller).
+        Idempotente — não re-emite se a URL já foi registrada."""
+        if not url or url in self._pr_urls:
             return
-        self._pr_url = url
+        self._pr_urls.append(url)
         self._show_pr_banner(url)
         self.pr_detected.emit(url)
 

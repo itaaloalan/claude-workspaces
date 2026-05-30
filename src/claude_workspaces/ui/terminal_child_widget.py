@@ -6,7 +6,6 @@ console do Claude rodando num workspace, no estilo card moderno:
     ┃         opus-4.7  ·  italo/branch  ·  2K
 """
 
-import re
 import time
 from collections.abc import Callable
 
@@ -23,32 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import theme
-
-# Strip patterns que o statusline do Claude joga e poluem a sidebar
-# (ex.: "Context · ▒▒░░░░ 12%"). Mantém só texto utilizável como
-# "última ação". Aplicado em _compose_state_text.
-_NOISE_PATTERNS = [
-    re.compile(r"Context\s*[·:]?\s*[▒░▓█▏▎▍▌▋▊▉|\-_=]+\s*\d+\s*%", re.IGNORECASE),
-    re.compile(r"\bContext\s+\d+\s*%", re.IGNORECASE),
-    re.compile(r"[▒░▓█▏▎▍▌▋▊▉]+\s*\d+\s*%"),
-    # OpenCode/GPT pode renderizar uma barra visual sem percentual no
-    # statusline; isso dominava a sidebar e empurrava branch/modelo.
-    re.compile(r"[·\s]*[█▉▊▋▌▍▎▏▒░▓■▪]+(?:[·\s]*[█▉▊▋▌▍▎▏▒░▓■▪]+){2,}"),
-]
-
-
-def _strip_noise(text: str) -> str:
-    """Remove segmentos visualmente poluentes (progress bars do
-    statusline) sem mexer no resto da última ação reportada."""
-    if not text:
-        return ""
-    out = text
-    for pat in _NOISE_PATTERNS:
-        out = pat.sub("", out)
-    # Limpa separadores '·' que sobraram pendurados.
-    out = re.sub(r"\s*·\s*·\s*", " · ", out)
-    out = out.strip(" ·\t")
-    return out
+from .text_utils import _strip_noise  # noqa: F401
 
 # Estados visíveis na UI — labels padronizados de acordo com o pedido
 # do usuário (Trabalhando/Aguardando/Ocioso/Erro/Concluído).
@@ -116,6 +90,16 @@ _CHIP_BRANCH_QSS = (
     f"  padding: 0px 4px;"
     f"  font-size: 10px;"
     f"}}"
+)
+
+_CHIP_PR_QSS = (
+    "QLabel {"
+    " background: rgba(244, 114, 182, 0.12);"
+    " color: #f472b6;"
+    " font-size: 9px; font-weight: 700;"
+    " padding: 1px 5px; border-radius: 6px;"
+    " border: 0;"
+    "}"
 )
 
 _INLINE_BTN_QSS = (
@@ -305,7 +289,7 @@ class TerminalChildWidget(QWidget):
         self._model: str = ""
         self._branch: str = ""
         self._modified: int = 0
-        self._pr_url: str | None = None
+        self._pr_urls: list[str] = []
 
         # Bloco de ações fica na própria title row, à direita do título —
         # mantém o título com peso visual (bold) e libera a linha do estado
@@ -410,23 +394,12 @@ class TerminalChildWidget(QWidget):
         self._git_label.setVisible(False)
         state_row.addWidget(self._git_label, 0, Qt.AlignmentFlag.AlignRight)
 
-        self._pr_label = QLabel("")
-        self._pr_label.setTextFormat(Qt.TextFormat.RichText)
-        self._pr_label.setStyleSheet(
-            "QLabel {"
-            " background: rgba(244, 114, 182, 0.12);"
-            " color: #f472b6;"
-            " font-size: 9px; font-weight: 700;"
-            " padding: 1px 5px; border-radius: 6px;"
-            " border: 0;"
-            "}"
-        )
-        self._pr_label.setSizePolicy(
-            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
-        )
-        self._pr_label.setMaximumHeight(16)
-        self._pr_label.setVisible(False)
-        state_row.addWidget(self._pr_label, 0, Qt.AlignmentFlag.AlignRight)
+        self._pr_chips_container = QWidget()
+        self._pr_chips_layout = QHBoxLayout(self._pr_chips_container)
+        self._pr_chips_layout.setContentsMargins(0, 0, 0, 0)
+        self._pr_chips_layout.setSpacing(3)
+        self._pr_chips_container.setVisible(False)
+        state_row.addWidget(self._pr_chips_container, 0, Qt.AlignmentFlag.AlignRight)
 
         vbox.addLayout(state_row)
 
@@ -691,15 +664,19 @@ class TerminalChildWidget(QWidget):
         self._continue_btn.setVisible(should_show)
 
     def set_pr_url(self, url: str) -> None:
-        """Marca esta sessão com o PR criado. Exibe chip rosa na sidebar."""
-        if not url or url == self._pr_url:
+        """Marca esta sessão com o PR/MR criado. Acumula chips na sidebar."""
+        if not url or url in self._pr_urls:
             return
-        self._pr_url = url
+        self._pr_urls.append(url)
         from ..services.runner_url_detect import pr_label_from_url
-        label = pr_label_from_url(url)
-        self._pr_label.setText(label)
-        self._pr_label.setToolTip(url)
-        self._pr_label.setVisible(True)
+        chip = QLabel(pr_label_from_url(url))
+        chip.setTextFormat(Qt.TextFormat.RichText)
+        chip.setStyleSheet(_CHIP_PR_QSS)
+        chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        chip.setMaximumHeight(16)
+        chip.setToolTip(url)
+        self._pr_chips_layout.addWidget(chip)
+        self._pr_chips_container.setVisible(True)
 
     def update_git_info(self, branch: str, modified: int) -> None:
         """Atualiza o label do lado direito com branch e contagem de
@@ -761,7 +738,7 @@ class TerminalChildWidget(QWidget):
             "branch": self._branch,
             "modified": self._modified,
             "title": self._title,
-            "pr_url": self._pr_url,
+            "pr_url": self._pr_urls[-1] if self._pr_urls else None,
         }
 
 
