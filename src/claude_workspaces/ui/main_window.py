@@ -5197,10 +5197,12 @@ class MainWindow(QMainWindow):
                 context_tokens=stats.last_context_tokens,
                 context_window=ctx_window,
             )
-            # Se o usuário trocou o modelo via popup ⚙ e o JSONL confirma
-            # um novo modelo, salva em Settings.claude_model pra persistir.
+            # Se o modelo mudou mid-sessão (via /model no terminal ou popup ⚙),
+            # persiste o novo modelo em Settings.claude_model. A guarda
+            # `prev_model != ""` evita sobrescrever settings quando o modelo
+            # aparece pela primeira vez no JSONL (início de sessão normal).
             prev_model = self._last_known_model.get(tab_id, "")
-            if new_model and new_model != prev_model and term.consume_pending_model_change():
+            if new_model and prev_model and new_model != prev_model:
                 self.settings.claude_model = new_model
                 self.settings.save()
                 self.settings_panel._refresh_fields()
