@@ -4985,9 +4985,10 @@ class MainWindow(QMainWindow):
         self._wire_child_actions(widget, tab_id)
         widget.set_actions_visible(self.settings.show_terminal_actions)
         widget.set_actions_enabled(is_running)
-        # Propaga PR já detectado pra sessões restauradas no startup.
-        if term is not None and term._pr_url:
-            widget.set_pr_url(term._pr_url)
+        # Propaga PRs/MRs já detectados pra sessões restauradas no startup.
+        if term is not None:
+            for pr_url in term._pr_urls:
+                widget.set_pr_url(pr_url)
         # ▶ só faz sentido em sessões restauradas via --resume após o app
         # reabrir; em sessão fresca ele fica oculto.
         widget.set_continue_eligible(
