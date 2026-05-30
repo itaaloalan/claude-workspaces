@@ -80,7 +80,6 @@ from .git_panel import open_path_in_editor
 from .launch_claude_dialog import LaunchClaudeDialog  # noqa: F401  (importado p/ tests)
 from .memory_panel import MemoryPanel
 from .panels import DockPanelSpec
-from .persistent_toast import PersistentToast, position_toasts
 from .runner_area import RunnerArea
 from .runner_edit_dialog import RunnerEditDialog
 from .session_export_dialog import open_session_export_dialog
@@ -242,11 +241,6 @@ class MainWindow(QMainWindow):
         # isso o usuário perde o popup em ~6s. Cancelado quando a
         # entry sai do inbox ou o usuário clica na action.
         self._notification_keepalive: dict[int, QTimer] = {}
-        # tab_id → PersistentToast — toast in-app frameless top-most que
-        # garante visibilidade independente do que o KDE Plasma faz com a
-        # notif D-Bus. Lifecycle 100% nosso: some só quando o usuário
-        # clica (Abrir/X) ou o tab sai do inbox.
-        self._active_toasts: dict[int, PersistentToast] = {}
         # tab_id → timestamp monotônico da última notif "Pronto" emitida.
         # Debounce: se um console oscila working↔idle rapidamente (ex:
         # Claude rodando hooks/sub-passos entre estados), suprime as
@@ -4584,10 +4578,6 @@ class MainWindow(QMainWindow):
                 "is_reminder": bool(is_reminder),
             },
         )
-        # Toast in-app top-most: continua só pro som (a função foi reduzida
-        # antes a "só toca som"; mantemos por enquanto).
-        self._show_persistent_toast(tab_id, workspace_id, title, body)
-
         # Despacho do popup D-Bus agora é responsabilidade do
         # DesktopNotifierAdapter (escuta notification_added do service e
         # respeita "app em foco", muted_kinds, etc.). O `notify()` acima já
@@ -4604,59 +4594,8 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("showMessage falhou", exc_info=True)
 
-    def _show_persistent_toast(
-        self, tab_id: int, workspace_id: str, title: str, body: str
-    ) -> None:
-        """Toast in-app quando o app está em foco e o popup nativo pode não aparecer."""
-        sound_name = (
-            self.settings.notify_sound_name.strip()
-            if self.settings.notify_sound_enabled else ""
-        )
-        if sound_name:
-            from ..services.desktop_notifier import _play_sound_async
-            _play_sound_async(sound_name)
-        # Toast visual — só quando em foco (app em background: popup nativo cobre).
-        if not self._is_app_in_foreground():
-            return
-        existing = self._active_toasts.get(tab_id)
-        if existing is not None and not existing.isHidden():
-            existing.update_content(title, body)
-            return
-        toast = PersistentToast(title, body, duration_ms=8000)
-        toast.action_clicked.connect(lambda: self._handle_toast_action(tab_id, workspace_id))
-        toast.dismissed.connect(lambda: self._on_toast_dismissed(tab_id))
-        toast.snoozed.connect(lambda: self._on_toast_dismissed(tab_id))
-        toast.seen.connect(lambda: self._on_toast_dismissed(tab_id))
-        self._active_toasts[tab_id] = toast
-        position_toasts(list(self._active_toasts.values()))
-        toast.show()
-
-    def _handle_toast_action(self, tab_id: int, workspace_id: str) -> None:
-        """Clique em 'Abrir console' no toast — mesma rota da action D-Bus.
-
-        Fecha também a notif D-Bus correspondente, senão fica esquecida no
-        canto / na central de notificações depois que o usuário já foi pro
-        console.
-        """
-        self._active_toasts.pop(tab_id, None)
-        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
-        nid = self._active_notifications.pop(tab_id, None)
-        if nid is not None and self._desktop_notifier is not None:
-            self._desktop_notifier.close(nid)
-        self._handle_notification_action(tab_id, workspace_id, "open")
-
-    def _on_toast_dismissed(self, tab_id: int) -> None:
-        """Usuário clicou no X — toast some, mas não muda estado do inbox."""
-        self._active_toasts.pop(tab_id, None)
-        QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
-
     def _close_persistent_toast(self, tab_id: int) -> None:
-        """Fecha o toast programaticamente (tab saiu do inbox / mudou estado)."""
-        toast = self._active_toasts.pop(tab_id, None)
-        if toast is not None:
-            toast.hide()
-            toast.deleteLater()
-            QTimer.singleShot(0, lambda: position_toasts(list(self._active_toasts.values())))
+        pass  # toast in-app removido
 
     def _arm_notification_keepalive(self, tab_id: int, is_reminder: bool) -> None:
         """Inicia (ou reinicia) o timer que re-emite a notif a cada 5s.
@@ -5027,6 +4966,13 @@ class MainWindow(QMainWindow):
             on_continue, on_open_mode_popup, on_close, on_rename
         )
 
+        # Conecta detecção de PR: quando o TerminalWidget encontra uma URL de
+        # PR no output, atualiza o card da sidebar e refresca o status bar.
+        term = self._terminal_widget_for(tab_id)
+        if term is not None:
+            term.pr_detected.connect(widget.set_pr_url)
+            term.pr_detected.connect(lambda _url: self._refresh_status_bar_console())
+
     def _add_terminal_child(
         self,
         ws_item: QTreeWidgetItem,
@@ -5067,6 +5013,9 @@ class MainWindow(QMainWindow):
         self._wire_child_actions(widget, tab_id)
         widget.set_actions_visible(self.settings.show_terminal_actions)
         widget.set_actions_enabled(is_running)
+        # Propaga PR já detectado pra sessões restauradas no startup.
+        if term is not None and term._pr_url:
+            widget.set_pr_url(term._pr_url)
         # ▶ só faz sentido em sessões restauradas via --resume após o app
         # reabrir; em sessão fresca ele fica oculto.
         widget.set_continue_eligible(
