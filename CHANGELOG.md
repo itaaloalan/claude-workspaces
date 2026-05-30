@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.79.7] — 2026-05-30
+
+### Testes (+16, total 1116)
+- `test_opencode_sessions.py` — leitura do DB sqlite do OpenCode com um banco temporário (schema session/message/part): `OpencodeSession.label`, `_read_first_user_message`, `list_sessions` (filtro por diretório, parse de model JSON, ordenação, preview) e `list_sessions_for_paths` (dedupe + ordenação).
+- Cobertura de `opencode_sessions.py` 25% → 78%; geral 46.9% → 47.2%.
+
 ## [0.79.6] — 2026-05-30
 
 ### Testes (+27, total 1100)
