@@ -141,6 +141,9 @@ class TerminalWidget(QWidget):
     # `set_runner_panel`. Sem essa indireção, o TerminalWidget precisaria
     # conhecer Workspace/Settings, quebrando o nível de abstração.
     runner_panel_toggle_requested = Signal()
+    # Emitido quando uma URL de PR do GitHub é detectada no output pela
+    # primeira vez na sessão. Propaga pra sidebar e status bar via MainWindow.
+    pr_detected = Signal(str)
 
     # IDs de sessões já reivindicadas por outros TerminalWidgets vivos.
     # Why: dois terminais no mesmo cwd disputam o mesmo dir de JSONLs e
@@ -167,6 +170,7 @@ class TerminalWidget(QWidget):
         self._last_status = ""
         self._last_working = False
         self._last_needs_decision = False
+        self._needs_decision_held = False
         self._is_plan_mode = False
         self._activity_dirty = False
         # Debounce working→idle: o parser oscila entre is_working True/False
@@ -210,6 +214,10 @@ class TerminalWidget(QWidget):
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
         # o botão vira ruído. Set por main_window._restore_sessions.
         self._restored_on_startup: bool = False
+        # URL do PR detectado no output (ex: https://github.com/org/repo/pull/42).
+        # Persistido durante toda a vida da sessão — uma vez encontrado, não
+        # some mesmo após o terminal ser limpo.
+        self._pr_url: str | None = None
         # Debounce do refit do xterm.js — durante drag de splitter / resize
         # de janela, evita disparar fits em rajada (cada um dispara 6 fits
         # com timeouts internos no JS → CPU thrash)
@@ -310,6 +318,27 @@ class TerminalWidget(QWidget):
         self._more_btn.clicked.connect(self._open_actions_menu)
         toolbar.addWidget(self._more_btn)
         outer.addWidget(toolbar_host)
+
+        # Banner rosa de PR — aparece quando o Claude cria um PR durante a
+        # sessão. Fica entre o toolbar e o xterm, sempre visível enquanto
+        # _pr_url estiver definido.
+        self._pr_bar = QLabel()
+        self._pr_bar.setObjectName("TerminalPrBar")
+        self._pr_bar.setTextFormat(Qt.TextFormat.RichText)
+        self._pr_bar.setOpenExternalLinks(True)
+        self._pr_bar.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._pr_bar.setMinimumWidth(0)
+        self._pr_bar.setStyleSheet(
+            "QLabel#TerminalPrBar {"
+            " background: rgba(244, 114, 182, 0.10);"
+            " color: #f472b6;"
+            " border-bottom: 1px solid rgba(244, 114, 182, 0.35);"
+            " padding: 3px 10px; font-size: 11px; font-weight: 600; }"
+        )
+        self._pr_bar.setVisible(False)
+        outer.addWidget(self._pr_bar)
 
         self.session = PtySession(self)
         self.session.finished.connect(self._on_session_finished)
@@ -655,6 +684,17 @@ class TerminalWidget(QWidget):
         self._activity_dirty = False
         activity = parse_status(bytes(self._output_buffer), age)
 
+        # Hold needs_decision: uma vez que o permission prompt é detectado,
+        # mantém needs_decision=True até Claude voltar a trabalhar (usuário
+        # respondeu). O buffer do TUI re-renderiza constantemente e pode fazer
+        # _has_decision_prompt oscilar True→False sem que o prompt tenha sumido
+        # de verdade — sem o hold, a sidebar volta pra "Ocioso" em milissegundos.
+        if activity.needs_decision:
+            self._needs_decision_held = True
+        elif activity.is_working:
+            self._needs_decision_held = False
+        effective_needs_decision = self._needs_decision_held and not activity.is_working
+
         # Debounce working→idle. Working→awaiting (needs_decision) passa
         # direto: o usuário precisa de feedback imediato quando o Claude
         # pede uma decisão. Quando o debounce é 0, vira idle imediatamente
@@ -675,7 +715,7 @@ class TerminalWidget(QWidget):
             and not in_startup_grace
             and self._last_working
             and not activity.is_working
-            and not activity.needs_decision
+            and not effective_needs_decision
         ):
             if self._pending_idle_since is None:
                 self._pending_idle_since = now
@@ -700,15 +740,39 @@ class TerminalWidget(QWidget):
         if (
             activity.status != self._last_status
             or activity.is_working != self._last_working
-            or activity.needs_decision != self._last_needs_decision
+            or effective_needs_decision != self._last_needs_decision
         ):
             self._last_status = activity.status
             self._last_working = activity.is_working
-            self._last_needs_decision = activity.needs_decision
+            self._last_needs_decision = effective_needs_decision
             self.activity_changed.emit(
-                activity.status, activity.is_working, activity.needs_decision
+                activity.status, activity.is_working, effective_needs_decision
             )
             self._refresh_continue_visibility()
+
+        # Detecção de PR: escaneia o buffer inteiro (não só a última linha)
+        # pra capturar a URL mesmo que ela tenha rolado para fora das 8k.
+        if self._pr_url is None:
+            from ..services.runner_url_detect import detect_pr_url
+            buf_text = bytes(self._output_buffer).decode("utf-8", errors="replace")
+            pr = detect_pr_url(buf_text)
+            if pr:
+                self._pr_url = pr
+                self._show_pr_banner(pr)
+                self.pr_detected.emit(pr)
+
+    def _show_pr_banner(self, url: str) -> None:
+        from ..services.runner_url_detect import pr_number_from_url
+        from html import escape
+        num = pr_number_from_url(url)
+        label = f"PR #{num}" if num else "Pull Request"
+        safe_url = escape(url)
+        self._pr_bar.setText(
+            f"⬡ PR criado: "
+            f"<a href='{safe_url}' style='color:#f472b6; text-decoration:underline;'>"
+            f"{label}</a>"
+        )
+        self._pr_bar.setVisible(True)
 
     @property
     def is_plan_mode(self) -> bool:

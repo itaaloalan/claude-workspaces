@@ -305,6 +305,7 @@ class TerminalChildWidget(QWidget):
         self._model: str = ""
         self._branch: str = ""
         self._modified: int = 0
+        self._pr_url: str | None = None
 
         # Bloco de ações fica na própria title row, à direita do título —
         # mantém o título com peso visual (bold) e libera a linha do estado
@@ -419,6 +420,24 @@ class TerminalChildWidget(QWidget):
         self._git_label.setMaximumHeight(16)
         self._git_label.setVisible(False)
         state_row.addWidget(self._git_label, 0, Qt.AlignmentFlag.AlignRight)
+
+        self._pr_label = QLabel("")
+        self._pr_label.setTextFormat(Qt.TextFormat.RichText)
+        self._pr_label.setStyleSheet(
+            "QLabel {"
+            " background: rgba(244, 114, 182, 0.12);"
+            " color: #f472b6;"
+            " font-size: 9px; font-weight: 700;"
+            " padding: 1px 5px; border-radius: 6px;"
+            " border: 0;"
+            "}"
+        )
+        self._pr_label.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed
+        )
+        self._pr_label.setMaximumHeight(16)
+        self._pr_label.setVisible(False)
+        state_row.addWidget(self._pr_label, 0, Qt.AlignmentFlag.AlignRight)
 
         vbox.addLayout(state_row)
 
@@ -692,6 +711,18 @@ class TerminalChildWidget(QWidget):
         )
         self._continue_btn.setVisible(should_show)
 
+    def set_pr_url(self, url: str) -> None:
+        """Marca esta sessão com o PR criado. Exibe chip rosa na sidebar."""
+        if not url or url == self._pr_url:
+            return
+        self._pr_url = url
+        from ..services.runner_url_detect import pr_number_from_url
+        num = pr_number_from_url(url)
+        label = f"PR #{num}" if num else "PR"
+        self._pr_label.setText(label)
+        self._pr_label.setToolTip(url)
+        self._pr_label.setVisible(True)
+
     def update_git_info(self, branch: str, modified: int) -> None:
         """Atualiza o label do lado direito com branch e contagem de
         arquivos modificados (working tree + staged + untracked).
@@ -752,6 +783,7 @@ class TerminalChildWidget(QWidget):
             "branch": self._branch,
             "modified": self._modified,
             "title": self._title,
+            "pr_url": self._pr_url,
         }
 
 

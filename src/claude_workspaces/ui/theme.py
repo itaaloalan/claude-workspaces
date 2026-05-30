@@ -39,6 +39,8 @@ WAITING = "#e09060"         # laranja (aguardando atenção, inbox)
 WAITING_HOVER = "#e0892f"
 WAITING_BG = "#c9772d"      # bg do bell quando há inbox
 PLANNING = "#5BBCB8"        # teal — planejando (plan mode)
+PR_PINK = "#f472b6"         # rosa — link de PR criado
+PR_PINK_BG = "rgba(244, 114, 182, 0.12)"  # fundo do banner de PR
 
 
 # ---------- Tempos (ms) ----------

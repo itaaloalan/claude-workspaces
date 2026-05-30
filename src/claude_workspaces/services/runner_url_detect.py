@@ -74,3 +74,25 @@ def strip_ansi(text: str) -> str:
 
 def _strip_ansi(text: str) -> str:  # alias interno (compat)
     return strip_ansi(text)
+
+
+_PR_URL_RE = re.compile(r"https://github\.com/[^\s]+/pull/\d+", re.IGNORECASE)
+_PR_NUM_RE = re.compile(r"/pull/(\d+)")
+
+
+def detect_pr_url(text: str) -> str | None:
+    """Detecta URL de PR do GitHub no texto (ex: https://github.com/org/repo/pull/42).
+    Aceita ANSI ainda presente — faz strip internamente."""
+    if not text:
+        return None
+    cleaned = _strip_ansi(text)
+    matches = list(_PR_URL_RE.finditer(cleaned))
+    if matches:
+        return matches[-1].group(0).rstrip(".,;)")
+    return None
+
+
+def pr_number_from_url(url: str) -> str | None:
+    """Extrai o número do PR de uma URL do GitHub."""
+    m = _PR_NUM_RE.search(url)
+    return m.group(1) if m else None

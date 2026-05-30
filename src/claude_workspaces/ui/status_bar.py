@@ -9,6 +9,7 @@ Os segmentos são atualizados pela MainWindow via setters explícitos.
 
 from __future__ import annotations
 
+import re
 import sys
 
 from PySide6.QtCore import Qt, Signal
@@ -128,11 +129,21 @@ class StatusBarWidgets(QWidget):
         self.console_branch.setStyleSheet(_SEG_QSS)
         self.console_branch.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
+        self.console_pr = QLabel("")
+        self.console_pr.setTextFormat(Qt.TextFormat.RichText)
+        self.console_pr.setOpenExternalLinks(True)
+        self.console_pr.setStyleSheet(
+            "QLabel { color: #f472b6; font-size: 11px; font-weight: 700;"
+            " padding: 0 8px; }"
+            "QLabel:hover { background: rgba(244, 114, 182, 0.15); }"
+        )
+        self.console_pr.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+
         for w in (self.workspace, _separator(), self.stack, _separator(),
                   self.python, _separator(),
                   self.mcp, _separator(), self.runners,
                   self._console_sep, self.console_state,
-                  self.console_model, self.console_branch):
+                  self.console_model, self.console_branch, self.console_pr):
             h.addWidget(w)
 
         self._set_console_visible(False)
@@ -205,6 +216,8 @@ class StatusBarWidgets(QWidget):
         self.console_state.setVisible(visible)
         self.console_model.setVisible(visible)
         self.console_branch.setVisible(visible)
+        if not visible:
+            self.console_pr.setVisible(False)
 
     def set_console_info(self, info: dict | None) -> None:
         """Atualiza os segmentos do console selecionado.
@@ -270,6 +283,21 @@ class StatusBarWidgets(QWidget):
                     f"Branch: {branch} — working tree limpo"
                 )
             self.console_branch.setVisible(True)
+
+        # PR link em rosa — visível somente quando há PR detectado.
+        pr_url = info.get("pr_url") or ""
+        if pr_url:
+            m = re.search(r"/pull/(\d+)", pr_url)
+            pr_label = f"PR #{m.group(1)}" if m else "PR"
+            safe = pr_url.replace("'", "%27")
+            self.console_pr.setText(
+                f"<a href='{safe}' style='color:#f472b6; text-decoration:none;'>"
+                f"⬡ {pr_label}</a>"
+            )
+            self.console_pr.setToolTip(pr_url)
+            self.console_pr.setVisible(True)
+        else:
+            self.console_pr.setVisible(False)
 
     def set_task(self, text: str, *, working: bool = False) -> None:
         """Atualiza o segmento da direita: tarefa IA atual.
