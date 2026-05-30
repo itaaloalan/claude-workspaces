@@ -180,27 +180,18 @@ class TerminalChildWidget(QWidget):
         self._icon.setVisible(False)
 
         # Ícone do Claude (robot) à esquerda — sinaliza "este card é uma
-        # sessão Claude" e dá feedback visual de seleção (azul quando
-        # selecionado, cinza nos demais).
-        from .icons import ic as _ic
-        # Ícone num quadradinho arredondado (padrão visual do mockup —
-        # mesma estética dos runners). Cor reage à seleção.
+        # sessão Claude". A cor acompanha sempre o estado (ver _robot_pixmap).
         self._claude_icon = QLabel()
         self._claude_icon.setFixedSize(16, 16)
         self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._claude_icon.setStyleSheet(
             "QLabel { background: transparent; border: 0; }"
         )
-        self._claude_icon_unselected_pix = _ic(
-            "fa5s.robot", color=theme.TEXT_FADED
-        ).pixmap(11, 11)
-        self._claude_icon_selected_pix = _ic(
-            "fa5s.robot", color=theme.SUCCESS
-        ).pixmap(11, 11)
-        self._claude_icon_working_pix = _ic(
-            "fa5s.robot", color=theme.WARNING
-        ).pixmap(11, 11)
-        self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
+        # O robô usa SEMPRE a cor do estado atual (mesma fonte do label de
+        # estado e da faixa lateral: STATE_COLOR). Pixmaps são gerados sob
+        # demanda por estado e cacheados pra não recriar a cada tick.
+        self._robot_pix_cache: dict[str, object] = {}
+        self._claude_icon.setPixmap(self._robot_pixmap(STATE_IDLE))
         outer.addWidget(
             self._claude_icon, 0, Qt.AlignmentFlag.AlignVCenter
         )
@@ -494,6 +485,8 @@ class TerminalChildWidget(QWidget):
         # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
         # em sessão restaurada+ociosa.
         self._current_state = state
+        # Robô segue a cor do estado (igual ao label/faixa lateral).
+        self._claude_icon.setPixmap(self._robot_pixmap(state))
         self._set_working_anim(state == STATE_WORKING)
         self._refresh_continue_visibility()
         # Atualiza a borda lateral colorida (state-driven).
@@ -586,22 +579,24 @@ class TerminalChildWidget(QWidget):
             f"#ConsoleCard QWidget {{ background: transparent; }}"
         )
 
+    def _robot_pixmap(self, state: str):
+        """Pixmap do robô na cor do estado (STATE_COLOR), cacheado por estado."""
+        pix = self._robot_pix_cache.get(state)
+        if pix is None:
+            from .icons import ic as _ic
+            pix = _ic("fa5s.robot", color=STATE_COLOR[state]).pixmap(11, 11)
+            self._robot_pix_cache[state] = pix
+        return pix
+
     def _set_working_anim(self, active: bool) -> None:
-        """Liga/desliga o pulso do robô. Ativo: troca pro robô âmbar e
-        roda a animação em loop. Inativo: para, restaura opacidade cheia
-        e volta o pixmap conforme a seleção atual."""
+        """Liga/desliga só o *pulso* (opacidade) do robô. A cor é definida
+        pelo estado em update_state — aqui não trocamos mais o pixmap."""
         if active:
-            self._claude_icon.setPixmap(self._claude_icon_working_pix)
             if self._working_anim.state() != QPropertyAnimation.State.Running:
                 self._working_anim.start()
         else:
             self._working_anim.stop()
             self._claude_icon_opacity.setOpacity(1.0)
-            self._claude_icon.setPixmap(
-                self._claude_icon_selected_pix
-                if self._selected
-                else self._claude_icon_unselected_pix
-            )
 
     def set_selected(self, selected: bool) -> None:
         """Pinta o background do card com tint discreto quando selecionado.
@@ -610,13 +605,8 @@ class TerminalChildWidget(QWidget):
         self._selected = selected
         self._apply_card_qss()
         self._connector_label.setText("╰" if selected else "")
-        # Trabalhando? o robô âmbar pulsante manda — seleção não troca o pix.
-        if getattr(self, "_current_state", STATE_IDLE) == STATE_WORKING:
-            return
-        if selected:
-            self._claude_icon.setPixmap(self._claude_icon_selected_pix)
-        else:
-            self._claude_icon.setPixmap(self._claude_icon_unselected_pix)
+        # Seleção não mexe na cor do robô — ele segue sempre o estado
+        # (sinalização de seleção fica no bg/borda do card e no conector).
 
     def set_actions_visible(self, visible: bool) -> None:
         """Mostra/esconde o bloco de ações inline (▶ ⚙) via toggle do
@@ -734,7 +724,10 @@ class TerminalChildWidget(QWidget):
             "branch": self._branch,
             "modified": self._modified,
             "title": self._title,
+            # `pr_url`: último MR/PR (compat). `pr_urls`: todos, pro footer
+            # renderizar um link por MR quando a sessão tem várias pastas.
             "pr_url": self._pr_urls[-1] if self._pr_urls else None,
+            "pr_urls": list(self._pr_urls),
         }
 
 

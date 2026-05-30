@@ -262,9 +262,6 @@ class MainWindow(QMainWindow):
         # _add_terminal_child poder pedir status no primeiro paint.
         self._repo_poller = RepoStatusPoller(ttl_seconds=4.0, parent=self)
         self._repo_poller.status_ready.connect(self._on_repo_status_ready)
-        # Rastreia o último modelo lido do JSONL por tab_id — usado para
-        # detectar mudanças de modelo e atualizar Settings.claude_model.
-        self._last_known_model: dict[str, str] = {}
         # Poller assíncrono de PR/MR aberto (GitHub via gh + GitLab via API).
         # TTL de 60s — PR não muda com frequência.
         from ..pr_status_poller import PrStatusPoller
@@ -5168,6 +5165,12 @@ class MainWindow(QMainWindow):
             cwd = term.claude_cwd()
             if cwd:
                 self._repo_poller.request(cwd)
+            # Pastas extra (--add-dir) podem ter repos git próprios com MR/PR
+            # independentes. Pede status direto aqui (não só como efeito
+            # colateral encadeado em _on_repo_status_ready) pra garantir que
+            # cada pasta tenha branch detectada → seu próprio chip na sidebar.
+            for extra in term.extra_dirs():
+                self._repo_poller.request(extra)
             # Modelo + tokens da sessão claimed. usage_for_session é leve
             # (lê apenas a usage de cada linha do JSONL).
             session_path = term.claimed_session_path()
@@ -5190,17 +5193,10 @@ class MainWindow(QMainWindow):
                 context_tokens=stats.last_context_tokens,
                 context_window=ctx_window,
             )
-            # Se o modelo mudou mid-sessão (via /model no terminal ou popup ⚙),
-            # persiste o novo modelo em Settings.claude_model. A guarda
-            # `prev_model != ""` evita sobrescrever settings quando o modelo
-            # aparece pela primeira vez no JSONL (início de sessão normal).
-            prev_model = self._last_known_model.get(tab_id, "")
-            if new_model and prev_model and new_model != prev_model:
-                self.settings.claude_model = new_model
-                self.settings.save()
-                self.settings_panel._refresh_fields()
-                log.info("Modelo padrão atualizado para %s", new_model)
-            self._last_known_model[tab_id] = new_model
+            # NB: a sidebar apenas *exibe* o modelo da sessão (update_session_info
+            # acima). Não persistimos mais em Settings.claude_model: o JSONL inclui
+            # mensagens de subagentes (Task) que rodam em sonnet, o que clobava o
+            # padrão global. O ajuste do padrão é feito só pelo painel de Settings.
         # Status do uso do plano (janela de 5h) — label acima do "Novo
         # Workspace". Replica o `Plan usage limits → Current session` do
         # claude.ai.

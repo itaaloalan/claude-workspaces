@@ -283,17 +283,20 @@ class StatusBarWidgets(QWidget):
                 )
             self.console_branch.setVisible(True)
 
-        # PR link em rosa — visível somente quando há PR detectado.
-        pr_url = info.get("pr_url") or ""
-        if pr_url:
+        # PR/MR links em rosa — um por pasta com MR/PR aberto. Visível só
+        # quando há ao menos um detectado.
+        pr_urls = info.get("pr_urls") or ([info["pr_url"]] if info.get("pr_url") else [])
+        if pr_urls:
             from ..services.runner_url_detect import pr_label_from_url
-            pr_label = pr_label_from_url(pr_url)
-            safe = pr_url.replace("'", "%27")
-            self.console_pr.setText(
-                f"<a href='{safe}' style='color:#f472b6; text-decoration:none;'>"
-                f"⬡ {pr_label}</a>"
-            )
-            self.console_pr.setToolTip(pr_url)
+            links = []
+            for url in pr_urls:
+                safe = url.replace("'", "%27")
+                links.append(
+                    f"<a href='{safe}' style='color:#f472b6; text-decoration:none;'>"
+                    f"⬡ {pr_label_from_url(url)}</a>"
+                )
+            self.console_pr.setText("&nbsp;&nbsp;".join(links))
+            self.console_pr.setToolTip("\n".join(pr_urls))
             self.console_pr.setVisible(True)
         else:
             self.console_pr.setVisible(False)

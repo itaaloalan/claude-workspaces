@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.79.0] — 2026-05-30
+
+### Correções
+- **MAP / sessões com múltiplas pastas (`--add-dir`)**: a sidebar agora detecta e exibe **um chip por MR/PR** de cada pasta. Antes, o status git (e o lookup de MR em cascata) das pastas extra só era pedido como efeito colateral encadeado do `cwd`; agora `_refresh_terminal_git_info` consulta cada `extra_dirs()` diretamente, garantindo que toda pasta com MR aberto vire chip. O footer global também passa a listar todos os MR/PR do console selecionado (antes mostrava só o último).
+- **Modelo padrão voltando para sonnet-4-6**: removido o auto-persist que sobrescrevia `Settings.claude_model` com o `last_model` lido do JSONL. Como o JSONL inclui mensagens de subagentes (Task) — que rodam em sonnet — o padrão global era clobado para sonnet-4-6 e o painel de configurações tinha os campos (modelo **e** effort) resetados no meio da edição. O ajuste do padrão agora é feito exclusivamente pelo painel de Settings. (O recurso existia para o popup ⚙, removido na 0.76.98.)
+
+### Visual
+- **Robô da sidebar** segue **sempre a cor do estado** (ocioso/cinza, trabalhando/âmbar, aguardando/laranja, erro/vermelho, concluído/verde) — mesma fonte da faixa lateral e do label de estado. Antes alternava entre 3 cores fixas atreladas a seleção/working. A seleção deixa de mexer na cor do robô (sinalizada pelo bg/borda do card).
+
 ## [0.78.0] — 2026-05-30
 
 ### Performance / Fluidez
