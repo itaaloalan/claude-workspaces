@@ -35,6 +35,32 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _build_pr_banner_html(urls: list[str]) -> str:
+    """Monta o HTML do banner rosa de PR/MR a partir de TODAS as URLs
+    acumuladas — uma sessão com várias pastas cria um MR por repo e o banner
+    deve listar todos, não só o último detectado (espelha os chips da sidebar).
+
+    Cada label vira um link clicável separado por ' · '. Retorna "" se a lista
+    estiver vazia (caller esconde a barra)."""
+    from html import escape
+
+    from ..services.runner_url_detect import pr_label_from_url
+
+    if not urls:
+        return ""
+
+    def _link(u: str) -> str:
+        return (
+            f"<a href='{escape(u)}' style='color:#f472b6; text-decoration:underline;'>"
+            f"{escape(pr_label_from_url(u))}</a>"
+        )
+
+    if len(urls) == 1:
+        return f"⬡ {escape(pr_label_from_url(urls[0]))} criado: {_link(urls[0])}"
+    links = " · ".join(_link(u) for u in urls)
+    return f"⬡ criados: {links}"
+
+
 class TerminalBridge(QObject):
     # QByteArray vira ArrayBuffer no JS, deixando o xterm.js decodificar
     # UTF-8 corretamente (chars multi-byte como ─ │ ╭ não quebram).
@@ -771,16 +797,14 @@ class TerminalWidget(QWidget):
         self.pr_detected.emit(url)
 
     def _show_pr_banner(self, url: str) -> None:
-        from html import escape
-
-        from ..services.runner_url_detect import pr_label_from_url
-        label = pr_label_from_url(url)
-        safe_url = escape(url)
-        self._pr_bar.setText(
-            f"⬡ {label} criado: "
-            f"<a href='{safe_url}' style='color:#f472b6; text-decoration:underline;'>"
-            f"{label}</a>"
-        )
+        """Reconstrói o banner a partir de `self._pr_urls` inteiro — o `url`
+        recém-detectado já foi adicionado à lista pelo caller. Mostra um link
+        por MR/PR (mesma lógica de múltiplos chips da sidebar)."""
+        html = _build_pr_banner_html(self._pr_urls)
+        if not html:
+            self._pr_bar.setVisible(False)
+            return
+        self._pr_bar.setText(html)
         self._pr_bar.setVisible(True)
 
     @property

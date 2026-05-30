@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.79.4] — 2026-05-30
+
+### Correções
+- **Banner de MR no centro do console só mostrava 1 MR (MAP / múltiplas pastas).** O `_pr_urls` do `TerminalWidget` já acumulava todos os MRs (um por pasta `--add-dir`, via `PrStatusPoller` → `_on_pr_status_ready` → `set_detected_pr_url`), mas `_show_pr_banner` reescrevia a barra rosa com apenas o último MR detectado — então o centro exibia só `MR #1127`, enquanto a sidebar mostrava `MR #791` + `MR #1127`. Agora o banner é remontado a partir de `self._pr_urls` inteiro, com um link clicável por MR/PR (singular `⬡ MR #N criado:` / plural `⬡ criados: MR #791 · MR #1127`), espelhando os chips da sidebar. Lógica extraída para a função pura `_build_pr_banner_html` com cobertura em `tests/test_terminal_widget_api.py`.
+
 ## [0.79.3] — 2026-05-30
 
 ### Correções
