@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.92] — 2026-05-29
+
+### Novidades
+- Sidebar: conector `╰` estilo Polaris adicionado ao lado esquerdo de cada console filho — cria hierarquia visual clara pai→filho sem depender de indentação do Qt.
+- `setIndentation(0)` restaurado — o recuo visual agora é inteiramente gerenciado pelo widget do console (18px via `_connector_label`).
+- `WorkspaceItemWidget`: margem esquerda reduzida de 11 → 8px para alinhamento com o conector.
+
 ## [0.76.91] — 2026-05-29
 
 ### Novidades

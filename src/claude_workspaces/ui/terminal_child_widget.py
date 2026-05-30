@@ -162,12 +162,18 @@ class TerminalChildWidget(QWidget):
         outer.setContentsMargins(0, 1, 6, 1)
         outer.setSpacing(4)
 
-        # Seleção: em vez de barra vertical à esquerda, usa um tint
-        # sutil no bg do widget inteiro (set_selected pinta um RGBA
-        # discreto). Estado continua sinalizado pelo texto colorido em
-        # _state_label ("Trabalhando · …" em âmbar) + status bar global.
-        # Mantemos os atributos pra preservar API (`set_selected` etc),
-        # mas eles ficam escondidos / com width 0.
+        # Conector estilo Polaris: "╰" à esquerda cria a hierarquia visual
+        # pai→filho sem depender de indentação do QTreeWidget.
+        self._connector_label = QLabel("╰")
+        self._connector_label.setFixedWidth(18)
+        self._connector_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._connector_label.setStyleSheet(
+            "QLabel { color: #555555; font-size: 11px; background: transparent; border: 0; }"
+        )
+        outer.addWidget(self._connector_label)
+
         self._selection_strip = QFrame()
         self._selection_strip.setVisible(False)
         self._status_strip = QFrame()

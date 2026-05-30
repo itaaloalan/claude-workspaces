@@ -93,7 +93,7 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(11, 5, 8, 5)
+        row.setContentsMargins(8, 5, 8, 5)
         row.setSpacing(6)
 
         # Ícone do workspace antes do nome — match com mockup que mostra

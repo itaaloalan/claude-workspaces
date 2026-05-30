@@ -451,7 +451,7 @@ class SidebarBuilder:
         self.list_widget.setRootIsDecorated(True)
         # Indentação leve: deixa claro que consoles/runners pertencem ao
         # workspace sem criar uma árvore visual pesada.
-        self.list_widget.setIndentation(18)
+        self.list_widget.setIndentation(0)
         self.list_widget.setUniformRowHeights(False)
         self.list_widget.setAnimated(True)
         self.list_widget.setExpandsOnDoubleClick(False)
