@@ -5187,15 +5187,25 @@ class MainWindow(QMainWindow):
                 log.debug("falha ao agregar usage %s", session_path, exc_info=True)
                 continue
             cache = stats.cache_creation_tokens + stats.cache_read_tokens
-            ctx_window = context_window_for_model(stats.last_model or "")
+            new_model = stats.last_model or ""
+            ctx_window = context_window_for_model(new_model)
             widget.update_session_info(
-                stats.last_model or "",
+                new_model,
                 stats.input_tokens,
                 stats.output_tokens,
                 cache,
                 context_tokens=stats.last_context_tokens,
                 context_window=ctx_window,
             )
+            # Se o usuário trocou o modelo via popup ⚙ e o JSONL confirma
+            # um novo modelo, salva em Settings.claude_model pra persistir.
+            prev_model = self._last_known_model.get(tab_id, "")
+            if new_model and new_model != prev_model and term.consume_pending_model_change():
+                self.settings.claude_model = new_model
+                self.settings.save()
+                self.settings_panel._refresh_fields()
+                log.info("Modelo padrão atualizado para %s", new_model)
+            self._last_known_model[tab_id] = new_model
         # Status do uso do plano (janela de 5h) — label acima do "Novo
         # Workspace". Replica o `Plan usage limits → Current session` do
         # claude.ai.

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.97] — 2026-05-29
+
+### Correção
+- Troca de modelo via popup ⚙ agora persiste nas configurações globais: ao usar "Trocar modelo" e o Claude confirmar o novo modelo no JSONL, `Settings.claude_model` é atualizado automaticamente. Novas sessões e sessões restauradas passam a usar o modelo escolhido.
+
 ## [0.76.96] — 2026-05-29
 
 ### Ajuste visual
