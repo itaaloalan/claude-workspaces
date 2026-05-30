@@ -71,28 +71,31 @@ WORKING_RE = re.compile(r"\*\s+\w+.*?tokens", re.IGNORECASE)
 
 # Indicadores positivos de "Claude está pedindo decisão" (permission prompt,
 # escolha de tool, confirmação). Cobertura:
-#   1. Permission tool-prompt clássico:
+#   1. Permission tool-prompt clássico (numbered):
 #        "Do you want to proceed?"
-#        "Do you want to make this edit to Foo.java?"
 #        "❯ 1. Yes / 2. No / ..."
 #      → casa quando "Do you want" aparece junto com "❯ N." no tail.
-#   2. Picker interativo (skill picker, plan mode, /commands, escolhas
-#      customizadas tipo "Qual direção?"). O footer canônico é
+#   2. Permission prompt moderno (yes/no sem número):
+#        "❯ Yes" / "❯ No" / "❯ yes, don't ask again"
+#        "Allow Claude to run bash?"
+#      → casa quando ❯ precede yes/no/allow/deny OU há questão de "allow".
+#   3. Picker interativo (skill picker, plan mode, /commands, etc).
 #        "Enter to select · ↑/↓ to navigate · Esc to cancel"
-#      Esse footer só aparece quando o picker está aberto bloqueando input,
-#      então sozinho já basta como sinal de awaiting-decision.
+#      Esse footer só aparece com input bloqueado → sozinho já basta.
 DECISION_QUESTION_RE = re.compile(r"\bdo you want\b", re.IGNORECASE)
+DECISION_ALLOW_RE = re.compile(r"\ballow\b.{0,60}\?", re.IGNORECASE)
 DECISION_CHOICE_RE = re.compile(r"❯\s*\d+\.")
+# Formato moderno sem número: "❯ Yes" / "❯ No" / "❯ yes, don't ask again"
+DECISION_CHOICE_YN_RE = re.compile(r"❯\s+(?:yes|no|allow|deny|approve|reject)", re.IGNORECASE)
 INTERACTIVE_FOOTER_RE = re.compile(r"enter to select", re.IGNORECASE)
 
 # Versões normalizadas (só [a-z0-9]) usadas como fallback quando o Claude TUI
 # emite o texto com cursor positioning absoluto entre palavras — strip_ansi
 # remove os escapes mas não reinsere os espaços, então "Enter to select"
-# vira "Entertoselect" e a regex acima não casa. Why: dump real do buffer
-# mostrou a linha "Entertoselect·↑/↓tonavigate·Esctocancel", o que travou
-# a detecção e fez sessões com picker aberto aparecerem como "Ocioso".
+# vira "Entertoselect" e a regex acima não casa.
 _INTERACTIVE_FOOTER_NORM = "entertoselect"
 _DECISION_QUESTION_NORM = "doyouwant"
+_DECISION_ALLOW_NORM = "allow"
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
 
@@ -104,6 +107,7 @@ class Activity:
     status: str
     is_working: bool
     needs_decision: bool = False
+    is_plan_mode: bool = False
 
 
 def strip_ansi(text: str) -> str:
@@ -154,17 +158,30 @@ def _has_decision_prompt(lines: list[str]) -> bool:
     """True se as últimas linhas contêm um permission prompt ou picker
     interativo do Claude.
 
-    Janela maior (12) porque o "Do you want to..." pode ficar algumas
-    linhas acima da seta "❯ 1." de escolha. O footer de picker
+    Janela maior (16) porque o "Do you want to..." / "Allow..." pode
+    ficar algumas linhas acima da seta de escolha. O footer de picker
     ("Enter to select…") sozinho já basta — ele só aparece com input
-    bloqueado."""
-    tail = lines[-12:]
+    bloqueado. Formato moderno usa "❯ Yes/No" sem número."""
+    tail = lines[-16:]
     tail_norm = [_normalize(ln) for ln in tail]
+    # Footer do picker interativo — sozinho basta.
     if any(_INTERACTIVE_FOOTER_NORM in n for n in tail_norm):
         return True
+    # Formato moderno: "❯ Yes" / "❯ No" sem número de opção.
+    has_yn_choice = any(DECISION_CHOICE_YN_RE.search(ln) for ln in tail)
+    if has_yn_choice:
+        return True
+    # Formato clássico: "Do you want...?" + "❯ 1." numerado.
     has_question = any(_DECISION_QUESTION_NORM in n for n in tail_norm)
-    has_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
-    return has_question and has_choice
+    has_numbered_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
+    if has_question and has_numbered_choice:
+        return True
+    # "Allow Claude to X?" + qualquer seleção (❯).
+    has_allow = any(DECISION_ALLOW_RE.search(ln) for ln in tail)
+    has_any_choice = has_numbered_choice or has_yn_choice or any(
+        "❯" in ln for ln in tail
+    )
+    return has_allow and has_any_choice
 
 
 def _looks_like_prompt(line: str) -> bool:
@@ -282,6 +299,14 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
     # working o buffer pode arrastar restos de prompt anterior.
     needs_decision = (not is_working) and _has_decision_prompt(lines)
 
+    # Plan mode: "plan mode on" visível nas últimas 5 linhas (footer idle).
+    _PLAN_NORM = _normalize("plan mode on")
+    plan_idx = _last_index(lines, lambda ln: _PLAN_NORM in _normalize(ln))
+    is_plan_mode = plan_idx >= 0 and plan_idx >= len(lines) - 5
+
     return Activity(
-        status=display, is_working=is_working, needs_decision=needs_decision
+        status=display,
+        is_working=is_working,
+        needs_decision=needs_decision,
+        is_plan_mode=is_plan_mode,
     )

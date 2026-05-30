@@ -92,6 +92,7 @@ from .terminal_child_widget import (
     STATE_AWAITING,
     STATE_DONE,
     STATE_IDLE,
+    STATE_PLANNING,
     STATE_WORKING,
     TerminalChildWidget,
 )
@@ -2551,9 +2552,7 @@ class MainWindow(QMainWindow):
         # rebuilds da árvore preservam o highlight branco no item certo.
         current_ws = self._current_workspace()
         widget.set_selected(current_ws is not None and current_ws.id == ws.id)
-        # SizeHint com altura extra pra dar respiro entre cards (sem isso,
-        # tree cola um card no outro e a borda some).
-        item.setSizeHint(0, _QS(0, 44))
+        item.setSizeHint(0, _QS(0, 36))
         self.list_widget.setItemWidget(item, 0, widget)
         self._refresh_empty_placeholder(item)
 
@@ -4899,10 +4898,16 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def _resolve_state(
-        self, is_working: bool, is_running: bool, needs_decision: bool = False
+        self,
+        is_working: bool,
+        is_running: bool,
+        needs_decision: bool = False,
+        is_plan_mode: bool = False,
     ) -> str:
         if not is_running:
             return STATE_DONE
+        if is_working and is_plan_mode:
+            return STATE_PLANNING
         if is_working:
             return STATE_WORKING
         if needs_decision:
@@ -4945,9 +4950,7 @@ class MainWindow(QMainWindow):
                     area._close_tab(i)
                     return
 
-    # Altura fixa do row do QTreeWidget pro TerminalChildWidget. Mantém a
-    # sidebar compacta, mas dá respiro suficiente pras duas linhas do card.
-    _CHILD_HEIGHT = 42
+    _CHILD_HEIGHT = 38
 
     def _wire_child_actions(
         self, widget: "TerminalChildWidget", tab_id: int
@@ -5030,7 +5033,8 @@ class MainWindow(QMainWindow):
             full_title = term.full_title() or title
         self._tab_base_titles[tab_id] = title
         widget.set_title(title, full_title)
-        state = self._resolve_state(is_working, is_running, needs_decision)
+        is_plan_mode = term.is_plan_mode if term is not None else False
+        state = self._resolve_state(is_working, is_running, needs_decision, is_plan_mode)
         widget.update_state(
             state,
             status,
@@ -5095,7 +5099,8 @@ class MainWindow(QMainWindow):
         self._tab_base_titles[tab_id] = title
         display = self._compute_disambiguated_title(item.parent(), tab_id, title)
         widget.set_title(display, full_title)
-        state = self._resolve_state(is_working, is_running, needs_decision)
+        is_plan_mode = term.is_plan_mode if term is not None else False
+        state = self._resolve_state(is_working, is_running, needs_decision, is_plan_mode)
         widget.update_state(
             state,
             status,

@@ -73,6 +73,7 @@ class RunnerWidget(QWidget):
         self._output_buf: str = ""
         self._browser_opened_this_start: bool = False
         self._ready_pattern_matched: bool = False
+        self._rodando_emitted: bool = False
         # URL atual conhecida pelo widget (config ou detectada). Mantida pra
         # sincronizar a sidebar (host:port). Inicializa a partir da config.
         self._current_url: str = (runner.browser_url or "").strip()
@@ -299,6 +300,7 @@ class RunnerWidget(QWidget):
             self._output_buf = ""
             self._browser_opened_this_start = False
             self._ready_pattern_matched = False
+            self._rodando_emitted = False
         try:
             self.session.start(argv, cwd, env=self._runner.env or None)
         except OSError as e:
@@ -308,15 +310,10 @@ class RunnerWidget(QWidget):
         # Para runners que abrem browser quando pronto: mostra "startando"
         # (transiente, amarelo na sidebar) até o ready_pattern/URL ser
         # detectado e o browser efetivamente abrir — aí vira "rodando" verde.
-        if (
-            intent in ("start", "restart")
-            and self._runner.open_browser_on_ready
-        ):
+        if intent in ("start", "restart"):
             label = "startando"
         else:
-            label = {
-                "start": "rodando", "stop": "parando", "restart": "reiniciando",
-            }.get(intent, intent)
+            label = {"stop": "parando"}.get(intent, intent)
         self._set_state("running", f"● {label}: {cmd[:80]}", status_label=label)
 
     def _on_bridge_ready(self) -> None:
@@ -335,6 +332,20 @@ class RunnerWidget(QWidget):
         self._log_buf = (self._log_buf + chunk)[-self._log_buf_max:]
 
         if not self._runner.open_browser_on_ready:
+            if not self._rodando_emitted and self._intent in ("start", "restart"):
+                ready_pat = (self._runner.ready_pattern or "").strip()
+                if ready_pat:
+                    self._output_buf = (self._output_buf + chunk)[-16384:]
+                    try:
+                        matched = bool(re.search(ready_pat, self._output_buf, re.IGNORECASE))
+                    except re.error:
+                        matched = True
+                    if matched:
+                        self._rodando_emitted = True
+                        self._emit_status_label("rodando")
+                else:
+                    self._rodando_emitted = True
+                    self._emit_status_label("rodando")
             return
         if self._browser_opened_this_start:
             return

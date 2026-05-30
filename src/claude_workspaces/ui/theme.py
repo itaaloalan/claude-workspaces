@@ -38,6 +38,7 @@ INFO = "#7aa6e6"            # azul claro (renomeado, info)
 WAITING = "#e09060"         # laranja (aguardando atenção, inbox)
 WAITING_HOVER = "#e0892f"
 WAITING_BG = "#c9772d"      # bg do bell quando há inbox
+PLANNING = "#5BBCB8"        # teal — planejando (plan mode)
 
 
 # ---------- Tempos (ms) ----------
@@ -175,6 +176,7 @@ _STATE_BADGE_BG = {
     STATE_IDLE: "rgba(136, 136, 136, 32)",
     STATE_ERROR: "rgba(213, 114, 114, 42)",
     STATE_DONE: "rgba(90, 195, 90, 38)",
+    PLANNING: "rgba(91, 188, 184, 38)",
 }
 
 

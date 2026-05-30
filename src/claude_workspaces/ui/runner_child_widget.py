@@ -100,7 +100,7 @@ class RunnerChildWidget(QWidget):
         # do `_card` (QFrame com bg/border via #RunnerCard).
         from PySide6.QtWidgets import QFrame
         wrapper = QHBoxLayout(self)
-        wrapper.setContentsMargins(8, 0, 8, 0)
+        wrapper.setContentsMargins(0, 0, 0, 0)
         wrapper.setSpacing(0)
         self._card = QFrame()
         self._card.setObjectName("RunnerCard")

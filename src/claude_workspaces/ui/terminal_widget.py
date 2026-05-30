@@ -167,6 +167,7 @@ class TerminalWidget(QWidget):
         self._last_status = ""
         self._last_working = False
         self._last_needs_decision = False
+        self._is_plan_mode = False
         self._activity_dirty = False
         # Debounce working→idle: o parser oscila entre is_working True/False
         # durante o mesmo turno (tool calls intercalando com texto). Aguarda
@@ -691,6 +692,11 @@ class TerminalWidget(QWidget):
             # debounce desligado: cancela qualquer debounce pendente.
             self._pending_idle_since = None
 
+        # Plan mode: só atualiza o flag quando idle (footer de modo visível).
+        # Durante working, o footer some — mantém o último valor conhecido.
+        if not activity.is_working:
+            self._is_plan_mode = activity.is_plan_mode
+
         if (
             activity.status != self._last_status
             or activity.is_working != self._last_working
@@ -703,6 +709,10 @@ class TerminalWidget(QWidget):
                 activity.status, activity.is_working, activity.needs_decision
             )
             self._refresh_continue_visibility()
+
+    @property
+    def is_plan_mode(self) -> bool:
+        return self._is_plan_mode
 
     def when_claude_ready(
         self,

@@ -273,16 +273,12 @@ _TREE_QSS = (
     f"  color: {theme.TEXT_PRIMARY};"
     f"  outline: 0;"
     f"}}"
-    # Respiro vertical real entre workspaces. Os widgets internos desenham
-    # seus próprios cards; a árvore só fornece espaço.
     f"QTreeWidget::item {{"
-    f"  padding: 1px 0px;"
+    f"  padding: 1px 4px;"
     f"  border: 0;"
+    f"  border-radius: 6px;"
     f"  color: {theme.TEXT_PRIMARY};"
     f"}}"
-    # Sem background em hover/seleção — o `_status_strip` colorido no
-    # canto esquerdo do card já é pista visual suficiente. Qualquer tint
-    # no row fazia o card parecer "ativado/destacado" e poluía o painel.
     f"QTreeWidget::item:hover {{"
     f"  background: transparent;"
     f"  color: {theme.TEXT_BRIGHT};"
@@ -295,7 +291,14 @@ _TREE_QSS = (
     f"  background: transparent;"
     f"  color: {theme.TEXT_BRIGHT};"
     f"}}"
-    f"QTreeWidget::branch {{ background: transparent; }}"
+    # Branch indicators do Qt ocultos — hierarquia fica implícita na
+    # indentação e nos custom widgets (WorkspaceItemWidget / TerminalChildWidget).
+    f"QTreeWidget::branch {{"
+    f"  background: transparent;"
+    f"  image: none;"
+    f"  border: 0;"
+    f"  width: 0px;"
+    f"}}"
 )
 
 _HEADER_ICON_BTN_QSS = (
@@ -448,7 +451,7 @@ class SidebarBuilder:
         self.list_widget.setRootIsDecorated(True)
         # Indentação leve: deixa claro que consoles/runners pertencem ao
         # workspace sem criar uma árvore visual pesada.
-        self.list_widget.setIndentation(0)
+        self.list_widget.setIndentation(18)
         self.list_widget.setUniformRowHeights(False)
         self.list_widget.setAnimated(True)
         self.list_widget.setExpandsOnDoubleClick(False)

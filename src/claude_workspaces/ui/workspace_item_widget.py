@@ -259,24 +259,15 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o workspace como um bloco com hierarquia clara."""
-        expanded = getattr(self, "_expanded", False)
+        """Renderiza o workspace como pill arredondado estilo Polaris."""
         if self._selected:
-            bg = "rgba(90, 195, 90, 13)"
-            border_qss = (
-                "border: 1px solid rgba(90, 195, 90, 60);"
-                "border-left: 2px solid rgba(90, 195, 90, 150);"
-                "border-radius: 0;"
-            )
-            hover_extra = "background: rgba(90, 195, 90, 18); border-left-color: #5ac35a;"
+            bg = "rgba(90, 195, 90, 16)"
+            border_qss = "border: 1px solid rgba(90, 195, 90, 40); border-radius: 6px;"
+            hover_extra = "background: rgba(90, 195, 90, 22);"
         else:
-            bg = "rgba(61, 110, 168, 15)"
-            border_qss = (
-                "border: 1px solid rgba(61, 110, 168, 45);"
-                "border-left: 2px solid rgba(61, 110, 168, 100);"
-                "border-radius: 0;"
-            )
-            hover_extra = "background: rgba(61, 110, 168, 22); border-left-color: #3d6ea8;"
+            bg = "transparent"
+            border_qss = "border: 0; border-radius: 6px;"
+            hover_extra = "background: rgba(255, 255, 255, 7);"
 
         self.setStyleSheet(
             f"#WorkspaceCard {{"
@@ -284,9 +275,6 @@ class WorkspaceItemWidget(QWidget):
             f"  {border_qss}"
             f"}}"
             f"#WorkspaceCard:hover {{ {hover_extra} }}"
-            # Filhos transparentes — sem isso QLabel/QPushButton/QWidget
-            # filhos caem em QPalette.Window e criam quadradinhos de bg
-            # diferente sobre o card.
             f"#WorkspaceCard QLabel {{ background: transparent; }}"
             f"#WorkspaceCard QPushButton {{ background: transparent; }}"
             f"#WorkspaceCard QWidget {{ background: transparent; }}"

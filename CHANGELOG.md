@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.76.91] — 2026-05-29
+
+### Novidades
+- Sidebar estilo Polaris: workspaces com seleção rounded-rect (pill) e consoles com indentação de 18px, sem borda lateral colorida no item pai.
+- Detecção de "Aguardando decisão": label atualizado de "Aguardando" para "Aguardando decisão"; padrões de detecção expandidos para cobrir `❯ Yes/No` sem número, perguntas "Allow…?" e janela de 16 linhas (era 12).
+- `STATE_PLANNING` ("Planejando") com tint teal detectado quando plan mode está ativo durante trabalho; `PLANNING` adicionado ao tema.
+- Runner: `open_browser_on_ready` dispara apenas quando `ready_pattern` configurado tem match no output; sem padrão, abre imediatamente. Novo flag `_rodando_emitted` evita disparo duplo.
+
+### Ajustes visuais
+- Workspace item height hint reduzido de 44 → 36px; `_CHILD_HEIGHT` de 42 → 38px — sidebar mais compacta.
+- `WorkspaceItemWidget._apply_card_qss`: border-left removida; rounded-rect uniforme selected/hover.
+- `TerminalChildWidget._apply_card_qss`: border-radius 5px; bg selected = `rgba(255,255,255,8)` (neutro, sem tint verde).
+
 ## [0.76.90] — 2026-05-29
 
 ### Novidades

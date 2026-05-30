@@ -53,6 +53,7 @@ def _strip_noise(text: str) -> str:
 # Estados visíveis na UI — labels padronizados de acordo com o pedido
 # do usuário (Trabalhando/Aguardando/Ocioso/Erro/Concluído).
 STATE_WORKING = "working"      # rodando (trabalhando)
+STATE_PLANNING = "planning"    # trabalhando em plan mode
 STATE_AWAITING = "awaiting"    # aguardando decisão (permission prompt)
 STATE_IDLE = "idle"            # parado no prompt principal (sem ação ativa)
 STATE_DONE = "done"            # concluído sem erro
@@ -61,7 +62,8 @@ STATE_ERROR = "error"          # processo falhou / saiu com erro
 
 STATE_LABEL = {
     STATE_WORKING: "Trabalhando",
-    STATE_AWAITING: "Aguardando",
+    STATE_PLANNING: "Planejando",
+    STATE_AWAITING: "Aguardando decisão",
     STATE_IDLE: "Ocioso",
     STATE_DONE: "Concluído",
     STATE_ERROR: "Erro",
@@ -73,6 +75,7 @@ STATE_LABEL = {
 # (callers existentes não quebram).
 STATE_TITLE_COLOR = {
     STATE_WORKING: theme.TEXT_PRIMARY,
+    STATE_PLANNING: theme.TEXT_PRIMARY,
     STATE_AWAITING: theme.TEXT_PRIMARY,
     STATE_IDLE: theme.TEXT_PRIMARY,
     STATE_DONE: theme.TEXT_PRIMARY,
@@ -82,6 +85,8 @@ STATE_TITLE_COLOR = {
 STATE_COLOR = {
     # Trabalhando = amber (trabalho em curso)
     STATE_WORKING: theme.WARNING,
+    # Planejando = teal (plan mode ativo)
+    STATE_PLANNING: theme.PLANNING,
     # Aguardando = laranja forte (decisão pendente)
     STATE_AWAITING: theme.WAITING,
     # Ocioso = cinza. Vermelho fica reservado para erro; assim a lista não
@@ -146,7 +151,7 @@ class TerminalChildWidget(QWidget):
         self.setMaximumHeight(38)
 
         wrapper = QHBoxLayout(self)
-        wrapper.setContentsMargins(12, 0, 6, 0)
+        wrapper.setContentsMargins(0, 0, 0, 0)
         wrapper.setSpacing(0)
         self._card = QFrame()
         self._card.setObjectName("ConsoleCard")
@@ -579,25 +584,26 @@ class TerminalChildWidget(QWidget):
         """Renderiza o console como item subordinado ao workspace."""
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
-            bg = "rgba(90, 195, 90, 8)"
+            bg = "rgba(255, 255, 255, 8)"
         elif state == STATE_WORKING:
-            bg = "rgba(224, 184, 106, 7)"
+            bg = "rgba(224, 184, 106, 6)"
         elif state == STATE_AWAITING:
-            bg = "rgba(224, 144, 96, 12)"
+            bg = "rgba(224, 144, 96, 9)"
         elif state == STATE_ERROR:
-            bg = "rgba(213, 114, 114, 14)"
+            bg = "rgba(213, 114, 114, 10)"
         else:
             bg = "transparent"
+        strip_color = STATE_COLOR[state]
         self._card.setStyleSheet(
             f"#ConsoleCard {{"
             f"  background: {bg};"
             f"  border: 0;"
-            f"  border-radius: 0px;"
+            f"  border-radius: 5px;"
             f"}}"
             f"#ConsoleCard:hover {{ background: rgba(255, 255, 255, 6); }}"
             f"#ConsoleStateStrip {{"
-            f"  background: {STATE_COLOR[state]};"
-            f"  border-radius: 0;"
+            f"  background: {strip_color};"
+            f"  border-radius: 1px;"
             f"}}"
             f"#ConsoleCard QLabel {{ background: transparent; }}"
             f"#ConsoleCard QPushButton {{ background: transparent; }}"
