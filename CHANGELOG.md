@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.79.8] — 2026-05-30
+
+### Testes (+16, total 1132)
+- `test_claude_activity_helpers.py` — helpers puros de detecção de atividade: `_is_meaningful`, `_normalize`, `_is_idle_marker` (linha vazia), `_last_index`, `_has_working_marker` (janela de 6 linhas), `_looks_like_prompt`, `_is_prompt_ready_marker`.
+- Cobertura de `claude_activity.py` 86% → 92%; geral 47.2%.
+
 ## [0.79.7] — 2026-05-30
 
 ### Testes (+16, total 1116)
