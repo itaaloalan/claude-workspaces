@@ -107,22 +107,45 @@ def _extract_pr_url(output: str) -> str:
     return ""
 
 
-_GITLAB_TOKEN_RE = re.compile(
-    r"https?://[^:@/]*:?(glpat-[A-Za-z0-9_-]+)@([^/]+)/(.+?)(?:\.git)?$"
+# Remote URL genérico: captura host e project path com ou sem credencial embutida.
+_GITLAB_REMOTE_RE = re.compile(
+    r"https?://(?:[^:@/]+(?::[^@/]*)?@)?([^/]+)/(.+?)(?:\.git)?$"
 )
 
 
-def _parse_gitlab_remote(remote_url: str) -> tuple[str, str, str] | None:
-    """Extrai (host, token, project_path) de URL GitLab com token embutido."""
-    m = _GITLAB_TOKEN_RE.match(remote_url.strip())
+def _parse_gitlab_remote(remote_url: str) -> tuple[str, str] | None:
+    """Extrai (host, project_path) de URL HTTPS. Retorna None para github.com."""
+    m = _GITLAB_REMOTE_RE.match(remote_url.strip())
     if not m:
         return None
-    return m.group(2), m.group(1), m.group(3)
+    host, path = m.group(1), m.group(2)
+    if host == "github.com":
+        return None
+    return host, path
+
+
+def _get_git_credential(folder: str, host: str) -> str | None:
+    """Obtém a senha/token do credential store do git para `host`."""
+    try:
+        r = subprocess.run(
+            ["git", "credential", "fill"],
+            input=f"protocol=https\nhost={host}\n\n",
+            cwd=folder,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for line in r.stdout.splitlines():
+            if line.startswith("password="):
+                return line[len("password="):].strip()
+    except Exception:
+        pass
+    return None
 
 
 def find_existing_mr_gitlab(folder: str, branch: str) -> ExistingPR | None:
-    """Procura MR aberto no GitLab via REST API. Só funciona quando o remote
-    tem token embutido no URL (ex: glpat-... em https://user:token@host/...)."""
+    """Procura MR aberto no GitLab via REST API.
+    Obtém o token do credential store do git (git credential fill)."""
     try:
         r = subprocess.run(
             ["git", "remote", "get-url", "origin"],
@@ -134,7 +157,10 @@ def find_existing_mr_gitlab(folder: str, branch: str) -> ExistingPR | None:
     parsed = _parse_gitlab_remote(remote)
     if not parsed:
         return None
-    host, token, project_path = parsed
+    host, project_path = parsed
+    token = _get_git_credential(folder, host)
+    if not token:
+        return None
     encoded = urllib.parse.quote(project_path, safe="")
     api_url = (
         f"https://{host}/api/v4/projects/{encoded}/merge_requests"

@@ -214,6 +214,10 @@ class TerminalWidget(QWidget):
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
         # o botão vira ruído. Set por main_window._restore_sessions.
         self._restored_on_startup: bool = False
+        # Flag: usuário pediu troca de modelo via popup ⚙. Consumido pelo
+        # main_window quando detecta mudança de modelo no JSONL — dispara
+        # salvamento automático em Settings.claude_model.
+        self._pending_model_change: bool = False
         # URL do PR detectado no output (ex: https://github.com/org/repo/pull/42).
         # Persistido durante toda a vida da sessão — uma vez encontrado, não
         # some mesmo após o terminal ser limpo.
@@ -456,6 +460,7 @@ class TerminalWidget(QWidget):
         from html import escape
 
         extras = extras or []
+        self._extra_dirs = list(extras)
         parts: list[str] = []
 
         # MCPs: usa workspace_folders pra alinhar com o top bar (evita
@@ -635,6 +640,11 @@ class TerminalWidget(QWidget):
         """cwd usado pra rodar Claude — necessário pro --resume casar o
         diretório do JSONL no ~/.claude/projects/."""
         return self._claude_cwd
+
+    def extra_dirs(self) -> list[str]:
+        """Dirs extras passados via --add-dir (set_context_info). Podem
+        ter repos git próprios com PRs/MRs independentes."""
+        return list(getattr(self, "_extra_dirs", []))
 
     def backend(self) -> str:
         return getattr(self, "_backend", "claude")
@@ -899,8 +909,20 @@ class TerminalWidget(QWidget):
             return
         self.session.write(b"\x1b[Z")
 
+    def mark_pending_model_change(self) -> None:
+        """Sinaliza que o usuário iniciou uma troca de modelo (via popup ⚙)."""
+        self._pending_model_change = True
+
+    def consume_pending_model_change(self) -> bool:
+        """Retorna True e limpa o flag se uma troca de modelo está pendente."""
+        if self._pending_model_change:
+            self._pending_model_change = False
+            return True
+        return False
+
     def send_open_model(self) -> None:
         """Abre o picker `/model` no prompt do Claude (com Enter)."""
+        self.mark_pending_model_change()
         self.send_text("/model")
 
     def send_open_effort(self) -> None:

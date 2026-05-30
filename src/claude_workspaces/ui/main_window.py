@@ -262,6 +262,9 @@ class MainWindow(QMainWindow):
         # _add_terminal_child poder pedir status no primeiro paint.
         self._repo_poller = RepoStatusPoller(ttl_seconds=4.0, parent=self)
         self._repo_poller.status_ready.connect(self._on_repo_status_ready)
+        # Rastreia o último modelo lido do JSONL por tab_id — usado para
+        # detectar mudanças de modelo e atualizar Settings.claude_model.
+        self._last_known_model: dict[str, str] = {}
         # Poller assíncrono de PR/MR aberto (GitHub via gh + GitLab via API).
         # TTL de 60s — PR não muda com frequência.
         from ..pr_status_poller import PrStatusPoller
@@ -5610,9 +5613,21 @@ class MainWindow(QMainWindow):
         # Aciona busca de PR/MR em paralelo sempre que a branch é conhecida.
         if branch:
             self._pr_poller.request(folder, branch)
+            # Também dispara git status (e consequentemente PR check) nos
+            # extra dirs (--add-dir) dos consoles cujo cwd é este folder.
+            for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
+                if item is None:
+                    continue
+                term = self._terminal_widget_for(tab_id)
+                if term is None or term.claude_cwd() != folder:
+                    continue
+                for extra in term.extra_dirs():
+                    self._repo_poller.request(extra)
 
     def _on_pr_status_ready(self, folder: str, pr_url: str) -> None:
-        """Recebe resultado do PrStatusPoller e propaga pra sidebar+banner."""
+        """Recebe resultado do PrStatusPoller e propaga pra sidebar+banner.
+        Aceita tanto consoles cujo cwd == folder quanto os que têm folder
+        nos seus extra dirs (--add-dir)."""
         if not pr_url:
             return
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
@@ -5622,7 +5637,9 @@ class MainWindow(QMainWindow):
             if not isinstance(widget, TerminalChildWidget):
                 continue
             term = self._terminal_widget_for(tab_id)
-            if term is None or term.claude_cwd() != folder:
+            if term is None:
+                continue
+            if term.claude_cwd() != folder and folder not in term.extra_dirs():
                 continue
             widget.set_pr_url(pr_url)
             term.set_detected_pr_url(pr_url)
