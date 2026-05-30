@@ -100,7 +100,10 @@ _PERM_SPECIFIC_NORMS = ("dontaskagain", "allowonce", "allowalways", "denyandstop
 # remove os escapes mas não reinsere os espaços, então "Enter to select"
 # vira "Entertoselect" e a regex acima não casa.
 _INTERACTIVE_FOOTER_NORM = "entertoselect"
-_DECISION_QUESTION_NORM = "doyouwant"
+# Frases de pergunta de decisão. "do you want" → permission prompt clássico;
+# "would you like" → prompt do plan mode ("...ready to execute. Would you
+# like to proceed?"). Ambas exigem uma escolha visível para virar decisão.
+_DECISION_QUESTION_NORMS = ("doyouwant", "wouldyoulike")
 _DECISION_ALLOW_NORM = "allow"
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
@@ -186,8 +189,11 @@ def _has_decision_prompt(lines: list[str]) -> bool:
     )
     if has_yn_choice:
         return True
-    # Formato clássico: "Do you want...?" + "❯ 1." numerado.
-    has_question = any(_DECISION_QUESTION_NORM in n for n in tail_norm)
+    # Formato clássico: "Do you want...?" / plan mode "Would you like...?"
+    # + "❯ 1." numerado.
+    has_question = any(
+        any(q in n for q in _DECISION_QUESTION_NORMS) for n in tail_norm
+    )
     has_numbered_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
     if has_question and has_numbered_choice:
         return True

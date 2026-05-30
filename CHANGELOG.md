@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.79.3] — 2026-05-30
+
+### Correções
+- **Sidebar mostrava "Trabalhando" no prompt do plan mode.** O detector de decisão (`claude_activity._has_decision_prompt`) só reconhecia a pergunta pelo termo `"do you want"`. O prompt do plan mode usa `"...ready to execute. Would you like to proceed?"` + escolhas numeradas `❯ N.`, que não casava — então a sessão ficava como "Trabalhando" em vez de "Aguardando decisão". Agora `"would you like"` também conta como pergunta de decisão, mantendo a exigência de uma escolha visível (`❯ N.`) para não dar falso positivo em lista numerada qualquer. Cobertura nova em `tests/test_claude_activity.py`.
+
 ## [0.79.2] — 2026-05-30
 
 ### Correções

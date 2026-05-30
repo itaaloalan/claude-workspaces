@@ -220,6 +220,21 @@ def test_needs_decision_true_com_make_edit():
     assert a.needs_decision is True
 
 
+def test_decision_prompt_plan_mode_would_you_like():
+    """Plan mode: 'ready to execute. Would you like to proceed?' + ❯ N."""
+    buf = (
+        b"Claude has written up a plan and is ready to execute. "
+        b"Would you like to proceed?\n"
+        b"\xe2\x9d\xaf 1. Yes, and bypass permissions\n"
+        b"  2. Yes, manually approve edits\n"
+        b"  3. No, refine with Ultraplan on Claude Code on the web\n"
+        b"  4. Tell Claude what to change\n"
+    )
+    act = parse_status(buf)
+    assert act.needs_decision is True
+    assert act.is_working is False
+
+
 def test_needs_decision_false_quando_working():
     """Mesmo com 'Do you want to' velho no buffer, se Claude está
     trabalhando agora não é 'aguardando' — working tem prioridade."""
