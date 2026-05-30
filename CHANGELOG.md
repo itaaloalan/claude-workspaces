@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.78.0] — 2026-05-30
+
+### Performance / Fluidez
+- **Filtro da busca com debounce de 150ms**: digitar na busca da sidebar não dispara mais uma varredura O(n) da árvore (com preview de sessões) a cada tecla. O trabalho real roda 150ms depois da última tecla, eliminando a travada perceptível ao digitar rápido. A reconstrução da lista (`refresh_list`) continua aplicando o filtro de imediato.
+- **Batching de paint no `refresh_list`**: a reconstrução inteira da árvore (clear + re-add de N workspaces × M filhos) agora roda com `setUpdatesEnabled(False)` e um único repaint ao final, eliminando flicker e travadas com muitos workspaces/sessões.
+- Sino de ações: `set_action_callbacks` só faz `disconnect()` quando já houve wiring prévio, eliminando ~38 `RuntimeWarning` ruidosos por execução de testes.
+
+### Refatoração (TDD)
+- Nova lógica pura sem Qt em `ui/sidebar_logic.py` — `partition_workspaces` (fixados/regulares), `format_activity_badge` (texto do badge) e `disambiguated_title` (`#N` entre irmãos) — extraídas de `main_window.py` e cobertas por testes escritos antes da implementação.
+- Predicado de filtro extraído para `ui/text_utils.py` (`matches_filter`, `normalize_needle`) — testável sem instanciar a janela.
+- `refresh_list` dividido em `refresh_list` (wrapper de paint) + `_rebuild_list` (corpo).
+
+### Testes
+- Novo `tests/test_main_window_integration.py`: constrói uma `MainWindow` real (offscreen, HOME isolado) e exercita as ações da sidebar end-to-end — add/delete/pin/minimize/restore de workspace, filtro (debounce e imediato), seleção/highlight, badges e batching de paint.
+- Cobertura geral subiu de 27% → 45%; `main_window.py` de 0% → 29%; `text_utils.py` 100%; `sidebar_logic.py` 93%.
+
 ## [0.77.4] — 2026-05-30
 
 ### Correções

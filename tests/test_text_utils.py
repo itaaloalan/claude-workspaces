@@ -1,8 +1,12 @@
-"""Testes para claude_workspaces.ui.text_utils — função pura _strip_noise."""
+"""Testes para claude_workspaces.ui.text_utils — funções puras."""
 
 import pytest
 
-from claude_workspaces.ui.text_utils import _strip_noise
+from claude_workspaces.ui.text_utils import (
+    _strip_noise,
+    matches_filter,
+    normalize_needle,
+)
 
 
 @pytest.mark.parametrize("text", [
@@ -92,3 +96,45 @@ def test_fmt_elapsed_seconds():
     assert _fmt_elapsed(45) == "45s"
     assert _fmt_elapsed(90) == "1m 30s"
     assert _fmt_elapsed(3660) == "1h 01m"
+
+
+# ---------- normalize_needle ----------
+
+@pytest.mark.parametrize("raw,expected", [
+    ("  ABC  ", "abc"),
+    ("MeuProjeto", "meuprojeto"),
+    ("", ""),
+    (None, ""),
+    ("\tFoo\n", "foo"),
+])
+def test_normalize_needle(raw, expected):
+    assert normalize_needle(raw) == expected
+
+
+# ---------- matches_filter (predicado do filtro da sidebar) ----------
+
+def test_matches_filter_empty_needle_matches_everything():
+    # Termo vazio = lista inteira visível
+    assert matches_filter("", "qualquer coisa") is True
+    assert matches_filter("", "") is True
+
+
+def test_matches_filter_substring_case_insensitive():
+    assert matches_filter("abc", "xxABCyy") is True
+
+
+def test_matches_filter_no_match():
+    assert matches_filter("zzz", "abc def") is False
+
+
+def test_matches_filter_haystack_none_safe():
+    assert matches_filter("abc", None) is False
+    assert matches_filter("", None) is True
+
+
+def test_matches_filter_matches_across_fields():
+    # Simula o haystack montado em _do_apply_filter: nome + desc + folders
+    haystack = "Meu Projeto\nbackend java\n/home/x/proj\nrodando testes"
+    assert matches_filter(normalize_needle("JAVA"), haystack) is True
+    assert matches_filter(normalize_needle("testes"), haystack) is True
+    assert matches_filter(normalize_needle("inexistente"), haystack) is False

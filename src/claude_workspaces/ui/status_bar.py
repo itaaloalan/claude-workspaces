@@ -9,7 +9,6 @@ Os segmentos são atualizados pela MainWindow via setters explícitos.
 
 from __future__ import annotations
 
-import re
 import sys
 
 from PySide6.QtCore import Qt, Signal

@@ -572,7 +572,6 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def show_workspace(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self._name.setText(workspace.name)
-        active_backend = self.settings.ai_backend
         self._claude_btn.setText("  Abrir agente…")
         self._sessions_title.setText("<b>Sessões recentes</b>")
 

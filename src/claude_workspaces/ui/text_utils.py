@@ -30,3 +30,19 @@ def _strip_noise(text: str) -> str:
     out = re.sub(r"\s*·\s*·\s*", " · ", out)
     out = out.strip(" ·\t")
     return out
+
+
+def normalize_needle(text: str) -> str:
+    """Normaliza o termo de busca digitado na sidebar (trim + lower)."""
+    return (text or "").strip().lower()
+
+
+def matches_filter(needle: str, haystack: str) -> bool:
+    """Predicado puro do filtro da sidebar: item visível?
+
+    `needle` deve vir já normalizado (ver `normalize_needle`). Termo vazio
+    casa tudo (lista inteira visível). Caso contrário, substring case-folded.
+    """
+    if not needle:
+        return True
+    return needle in (haystack or "").lower()

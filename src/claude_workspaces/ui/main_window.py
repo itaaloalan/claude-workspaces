@@ -1942,6 +1942,17 @@ class MainWindow(QMainWindow):
                 if isinstance(pdata, Workspace):
                     current_id = pdata.id
 
+        # Batch de paint: desabilita repaints durante a reconstrução inteira
+        # da árvore (clear + re-add de N workspaces × M filhos). Sem isso o
+        # Qt repinta a cada addTopLevelItem/setItemWidget, causando flicker e
+        # travadas perceptíveis quando há muitos workspaces e sessões.
+        self.list_widget.setUpdatesEnabled(False)
+        try:
+            self._rebuild_list(current_id)
+        finally:
+            self.list_widget.setUpdatesEnabled(True)
+
+    def _rebuild_list(self, current_id: str | None) -> None:
         self.list_widget.clear()
         self.terminals_coord.state.tree_items.clear()
         self._runner_tree_items.clear()
@@ -1960,9 +1971,9 @@ class MainWindow(QMainWindow):
         # Particiona: workspaces fixados aparecem em "FIXADOS" no topo,
         # fora da lista principal (não duplica). Minimizados ficam fora
         # de ambas as seções (só viram chip).
-        visible = [ws for ws in self.workspaces if not ws.minimized]
-        pinned = [ws for ws in visible if ws.pinned]
-        regular = [ws for ws in visible if not ws.pinned]
+        from .sidebar_logic import partition_workspaces
+
+        pinned, regular = partition_workspaces(self.workspaces)
 
         def _add_workspace(ws: Workspace) -> None:
             item = QTreeWidgetItem([""])
@@ -1994,9 +2005,12 @@ class MainWindow(QMainWindow):
             if bool(self.settings.section_collapsed.get(_label, False)):
                 self._apply_section_collapse(_label, True)
 
-        self._apply_filter(
+        # Reaplica o filtro imediatamente (sem debounce) — estamos
+        # reconstruindo a lista, então o estado de hidden tem que valer já.
+        self._pending_filter = (
             self.top_bar.search.text() if hasattr(self, "top_bar") else ""
         )
+        self._do_apply_filter()
         self._refresh_activity_badges()
 
         # Reanexa abas de terminais já existentes
@@ -2066,7 +2080,25 @@ class MainWindow(QMainWindow):
         return ws.name
 
     def _apply_filter(self, text: str) -> None:
-        needle = text.strip().lower()
+        """Entrada debounced do filtro (chamada a cada tecla na busca).
+
+        Em vez de varrer a árvore inteira a cada keystroke — que trava a
+        digitação quando há sessões com preview pesado — guarda o termo e
+        agenda o trabalho real 150ms depois da última tecla.
+        """
+        self._pending_filter = text
+        timer = getattr(self, "_filter_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._do_apply_filter)
+            self._filter_timer = timer
+        timer.start(150)
+
+    def _do_apply_filter(self) -> None:
+        from .text_utils import matches_filter, normalize_needle
+
+        needle = normalize_needle(getattr(self, "_pending_filter", ""))
         for i in range(self.list_widget.topLevelItemCount()):
             item = self.list_widget.topLevelItem(i)
             ws = item.data(0, Qt.ItemDataRole.UserRole)
@@ -2077,8 +2109,8 @@ class MainWindow(QMainWindow):
             sess_text = self._session_text_for(ws) if needle else ""
             haystack = (
                 f"{ws.name}\n{ws.description}\n{' '.join(ws.folders)}\n{sess_text}"
-            ).lower()
-            item.setHidden(bool(needle) and needle not in haystack)
+            )
+            item.setHidden(not matches_filter(needle, haystack))
         current = self.list_widget.currentItem()
         if current and current.isHidden():
             for i in range(self.list_widget.topLevelItemCount()):
@@ -2952,18 +2984,16 @@ class MainWindow(QMainWindow):
         """
         if not hasattr(self, "activity_bar"):
             return
+        from .sidebar_logic import format_activity_badge
+
         total = len(self.workspaces_coord.workspaces)
         working = sum(
             1
             for ws in self.workspaces_coord.workspaces
             if self.terminals_coord.state.running_counts.get(ws.id, 0) > 0
         )
-        if total > 0:
-            badge = f"{working}/{total}" if working > 0 else str(total)
-            tip = (
-                f"{working} trabalhando · {total - working} ocioso(s) · "
-                f"{total} no total"
-            )
+        badge, tip = format_activity_badge(working, total)
+        if badge:
             self.activity_bar.set_badge(VIEW_WORKSPACES, badge, tip)
         else:
             self.activity_bar.set_badge(VIEW_WORKSPACES, "")
@@ -5075,16 +5105,14 @@ class MainWindow(QMainWindow):
             if real_ws is None:
                 return base_title
             ws_item = real_ws
+        from .sidebar_logic import disambiguated_title
+
         sibling_ids: list[int] = []
         for sib in self._iter_terminal_items(ws_item):
             sib_id = sib.data(0, Qt.ItemDataRole.UserRole)
             if isinstance(sib_id, int):
                 sibling_ids.append(sib_id)
-        if int(tab_id) not in sibling_ids:
-            sibling_ids.append(int(tab_id))
-        sibling_ids.sort()
-        position = sibling_ids.index(int(tab_id)) + 1
-        return f"#{position} {base_title}"
+        return disambiguated_title(base_title, int(tab_id), sibling_ids)
 
     def _refresh_workspace_child_titles(
         self, ws_item: QTreeWidgetItem | None

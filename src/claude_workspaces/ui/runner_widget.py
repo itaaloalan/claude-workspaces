@@ -8,12 +8,12 @@ ao vivo no xterm.js (mesmo HTML/JS da aba Terminal).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import re
 import shlex
 import subprocess
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings

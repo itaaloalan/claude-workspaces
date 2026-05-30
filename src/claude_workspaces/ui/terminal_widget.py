@@ -771,8 +771,9 @@ class TerminalWidget(QWidget):
         self.pr_detected.emit(url)
 
     def _show_pr_banner(self, url: str) -> None:
-        from ..services.runner_url_detect import pr_label_from_url
         from html import escape
+
+        from ..services.runner_url_detect import pr_label_from_url
         label = pr_label_from_url(url)
         safe_url = escape(url)
         self._pr_bar.setText(

@@ -542,19 +542,16 @@ class TerminalChildWidget(QWidget):
         on_rename: Callable[[], None] | None = None,
     ) -> None:
         """Conecta os cliques dos botões inline (▶ ✖)."""
-        # Desconecta primeiro pra evitar duplicar handlers ao reconectar
-        try:
-            self._continue_btn.clicked.disconnect()
-        except RuntimeError:
-            pass
-        try:
-            self._close_btn.clicked.disconnect()
-        except RuntimeError:
-            pass
-        try:
-            self._rename_btn.clicked.disconnect()
-        except RuntimeError:
-            pass
+        # Desconecta primeiro pra evitar duplicar handlers ao reconectar.
+        # Só na 2ª+ chamada — disconnect() sem conexão prévia emite um
+        # RuntimeWarning ruidoso (não um RuntimeError capturável).
+        if getattr(self, "_actions_wired", False):
+            for btn in (self._continue_btn, self._close_btn, self._rename_btn):
+                try:
+                    btn.clicked.disconnect()
+                except RuntimeError:
+                    pass
+        self._actions_wired = True
         self._continue_btn.clicked.connect(lambda _=False: on_continue())
         if on_close is not None:
             self._close_btn.clicked.connect(lambda _=False: on_close())
