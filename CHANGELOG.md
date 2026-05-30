@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.79.5] — 2026-05-30
+
+### Refatoração (TDD)
+- Nova lógica pura sem Qt em `notifications/thresholds.py` (`cost_warning_levels`, `long_running_minutes`) extraída de `_maybe_emit_cost_warning` e `_scan_long_running` do `main_window.py`.
+- `ui/sidebar_logic.py` ganhou `count_unseen_by_tab` e `unread_count_for`, extraídas da agregação de badges não-lidos em `_refresh_unread_badges`.
+- Os 3 métodos do `main_window.py` passaram a delegar para a lógica pura; comportamento (notify/dedup/badges) inalterado.
+
+### Testes (+100, total 1073)
+- `test_notification_thresholds.py`, casos novos em `test_sidebar_logic.py` (agregação).
+- `test_runner_prompt.py` — builders de prompt de runner (`services/runner_prompt.py`).
+- `tests/plugins/test_manifest.py` — dataclasses e lógica de permissões de plugins.
+- `tests/plugins/test_events.py` — EventBus (pub/sub, unsubscribe, throttle/debounce, isolamento de exceção).
+- `test_runner_gen_history.py` — round-trip + persistência JSON do histórico de geração.
+- Testes do parser puro `_parse_porcelain_v2` e de `GitFile`/`GitStatus` em `test_git_status.py`.
+- Cobertura geral 46% → 46.7%.
+
 ## [0.79.4] — 2026-05-30
 
 ### Correções

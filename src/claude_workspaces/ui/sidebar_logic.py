@@ -42,6 +42,31 @@ def disambiguated_title(
     return f"#{position} {base_title}"
 
 
+def count_unseen_by_tab(notifications) -> dict[int, int]:
+    """Conta notificações não-vistas por `tab_id`. Notifs com `tab_id`
+    None são ignoradas (não têm sessão associada na sidebar)."""
+    out: dict[int, int] = {}
+    for n in notifications:
+        if n.tab_id is not None:
+            out[n.tab_id] = out.get(n.tab_id, 0) + 1
+    return out
+
+
+def unread_count_for(
+    session_id: str | None,
+    tab_id: int,
+    sess_counts: dict[str | None, int],
+    tab_counts: dict[int, int],
+) -> int:
+    """Contagem de não-lidos de uma sessão Claude na sidebar.
+
+    Usa o maior valor entre a contagem por `session_id` (quando há sessão
+    reivindicada) e a contagem por `tab_id` (fallback do inbox_alert), pra
+    não subcontar quando só um dos lados foi preenchido."""
+    by_session = sess_counts.get(session_id, 0) if session_id else 0
+    return max(by_session, tab_counts.get(tab_id, 0))
+
+
 def format_activity_badge(working: int, total: int) -> tuple[str, str]:
     """Texto do badge de atividade dos workspaces no ActivityBar.
 

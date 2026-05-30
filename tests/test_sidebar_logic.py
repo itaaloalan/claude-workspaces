@@ -4,11 +4,15 @@ TDD: estes testes foram escritos ANTES de sidebar_logic.py existir, travando
 o comportamento que estava embutido em _rebuild_list e _refresh_activity_badges.
 """
 
+from types import SimpleNamespace
+
 from claude_workspaces.models import Workspace
 from claude_workspaces.ui.sidebar_logic import (
+    count_unseen_by_tab,
     disambiguated_title,
     format_activity_badge,
     partition_workspaces,
+    unread_count_for,
 )
 
 
@@ -117,3 +121,45 @@ def test_disambig_tab_id_absent_gets_appended():
 
 def test_disambig_dedups_repeated_ids():
     assert disambiguated_title("foo", 5, [1, 5, 5, 9]) == "#2 foo"
+
+
+# ---------- count_unseen_by_tab ----------
+
+def _notif(tab_id):
+    return SimpleNamespace(tab_id=tab_id)
+
+
+def test_count_unseen_empty():
+    assert count_unseen_by_tab([]) == {}
+
+
+def test_count_unseen_groups_by_tab():
+    notifs = [_notif(1), _notif(1), _notif(2)]
+    assert count_unseen_by_tab(notifs) == {1: 2, 2: 1}
+
+
+def test_count_unseen_ignores_none_tab():
+    notifs = [_notif(None), _notif(5), _notif(None)]
+    assert count_unseen_by_tab(notifs) == {5: 1}
+
+
+# ---------- unread_count_for ----------
+
+def test_unread_count_uses_session_when_present():
+    sess = {"sid-a": 4}
+    tabs = {10: 1}
+    assert unread_count_for("sid-a", 10, sess, tabs) == 4  # max(4, 1)
+
+
+def test_unread_count_uses_tab_when_higher():
+    sess = {"sid-a": 1}
+    tabs = {10: 7}
+    assert unread_count_for("sid-a", 10, sess, tabs) == 7
+
+
+def test_unread_count_no_session_id_falls_back_to_tab():
+    assert unread_count_for(None, 10, {"sid-a": 99}, {10: 3}) == 3
+
+
+def test_unread_count_zero_when_absent():
+    assert unread_count_for("sid-x", 10, {}, {}) == 0

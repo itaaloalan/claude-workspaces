@@ -2157,22 +2157,23 @@ class MainWindow(QMainWindow):
         uma janela cruza 80% (high) ou 95% (critical). Dedup por janela —
         a mesma janela só re-notifica depois do cooldown do service ou
         quando passa de high pra critical."""
-        thresholds = [
+        from ..notifications.thresholds import cost_warning_levels
+
+        windows = [
             ("5h", getattr(snap, "five_hour", None)),
             ("7d", getattr(snap, "seven_day", None)),
             ("7d-sonnet", getattr(snap, "seven_day_sonnet", None)),
         ]
-        for window_label, window in thresholds:
-            if window is None:
-                continue
-            pct = float(getattr(window, "utilization_pct", 0) or 0)
-            if pct < 80.0:
-                continue
+        pairs = [
+            (label, float(getattr(window, "utilization_pct", 0) or 0))
+            for label, window in windows
+            if window is not None
+        ]
+        for window_label, pct, level in cost_warning_levels(pairs):
             priority = (
-                NotificationPriority.CRITICAL if pct >= 95.0
+                NotificationPriority.CRITICAL if level == "crítico"
                 else NotificationPriority.HIGH
             )
-            level = "crítico" if pct >= 95.0 else "alto"
             self.notif_service.notify(
                 NotificationKind.COST_WARNING,
                 title=f"💰 Uso do plano {level} — janela {window_label}",
@@ -2269,12 +2270,15 @@ class MainWindow(QMainWindow):
         if not self._working_since:
             return
         import time as _t
+
+        from ..notifications.thresholds import long_running_minutes
         now = _t.monotonic()
         threshold = 5 * 60  # 5min — futuro: settings.long_running_seconds
         for tab_id, started in list(self._working_since.items()):
             if tab_id in self._long_running_notified:
                 continue
-            if (now - started) < threshold:
+            elapsed_min = long_running_minutes(started, now, threshold)
+            if elapsed_min is None:
                 continue
             self._long_running_notified.add(tab_id)
             activity = self.terminals_coord.state.activity.get(tab_id)
@@ -2282,7 +2286,6 @@ class MainWindow(QMainWindow):
             ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id)
             ws = self.workspaces_coord.find_by_id(ws_id) if ws_id else None
             ws_name = ws.name if ws else "Workspace"
-            elapsed_min = int((now - started) // 60)
             self.notif_service.notify(
                 NotificationKind.LONG_RUNNING,
                 title=f"⏱ Execução longa — {ws_name}",
@@ -2307,19 +2310,17 @@ class MainWindow(QMainWindow):
         # Badge por sessão: chave do service.unread_by_session é session_id;
         # nas notifs do inbox_alert também guardamos tab_id, então fazemos
         # o fallback por tab_id pra casos onde session_id não foi setado.
+        from .sidebar_logic import count_unseen_by_tab, unread_count_for
         sess_counts = self.notif_service.unread_by_session()
-        tab_counts: dict[int, int] = {}
-        for n in self.notif_service.list(only_unseen=True):
-            if n.tab_id is not None:
-                tab_counts[n.tab_id] = tab_counts.get(n.tab_id, 0) + 1
+        tab_counts = count_unseen_by_tab(self.notif_service.list(only_unseen=True))
         for tab_id, tree_item in self.terminals_coord.state.tree_items.items():
             widget = self.list_widget.itemWidget(tree_item, 0)
             if not isinstance(widget, TerminalChildWidget):
                 continue
             sid = widget.claimed_session_id() if hasattr(widget, "claimed_session_id") else None
-            count = sess_counts.get(sid, 0) if sid else 0
-            count = max(count, tab_counts.get(tab_id, 0))
-            widget.set_unread_count(count)
+            widget.set_unread_count(
+                unread_count_for(sid, tab_id, sess_counts, tab_counts)
+            )
 
     def _focus_active_workspace_from_status(self) -> None:
         """Click no segmento 'workspace' do footer → ativa view de
