@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.79.6] — 2026-05-30
+
+### Testes (+27, total 1100)
+- `test_backend_probe.py` — parse de versão (`_parse_semver`) e checagem de compatibilidade (`check_compatibility`) do detector de CLI.
+- Casos extras em `tests/plugins/test_semver.py` — ordenação de `Version`, operadores `>`/`<`/`<=`/`>=`, múltiplos constraints e erros de `parse_range`.
+
 ## [0.79.5] — 2026-05-30
 
 ### Refatoração (TDD)
