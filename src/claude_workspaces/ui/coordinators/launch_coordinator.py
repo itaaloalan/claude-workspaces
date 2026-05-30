@@ -75,7 +75,11 @@ class LaunchCoordinator(QObject):
         submit_initial_prompt = False
         if cwd_override:
             cwd = cwd_override
-            extras = []
+            # Mantém as demais pastas do workspace como --add-dir. Antes zerava,
+            # e como restore/resume sempre passam cwd_override, os add-dirs eram
+            # perdidos: o Claude não via as outras pastas e a sidebar só pollava
+            # MR/git do cwd (MAP mostrava só 1 MR).
+            extras = [f for f in workspace.folders if f != cwd_override]
         elif not resume_session_id:
             # Importa local pra evitar circular import e custo de
             # importar Qt widgets pesados em testes

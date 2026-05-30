@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.79.2] — 2026-05-30
+
+### Correções
+- **MAP / múltiplas pastas: só 1 MR aparecia após restaurar/retomar a sessão.** A causa real era o `launch_coordinator`, que zerava as pastas extra (`extras = []`) sempre que um `cwd_override` era passado — e restore (`_restore_sessions`) e resume sempre passam. Isso descartava todos os `--add-dir`: o Claude reaberto nem via as outras pastas e a sidebar só consultava MR/git do `cwd` (ex.: MAP mostrava só `MR #791`, omitindo `MR #1127` do map-web). Agora as demais pastas do workspace são mantidas como `--add-dir` no override, restaurando o contexto multi-pasta e o chip de MR de cada pasta. Complementa o fix de polling de `extra_dirs()` da 0.79.0 (que só tinha efeito com `extra_dirs` populado).
+
 ## [0.79.1] — 2026-05-30
 
 ### Refatoração (TDD)
