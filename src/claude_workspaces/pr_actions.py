@@ -9,8 +9,11 @@ Por que `gh` e não a API direta:
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
@@ -102,6 +105,66 @@ def _extract_pr_url(output: str) -> str:
         if line.startswith("https://github.com/"):
             return line
     return ""
+
+
+_GITLAB_TOKEN_RE = re.compile(
+    r"https?://[^:@/]*:?(glpat-[A-Za-z0-9_-]+)@([^/]+)/(.+?)(?:\.git)?$"
+)
+
+
+def _parse_gitlab_remote(remote_url: str) -> tuple[str, str, str] | None:
+    """Extrai (host, token, project_path) de URL GitLab com token embutido."""
+    m = _GITLAB_TOKEN_RE.match(remote_url.strip())
+    if not m:
+        return None
+    return m.group(2), m.group(1), m.group(3)
+
+
+def find_existing_mr_gitlab(folder: str, branch: str) -> ExistingPR | None:
+    """Procura MR aberto no GitLab via REST API. Só funciona quando o remote
+    tem token embutido no URL (ex: glpat-... em https://user:token@host/...)."""
+    try:
+        r = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=folder, capture_output=True, text=True, timeout=5,
+        )
+        remote = r.stdout.strip()
+    except Exception:
+        return None
+    parsed = _parse_gitlab_remote(remote)
+    if not parsed:
+        return None
+    host, token, project_path = parsed
+    encoded = urllib.parse.quote(project_path, safe="")
+    api_url = (
+        f"https://{host}/api/v4/projects/{encoded}/merge_requests"
+        f"?state=opened&source_branch={urllib.parse.quote(branch)}&per_page=1"
+    )
+    req = urllib.request.Request(api_url, headers={"PRIVATE-TOKEN": token})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except Exception as exc:
+        log.debug("GitLab MR lookup falhou em %s/%s: %s", host, project_path, exc)
+        return None
+    if not data:
+        return None
+    mr = data[0]
+    web_url = (mr.get("web_url") or "").strip()
+    state = (mr.get("state") or "").strip().upper()
+    number = int(mr.get("iid") or 0)
+    if not web_url:
+        return None
+    return ExistingPR(url=web_url, state=state, number=number)
+
+
+def find_existing_pr_or_mr(folder: str, branch: str) -> ExistingPR | None:
+    """Tenta GitHub (gh pr view) primeiro, depois GitLab REST API."""
+    if gh_available():
+        pr = find_existing_pr(folder, branch)
+        if pr and pr.state == "OPEN":
+            return pr
+    return find_existing_mr_gitlab(folder, branch)
 
 
 def find_existing_pr(folder: str, branch: str) -> ExistingPR | None:

@@ -761,6 +761,15 @@ class TerminalWidget(QWidget):
                 self._show_pr_banner(pr)
                 self.pr_detected.emit(pr)
 
+    def set_detected_pr_url(self, url: str) -> None:
+        """Injeta URL de PR detectado externamente (PrStatusPoller).
+        Idempotente — não re-emite se a URL já é a mesma."""
+        if not url or url == self._pr_url:
+            return
+        self._pr_url = url
+        self._show_pr_banner(url)
+        self.pr_detected.emit(url)
+
     def _show_pr_banner(self, url: str) -> None:
         from ..services.runner_url_detect import pr_number_from_url
         from html import escape

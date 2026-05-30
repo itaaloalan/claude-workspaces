@@ -164,7 +164,7 @@ class TerminalChildWidget(QWidget):
 
         # Conector estilo Polaris: "╰" à esquerda cria a hierarquia visual
         # pai→filho sem depender de indentação do QTreeWidget.
-        self._connector_label = QLabel("╰")
+        self._connector_label = QLabel("")
         self._connector_label.setFixedWidth(18)
         self._connector_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -661,6 +661,7 @@ class TerminalChildWidget(QWidget):
         diferença de bg/borda externa."""
         self._selected = selected
         self._apply_card_qss()
+        self._connector_label.setText("╰" if selected else "")
         # Trabalhando? o robô âmbar pulsante manda — seleção não troca o pix.
         if getattr(self, "_current_state", STATE_IDLE) == STATE_WORKING:
             return

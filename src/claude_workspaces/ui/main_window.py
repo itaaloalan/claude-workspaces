@@ -262,6 +262,11 @@ class MainWindow(QMainWindow):
         # _add_terminal_child poder pedir status no primeiro paint.
         self._repo_poller = RepoStatusPoller(ttl_seconds=4.0, parent=self)
         self._repo_poller.status_ready.connect(self._on_repo_status_ready)
+        # Poller assíncrono de PR/MR aberto (GitHub via gh + GitLab via API).
+        # TTL de 60s — PR não muda com frequência.
+        from ..pr_status_poller import PrStatusPoller
+        self._pr_poller = PrStatusPoller(ttl_seconds=60.0, parent=self)
+        self._pr_poller.pr_ready.connect(self._on_pr_status_ready)
         self._repo_poll_timer = QTimer(self)
         self._repo_poll_timer.setInterval(5_000)
         self._repo_poll_timer.timeout.connect(self._refresh_terminal_git_info)
@@ -5602,6 +5607,26 @@ class MainWindow(QMainWindow):
             if term is None or term.claude_cwd() != folder:
                 continue
             widget.update_git_info(branch, modified)
+        # Aciona busca de PR/MR em paralelo sempre que a branch é conhecida.
+        if branch:
+            self._pr_poller.request(folder, branch)
+
+    def _on_pr_status_ready(self, folder: str, pr_url: str) -> None:
+        """Recebe resultado do PrStatusPoller e propaga pra sidebar+banner."""
+        if not pr_url:
+            return
+        for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
+            if item is None:
+                continue
+            widget = self.list_widget.itemWidget(item, 0)
+            if not isinstance(widget, TerminalChildWidget):
+                continue
+            term = self._terminal_widget_for(tab_id)
+            if term is None or term.claude_cwd() != folder:
+                continue
+            widget.set_pr_url(pr_url)
+            term.set_detected_pr_url(pr_url)
+        self._refresh_status_bar_console()
 
     def _launch_claude_for(
         self,
