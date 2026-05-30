@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.77.4] — 2026-05-30
+
+### Correções
+- Sidebar: o status **Trabalhando** não pinta mais o fundo da linha com âmbar semitransparente, que dava a falsa impressão de item selecionado. O estado segue indicado apenas pela faixa lateral colorida e pelo robô animado. O fundo destacado fica reservado para o item realmente selecionado (e os estados Aguardando/Erro mantêm o seu).
+
 ## [0.77.0] — 2026-05-30
 
 ### Novidade

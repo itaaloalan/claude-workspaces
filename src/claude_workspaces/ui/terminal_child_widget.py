@@ -566,8 +566,6 @@ class TerminalChildWidget(QWidget):
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
             bg = "rgba(255, 255, 255, 8)"
-        elif state == STATE_WORKING:
-            bg = "rgba(224, 184, 106, 6)"
         elif state == STATE_AWAITING:
             bg = "rgba(224, 144, 96, 9)"
         elif state == STATE_ERROR:
