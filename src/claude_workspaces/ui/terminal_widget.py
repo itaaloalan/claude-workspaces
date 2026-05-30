@@ -214,10 +214,6 @@ class TerminalWidget(QWidget):
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
         # o botão vira ruído. Set por main_window._restore_sessions.
         self._restored_on_startup: bool = False
-        # Flag: usuário pediu troca de modelo via popup ⚙. Consumido pelo
-        # main_window quando detecta mudança de modelo no JSONL — dispara
-        # salvamento automático em Settings.claude_model.
-        self._pending_model_change: bool = False
         # URL do PR detectado no output (ex: https://github.com/org/repo/pull/42).
         # Persistido durante toda a vida da sessão — uma vez encontrado, não
         # some mesmo após o terminal ser limpo.
@@ -302,10 +298,6 @@ class TerminalWidget(QWidget):
         self._continue_btn = QPushButton("▶ Continuar", _ghost)
         self._continue_btn.setEnabled(False)
         self._continue_btn.clicked.connect(self.send_continue)
-
-        self._mode_btn = QPushButton("⚙ Modo", _ghost)
-        self._mode_btn.setEnabled(False)
-        self._mode_btn.clicked.connect(self._open_mode_popup)
 
         self._runners_btn = QPushButton("▤ Runners", _ghost)
         self._runners_btn.setCheckable(True)
@@ -846,7 +838,6 @@ class TerminalWidget(QWidget):
         self._stop_btn.setEnabled(False)
         self._continue_btn.setEnabled(False)
         self._continue_btn.setVisible(False)
-        self._mode_btn.setEnabled(False)
         self._set_running(False)
 
     def send_text(self, text: str, submit: bool = True) -> None:
@@ -902,33 +893,6 @@ class TerminalWidget(QWidget):
         # setVisible(True) num widget parentless o faz flutuar sobre a UI.
         self._continue_btn.setVisible(False)
 
-    def send_cycle_mode(self) -> None:
-        """Manda Shift+Tab (CSI Z) — cicla entre os modos do Claude Code
-        (default → auto-accept → plan)."""
-        if not self.session.is_running():
-            return
-        self.session.write(b"\x1b[Z")
-
-    def mark_pending_model_change(self) -> None:
-        """Sinaliza que o usuário iniciou uma troca de modelo (via popup ⚙)."""
-        self._pending_model_change = True
-
-    def consume_pending_model_change(self) -> bool:
-        """Retorna True e limpa o flag se uma troca de modelo está pendente."""
-        if self._pending_model_change:
-            self._pending_model_change = False
-            return True
-        return False
-
-    def send_open_model(self) -> None:
-        """Abre o picker `/model` no prompt do Claude (com Enter)."""
-        self.mark_pending_model_change()
-        self.send_text("/model")
-
-    def send_open_effort(self) -> None:
-        """Abre o picker `/effort` no prompt do Claude (com Enter)."""
-        self.send_text("/effort")
-
     def _open_actions_menu(self) -> None:
         """Abre QMenu com todas as ações do console (▶ Continuar, ⚙ Modo,
         ▤ Runners, Encerrar) ancorado abaixo do botão ⋯."""
@@ -948,10 +912,6 @@ class TerminalWidget(QWidget):
         act_continue.setEnabled(getattr(self, "_continue_available", False))
         act_continue.triggered.connect(self.send_continue)
 
-        act_mode = menu.addAction("⚙  Modo")
-        act_mode.setEnabled(self._mode_btn.isEnabled())
-        act_mode.triggered.connect(self._open_mode_popup)
-
         runners_checked = self._runners_btn.isChecked()
         act_runners = menu.addAction(
             "▤  Runners  ✓" if runners_checked else "▤  Runners"
@@ -968,27 +928,6 @@ class TerminalWidget(QWidget):
         pos.setX(pos.x() - menu.sizeHint().width())
         pos.setY(pos.y() + 4)
         menu.exec(pos)
-
-    def _open_mode_popup(self) -> None:
-        """Mostra o ModePopup ancorado abaixo do botão ⚙ Modo."""
-        from .mode_popup import ModePopup
-
-        if not self.session.is_running():
-            return
-        popup = ModePopup(
-            on_cycle=self.send_cycle_mode,
-            on_effort=self.send_open_effort,
-            on_model=self.send_open_model,
-            backend=getattr(self, "_backend", "claude"),
-            parent=self,
-        )
-        # Ancorar abaixo-direita do botão ⋯ (agora que _mode_btn é oculto)
-        anchor = self._more_btn.mapToGlobal(
-            self._more_btn.rect().bottomRight()
-        )
-        anchor.setX(anchor.x() - popup.sizeHint().width())
-        anchor.setY(anchor.y() + 4)
-        popup.show_at(anchor)
 
     def start_command(self, argv: list[str], cwd: str, label: str | None = None) -> None:
         if not self._bridge_ready:
@@ -1010,7 +949,6 @@ class TerminalWidget(QWidget):
         self._status.setText(label or " ".join(argv))
         self._stop_btn.setEnabled(True)
         self._continue_btn.setEnabled(True)
-        self._mode_btn.setEnabled(True)
         self._set_running(True)
         # Avalia visibilidade do ▶ — depende de restored_on_startup +
         # estado idle. Quem chama esse método é o launch flow; restore
@@ -1042,7 +980,6 @@ class TerminalWidget(QWidget):
         self._stop_btn.setEnabled(False)
         self._continue_btn.setEnabled(False)
         self._continue_btn.setVisible(False)
-        self._mode_btn.setEnabled(False)
         self._status.setText("(terminal vazio)")
         self._set_running(False)
 

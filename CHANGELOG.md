@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.98] — 2026-05-29
+
+### Remoção
+- Botão ⚙ e popup de ajuste do Claude pela interface removidos (ciclar modo, trocar effort, trocar modelo via UI). O ajuste é feito diretamente no terminal. `mode_popup.py` deletado.
+
 ## [0.76.97] — 2026-05-29
 
 ### Correção

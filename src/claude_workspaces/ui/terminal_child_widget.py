@@ -333,17 +333,6 @@ class TerminalChildWidget(QWidget):
         self._continue_btn.setVisible(False)
         actions_layout.addWidget(self._continue_btn)
 
-        self._mode_btn = QPushButton("⚙")
-        self._mode_btn.setFixedSize(20, 18)
-        self._mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._mode_btn.setStyleSheet(_INLINE_BTN_QSS)
-        self._mode_btn.setToolTip(
-            "Modo / effort / modelo — abre popup com Plan/Auto/Default,"
-            " /effort e /model"
-        )
-        self._mode_btn.setEnabled(False)
-        actions_layout.addWidget(self._mode_btn)
-
         # ✖ Encerrar/remover console — mesmo atalho que estava só no menu
         # de contexto (clique direito). Hover em vermelho pra deixar claro
         # que é destrutivo.
@@ -576,19 +565,13 @@ class TerminalChildWidget(QWidget):
     def set_action_callbacks(
         self,
         on_continue: Callable[[], None],
-        on_open_mode_popup: Callable[[QWidget], None],
         on_close: Callable[[], None] | None = None,
         on_rename: Callable[[], None] | None = None,
     ) -> None:
-        """Conecta os cliques dos botões inline (✏ ▶ ⚙ ✖). `on_open_mode_popup`
-        recebe o próprio botão como anchor pra posicionar o ModePopup."""
+        """Conecta os cliques dos botões inline (▶ ✖)."""
         # Desconecta primeiro pra evitar duplicar handlers ao reconectar
         try:
             self._continue_btn.clicked.disconnect()
-        except RuntimeError:
-            pass
-        try:
-            self._mode_btn.clicked.disconnect()
         except RuntimeError:
             pass
         try:
@@ -600,9 +583,6 @@ class TerminalChildWidget(QWidget):
         except RuntimeError:
             pass
         self._continue_btn.clicked.connect(lambda _=False: on_continue())
-        self._mode_btn.clicked.connect(
-            lambda _=False, b=self._mode_btn: on_open_mode_popup(b)
-        )
         if on_close is not None:
             self._close_btn.clicked.connect(lambda _=False: on_close())
         if on_rename is not None:
@@ -680,7 +660,6 @@ class TerminalChildWidget(QWidget):
     def _refresh_actions_visibility(self) -> None:
         visible = self._actions_user_visible and self._hovered
         self._actions_widget.setVisible(visible)
-        self._mode_btn.setVisible(visible)
         self._close_btn.setVisible(visible)
         self._refresh_continue_visibility()
 
@@ -689,7 +668,6 @@ class TerminalChildWidget(QWidget):
         O ✖ fica sempre habilitado — faz sentido remover mesmo console
         já encerrado (limpa a sidebar)."""
         self._continue_btn.setEnabled(enabled)
-        self._mode_btn.setEnabled(enabled)
         self._refresh_continue_visibility()
 
     def set_continue_eligible(self, eligible: bool) -> None:

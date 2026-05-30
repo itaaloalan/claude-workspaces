@@ -1826,23 +1826,6 @@ class MainWindow(QMainWindow):
                 continue_act.triggered.connect(term.send_continue)
                 menu.addAction(continue_act)
                 menu.addSeparator()
-                cycle_act = QAction("↹ Ciclar modo (Plan / Auto / …)", menu)
-                cycle_act.setToolTip(
-                    "Manda Shift+Tab pro agente — cicla entre Plan, Auto-accept "
-                    "e Default. Olha o indicador embaixo-direita do TUI pra ver "
-                    "onde parou."
-                )
-                cycle_act.triggered.connect(term.send_cycle_mode)
-                menu.addAction(cycle_act)
-                effort_act = QAction("⏻ Trocar effort (/effort)", menu)
-                effort_act.setToolTip("Abre o slash command /effort no prompt do agente")
-                effort_act.triggered.connect(term.send_open_effort)
-                menu.addAction(effort_act)
-                model_act = QAction("✦ Trocar modelo (/model)", menu)
-                model_act.setToolTip("Abre o slash command /model no prompt do agente")
-                model_act.triggered.connect(term.send_open_model)
-                menu.addAction(model_act)
-                menu.addSeparator()
             close_act = QAction("✖ Encerrar/remover console", menu)
             close_act.setToolTip(
                 "Encerra o processo (se rodando) e remove esta aba do terminal"
@@ -4924,25 +4907,6 @@ class MainWindow(QMainWindow):
             if term is not None and term.is_running():
                 term.send_continue()
 
-        def on_open_mode_popup(anchor_btn) -> None:
-            term = self._terminal_widget_for(tab_id)
-            if term is None or not term.is_running():
-                return
-            from .mode_popup import ModePopup
-            popup = ModePopup(
-                on_cycle=term.send_cycle_mode,
-                on_effort=term.send_open_effort,
-                on_model=term.send_open_model,
-                backend=term.backend(),
-                parent=anchor_btn,
-            )
-            global_pos = anchor_btn.mapToGlobal(
-                anchor_btn.rect().bottomRight()
-            )
-            global_pos.setX(global_pos.x() - popup.sizeHint().width())
-            global_pos.setY(global_pos.y() + 4)
-            popup.show_at(global_pos)
-
         def on_close() -> None:
             from PySide6.QtWidgets import QMessageBox
             term = self._terminal_widget_for(tab_id)
@@ -4971,7 +4935,7 @@ class MainWindow(QMainWindow):
             self._rename_terminal_session(tab_id)
 
         widget.set_action_callbacks(
-            on_continue, on_open_mode_popup, on_close, on_rename
+            on_continue, on_close, on_rename
         )
 
         # Conecta detecção de PR: quando o TerminalWidget encontra uma URL de
