@@ -5232,31 +5232,10 @@ class MainWindow(QMainWindow):
         if ts is None:
             label.setVisible(False)
             return
+        from .usage_utils import relative_time_phrase
+
         secs = max(int((datetime.now() - ts).total_seconds()), 0)
-        if secs < 60:
-            phrase = "atualizado agora"
-        elif secs < 3600:
-            mins = secs // 60
-            phrase = (
-                "atualizado há 1 minuto atrás"
-                if mins == 1
-                else f"atualizado há {mins} minutos atrás"
-            )
-        elif secs < 86_400:
-            hours = secs // 3600
-            phrase = (
-                "atualizado há 1 hora atrás"
-                if hours == 1
-                else f"atualizado há {hours} horas atrás"
-            )
-        else:
-            days = secs // 86_400
-            phrase = (
-                "atualizado há 1 dia atrás"
-                if days == 1
-                else f"atualizado há {days} dias atrás"
-            )
-        label.setText(phrase)
+        label.setText(relative_time_phrase(secs))
         label.setVisible(True)
 
     def _refresh_plan_usage_status(self, force: bool = False) -> None:
@@ -5292,12 +5271,13 @@ class MainWindow(QMainWindow):
             if not visible and updated_label is not None:
                 updated_label.setVisible(False)
 
-        def _color(p: float) -> str:
-            if p < 50:
-                return theme.SUCCESS
-            if p < 80:
-                return theme.WARNING
-            return theme.DANGER
+        from .usage_utils import (
+            clamp_pct,
+            next_weekly_reset,
+            pct_chip,
+            reset_phrase,
+            sum_opencode_usage,
+        )
 
         opencode_line = ""
         opencode_tooltip = ""
@@ -5334,18 +5314,8 @@ class MainWindow(QMainWindow):
                 recent = {}
                 weekly = {}
 
-            def _sum(stats_map) -> tuple[int, float, str]:
-                tokens = sum(s.total_tokens for s in stats_map.values())
-                cost = sum(s.cost_usd for s in stats_map.values())
-                models: dict[str, int] = {}
-                for stats in stats_map.values():
-                    for model, count in stats.by_model.items():
-                        models[model] = models.get(model, 0) + count
-                top_model = max(models.items(), key=lambda kv: kv[1])[0] if models else ""
-                return tokens, cost, top_model
-
-            tokens_5h, cost_5h, model_5h = _sum(recent)
-            tokens_7d, cost_7d, model_7d = _sum(weekly)
+            tokens_5h, cost_5h, model_5h = sum_opencode_usage(recent)
+            tokens_7d, cost_7d, model_7d = sum_opencode_usage(weekly)
             if tokens_5h > 0 or tokens_7d > 0:
                 model = model_5h or model_7d or "modelo"
                 sep = f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
@@ -5396,27 +5366,13 @@ class MainWindow(QMainWindow):
             chips: list[str] = []
             tooltip_lines: list[str] = ["Plan usage limits (via /api/oauth/usage)"]
 
-            def _reset_phrase(reset_at):
-                if reset_at is None:
-                    return ""
-                delta = reset_at - datetime.now(UTC)
-                mins_left = max(int(delta.total_seconds() // 60), 0)
-                if mins_left >= 60:
-                    return f"{mins_left // 60}h{mins_left % 60:02d}m"
-                return f"{mins_left}m"
-
-            def _chip(label_txt: str, pct: float) -> str:
-                return (
-                    f"<span style='color: {theme.TEXT_FAINT};'>{label_txt} </span>"
-                    f"<span style='color: {_color(pct)}; font-weight: 600;'>"
-                    f"{pct:.0f}%</span>"
-                )
-
             five_hour_reset_str = ""
             if snap.five_hour is not None:
                 pct = snap.five_hour.utilization_pct
-                five_hour_reset_str = _reset_phrase(snap.five_hour.resets_at)
-                chips.append(_chip("5h", pct))
+                five_hour_reset_str = reset_phrase(
+                    snap.five_hour.resets_at, datetime.now(UTC)
+                )
+                chips.append(pct_chip("5h", pct))
                 tip = f"Sessão 5h: {pct:.0f}%"
                 if snap.five_hour.resets_at is not None:
                     tip += (
@@ -5428,7 +5384,7 @@ class MainWindow(QMainWindow):
 
             if snap.seven_day is not None:
                 pct = snap.seven_day.utilization_pct
-                chips.append(_chip("semanal", pct))
+                chips.append(pct_chip("semanal", pct))
                 reset_at = snap.seven_day.resets_at
                 tip = f"Semana (todos): {pct:.0f}%"
                 if reset_at is not None:
@@ -5440,7 +5396,7 @@ class MainWindow(QMainWindow):
 
             if snap.seven_day_sonnet is not None:
                 pct = snap.seven_day_sonnet.utilization_pct
-                chips.append(_chip("Sonnet", pct))
+                chips.append(pct_chip("Sonnet", pct))
                 tooltip_lines.append(f"Semana (Sonnet): {pct:.0f}%")
 
             if snap.seven_day_opus is not None:
@@ -5514,43 +5470,25 @@ class MainWindow(QMainWindow):
         reset_5h_wall = ""
         sess_pct = 0.0
 
-        def _chip(label_txt: str, pct: float) -> str:
-            return (
-                f"<span style='color: {theme.TEXT_FAINT};'>{label_txt} </span>"
-                f"<span style='color: {_color(pct)}; font-weight: 600;'>"
-                f"{pct:.0f}%</span>"
-            )
-
         if usage.first_ts is not None and usage.cost_usd > 0:
             limit_5h = max(self.settings.plan_usd_limit_5h, 0.01)
-            sess_pct = min(usage.cost_usd / limit_5h * 100.0, 999.0)
+            sess_pct = clamp_pct(usage.cost_usd, limit_5h)
             reset_at = usage.first_ts + timedelta(hours=5)
-            delta = reset_at - datetime.now(UTC)
-            mins_left = max(int(delta.total_seconds() // 60), 0)
-            reset_5h_str = (
-                f"{mins_left // 60}h{mins_left % 60:02d}m"
-                if mins_left >= 60
-                else f"{mins_left}m"
-            )
+            reset_5h_str = reset_phrase(reset_at, datetime.now(UTC))
             reset_5h_wall = reset_at.astimezone().strftime("%H:%M")
-            chips.append(_chip("5h", sess_pct))
+            chips.append(pct_chip("5h", sess_pct))
 
         # Reset semanal: próxima segunda 07:00 local (só pro tooltip agora).
         now_local = datetime.now().astimezone()
-        days_until_monday = (7 - now_local.weekday()) % 7
-        next_monday = (now_local + timedelta(days=days_until_monday)).replace(
-            hour=7, minute=0, second=0, microsecond=0
-        )
-        if next_monday <= now_local:
-            next_monday += timedelta(days=7)
+        next_monday = next_weekly_reset(now_local)
 
         limit_all = max(self.settings.plan_weekly_usd_limit_all, 0.01)
-        all_pct = min(weekly.all_cost_usd / limit_all * 100.0, 999.0)
-        chips.append(_chip("semanal", all_pct))
+        all_pct = clamp_pct(weekly.all_cost_usd, limit_all)
+        chips.append(pct_chip("semanal", all_pct))
 
         limit_sonnet = max(self.settings.plan_weekly_usd_limit_sonnet, 0.01)
-        sonnet_pct = min(weekly.sonnet_cost_usd / limit_sonnet * 100.0, 999.0)
-        chips.append(_chip("Sonnet", sonnet_pct))
+        sonnet_pct = clamp_pct(weekly.sonnet_cost_usd, limit_sonnet)
+        chips.append(pct_chip("Sonnet", sonnet_pct))
 
         cooldown = cooldown_remaining_seconds()
         cooldown_note = ""

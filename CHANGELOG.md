@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.79.1] — 2026-05-30
+
+### Refatoração (TDD)
+- Nova lógica pura sem Qt em `ui/usage_utils.py` extraída do método gigante `_refresh_plan_usage_status` do `main_window.py`: `color_for_pct`, `clamp_pct`, `reset_phrase`, `pct_chip`, `sum_opencode_usage`, `next_weekly_reset` e `relative_time_phrase`. Elimina duplicação (o cálculo de `%` com teto 999 aparecia 3×; o chip HTML e a frase de reset 2×) e torna a formatação de uso testável isoladamente. Renderização permanece idêntica (string-level).
+
+### Testes
+- `tests/test_usage_utils.py` (26 casos) escrito antes da extração (TDD).
+- `tests/test_runner_url_detect.py` (28 casos): blindagem da detecção de URL/porta/PR/MR de `services/runner_url_detect.py` — a mesma lógica que originou o bug de chip duplicado por trailing slash (0.77.2).
+- `tests/test_changelog.py` (14 casos): parser do CHANGELOG (`services/changelog.py`).
+- Cobertura geral 45% → 46%; 973 testes no total.
+
 ## [0.79.0] — 2026-05-30
 
 ### Correções
