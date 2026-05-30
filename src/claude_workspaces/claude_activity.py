@@ -86,8 +86,14 @@ DECISION_QUESTION_RE = re.compile(r"\bdo you want\b", re.IGNORECASE)
 DECISION_ALLOW_RE = re.compile(r"\ballow\b.{0,60}\?", re.IGNORECASE)
 DECISION_CHOICE_RE = re.compile(r"❯\s*\d+\.")
 # Formato moderno sem número: "❯ Yes" / "❯ No" / "❯ yes, don't ask again"
-DECISION_CHOICE_YN_RE = re.compile(r"❯\s+(?:yes|no|allow|deny|approve|reject)", re.IGNORECASE)
+DECISION_CHOICE_YN_RE = re.compile(r"❯\s*(?:yes|no|allow|deny|approve|reject)", re.IGNORECASE)
+# ASCII > como seletor (algumas versões/terminais usam > em vez de ❯).
+DECISION_CHOICE_ASCII_RE = re.compile(r"^>\s+(?:yes|no|allow|deny|approve|reject)", re.IGNORECASE)
 INTERACTIVE_FOOTER_RE = re.compile(r"enter to select", re.IGNORECASE)
+
+# Frases exclusivas do permission prompt — sozinhas identificam a tela,
+# mesmo que o ❯ venha de cursor positioning e não apareça numa linha limpa.
+_PERM_SPECIFIC_NORMS = ("dontaskagain", "allowonce", "allowalways", "denyandstop")
 
 # Versões normalizadas (só [a-z0-9]) usadas como fallback quando o Claude TUI
 # emite o texto com cursor positioning absoluto entre palavras — strip_ansi
@@ -161,14 +167,23 @@ def _has_decision_prompt(lines: list[str]) -> bool:
     Janela maior (16) porque o "Do you want to..." / "Allow..." pode
     ficar algumas linhas acima da seta de escolha. O footer de picker
     ("Enter to select…") sozinho já basta — ele só aparece com input
-    bloqueado. Formato moderno usa "❯ Yes/No" sem número."""
+    bloqueado. Formato moderno usa "❯ Yes/No" ou "> Yes/No" sem número."""
     tail = lines[-16:]
     tail_norm = [_normalize(ln) for ln in tail]
+    full_tail_norm = "".join(tail_norm)
     # Footer do picker interativo — sozinho basta.
     if any(_INTERACTIVE_FOOTER_NORM in n for n in tail_norm):
         return True
-    # Formato moderno: "❯ Yes" / "❯ No" sem número de opção.
-    has_yn_choice = any(DECISION_CHOICE_YN_RE.search(ln) for ln in tail)
+    # Frases exclusivas do permission prompt (ex: "don't ask again",
+    # "allow once") — únicas nesse contexto, dispensam presença de ❯.
+    if any(p in full_tail_norm for p in _PERM_SPECIFIC_NORMS):
+        return True
+    # Formato moderno: "❯ Yes/No" (Unicode) ou "> Yes/No" (ASCII, \s* por
+    # eventual cursor positioning que remove o espaço após strip).
+    has_yn_choice = any(
+        DECISION_CHOICE_YN_RE.search(ln) or DECISION_CHOICE_ASCII_RE.match(ln)
+        for ln in tail
+    )
     if has_yn_choice:
         return True
     # Formato clássico: "Do you want...?" + "❯ 1." numerado.
@@ -176,10 +191,10 @@ def _has_decision_prompt(lines: list[str]) -> bool:
     has_numbered_choice = any(DECISION_CHOICE_RE.search(ln) for ln in tail)
     if has_question and has_numbered_choice:
         return True
-    # "Allow Claude to X?" + qualquer seleção (❯).
+    # "Allow Claude to X?" + qualquer seleção (❯ ou > ASCII).
     has_allow = any(DECISION_ALLOW_RE.search(ln) for ln in tail)
     has_any_choice = has_numbered_choice or has_yn_choice or any(
-        "❯" in ln for ln in tail
+        "❯" in ln or bool(DECISION_CHOICE_ASCII_RE.match(ln)) for ln in tail
     )
     return has_allow and has_any_choice
 

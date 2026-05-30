@@ -4607,8 +4607,7 @@ class MainWindow(QMainWindow):
     def _show_persistent_toast(
         self, tab_id: int, workspace_id: str, title: str, body: str
     ) -> None:
-        """Apenas toca o som de alerta — toast in-app foi removido a pedido."""
-        del tab_id, workspace_id, title, body
+        """Toast in-app quando o app está em foco e o popup nativo pode não aparecer."""
         sound_name = (
             self.settings.notify_sound_name.strip()
             if self.settings.notify_sound_enabled else ""
@@ -4616,6 +4615,21 @@ class MainWindow(QMainWindow):
         if sound_name:
             from ..services.desktop_notifier import _play_sound_async
             _play_sound_async(sound_name)
+        # Toast visual — só quando em foco (app em background: popup nativo cobre).
+        if not self._is_app_in_foreground():
+            return
+        existing = self._active_toasts.get(tab_id)
+        if existing is not None and not existing.isHidden():
+            existing.update_content(title, body)
+            return
+        toast = PersistentToast(title, body, duration_ms=8000)
+        toast.action_clicked.connect(lambda: self._handle_toast_action(tab_id, workspace_id))
+        toast.dismissed.connect(lambda: self._on_toast_dismissed(tab_id))
+        toast.snoozed.connect(lambda: self._on_toast_dismissed(tab_id))
+        toast.seen.connect(lambda: self._on_toast_dismissed(tab_id))
+        self._active_toasts[tab_id] = toast
+        position_toasts(list(self._active_toasts.values()))
+        toast.show()
 
     def _handle_toast_action(self, tab_id: int, workspace_id: str) -> None:
         """Clique em 'Abrir console' no toast — mesma rota da action D-Bus.

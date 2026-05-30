@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.95] — 2026-05-29
+
+### Correções
+- `_show_persistent_toast`: restaurado toast in-app visual (`PersistentToast`) quando o app está em foco — antes só tocava som, agora exibe banner no canto com "Abrir console" / "Adiar" / "Já vi". Sem toast quando app em background (popup nativo cobre).
+- `claude_activity._has_decision_prompt`: detecção de "Aguardando decisão" melhorada — adiciona check de frases exclusivas do permission prompt (`dontaskagain`, `allowonce`, `allowalways`, `denyandstop`), suporte a `>` ASCII como seletor alternativo ao `❯` Unicode, e `\s*` (antes `\s+`) no pattern principal para tolerar cursor positioning que remove espaço após strip.
+
 ## [0.76.94] — 2026-05-29
 
 ### Ajuste visual
