@@ -302,17 +302,23 @@ def parse_status(buffer_bytes: bytes, last_output_age: float = 0.0) -> Activity:
     # quando o próximo chunk reativava working. Quando Claude termina de
     # verdade, o footer idle aparece DEPOIS do working marker
     # (idle_is_more_recent), e a transição é detectada normalmente.
+    # Pré-computa decision prompt pra evitar chamada dupla e pra usar no fallback.
+    has_decision = _has_decision_prompt(lines)
+
     if has_working and not (tail_has_idle and idle_is_more_recent):
         is_working = True
     elif tail_has_idle or looks_prompt:
         is_working = False
     else:
         # Fallback pra shells genéricos sem markers do Claude.
-        is_working = recent and not looks_prompt
+        # Se há decision prompt visível, definitivamente não está trabalhando —
+        # sem isso, re-renders parciais do TUI (cursor/spinner, age < 2.5s)
+        # disparam is_working=True, limpam o hold e derrubam o status pra Ocioso.
+        is_working = recent and not looks_prompt and not has_decision
 
     # Decisão pendente só vale quando Claude NÃO está trabalhando — durante
     # working o buffer pode arrastar restos de prompt anterior.
-    needs_decision = (not is_working) and _has_decision_prompt(lines)
+    needs_decision = (not is_working) and has_decision
 
     # Plan mode: "plan mode on" visível nas últimas 5 linhas (footer idle).
     _PLAN_NORM = _normalize("plan mode on")

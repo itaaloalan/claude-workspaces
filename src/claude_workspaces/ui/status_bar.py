@@ -287,8 +287,8 @@ class StatusBarWidgets(QWidget):
         # PR link em rosa — visível somente quando há PR detectado.
         pr_url = info.get("pr_url") or ""
         if pr_url:
-            m = re.search(r"/pull/(\d+)", pr_url)
-            pr_label = f"PR #{m.group(1)}" if m else "PR"
+            from ..services.runner_url_detect import pr_label_from_url
+            pr_label = pr_label_from_url(pr_url)
             safe = pr_url.replace("'", "%27")
             self.console_pr.setText(
                 f"<a href='{safe}' style='color:#f472b6; text-decoration:none;'>"

@@ -695,9 +695,8 @@ class TerminalChildWidget(QWidget):
         if not url or url == self._pr_url:
             return
         self._pr_url = url
-        from ..services.runner_url_detect import pr_number_from_url
-        num = pr_number_from_url(url)
-        label = f"PR #{num}" if num else "PR"
+        from ..services.runner_url_detect import pr_label_from_url
+        label = pr_label_from_url(url)
         self._pr_label.setText(label)
         self._pr_label.setToolTip(url)
         self._pr_label.setVisible(True)

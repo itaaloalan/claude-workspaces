@@ -78,10 +78,12 @@ def _strip_ansi(text: str) -> str:  # alias interno (compat)
 
 _PR_URL_RE = re.compile(r"https://github\.com/[^\s]+/pull/\d+", re.IGNORECASE)
 _PR_NUM_RE = re.compile(r"/pull/(\d+)")
+_MR_URL_RE = re.compile(r"https://[^\s]+/merge_requests/\d+", re.IGNORECASE)
+_MR_NUM_RE = re.compile(r"/merge_requests/(\d+)")
 
 
 def detect_pr_url(text: str) -> str | None:
-    """Detecta URL de PR do GitHub no texto (ex: https://github.com/org/repo/pull/42).
+    """Detecta URL de PR (GitHub) ou MR (GitLab) no texto.
     Aceita ANSI ainda presente — faz strip internamente."""
     if not text:
         return None
@@ -89,10 +91,20 @@ def detect_pr_url(text: str) -> str | None:
     matches = list(_PR_URL_RE.finditer(cleaned))
     if matches:
         return matches[-1].group(0).rstrip(".,;)")
+    matches = list(_MR_URL_RE.finditer(cleaned))
+    if matches:
+        return matches[-1].group(0).rstrip(".,;)")
     return None
 
 
 def pr_number_from_url(url: str) -> str | None:
-    """Extrai o número do PR de uma URL do GitHub."""
-    m = _PR_NUM_RE.search(url)
+    """Extrai o número do PR/MR de uma URL do GitHub ou GitLab."""
+    m = _PR_NUM_RE.search(url) or _MR_NUM_RE.search(url)
     return m.group(1) if m else None
+
+
+def pr_label_from_url(url: str) -> str:
+    """Retorna label formatado: 'MR #N' para GitLab, 'PR #N' para GitHub."""
+    num = pr_number_from_url(url)
+    prefix = "MR" if _MR_NUM_RE.search(url) else "PR"
+    return f"{prefix} #{num}" if num else prefix

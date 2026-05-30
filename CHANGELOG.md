@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.76.99] — 2026-05-30
+
+### Correções
+- Status "Aguardando decisão" não cai mais para "Ocioso" após alguns segundos: re-renders parciais do TUI (cursor/spinner com `age < 2.5s`) não disparam mais falso positivo de `is_working=True` quando um decision prompt está visível no buffer.
+- MAP (GitLab): chip e banner mostram agora "MR #N" em vez de "PR". `detect_pr_url` e `pr_number_from_url` passam a suportar URLs do padrão `/merge_requests/\d+`; nova função `pr_label_from_url` centraliza a geração do label com prefixo correto (PR vs MR).
+
 ## [0.76.98] — 2026-05-29
 
 ### Remoção
