@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.93] — 2026-05-29
+
+### Ajuste visual
+- `TerminalChildWidget`: barra vertical colorida (`_status_strip`) removida da sidebar — estado continua comunicado pela cor do texto na linha de estado ("Trabalhando" em âmbar, "Aguardando decisão" em laranja). Widget mantido oculto (largura 0) para não quebrar chamadas internas de `setStyleSheet`.
+
 ## [0.76.92] — 2026-05-29
 
 ### Novidades

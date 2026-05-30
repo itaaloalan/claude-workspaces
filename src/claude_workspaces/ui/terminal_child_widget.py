@@ -176,8 +176,11 @@ class TerminalChildWidget(QWidget):
 
         self._selection_strip = QFrame()
         self._selection_strip.setVisible(False)
+        # Strip de estado mantido no DOM pra não quebrar _apply_card_qss/update_state
+        # que chamam setStyleSheet nele — apenas oculto (largura 0).
         self._status_strip = QFrame()
-        self._status_strip.setFixedWidth(3)
+        self._status_strip.setFixedWidth(0)
+        self._status_strip.setVisible(False)
         self._status_strip.setObjectName("ConsoleStateStrip")
         self._selected = False
         self._apply_card_qss()
