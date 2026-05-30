@@ -262,8 +262,8 @@ class WorkspaceItemWidget(QWidget):
         """Renderiza o workspace como pill arredondado estilo Polaris."""
         if self._selected:
             bg = "rgba(255, 255, 255, 12)"
-            border_qss = "border: 1px solid rgba(255, 255, 255, 20); border-radius: 6px;"
-            hover_extra = "background: rgba(255, 255, 255, 17);"
+            border_qss = "border: 0; border-radius: 6px;"
+            hover_extra = "background: rgba(255, 255, 255, 15);"
         else:
             bg = "transparent"
             border_qss = "border: 0; border-radius: 6px;"

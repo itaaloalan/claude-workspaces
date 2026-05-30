@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.76.96] — 2026-05-29
+
+### Ajuste visual
+- `WorkspaceItemWidget`: removida borda `1px solid` do workspace selecionado — seleção passa a ser apenas pill cinza sutil (`rgba(255,255,255,12)`) sem contorno, consistente com o console filho selecionado.
+
 ## [0.76.95] — 2026-05-29
 
 ### Correções
