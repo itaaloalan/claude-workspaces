@@ -17,6 +17,22 @@
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
 
+    // Ctrl+V cola (igual ao Konsole). Por padrão o xterm.js intercepta Ctrl+V e
+    // manda \x16 (literal-next), então só Ctrl+Shift+V — o paste nativo do
+    // navegador — colava. Retornar false faz o xterm não tratar a tecla e deixa
+    // o navegador disparar seu paste nativo (mesmo caminho do Ctrl+Shift+V,
+    // incluindo bracketed-paste). Ctrl+Shift+V e Ctrl+Alt+V seguem inalterados.
+    term.attachCustomKeyEventHandler(function (e) {
+        if (
+            e.type === 'keydown' &&
+            e.ctrlKey && !e.shiftKey && !e.altKey &&
+            e.code === 'KeyV'
+        ) {
+            return false;
+        }
+        return true;
+    });
+
     const termEl = document.getElementById('terminal');
 
     function safeFit() {

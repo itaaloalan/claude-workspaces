@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.79.9] — 2026-06-01
+
+### Correções
+- **Ctrl+V cola no terminal embutido (xterm.js).** Antes só Ctrl+Shift+V colava — o xterm.js interceptava Ctrl+V e mandava `\x16` (literal-next). Agora um `attachCustomKeyEventHandler` deixa Ctrl+V (sem Shift/Alt) cair no paste nativo do navegador, igual ao Konsole. Ctrl+Shift+V e Ctrl+Alt+V seguem inalterados; bracketed-paste preservado.
+
 ## [0.79.8] — 2026-05-30
 
 ### Testes (+16, total 1132)
