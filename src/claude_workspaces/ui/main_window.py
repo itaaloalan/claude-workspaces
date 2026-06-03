@@ -950,6 +950,10 @@ class MainWindow(QMainWindow):
         w = self.terminal_host.currentWidget()
         if w is not None:
             w.raise_()
+            if isinstance(w, TerminalArea):
+                # Cross-workspace via StackAll: além do z-order, propaga o foco
+                # pro console ativo da área pra digitação cair sem clique.
+                w.focus_active_console()
 
     def _raise_current_host_widget(self, _idx: int = -1) -> None:
         """Igual ao terminal_host, mas pros runner hosts em StackAll: traz a
@@ -960,6 +964,30 @@ class MainWindow(QMainWindow):
             w = host.currentWidget()
             if w is not None:
                 w.raise_()
+
+    # ---------- indicador de carregamento (troca de workspace) ----------
+
+    _LOADING_VISIBLE_MS = 240
+
+    def _on_loading_tick(self, frame: str) -> None:
+        self._loading_overlay.set_frame(frame)
+        self._loading_corner.setText(f"{frame} trocando workspace…")
+
+    def _show_switch_loading(self) -> None:
+        """Mostra overlay no pane do console + spinner no canto. Pinta na hora
+        (antes do trabalho pesado da troca) e agenda o hide."""
+        if not self._terminal_pane_widget.isVisible():
+            return
+        self._loading_spinner.start()
+        self._on_loading_tick(self._loading_spinner.frame())
+        self._loading_corner.setVisible(True)
+        self._loading_overlay.cover(self._terminal_pane_widget)
+        self._loading_hide_timer.start(self._LOADING_VISIBLE_MS)
+
+    def _hide_switch_loading(self) -> None:
+        self._loading_spinner.stop()
+        self._loading_overlay.hide()
+        self._loading_corner.setVisible(False)
 
     def _close_active_terminal_tab(self) -> None:
         area = self._active_terminal_area()
@@ -1340,6 +1368,28 @@ class MainWindow(QMainWindow):
         tp_layout.addWidget(self._terminal_tabs, stretch=1)
 
         self._bottom_sub_splitter.addWidget(self._terminal_pane_widget)
+
+        # ----- Indicadores de carregamento (só na troca de workspace) -----
+        # Overlay sobre o pane do console + spinner no canto da status bar.
+        # Aparecem quando o workspace muda (a 1ª pintura da webview pode dar
+        # um respiro); somem após um delay curto. Mesma-workspace é instantâneo
+        # → não dispara.
+        from PySide6.QtCore import QTimer as _QTimer
+
+        from .loading_overlay import LoadingOverlay
+        from .spinner import Spinner as _Spinner
+        self._loading_overlay = LoadingOverlay(self._terminal_pane_widget)
+        self._loading_corner = QLabel("")
+        self._loading_corner.setStyleSheet(
+            "color: #6aa9e0; font-size: 12px; padding: 0 8px;"
+        )
+        self._loading_corner.setVisible(False)
+        self.statusBar().addPermanentWidget(self._loading_corner)
+        self._loading_spinner = _Spinner(parent=self)
+        self._loading_spinner.tick.connect(self._on_loading_tick)
+        self._loading_hide_timer = _QTimer(self)
+        self._loading_hide_timer.setSingleShot(True)
+        self._loading_hide_timer.timeout.connect(self._hide_switch_loading)
 
         # ----- Panes dos RUNNERS (workspace e console, separados) -----
         # Cada um tem header + botão minimize próprio e ocupa entrada
@@ -3110,6 +3160,9 @@ class MainWindow(QMainWindow):
         ws_changed = ws.id != getattr(self, "_last_shown_ws_id", None)
         if ws_changed:
             self._last_shown_ws_id = ws.id
+            # Feedback visível na troca de workspace (a 1ª pintura da webview
+            # daquele ws pode dar um respiro). Mostra ANTES do trabalho pesado.
+            self._show_switch_loading()
             self.details.show_workspace(ws)
             self._broadcast_workspace(ws)
             self._update_status_bar(ws)
@@ -3546,6 +3599,10 @@ class MainWindow(QMainWindow):
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
+                # Foca o console ativo: clicar num console que já era o índice
+                # atual da área não dispara `currentChanged`, então o setFocus
+                # do handler não roda — força aqui pra digitação cair sem clique.
+                area.focus_active_console()
                 self._refresh_terminal_pane_title()
                 log.info(
                     "[SIDEBAR-PERF] _focus_terminal_tab dt=%.1fms",

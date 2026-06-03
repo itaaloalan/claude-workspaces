@@ -84,6 +84,27 @@ def add_worktree(
     return True, "", dest
 
 
+def is_worktree_path(path: str) -> bool:
+    """True se `path` é uma git worktree linkada (não o repo principal).
+
+    Num repo normal `--git-dir == --git-common-dir`; numa worktree linkada o
+    `--git-dir` aponta pra `.git/worktrees/<nome>` e diferem do common-dir.
+    """
+    rc1, gd = _run(["git", "rev-parse", "--git-dir"], path)
+    rc2, gc = _run(["git", "rev-parse", "--git-common-dir"], path)
+    if rc1 != 0 or rc2 != 0:
+        return False
+    a = (Path(path) / gd.strip()).resolve()
+    b = (Path(path) / gc.strip()).resolve()
+    return a != b
+
+
+def current_branch(path: str) -> str:
+    """Nome da branch atual em `path` ("" se detached/erro)."""
+    rc, out = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], path)
+    return out.strip() if rc == 0 else ""
+
+
 def list_local_branches(repo_path: str) -> list[str]:
     """Lista nomes das branches locais (ordenadas por uso recente)."""
     rc, out = _run(

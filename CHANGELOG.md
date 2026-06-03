@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.82.3] — 2026-06-03
+
+### Correções
+- **Badge de worktree voltou a aparecer em restore/resume.** O badge 🌿 lê
+  `term.is_worktree()`, que só era marcado `True` no launch fresco via dialog. Como
+  restore e resume sempre passam `cwd_override` (sem passar pelo dialog), o flag ficava
+  `False` e o badge sumia ao reabrir o app ou dar resume numa sessão de worktree. Agora o
+  `launch_coordinator` detecta a worktree direto do cwd (`is_worktree_path` comparando
+  `git rev-parse --git-dir` vs `--git-common-dir`) e recupera o label da branch atual.
+- **Foco cai no console ao clicar (sem precisar do mouse).** Com o StackAll, o `setFocus`
+  da webview só rodava dentro de `_on_bar_current_changed`, que não dispara quando o
+  console clicado já é o índice atual da sua área (ou ao trocar de workspace). Extraído o
+  foco pra `TerminalArea.focus_active_console()`, agora chamado explicitamente em
+  `_focus_terminal_tab` (clique no sidebar) e em `_raise_current_terminal_area` (troca
+  cross-workspace) → a digitação cai no console certo imediatamente.
+
 ## [0.82.2] — 2026-06-03
 
 ### Melhorias

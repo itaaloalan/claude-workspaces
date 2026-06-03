@@ -81,6 +81,14 @@ class LaunchCoordinator(QObject):
             # perdidos: o Claude não via as outras pastas e a sidebar só pollava
             # MR/git do cwd (MAP mostrava só 1 MR).
             extras = [f for f in workspace.folders if f != cwd_override]
+            # Restore/resume não passam pelo dialog, então `is_worktree` viria
+            # sempre False e o badge 🌿 sumia. Detecta a worktree direto do cwd.
+            from ...git_worktree import current_branch, is_worktree_path
+            if is_worktree_path(cwd):
+                is_worktree = True
+                if not worktree_label:
+                    br = current_branch(cwd)
+                    worktree_label = f" · {br}" if br else " · isolado"
         elif not resume_session_id and not skip_dialog:
             # Importa local pra evitar circular import e custo de
             # importar Qt widgets pesados em testes

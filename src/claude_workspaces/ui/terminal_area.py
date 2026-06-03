@@ -145,15 +145,20 @@ class TerminalArea(QWidget):
     def _on_bar_current_changed(self, idx: int) -> None:
         if 0 <= idx < self._stack.count():
             self._stack.setCurrentIndex(idx)  # StackAll: marca o atual
-            w = self._stack.widget(idx)
-            if w is not None:
-                # StackAll deixa todas visíveis; garante a ativa no topo do
-                # z-order e manda o foco pra webview (input no console certo).
-                w.raise_()
-                view = getattr(w, "view", None)
-                (view or w).setFocus()
+            self.focus_active_console()
         self._refresh_tab_bar_visibility()
         self.tabs.currentChanged.emit(idx)
+
+    def focus_active_console(self) -> None:
+        """Traz o console ativo pro topo do z-order (StackAll) e manda o foco
+        pra webview, pra digitação cair no console certo sem clique do mouse."""
+        w = self._stack.currentWidget()
+        if w is not None:
+            # StackAll deixa todas visíveis; garante a ativa no topo do
+            # z-order e manda o foco pra webview (input no console certo).
+            w.raise_()
+            view = getattr(w, "view", None)
+            (view or w).setFocus()
 
     def _on_tab_moved(self, from_idx: int, to_idx: int) -> None:
         """Mantém o stack na mesma ordem da barra quando o usuário arrasta
