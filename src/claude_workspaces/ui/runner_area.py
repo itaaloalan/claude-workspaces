@@ -76,11 +76,17 @@ class RunnerArea(QWidget):
         settings: Settings | None = None,
         parent: QWidget | None = None,
         console_session_id: str = "",
+        default_cwd: str = "",
     ) -> None:
         super().__init__(parent)
         self._ws = workspace
         self._settings = settings or Settings()
         self._running_count = 0
+        # Override do cwd padrão dos runners deste painel. Vazio → cai no
+        # primary_folder do workspace. Preenchido (painel de console) → aponta
+        # ao worktree do console dono, pra runners de consoles paralelos
+        # rodarem em worktrees diferentes em vez de na pasta raiz.
+        self._default_cwd_override = default_cwd
         # "" → escopo workspace (mostra apenas runners sem console_session_id).
         # Quando preenchido, é o session_id do console Claude dono deste painel
         # e mostra apenas runners daquele console.
@@ -202,6 +208,18 @@ class RunnerArea(QWidget):
         self._console_session_id = sid
         self._refresh_from_workspace()
 
+    def set_default_cwd(self, cwd: str) -> None:
+        """Atualiza o cwd padrão dos runners deste painel (worktree do
+        console) e propaga aos widgets vivos."""
+        if cwd == self._default_cwd_override:
+            return
+        self._default_cwd_override = cwd
+        primary = self._default_cwd_override or self._ws.primary_folder or ""
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget):
+                w.set_default_cwd(primary)
+
     def runners_in_scope(self) -> list[RunnerConfig]:
         return [r for r in self._ws.runners if self._matches_scope(r)]
 
@@ -254,7 +272,7 @@ class RunnerArea(QWidget):
         while self.tabs.count():
             self.tabs.removeTab(0)
 
-        primary = self._ws.primary_folder or ""
+        primary = self._default_cwd_override or self._ws.primary_folder or ""
         seen_ids: set[str] = set()
         for runner in self._ws.runners:
             if not self._matches_scope(runner):
@@ -265,6 +283,7 @@ class RunnerArea(QWidget):
                 widget = RunnerWidget(runner, primary, settings=self._settings)
                 self._wire(widget)
             else:
+                widget.set_default_cwd(primary)
                 widget.update_config(runner)
             self.tabs.addTab(widget, runner.name or "(runner)")
             self._update_tab_color(widget)

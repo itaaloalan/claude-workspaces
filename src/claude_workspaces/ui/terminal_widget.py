@@ -220,6 +220,10 @@ class TerminalWidget(QWidget):
         # Context Claude (cwd + resume) pra descobrir o título da sessão
         # via scan do ~/.claude/projects/<cwd>/*.jsonl
         self._claude_cwd: str | None = None
+        # Worktree/branch do console — preenchidos por set_context_info e
+        # expostos via getters pra alimentar runners/git panel/footer.
+        self._worktree_label: str = ""
+        self._is_worktree: bool = False
         self._claude_resume_id: str | None = None
         self._claude_start_time: float = 0.0
         self._session_preview: str | None = None
@@ -478,6 +482,8 @@ class TerminalWidget(QWidget):
 
         extras = extras or []
         self._extra_dirs = list(extras)
+        self._worktree_label = worktree_label
+        self._is_worktree = is_worktree
         parts: list[str] = []
 
         # MCPs: usa workspace_folders pra alinhar com o top bar (evita
@@ -662,6 +668,14 @@ class TerminalWidget(QWidget):
         """Dirs extras passados via --add-dir (set_context_info). Podem
         ter repos git próprios com PRs/MRs independentes."""
         return list(getattr(self, "_extra_dirs", []))
+
+    def worktree_label(self) -> str:
+        """Branch/worktree do console (set_context_info). "" se não houver."""
+        return getattr(self, "_worktree_label", "")
+
+    def is_worktree(self) -> bool:
+        """True se o cwd do console é um git worktree isolado."""
+        return bool(getattr(self, "_is_worktree", False))
 
     def backend(self) -> str:
         return getattr(self, "_backend", "claude")

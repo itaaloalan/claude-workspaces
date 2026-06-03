@@ -203,6 +203,11 @@ class RunnerWidget(QWidget):
         lines = text.splitlines()
         return "\n".join(lines[-max_lines:])
 
+    def set_default_cwd(self, cwd: str) -> None:
+        """Atualiza o cwd padrão usado quando `runner.cwd` está vazio.
+        Usado pelo painel de console pra apontar ao worktree do console."""
+        self._default_cwd = cwd
+
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
         old_url = (self._runner.browser_url or "").strip()

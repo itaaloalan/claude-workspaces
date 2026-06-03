@@ -3061,6 +3061,7 @@ class MainWindow(QMainWindow):
             self.details.show_empty()
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             self._broadcast_workspace(None)
+            self._sync_git_panel_to_active_console()
             self._update_status_bar(None)
             self._refresh_status_bar_console()
             self._refresh_console_runners_footer(None)
@@ -3075,6 +3076,7 @@ class MainWindow(QMainWindow):
             return
         self.details.show_workspace(ws)
         self._broadcast_workspace(ws)
+        self._sync_git_panel_to_active_console()
         self._sync_terminal_for(ws)
         self._update_status_bar(ws)
         self._refresh_status_bar_console()
@@ -3144,10 +3146,43 @@ class MainWindow(QMainWindow):
                     state = rw.current_state()
                     status = rw.current_status_label()
                     url = rw.current_url() or url
+            scope_label = scope
+            if runner.console_session_id:
+                branch = self._console_branch_for(runner.console_session_id)
+                if branch:
+                    scope_label = f"{scope} · 🌿 {branch}"
             rows.append(
-                (ws.id, runner.id, runner.name or "(runner)", state, f"{scope} · {status}", url)
+                (ws.id, runner.id, runner.name or "(runner)", state, f"{scope_label} · {status}", url)
             )
         setter(rows)
+
+    def _console_branch_for(self, console_session_id: str) -> str:
+        """Branch/worktree do console dono de um runner. Usa o branch ao vivo
+        do TerminalChildWidget; cai pro basename do worktree quando ainda não
+        resolveu. "" se o console não for encontrado."""
+        from .terminal_child_widget import TerminalChildWidget
+
+        sid = (console_session_id or "").strip()
+        if not sid:
+            return ""
+        for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
+            if item is None:
+                continue
+            term = self._terminal_widget_for(tab_id)
+            if term is None or term.claimed_session_id() != sid:
+                continue
+            child = self.list_widget.itemWidget(item, 0)
+            if isinstance(child, TerminalChildWidget):
+                branch = (child.status_info().get("branch") or "").strip()
+                if branch:
+                    return branch
+            if term.is_worktree():
+                cwd = term.claude_cwd() or ""
+                if cwd:
+                    from pathlib import Path
+                    return Path(cwd).name
+            return ""
+        return ""
 
     def _open_footer_runner(self, workspace_id: str, runner_id: str) -> None:
         ws = self.workspaces_coord.find_by_id(workspace_id)
@@ -3682,6 +3717,22 @@ class MainWindow(QMainWindow):
             self.console_runner_host.setCurrentIndex(
                 self._console_runner_placeholder_idx
             )
+        self._sync_git_panel_to_active_console()
+
+    def _sync_git_panel_to_active_console(self) -> None:
+        """Faz o painel Git de Ferramentas inspecionar o worktree do console
+        ativo (cwd + extra dirs). Sem console ativo, volta a workspace.folders."""
+        panel = self.details.git_panel() if hasattr(self, "details") else None
+        if panel is None:
+            return
+        folders: list[str] | None = None
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        if isinstance(term, TerminalWidget):
+            cwd = term.claude_cwd()
+            if cwd:
+                folders = [cwd, *term.extra_dirs()]
+        panel.set_folders_override(folders)
 
     def _get_or_create_runner_area(self, workspace: Workspace) -> RunnerArea:
         area = self._runner_areas.get(workspace.id)
@@ -3811,7 +3862,12 @@ class MainWindow(QMainWindow):
             self._ensure_runners_console_pane_visible()
             return existing
         sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
-        area = RunnerArea(workspace, settings=self.settings, console_session_id=sid)
+        area = RunnerArea(
+            workspace,
+            settings=self.settings,
+            console_session_id=sid,
+            default_cwd=terminal.claude_cwd() or "",
+        )
         area.set_edit_handler(
             lambda runner, w=workspace, a=area:
                 self._open_runner_edit(w, runner, console_session_id=a.console_session_id())

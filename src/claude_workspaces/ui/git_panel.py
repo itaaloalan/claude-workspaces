@@ -160,6 +160,9 @@ class GitPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.workspace: Workspace | None = None
+        # Quando não-None, o painel inspeciona estas pastas em vez de
+        # workspace.folders — usado pra seguir o worktree do console ativo.
+        self._folders_override: list[str] | None = None
         self._statuses: dict[str, GitStatus] = {}
         self._status_fingerprint: tuple = ()
         self._has_any_repo: bool = False
@@ -449,6 +452,23 @@ class GitPanel(QWidget):
         self.workspace = workspace
         self.refresh()
 
+    def set_folders_override(self, folders: list[str] | None) -> None:
+        """Faz o painel inspecionar `folders` (ex.: worktree do console ativo)
+        em vez de workspace.folders. None volta ao comportamento do workspace."""
+        new = list(folders) if folders is not None else None
+        if new == self._folders_override:
+            return
+        self._folders_override = new
+        self.refresh()
+
+    def _active_folders(self) -> list[str]:
+        """Pastas a inspecionar: override do console ativo, senão as do workspace."""
+        if self._folders_override is not None:
+            return self._folders_override
+        if self.workspace and self.workspace.folders:
+            return list(self.workspace.folders)
+        return []
+
     def has_any_repo(self) -> bool:
         return self._has_any_repo
 
@@ -478,11 +498,12 @@ class GitPanel(QWidget):
         # refresh, evita rebuild da árvore (preserva scroll/seleção e zera
         # custo de paint do QTreeWidget). Fingerprint = tuple imutável das
         # infos visíveis por repo.
-        if not self.workspace or not self.workspace.folders:
+        active_folders = self._active_folders()
+        if not active_folders:
             new_statuses: dict[str, GitStatus] = {}
         else:
             new_statuses = {
-                folder: get_status(folder) for folder in self.workspace.folders
+                folder: get_status(folder) for folder in active_folders
             }
 
         new_fp = _fingerprint_statuses(new_statuses)
@@ -497,7 +518,7 @@ class GitPanel(QWidget):
         self._statuses = new_statuses
         self._status_fingerprint = new_fp
 
-        if not self.workspace or not self.workspace.folders:
+        if not active_folders:
             self._counter.setText("")
             self.header_summary_changed.emit("")
             self._has_any_repo = False
@@ -508,7 +529,7 @@ class GitPanel(QWidget):
 
         repo_folders: list[str] = []
         total_files = 0
-        for folder in self.workspace.folders:
+        for folder in active_folders:
             status = self._statuses[folder]
             if not status.is_repo:
                 continue
@@ -652,9 +673,7 @@ class GitPanel(QWidget):
         """Lê o que foi acrescentado a cada `.git/logs/HEAD` desde a última
         leitura e joga no console. Na primeira vez só registra o tamanho
         (não reproduz histórico). Captura atividade de qualquer origem."""
-        if not self.workspace:
-            return
-        for folder in self.workspace.folders:
+        for folder in self._active_folders():
             reflog = Path(folder) / ".git" / "logs" / "HEAD"
             if not reflog.is_file():
                 continue
@@ -1327,7 +1346,7 @@ class GitPanel(QWidget):
         """
         if not self.workspace:
             return
-        targets = folders if folders is not None else list(self.workspace.folders)
+        targets = folders if folders is not None else self._active_folders()
         previews = []
         for folder in targets:
             pv = push_preview(folder)
@@ -1355,7 +1374,7 @@ class GitPanel(QWidget):
         if not self.workspace:
             return
         results = []
-        for folder in self.workspace.folders:
+        for folder in self._active_folders():
             if folder not in self._statuses or not self._statuses[folder].is_repo:
                 continue
             ok, out = git_fetch(folder)
@@ -1368,7 +1387,7 @@ class GitPanel(QWidget):
         if not self.workspace:
             return
         results = []
-        for folder in self.workspace.folders:
+        for folder in self._active_folders():
             if folder not in self._statuses or not self._statuses[folder].is_repo:
                 continue
             ok, out = pull_ff_only(folder)
@@ -1380,12 +1399,13 @@ class GitPanel(QWidget):
     def _pick_pr_folder(self) -> str | None:
         """Escolhe o folder pra abrir PR: primária se for repo, senão
         primeira pasta que é repo. None se nenhum."""
-        if not self.workspace:
+        folders = self._active_folders()
+        if not folders:
             return None
-        primary = self.workspace.primary_folder()
+        primary = folders[0]
         if primary and self._statuses.get(primary) and self._statuses[primary].is_repo:
             return primary
-        for folder in self.workspace.folders:
+        for folder in folders:
             st = self._statuses.get(folder)
             if st and st.is_repo:
                 return folder

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.79.10] — 2026-06-03
+
+### Correções
+- **Runners e Git de Ferramentas seguem o worktree do console ativo.** Antes, com vários consoles isolados em git worktrees diferentes, os runners de console rodavam sempre na pasta raiz do workspace (`folders[0]`) e o painel Git de "Ferramentas" mostrava o branch/status da raiz, ignorando o worktree do console.
+  - **Runners de console:** o `RunnerArea` embutido agora nasce com `default_cwd = console.claude_cwd()` (o worktree daquele console). `runner.cwd` manual continua tendo prioridade. Runners de workspace seguem na pasta raiz.
+  - **Painel Git (Ferramentas):** ganha `set_folders_override` e passa a inspecionar o cwd + extra dirs do console ativo (branch, status, fetch/pull/push, PR, reflogs). Sem console ativo, volta a `workspace.folders`.
+  - **Footer do sidebar:** runners de console exibem `🌿 <branch>` do console dono ao lado do status.
+- `TerminalWidget` passa a expor `worktree_label()`/`is_worktree()` (antes `set_context_info` só renderizava e descartava).
+
 ## [0.79.9] — 2026-06-01
 
 ### Correções
