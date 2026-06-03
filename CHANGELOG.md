@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.82.1] — 2026-06-03
+
+### Melhorias
+- **Trocar de console entre workspaces diferentes também ficou instantâneo.** Estende o
+  StackAll do 0.82.0 pro `terminal_host` (o `QStackedWidget` que segura as
+  `TerminalArea` de cada workspace): seu `QStackedLayout` interno passa a
+  `StackingMode.StackAll`, mantendo todas as áreas (e suas webviews) vivas/compostas em
+  vez de esconder as inativas. Assim a 1ª exibição de um workspace não recria a
+  superfície do Chromium — sem o stall residual cross-workspace. `raise_()` defensivo na
+  troca garante a área ativa no topo do z-order. _Custo:_ as webviews de todos os
+  workspaces ficam compostas ao mesmo tempo (mais memória/GPU com muitos consoles).
+
 ## [0.82.0] — 2026-06-03
 
 ### Melhorias

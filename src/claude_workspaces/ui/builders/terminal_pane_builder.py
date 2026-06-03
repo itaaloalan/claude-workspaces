@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStackedLayout,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -102,6 +103,14 @@ class TerminalPaneBuilder:
 
         self.host = QStackedWidget()
         self.host.setMinimumHeight(0)
+        # StackAll: mantém todas as TerminalAreas (e suas webviews) vivas e
+        # compostas em vez de esconder as inativas. Trocar de workspace não
+        # recria a superfície de GPU do Chromium → sem "congela e depois
+        # troca" também entre workspaces. Custo: as webviews de todos os
+        # workspaces ficam compostas ao mesmo tempo (mais memória/GPU).
+        host_layout = self.host.layout()
+        if isinstance(host_layout, QStackedLayout):
+            host_layout.setStackingMode(QStackedLayout.StackingMode.StackAll)
         self.empty_label = QLabel(
             "Nenhum terminal aberto — clique em 'Abrir Claude' ou 'Abrir Terminal' "
             "para iniciar uma sessão. Cada workspace tem suas próprias abas."

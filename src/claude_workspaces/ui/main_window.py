@@ -944,6 +944,13 @@ class MainWindow(QMainWindow):
         w = self.terminal_host.currentWidget()
         return w if isinstance(w, TerminalArea) else None
 
+    def _raise_current_terminal_area(self, _idx: int = -1) -> None:
+        """Com o terminal_host em StackAll, todas as páginas ficam visíveis;
+        traz a atual pro topo do z-order pra cobrir as demais."""
+        w = self.terminal_host.currentWidget()
+        if w is not None:
+            w.raise_()
+
     def _close_active_terminal_tab(self) -> None:
         area = self._active_terminal_area()
         if area is None or area.count() == 0:
@@ -1210,6 +1217,10 @@ class MainWindow(QMainWindow):
         self.terminal_host.currentChanged.connect(
             lambda _i: self._refresh_terminal_pane_title()
         )
+        # StackAll deixa todas as áreas compostas; garante a ativa no topo do
+        # z-order ao trocar de workspace (defensivo — o StackAll já levanta a
+        # current, mas raise_() explícito blinda contra ordem errada).
+        self.terminal_host.currentChanged.connect(self._raise_current_terminal_area)
 
         # Embute o host num sub-splitter vertical: Claude console em cima
         # + Runners (workspace + console) embaixo (minimizável).
