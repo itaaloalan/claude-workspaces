@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.82.4] — 2026-06-03
+
+### Novidades
+- **Animação de carregamento na troca de workspace.** Como a 1ª pintura da webview de
+  outro workspace ainda pode dar um respiro, ao trocar de workspace aparece um feedback
+  visível: um overlay com spinner centralizado sobre o pane do console **+** um spinner no
+  canto da status bar ("⠋ trocando workspace…"). Some após um delay curto. **Só dispara na
+  troca de workspace** — trocar de console no mesmo workspace segue instantâneo, sem flash.
+  Novo `ui/loading_overlay.py` (reusa o `Spinner`).
+
+### Correções
+- Adiciona ao repo o `ui/loading_overlay.py` que faltava ser versionado (o 0.82.3 já
+  referenciava o overlay no `main_window`, mas o arquivo estava untracked).
+
 ## [0.82.3] — 2026-06-03
 
 ### Correções
