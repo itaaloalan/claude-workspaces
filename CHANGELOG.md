@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.82.5] — 2026-06-03
+
+### Melhorias
+- **Ícone do overlay de carregamento agora anima de verdade.** O glifo braille (100ms/
+  frame) lia como estático na janela curta do overlay — virou um **arco girando** estilo
+  material, desenhado via `paintEvent` a ~33fps (timer interno no `_ArcSpinner`, inicia
+  no show e para no hide). O spinner do canto da status bar ficou mais rápido (80ms).
+- **Janela do overlay conta a partir do fim do trabalho da troca.** O hide-timer era
+  agendado antes do trabalho síncrono da troca de workspace; com o event loop ocupado
+  nada repintava e a janela já vencia quase toda no bloqueio. Agora o timer é reiniciado
+  **depois** do trabalho (fim do bloco `ws_changed`), garantindo os ~240ms de animação
+  visíveis inteiros.
+
 ## [0.82.4] — 2026-06-03
 
 ### Novidades

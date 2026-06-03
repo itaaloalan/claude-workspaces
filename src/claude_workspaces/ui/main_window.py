@@ -970,12 +970,14 @@ class MainWindow(QMainWindow):
     _LOADING_VISIBLE_MS = 240
 
     def _on_loading_tick(self, frame: str) -> None:
-        self._loading_overlay.set_frame(frame)
+        # Só o texto do canto — o overlay anima sozinho (arco via paintEvent).
         self._loading_corner.setText(f"{frame} trocando workspace…")
 
     def _show_switch_loading(self) -> None:
         """Mostra overlay no pane do console + spinner no canto. Pinta na hora
-        (antes do trabalho pesado da troca) e agenda o hide."""
+        (antes do trabalho pesado da troca) e agenda o hide (fallback — o
+        chamador reinicia o timer após o trabalho pra janela contar do fim
+        do bloqueio, deixando a animação visível inteira)."""
         if not self._terminal_pane_widget.isVisible():
             return
         self._loading_spinner.start()
@@ -1385,7 +1387,7 @@ class MainWindow(QMainWindow):
         )
         self._loading_corner.setVisible(False)
         self.statusBar().addPermanentWidget(self._loading_corner)
-        self._loading_spinner = _Spinner(parent=self)
+        self._loading_spinner = _Spinner(interval_ms=80, parent=self)
         self._loading_spinner.tick.connect(self._on_loading_tick)
         self._loading_hide_timer = _QTimer(self)
         self._loading_hide_timer.setSingleShot(True)
@@ -3172,6 +3174,11 @@ class MainWindow(QMainWindow):
         self._sync_terminal_for(ws)
         self._refresh_status_bar_console()
         self._refresh_console_runners_footer(current)
+        if ws_changed:
+            # Reinicia a janela do overlay DEPOIS do trabalho da troca: o
+            # event loop estava ocupado até aqui (nada repinta), então contar
+            # a partir de agora garante a animação do arco visível inteira.
+            self._loading_hide_timer.start(self._LOADING_VISIBLE_MS)
         # Safety net: clicks em RunnerChildWidget muitas vezes não
         # disparam `itemClicked` (o widget customizado intercepta o
         # mouse). Re-dispatcha o focus a partir do selection_changed
