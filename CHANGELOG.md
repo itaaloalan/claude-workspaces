@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.82.8] — 2026-06-03
+
+### Correções
+- **Runners de outro workspace não "vazam" mais no pane.** Com os hosts em StackAll
+  (0.82.2), as RunnerAreas de todos os workspaces ficam compostas ao mesmo tempo — e a
+  `RunnerArea` (QWidget raiz transparente + tab bar em documentMode, que só pinta as
+  abas) deixava as abas do workspace de trás aparecerem na faixa vazia ao lado das abas
+  do atual. Agora a RunnerArea pinta fundo opaco (`WA_StyledBackground` + `#101010`), e
+  o placeholder de "Runners console" idem. Defensivo extra: ao adicionar uma nova área a
+  um host StackAll sem torná-la current (runner_host, terminal_host), a área atual é
+  re-levantada no z-order — recém-adicionados pintam por último e cobririam o pane.
+
 ## [0.82.7] — 2026-06-03
 
 ### Novidades

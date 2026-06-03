@@ -1532,6 +1532,14 @@ class MainWindow(QMainWindow):
         console Claude primeiro. Visual fica consistente com o pane workspace.
         """
         container = QWidget()
+        # Host em StackAll: sem fundo opaco, as RunnerAreas de consoles
+        # compostas atrás vazariam através do placeholder. Seletor por
+        # objectName pra não cascatear o fundo pros botões do header.
+        container.setObjectName("consoleRunnerPlaceholder")
+        container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        container.setStyleSheet(
+            "#consoleRunnerPlaceholder { background: #0e0e0e; }"
+        )
         outer = QVBoxLayout(container)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -3918,6 +3926,12 @@ class MainWindow(QMainWindow):
         area = RunnerArea(workspace, settings=self.settings)
         self._runner_areas[workspace.id] = area
         self.runner_host.addWidget(area)
+        # StackAll: o widget recém-adicionado fica visível e pintado por
+        # último (topo do z-order). Se a área atual é de OUTRO workspace,
+        # re-levanta ela — senão os runners do novo workspace cobrem o pane.
+        cur = self.runner_host.currentWidget()
+        if cur is not None and cur is not area:
+            cur.raise_()
         ws = workspace
         area.set_edit_handler(
             lambda runner, w=ws: self._open_runner_edit(w, runner)
@@ -4434,6 +4448,11 @@ class MainWindow(QMainWindow):
     def _on_area_created(self, workspace_id: str, area: TerminalArea) -> None:
         """TerminalCoordinator criou uma nova area — adiciona no host."""
         self.terminal_host.addWidget(area)
+        # StackAll: o widget recém-adicionado fica pintado por último (topo
+        # do z-order). Se a área atual é de OUTRO workspace, re-levanta ela.
+        cur = self.terminal_host.currentWidget()
+        if cur is not None and cur is not area:
+            cur.raise_()
         # Trocar a aba ativa do workspace só re-sincroniza o runner host;
         # o % de plano não muda ao trocar de aba (cada chamada extra de
         # /api/oauth/usage gasta cota desnecessária do rate limit).
@@ -5972,6 +5991,11 @@ class MainWindow(QMainWindow):
             area = TerminalArea()
             self._no_ctx_area = area
             self.terminal_host.addWidget(area)
+            # StackAll: recém-adicionado pinta por cima; re-levanta a atual
+            # caso o chamador não vá tornar essa area a current.
+            cur = self.terminal_host.currentWidget()
+            if cur is not None and cur is not area:
+                cur.raise_()
         return area
 
     def _launch_terminal_no_ctx(self) -> None:

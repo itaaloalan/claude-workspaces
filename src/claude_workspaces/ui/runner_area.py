@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -96,6 +96,13 @@ class RunnerArea(QWidget):
         # mínimo de largura >600px pra cima até a janela, causando scroll
         # horizontal ao abrir o painel. Quebra essa propagação aqui.
         self.setMinimumWidth(0)
+
+        # Os hosts em StackAll deixam as RunnerAreas de TODOS os workspaces
+        # compostas ao mesmo tempo; QWidget raiz é transparente e a tab bar
+        # em documentMode só pinta as abas — as abas do workspace de trás
+        # "vazavam" na faixa vazia ao lado. Fundo opaco mata o bleed-through.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("RunnerArea { background: #101010; }")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
