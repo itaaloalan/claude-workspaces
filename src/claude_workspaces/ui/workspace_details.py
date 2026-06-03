@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -24,13 +24,44 @@ from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_pa
 from ..models import Workspace
 from ..session_marks import is_starred
 from ..settings import OPENCODE_ENABLED, Settings
-from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
+from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks_cached
 from .file_finder import FileFinder
 from .git_panel import GitPanel
 from .mcp_dialog import MCPDialog
 from .session_card import SessionCard
+from .spinner import Spinner
 
 log = logging.getLogger(__name__)
+
+
+class _SessionScanSignals(QObject):
+    done = Signal(int, list)  # epoch, sessions
+
+
+class _SessionScanTask(QRunnable):
+    """Escaneia sessões fora da UI thread (glob + JSONL + sqlite). Só devolve
+    dados (ClaudeSession são dataclasses); os widgets nascem na UI thread."""
+
+    def __init__(self, epoch: int, paths: list[str]) -> None:
+        super().__init__()
+        self.epoch = epoch
+        self.paths = paths
+        self.signals = _SessionScanSignals()
+
+    def run(self) -> None:
+        try:
+            sessions = list_sessions_for_paths_backend(
+                self.paths, backend="claude", limit=15
+            )
+            if OPENCODE_ENABLED:
+                sessions = sessions + list_sessions_for_paths_backend(
+                    self.paths, backend="opencode", limit=15
+                )
+            sessions = sorted(sessions, key=lambda s: s.mtime, reverse=True)[:20]
+        except Exception:
+            log.exception("workspace_details: scan de sessões falhou")
+            sessions = []
+        self.signals.done.emit(self.epoch, sessions)
 
 
 class WorkspaceDetailsPanel(QStackedWidget):
@@ -49,6 +80,13 @@ class WorkspaceDetailsPanel(QStackedWidget):
         super().__init__()
         self.settings = settings
         self.workspace: Workspace | None = None
+
+        # Scan de sessões assíncrono: pool + epoch (descarta resultado de
+        # cliques antigos) + spinner pro placeholder "carregando…".
+        self._sessions_pool = QThreadPool.globalInstance()
+        self._sessions_epoch = 0
+        self._sessions_spinner = Spinner(parent=self)
+        self._sessions_spinner.tick.connect(self._on_sessions_spinner_tick)
 
         self._empty = self._build_empty_panel()
         self.addWidget(self._empty)
@@ -577,7 +615,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         # Chips: Stack | Path | MCP. Substitui os labels separados do
         # cabeçalho antigo (mantidos invisíveis pra compatibilidade interna).
-        stacks = detect_stacks(workspace.folders)
+        stacks = detect_stacks_cached(workspace.folders)
         if stacks:
             labels = sorted(STACK_LABEL.get(s, s) for s in stacks)
             self._set_chip(self._stack_chip, f"Stack: {', '.join(labels)}")
@@ -637,14 +675,41 @@ class WorkspaceDetailsPanel(QStackedWidget):
             self._ide_row.addWidget(btn, stretch=1)
 
     def _refresh_sessions(self) -> None:
+        # Não-bloqueante: dispara o scan numa thread e mostra placeholder
+        # animado. O resultado chega em `_on_sessions_ready` (UI thread).
         self._sessions_list.clear()
         if not self.workspace or not self.workspace.folders:
+            self._sessions_spinner.stop()
             return
         cwd, _ = self.workspace.launch_paths()
         candidate_paths = list({cwd, *self.workspace.folders})
-        sessions_claude = list_sessions_for_paths_backend(candidate_paths, backend="claude", limit=15)
-        sessions_oc = list_sessions_for_paths_backend(candidate_paths, backend="opencode", limit=15)
-        sessions = sorted(sessions_claude + sessions_oc, key=lambda s: s.mtime, reverse=True)[:20]
+
+        self._sessions_epoch += 1
+        self._sessions_placeholder = QListWidgetItem("⠋  carregando sessões…")
+        self._sessions_placeholder.setFlags(
+            self._sessions_placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled
+        )
+        self._sessions_list.addItem(self._sessions_placeholder)
+        self._sessions_spinner.start()
+
+        task = _SessionScanTask(self._sessions_epoch, candidate_paths)
+        task.signals.done.connect(self._on_sessions_ready)
+        self._sessions_pool.start(task)
+
+    def _on_sessions_spinner_tick(self, frame: str) -> None:
+        ph = getattr(self, "_sessions_placeholder", None)
+        if ph is not None:
+            ph.setText(f"{frame}  carregando sessões…")
+
+    def _on_sessions_ready(self, epoch: int, sessions: list) -> None:
+        # Descarta resultado obsoleto (clique rápido trocou de workspace).
+        if epoch != self._sessions_epoch:
+            return
+        self._sessions_spinner.stop()
+        self._sessions_placeholder = None
+        self._sessions_list.clear()
+        if not self.workspace or not self.workspace.folders:
+            return
         if not sessions:
             placeholder = QListWidgetItem("(nenhuma sessão encontrada para esse projeto)")
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)

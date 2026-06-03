@@ -9,6 +9,7 @@ Devolve uma lista de McpServerEntry pra render.
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -101,6 +102,32 @@ def list_servers(workspace_folders: list[str] | None = None) -> list[McpServerEn
                     if entry:
                         out.append(entry)
     return out
+
+
+# Cache TTL por tuple(folders) dos nomes de MCP scope=project. Chamado a
+# cada seleção (status bar + footer); lê .mcp.json do disco. 30s é fresco o
+# bastante e some o IO repetido nos cliques.
+_PROJECT_NAMES_TTL_S = 30.0
+_project_names_cache: dict[tuple[str, ...], tuple[float, list[str]]] = {}
+
+
+def list_project_server_names_cached(workspace_folders: list[str]) -> list[str]:
+    """Nomes ordenados dos MCP servers scope=project, com cache TTL."""
+    key = tuple(workspace_folders)
+    now = time.monotonic()
+    hit = _project_names_cache.get(key)
+    if hit is not None and (now - hit[0]) < _PROJECT_NAMES_TTL_S:
+        return list(hit[1])
+    try:
+        names = sorted({
+            s.name for s in list_servers(list(workspace_folders))
+            if s.scope == SCOPE_PROJECT
+        })
+    except Exception:
+        log.exception("list_project_server_names_cached falhou")
+        names = []
+    _project_names_cache[key] = (now, list(names))
+    return names
 
 
 def mask_sensitive(text: str) -> str:

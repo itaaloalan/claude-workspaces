@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 STACK_INDICATORS: dict[str, list[str]] = {
@@ -44,3 +45,21 @@ def detect_stacks(folders: list[str]) -> set[str]:
             if any(next(p.glob(pattern), None) is not None for pattern in patterns):
                 found.add(stack)
     return found
+
+
+# Cache TTL por tuple(folders): detect_stacks faz IO de filesystem
+# (exists/glob) e é chamado a cada seleção de workspace (sidebar + status
+# bar). Pastas raramente mudam de stack; 30s mantém responsivo sem reler.
+_STACKS_TTL_S = 30.0
+_stacks_cache: dict[tuple[str, ...], tuple[float, set[str]]] = {}
+
+
+def detect_stacks_cached(folders: list[str]) -> set[str]:
+    key = tuple(folders)
+    now = time.monotonic()
+    hit = _stacks_cache.get(key)
+    if hit is not None and (now - hit[0]) < _STACKS_TTL_S:
+        return set(hit[1])
+    result = detect_stacks(folders)
+    _stacks_cache[key] = (now, set(result))
+    return result

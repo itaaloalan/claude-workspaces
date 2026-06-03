@@ -1,7 +1,16 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QFileSystemWatcher, QPoint, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QFileSystemWatcher,
+    QObject,
+    QPoint,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QAction,
     QBrush,
@@ -49,8 +58,34 @@ from ..git_actions import (
 from ..git_status import GitFile, GitStatus, get_diff, get_status
 from ..models import Workspace
 from . import theme
+from .spinner import Spinner
 
 log = logging.getLogger(__name__)
+
+
+class _StatusScanSignals(QObject):
+    done = Signal(int, dict)  # epoch, {folder: GitStatus}
+
+
+class _StatusScanTask(QRunnable):
+    """Roda `get_status` (subprocess `git status`) fora da UI thread pra cada
+    pasta. Só devolve dados (GitStatus); o rebuild da árvore fica na UI thread."""
+
+    def __init__(self, epoch: int, folders: list[str], signals: _StatusScanSignals) -> None:
+        super().__init__()
+        self.epoch = epoch
+        self.folders = folders
+        self.signals = signals
+
+    def run(self) -> None:
+        statuses: dict[str, GitStatus] = {}
+        for folder in self.folders:
+            try:
+                statuses[folder] = get_status(folder)
+            except Exception:
+                log.exception("git_panel: get_status falhou em %s", folder)
+                statuses[folder] = GitStatus(folder=folder, is_repo=False)
+        self.signals.done.emit(self.epoch, statuses)
 
 
 STATUS_COLOR = {
@@ -292,6 +327,19 @@ class GitPanel(QWidget):
         self._poll_timer.setInterval(POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self.refresh)
 
+        # Coleta de git status assíncrona: pool dedicado (max 2, igual ao
+        # RepoStatusPoller — subprocess+disk-bound), epoch pra descartar scans
+        # obsoletos e spinner "atualizando…" no contador.
+        self._status_pool = QThreadPool()
+        self._status_pool.setMaxThreadCount(2)
+        self._status_epoch = 0
+        self._status_signals = _StatusScanSignals()
+        self._status_signals.done.connect(self._apply_statuses)
+        self._prev_unchecked: dict[str, set[str]] = {}
+        self._counter_before_scan = ""
+        self._status_spinner = Spinner(parent=self)
+        self._status_spinner.tick.connect(self._on_status_spinner_tick)
+
     # ---------- construção ----------
 
     def _make_toolbar(self, branch_row: QHBoxLayout, actions_row: QHBoxLayout) -> None:
@@ -480,10 +528,12 @@ class GitPanel(QWidget):
     def refresh(self) -> None:
         # Drena reflogs antes de qualquer early-return — captura atividade
         # (merge/commit/checkout/pull) de qualquer origem, inclusive skills.
+        # Barato (stat/read de arquivo), fica síncrono.
         self._drain_reflogs()
 
-        # Preserva o estado de checked dos arquivos (rel_path) por repo
-        prev_unchecked: dict[str, set[str]] = {}
+        # Preserva o estado de checked dos arquivos (rel_path) por repo —
+        # lido da árvore atual (UI thread) pra reaplicar no rebuild.
+        self._prev_unchecked = {}
         for i in range(self._tree.topLevelItemCount()):
             repo_item = self._tree.topLevelItem(i)
             data = repo_item.data(0, Qt.ItemDataRole.UserRole) or {}
@@ -492,25 +542,46 @@ class GitPanel(QWidget):
             folder = data["folder"]
             unchecked: set[str] = set()
             self._collect_unchecked_files(repo_item, unchecked)
-            prev_unchecked[folder] = unchecked
+            self._prev_unchecked[folder] = unchecked
+
+        active_folders = self._active_folders()
+        self._status_epoch += 1
+        if not active_folders:
+            # Sem pastas → aplica direto, sem thread.
+            self._status_spinner.stop()
+            self._apply_statuses(self._status_epoch, {})
+            return
+
+        # Coleta `get_status` (subprocess) numa thread — não bloqueia a UI.
+        # Mostra "atualizando…" no contador enquanto roda.
+        if not self._status_spinner.is_running():
+            self._counter_before_scan = self._counter.text()
+        self._counter.setText(f"{self._status_spinner.frame()} atualizando…")
+        self._status_spinner.start()
+        self._status_pool.start(
+            _StatusScanTask(self._status_epoch, list(active_folders), self._status_signals)
+        )
+
+    def _on_status_spinner_tick(self, frame: str) -> None:
+        self._counter.setText(f"{frame} atualizando…")
+
+    def _apply_statuses(self, epoch: int, new_statuses: dict) -> None:
+        # Descarta scan obsoleto (override/seleção mudou no meio do caminho).
+        if epoch != self._status_epoch:
+            return
+        self._status_spinner.stop()
+        prev_unchecked = self._prev_unchecked
+        active_folders = self._active_folders()
 
         # Coleta primeiro, decide depois: se nada mudou desde o último
         # refresh, evita rebuild da árvore (preserva scroll/seleção e zera
         # custo de paint do QTreeWidget). Fingerprint = tuple imutável das
         # infos visíveis por repo.
-        active_folders = self._active_folders()
-        if not active_folders:
-            new_statuses: dict[str, GitStatus] = {}
-        else:
-            new_statuses = {
-                folder: get_status(folder) for folder in active_folders
-            }
-
         new_fp = _fingerprint_statuses(new_statuses)
         if new_fp == self._status_fingerprint and self._tree.topLevelItemCount():
-            # Estado idêntico — só atualiza referência e sai. Evita rebuild
-            # da árvore inteira durante polls quando nada mudou no repo.
+            # Estado idêntico — só atualiza referência e restaura o contador.
             self._statuses = new_statuses
+            self._counter.setText(self._counter_before_scan)
             return
 
         self._tree.blockSignals(True)

@@ -2395,21 +2395,15 @@ class MainWindow(QMainWindow):
             return
         self.status_widgets.set_workspace(ws.name)
         # Stack
-        from ..stacks import STACK_LABEL, detect_stacks
-        stacks = detect_stacks(ws.folders)
+        from ..stacks import STACK_LABEL, detect_stacks_cached
+        stacks = detect_stacks_cached(ws.folders)
         stack_label = ", ".join(sorted(STACK_LABEL.get(s, s) for s in stacks))
         self.status_widgets.set_stack(stack_label)
         # MCP — lista real (user globais + .mcp.json do projeto), igual ao
         # que o Claude enxerga e à barra de contexto do console. Passa os
         # nomes pro footer mostrar inline + tooltip.
-        try:
-            from ..services.mcp_inspector import SCOPE_PROJECT, list_servers
-            mcp_names = sorted({
-                s.name for s in list_servers(list(ws.folders))
-                if s.scope == SCOPE_PROJECT
-            })
-        except Exception:
-            mcp_names = []
+        from ..services.mcp_inspector import list_project_server_names_cached
+        mcp_names = list_project_server_names_cached(list(ws.folders))
         self.status_widgets.set_mcp(len(mcp_names), mcp_names)
         # Runners
         active = self.terminals_coord.state.running_counts.get(ws.id, 0)
@@ -3408,8 +3402,24 @@ class MainWindow(QMainWindow):
     def _ensure_runners_console_pane_visible(self) -> None:
         self._focus_pane_from_sidebar("runners_console")
 
+    def _terminal_pane_is_minimized(self) -> bool:
+        """True quando o pane do console está colapsado/oculto (minimizado
+        via botão ou splitter zerado)."""
+        if not hasattr(self, "_bottom_sub_splitter"):
+            return False
+        w = getattr(self, "_terminal_pane_widget", None)
+        if w is not None and not w.isVisible():
+            return True
+        sizes = self._bottom_sub_splitter.sizes()
+        return bool(sizes) and sizes[0] <= 4
+
     def _ensure_terminal_pane_visible(self) -> None:
-        self._focus_pane_from_sidebar("terminal")
+        # Só restaura/maximiza o console quando ele está minimizado. Se já
+        # está visível, preserva o layout atual (não esconde o runner) —
+        # clicar/selecionar um console não deve mexer nas abas/janelas
+        # abertas, só trazer o console de volta quando estava minimizado.
+        if self._terminal_pane_is_minimized():
+            self._focus_pane_from_sidebar("terminal")
 
     def _open_runner_from_sidebar(self, workspace: Workspace, runner_id: str) -> None:
         """Switch pro bottom tab "Runners" e foca a aba do runner.
@@ -3646,14 +3656,8 @@ class MainWindow(QMainWindow):
         # MCPs do workspace (scope=project) — exclui MCPs globais do user
         # (~/.claude.json) que são comuns a todos os workspaces e poluem.
         mcp_html = ""
-        try:
-            from ..services.mcp_inspector import SCOPE_PROJECT, list_servers
-            mcp_names = sorted({
-                s.name for s in list_servers(list(ws.folders))
-                if s.scope == SCOPE_PROJECT
-            })
-        except Exception:
-            mcp_names = []
+        from ..services.mcp_inspector import list_project_server_names_cached
+        mcp_names = list_project_server_names_cached(list(ws.folders))
         if mcp_names:
             shown = ", ".join(mcp_names[:4])
             if len(mcp_names) > 4:

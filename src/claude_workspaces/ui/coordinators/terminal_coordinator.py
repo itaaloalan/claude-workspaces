@@ -25,14 +25,14 @@ import time
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from ...models import Workspace
+from ..spinner import SPINNER_FRAMES, SPINNER_INTERVAL_MS
 from ..terminal_area import TerminalArea
 from ..terminal_state import TerminalState
 
 log = logging.getLogger(__name__)
 
 
-SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-SPINNER_INTERVAL_MS = 100
+__all__ = ["SPINNER_FRAMES", "SPINNER_INTERVAL_MS", "TerminalCoordinator"]
 
 # Intervalo entre re-lembretes (default — configurável via setting).
 # Cada entrada do inbox que está parada há mais que isso, e não foi

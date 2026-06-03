@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.81.0] — 2026-06-03
+
+### Melhorias
+- **Cliques fluidos — trabalho pesado sai da UI thread.** Selecionar workspace/console
+  travava porque o scan de sessões (glob + JSONL + sqlite) e o `git status` rodavam
+  síncronos no event loop do Qt. Agora ambos rodam em **background** (`QThreadPool`):
+  - **Sessões:** scan numa thread com placeholder animado **"⠋ carregando sessões…"**;
+    o resultado preenche a lista quando chega. Guard por *epoch* descarta resultados de
+    cliques antigos (clicar A→B→C deixa só os dados de C).
+  - **Git (painel Ferramentas):** `get_status` por pasta numa thread, com **"⠋ atualizando…"**
+    no contador; o rebuild da árvore só roda quando o status chega.
+  - **Cache por seleção:** `detect_stacks` e os nomes de MCP (scope=project) ganham
+    cache TTL (30s) por `tuple(folders)` — somem as releituras de filesystem a cada clique.
+  - Corte do scan **morto** do OpenCode no carregamento de sessões (só roda com a flag
+    `OPENCODE_ENABLED`). Novo módulo `ui/spinner.py` compartilha os frames do spinner.
+- **Clicar num console não mexe mais no layout.** Antes, selecionar um console
+  **minimizava o runner e maximizava o console** à força em todo clique. Agora o layout
+  (abas/painéis abertos) é **preservado** como está; o console só é restaurado/maximizado
+  quando estava **minimizado**. Os botões de minimizar/maximizar continuam funcionando.
+
 ## [0.80.0] — 2026-06-03
 
 ### Novidades
