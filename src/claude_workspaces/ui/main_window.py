@@ -967,24 +967,43 @@ class MainWindow(QMainWindow):
 
     # ---------- indicador de carregamento (troca de workspace) ----------
 
-    _LOADING_VISIBLE_MS = 240
+    # Mínimo que o overlay fica visível (evita flash de 1 frame quando a
+    # troca é instantânea). Contado a partir do show.
+    _LOADING_MIN_VISIBLE_MS = 150
+    # Fallback: se a cadeia deferida morrer, o overlay nunca fica preso.
+    _LOADING_FALLBACK_MS = 1200
 
     def _on_loading_tick(self, frame: str) -> None:
         # Só o texto do canto — o overlay anima sozinho (arco via paintEvent).
         self._loading_corner.setText(f"{frame} trocando workspace…")
 
     def _show_switch_loading(self) -> None:
-        """Mostra overlay no pane do console + spinner no canto. Pinta na hora
-        (antes do trabalho pesado da troca) e agenda o hide (fallback — o
-        chamador reinicia o timer após o trabalho pra janela contar do fim
-        do bloqueio, deixando a animação visível inteira)."""
+        """Mostra overlay no pane do console + spinner no canto, pintando na
+        hora — o trabalho da troca vem deferido no tick seguinte, então o
+        arco já entra girando. O hide normal é `_finish_switch_loading()`;
+        o timer aqui é só fallback."""
         if not self._terminal_pane_widget.isVisible():
             return
+        import time
+        self._loading_shown_at = time.monotonic()
         self._loading_spinner.start()
         self._on_loading_tick(self._loading_spinner.frame())
         self._loading_corner.setVisible(True)
         self._loading_overlay.cover(self._terminal_pane_widget)
-        self._loading_hide_timer.start(self._LOADING_VISIBLE_MS)
+        self._loading_hide_timer.start(self._LOADING_FALLBACK_MS)
+
+    def _finish_switch_loading(self) -> None:
+        """Esconde o overlay assim que a troca terminou, garantindo o mínimo
+        visível pra animação não virar um flash."""
+        import time
+        shown_at = getattr(self, "_loading_shown_at", 0.0)
+        elapsed_ms = (time.monotonic() - shown_at) * 1000.0
+        remaining = int(self._LOADING_MIN_VISIBLE_MS - elapsed_ms)
+        if remaining > 0:
+            self._loading_hide_timer.start(remaining)
+        else:
+            self._loading_hide_timer.stop()
+            self._hide_switch_loading()
 
     def _hide_switch_loading(self) -> None:
         self._loading_spinner.stop()
@@ -3162,23 +3181,53 @@ class MainWindow(QMainWindow):
         ws_changed = ws.id != getattr(self, "_last_shown_ws_id", None)
         if ws_changed:
             self._last_shown_ws_id = ws.id
-            # Feedback visível na troca de workspace (a 1ª pintura da webview
-            # daquele ws pode dar um respiro). Mostra ANTES do trabalho pesado.
+            # Mostra o overlay JÁ GIRANDO e defere o trabalho da troca pro
+            # próximo tick do event loop: assim o arco anima ANTES/DURANTE a
+            # troca (e não só depois, sobre conteúdo já pronto). O overlay
+            # some assim que o trabalho termina (mínimo visível curto pra
+            # não piscar) — ver _finish_workspace_switch.
+            self._switch_epoch = getattr(self, "_switch_epoch", 0) + 1
             self._show_switch_loading()
-            self.details.show_workspace(ws)
-            self._broadcast_workspace(ws)
-            self._update_status_bar(ws)
-            self.plugin_coord.dispatch_workspace_opened(ws.id)
-        # Trabalho de escopo CONSOLE — sempre (o console ativo mudou):
+            QTimer.singleShot(
+                0,
+                lambda e=self._switch_epoch: self._finish_workspace_switch(e),
+            )
+            return
+        # Mesmo workspace: trabalho de escopo CONSOLE direto (sem overlay).
         self._sync_git_panel_to_active_console()
         self._sync_terminal_for(ws)
         self._refresh_status_bar_console()
         self._refresh_console_runners_footer(current)
-        if ws_changed:
-            # Reinicia a janela do overlay DEPOIS do trabalho da troca: o
-            # event loop estava ocupado até aqui (nada repinta), então contar
-            # a partir de agora garante a animação do arco visível inteira.
-            self._loading_hide_timer.start(self._LOADING_VISIBLE_MS)
+        self._dispatch_runner_safety_net(ws, current_data)
+
+    def _finish_workspace_switch(self, epoch: int) -> None:
+        """Conclui a troca de workspace deferida por `_on_selection_changed`
+        (roda no tick seguinte, com o arco do overlay já girando). Epoch
+        descarta cadeias obsoletas em cliques rápidos A→B."""
+        if epoch != getattr(self, "_switch_epoch", 0):
+            return
+        current = self.list_widget.currentItem()
+        ws = self._workspace_of_item(current) if current is not None else None
+        if ws is None:
+            self._hide_switch_loading()
+            return
+        self.details.show_workspace(ws)
+        self._broadcast_workspace(ws)
+        self._update_status_bar(ws)
+        self.plugin_coord.dispatch_workspace_opened(ws.id)
+        self._sync_git_panel_to_active_console()
+        self._sync_terminal_for(ws)
+        self._refresh_status_bar_console()
+        self._refresh_console_runners_footer(current)
+        current_data = (
+            current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
+        )
+        self._dispatch_runner_safety_net(ws, current_data)
+        # Esconde o overlay agora que está tudo pronto (respeitando o
+        # mínimo visível pra animação não virar um flash).
+        self._finish_switch_loading()
+
+    def _dispatch_runner_safety_net(self, ws: "Workspace", current_data) -> None:
         # Safety net: clicks em RunnerChildWidget muitas vezes não
         # disparam `itemClicked` (o widget customizado intercepta o
         # mouse). Re-dispatcha o focus a partir do selection_changed

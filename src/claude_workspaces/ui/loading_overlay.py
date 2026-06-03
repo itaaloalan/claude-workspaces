@@ -14,8 +14,8 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 _ARC_COLOR = "#6aa9e0"
 _ARC_SIZE = 36          # px (lado do widget quadrado)
 _ARC_SPAN_DEG = 100     # comprimento do arco
-_ARC_STEP_DEG = 10      # graus por tick (10° a cada 30ms ≈ 1 volta/segundo)
-_ARC_TICK_MS = 30       # ~33fps
+_ARC_STEP_DEG = 8       # graus por tick (8° a cada 16ms ≈ 1.4 voltas/segundo)
+_ARC_TICK_MS = 16       # ~60fps — giro perceptível mesmo em janelas curtas
 
 
 class _ArcSpinner(QWidget):

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.82.6] — 2026-06-03
+
+### Melhorias
+- **Arco do overlay gira DURANTE a troca, não depois.** O trabalho da troca de
+  workspace bloqueava o event loop logo após mostrar o overlay — o arco só começava a
+  girar quando tudo já tinha aberto (e ainda ficava 240ms sobre conteúdo pronto). Agora
+  `_on_selection_changed` mostra o overlay e **defere o trabalho pro tick seguinte**
+  (`_finish_workspace_switch`, com epoch pra cliques rápidos A→B): o arco entra girando
+  antes/durante a troca e o overlay **some assim que termina**, respeitando um mínimo
+  visível de 150ms (sem flash). Fallback de 1,2s garante que nunca fica preso.
+- Arco a **60fps** (16ms/tick, ~1.4 voltas/s) — giro perceptível mesmo em janelas curtas.
+
 ## [0.82.5] — 2026-06-03
 
 ### Melhorias
