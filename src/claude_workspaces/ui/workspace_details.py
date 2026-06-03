@@ -23,7 +23,7 @@ from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Workspace
 from ..session_marks import is_starred
-from ..settings import Settings
+from ..settings import OPENCODE_ENABLED, Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks
 from .file_finder import FileFinder
 from .git_panel import GitPanel
@@ -687,6 +687,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
     def _on_launch_claude(self) -> None:
         if not self.workspace or not self.workspace.folders:
             QMessageBox.warning(self, "Workspace sem pastas", "Adicione pelo menos uma pasta.")
+            return
+        if not OPENCODE_ENABLED:
+            # Só Claude → pula o menu de backend e vai direto pro diálogo
+            # "Abrir Claude" (worktree/branch/prompt).
+            self.launch_claude_requested.emit(self.workspace, "", "", "claude")
             return
         menu = QMenu(self._claude_btn)
         menu.addAction("Claude Code").triggered.connect(

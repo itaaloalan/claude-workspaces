@@ -57,6 +57,7 @@ class LaunchCoordinator(QObject):
         resume_session_id: str = "",
         cwd_override: str = "",
         backend_override: str = "",
+        skip_dialog: bool = False,
     ) -> TerminalWidget | None:
         """Fluxo principal. Devolve o TerminalWidget criado ou None se
         usuário cancelou / falhou."""
@@ -80,7 +81,7 @@ class LaunchCoordinator(QObject):
             # perdidos: o Claude não via as outras pastas e a sidebar só pollava
             # MR/git do cwd (MAP mostrava só 1 MR).
             extras = [f for f in workspace.folders if f != cwd_override]
-        elif not resume_session_id:
+        elif not resume_session_id and not skip_dialog:
             # Importa local pra evitar circular import e custo de
             # importar Qt widgets pesados em testes
             from ..launch_claude_dialog import LaunchClaudeDialog

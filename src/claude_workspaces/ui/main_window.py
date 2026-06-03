@@ -55,7 +55,7 @@ from ..session_persistence import (
     load_saved_sessions,
     save_sessions,
 )
-from ..settings import Settings
+from ..settings import OPENCODE_ENABLED, Settings
 from . import theme
 from .activity_bar import (
     VIEW_APPS,
@@ -5648,9 +5648,14 @@ class MainWindow(QMainWindow):
         cwd_override: str,
         restored_on_startup: bool = False,
         backend: str = "",
+        skip_dialog: bool = False,
     ) -> None:
         terminal = self.launch_coord.launch_claude(
-            workspace, resume_session_id, cwd_override, backend_override=backend
+            workspace,
+            resume_session_id,
+            cwd_override,
+            backend_override=backend,
+            skip_dialog=skip_dialog,
         )
         if terminal is not None:
             if restored_on_startup:
@@ -5676,6 +5681,12 @@ class MainWindow(QMainWindow):
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
 
     def _show_ai_launch_menu(self, workspace: Workspace) -> None:
+        if not OPENCODE_ENABLED:
+            # Só Claude disponível → abre direto, sem menu nem diálogo.
+            self._launch_claude_for(
+                workspace, "", "", backend="claude", skip_dialog=True
+            )
+            return
         menu = QMenu(self)
         menu.setStyleSheet(
             "QMenu { background: #1f1f1f; color: #e6e6e6; "
@@ -5685,11 +5696,15 @@ class MainWindow(QMainWindow):
         )
         claude_act = menu.addAction("Claude Code")
         claude_act.triggered.connect(
-            lambda _=False: self._launch_claude_for(workspace, "", "", backend="claude")
+            lambda _=False: self._launch_claude_for(
+                workspace, "", "", backend="claude", skip_dialog=True
+            )
         )
         opencode_act = menu.addAction("OpenCode")
         opencode_act.triggered.connect(
-            lambda _=False: self._launch_claude_for(workspace, "", "", backend="opencode")
+            lambda _=False: self._launch_claude_for(
+                workspace, "", "", backend="opencode", skip_dialog=True
+            )
         )
         menu.exec(QCursor.pos())
 

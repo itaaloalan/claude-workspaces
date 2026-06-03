@@ -25,7 +25,7 @@ from ..hook_manager import (
     uninstall_hook,
 )
 from ..logging_setup import log_file
-from ..settings import Settings, settings_file
+from ..settings import OPENCODE_ENABLED, Settings, settings_file
 
 log = logging.getLogger(__name__)
 
@@ -71,9 +71,11 @@ class SettingsPanel(QWidget):
 
         self._ai_backend = QComboBox()
         self._ai_backend.addItem("Claude", "claude")
-        self._ai_backend.addItem("OpenCode", "opencode")
+        if OPENCODE_ENABLED:
+            self._ai_backend.addItem("OpenCode", "opencode")
         self._ai_backend.currentIndexChanged.connect(self._on_backend_changed)
-        form.addRow("Backend de IA:", self._ai_backend)
+        if OPENCODE_ENABLED:
+            form.addRow("Backend de IA:", self._ai_backend)
 
         self._ai_cmd = QLineEdit()
         self._ai_cmd.setPlaceholderText("claude")

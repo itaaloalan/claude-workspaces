@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0] — 2026-06-03
+
+### Novidades
+- **Criação de console mais fluida.** Clicar no `+` ao lado do workspace (e no placeholder "＋ Nova sessão…") agora abre o Claude **instantaneamente** — sem o menu de backend e sem o diálogo "Abrir Claude". O console sobe na pasta primária do workspace (cwd, com as demais como `--add-dir`), na branch atual, sem criar branch nem worktree.
+- **Diálogo "Abrir Claude" preservado no painel de detalhes.** O botão "Abrir Claude" do painel à direita continua abrindo o diálogo completo (worktree / branch / prompt inicial), pra quando precisar dessas opções.
+- **OpenCode desabilitado por enquanto** (de forma reversível). Nova constante `OPENCODE_ENABLED` (em `settings.py`, default `False`) esconde o OpenCode do menu do `+`, do botão do painel de detalhes e do combo "Backend de IA" das configurações. A lógica de dispatch do OpenCode permanece intacta — basta trocar a flag pra `True` pra restaurar o menu de backend em todo lugar.
+
 ## [0.79.10] — 2026-06-03
 
 ### Correções

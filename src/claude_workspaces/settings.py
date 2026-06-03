@@ -11,6 +11,11 @@ def settings_file() -> Path:
     return config_dir() / "settings.json"
 
 
+# Liga/desliga o OpenCode como opção de backend na UI. False = só Claude.
+# "por enquanto" — flip pra True restaura o menu de backend em todo lugar.
+OPENCODE_ENABLED = False
+
+
 @dataclass
 class Settings:
     # --- Backend: "claude" ou "opencode" ---
