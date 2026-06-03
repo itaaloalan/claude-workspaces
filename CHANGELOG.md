@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.82.0] — 2026-06-03
+
+### Melhorias
+- **Trocar de console no mesmo workspace ficou instantâneo (sem "congelar").** Cada
+  console é um `QWebEngineView` (Chromium); o `TerminalArea` usava um `QTabWidget`, que
+  esconde a aba inativa — e o QtWebEngine libera a superfície de GPU das views
+  escondidas, então mostrar de novo travava a UI thread por um instante ("congela e
+  depois troca"). Agora o `TerminalArea` usa `QTabBar` + `QStackedLayout` em modo
+  **StackAll**: todas as webviews do workspace ativo ficam vivas/compostas e trocar de
+  console é só trazer a ativa pro topo (z-order) — sem recriar superfície, sem stall.
+  - API pública e o atributo `area.tabs` foram preservados via shim, então o resto do
+    app (main_window, coordinators) não mudou. Tab bar, cores/ícones de status, fechar
+    e reordenar abas seguem iguais.
+  - _Limite:_ trocar entre consoles de **workspaces diferentes** ainda pode ter um stall
+    breve na 1ª exibição daquele workspace (o `terminal_host` segue escondendo as áreas
+    inativas pra limitar uso de memória).
+
 ## [0.81.2] — 2026-06-03
 
 ### Novidades
