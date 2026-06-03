@@ -951,6 +951,16 @@ class MainWindow(QMainWindow):
         if w is not None:
             w.raise_()
 
+    def _raise_current_host_widget(self, _idx: int = -1) -> None:
+        """Igual ao terminal_host, mas pros runner hosts em StackAll: traz a
+        área atual do host que emitiu o sinal pro topo do z-order."""
+        from PySide6.QtWidgets import QStackedWidget
+        host = self.sender()
+        if isinstance(host, QStackedWidget):
+            w = host.currentWidget()
+            if w is not None:
+                w.raise_()
+
     def _close_active_terminal_tab(self) -> None:
         area = self._active_terminal_area()
         if area is None or area.count() == 0:
@@ -1352,6 +1362,17 @@ class MainWindow(QMainWindow):
         self._console_runner_placeholder_idx = self.console_runner_host.addWidget(
             self._build_console_runner_placeholder()
         )
+
+        # StackAll: mantém as RunnerAreas (e suas webviews de runner) vivas e
+        # compostas em vez de esconder as inativas. Trocar de workspace não
+        # recria a superfície do Chromium dos runners → sem "travada" também
+        # entre workspaces (mesma raiz já resolvida no terminal_host).
+        from PySide6.QtWidgets import QStackedLayout as _QStackedLayout
+        for _host in (self.runner_host, self.console_runner_host):
+            _lay = _host.layout()
+            if isinstance(_lay, _QStackedLayout):
+                _lay.setStackingMode(_QStackedLayout.StackingMode.StackAll)
+            _host.currentChanged.connect(self._raise_current_host_widget)
 
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB

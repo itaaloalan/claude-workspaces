@@ -125,6 +125,32 @@ def _load() -> dict:
         raise
 
 
+# Cache somente-leitura do ~/.claude.json (arquivo grande — toda a história do
+# Claude). Invalida por mtime + TTL curto. Usado pelos getters read-only
+# (mcp_exists/is_postgres_mcp/get_postgres_url/list_mcp_names) que são chamados
+# a cada troca de workspace. NÃO usar em set_*/delete_*: eles mutam o dict
+# antes de salvar e corromperiam o cache — esses seguem com `_load()`.
+_LOAD_TTL_S = 3.0
+_load_cache: dict[str, object] = {"key": None, "ts": 0.0, "data": {}}
+
+
+def _load_cached() -> dict:
+    path = claude_config_file()
+    try:
+        mtime = path.stat().st_mtime if path.exists() else 0.0
+    except OSError:
+        mtime = 0.0
+    key = (str(path), mtime)
+    now = time.monotonic()
+    if _load_cache["key"] == key and (now - float(_load_cache["ts"])) < _LOAD_TTL_S:
+        return _load_cache["data"]  # type: ignore[return-value]
+    data = _load()
+    _load_cache["key"] = key
+    _load_cache["ts"] = now
+    _load_cache["data"] = data
+    return data
+
+
 def _save(data: dict) -> None:
     path = claude_config_file()
     # Backup curto antes de escrever — ~/.claude.json é o arquivo mais
@@ -149,13 +175,13 @@ def _save(data: dict) -> None:
 
 
 def list_mcp_names() -> list[str]:
-    return list(_load().get("mcpServers", {}).keys())
+    return list(_load_cached().get("mcpServers", {}).keys())
 
 
 def get_postgres_url(name: str) -> str | None:
     """Devolve a URL postgres do MCP `name`, ou None se não for um
     server postgres reconhecido."""
-    data = _load()
+    data = _load_cached()
     server = (data.get("mcpServers") or {}).get(name)
     if not server:
         return None
@@ -169,7 +195,7 @@ def get_postgres_url(name: str) -> str | None:
 
 def is_postgres_mcp(name: str) -> bool:
     """True se o MCP `name` existe e é o postgres-server."""
-    data = _load()
+    data = _load_cached()
     server = (data.get("mcpServers") or {}).get(name)
     if not server:
         return False
@@ -205,7 +231,7 @@ def delete_mcp(name: str) -> bool:
 
 
 def mcp_exists(name: str) -> bool:
-    return name in _load().get("mcpServers", {})
+    return name in _load_cached().get("mcpServers", {})
 
 
 def set_generic_mcp(

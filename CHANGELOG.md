@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.82.2] — 2026-06-03
+
+### Melhorias
+- **Trocar de workspace deixou de "travar".** Faltava aplicar o StackAll nos runner hosts:
+  `runner_host` e `console_runner_host` eram `QStackedWidget` comuns, e como cada runner é
+  um `RunnerWidget` com `QWebEngineView`, trocar de workspace escondia/mostrava essas
+  áreas e o Chromium recriava a superfície de GPU dos runners (mesma raiz já resolvida no
+  `terminal_host`). Agora os dois hosts usam `QStackedLayout` em `StackAll` (+ `raise_()`
+  defensivo na troca), mantendo as áreas de runner vivas/compostas → troca de workspace
+  instantânea.
+- **MCP do header sem reler disco a cada troca.** `_refresh_mcp_status` reparseava o
+  `~/.claude.json` (arquivo grande) 3× por troca de workspace. Os getters somente-leitura
+  (`mcp_exists`/`is_postgres_mcp`/`get_postgres_url`/`list_mcp_names`) agora usam
+  `_load_cached()` (cache por mtime + TTL 3s). `set_*`/`delete_*` seguem com `_load()`
+  direto (sem risco de cache stale na escrita).
+
 ## [0.82.1] — 2026-06-03
 
 ### Melhorias
