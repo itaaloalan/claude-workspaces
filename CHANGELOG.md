@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.81.1] — 2026-06-03
+
+### Melhorias
+- **Clicar entre consoles do mesmo workspace ficou instantâneo.** `_on_selection_changed`
+  re-rodava todo o refresh de escopo workspace (re-escanear sessões, ler `~/.claude.json`
+  3×, rebuildar botões de IDE, re-broadcastar docks) a cada clique de console — mesmo
+  sem o workspace mudar. Agora um guard `_last_shown_ws_id` (espelhando o
+  `_last_synced_ws_id` que o terminal já usava) só roda esse trabalho quando o workspace
+  realmente muda; trocar de console no mesmo ws faz só o trabalho de escopo console
+  (aba do terminal + painel Git seguindo o worktree + footer). Some o flicker de
+  "carregando sessões…" a cada clique.
+
 ## [0.81.0] — 2026-06-03
 
 ### Melhorias

@@ -2058,6 +2058,7 @@ class MainWindow(QMainWindow):
                 self.list_widget.setCurrentItem(it)
                 return
 
+        self._last_shown_ws_id = None
         self.details.show_empty()
         self._update_status_bar(None)
         if hasattr(self, "notif_service"):
@@ -3052,6 +3053,7 @@ class MainWindow(QMainWindow):
         if self.content_stack.currentIndex() != 0:
             self.content_stack.setCurrentIndex(0)
         if current is None:
+            self._last_shown_ws_id = None
             self.details.show_empty()
             self.terminal_host.setCurrentIndex(self._terminal_placeholder_idx)
             self._broadcast_workspace(None)
@@ -3066,16 +3068,25 @@ class MainWindow(QMainWindow):
             ws.id if ws else None,
         )
         if ws is None:
+            self._last_shown_ws_id = None
             self._refresh_status_bar_console()
             return
-        self.details.show_workspace(ws)
-        self._broadcast_workspace(ws)
+        # Trabalho de escopo WORKSPACE — só quando o workspace muda. Clicar
+        # entre consoles do mesmo ws não re-escaneia sessões/MCP, não rebuilda
+        # botões de IDE nem re-broadcasta docks (era a lentidão sentida em cada
+        # click). Espelha o guard de `_sync_terminal_for` (_last_synced_ws_id).
+        ws_changed = ws.id != getattr(self, "_last_shown_ws_id", None)
+        if ws_changed:
+            self._last_shown_ws_id = ws.id
+            self.details.show_workspace(ws)
+            self._broadcast_workspace(ws)
+            self._update_status_bar(ws)
+            self.plugin_coord.dispatch_workspace_opened(ws.id)
+        # Trabalho de escopo CONSOLE — sempre (o console ativo mudou):
         self._sync_git_panel_to_active_console()
         self._sync_terminal_for(ws)
-        self._update_status_bar(ws)
         self._refresh_status_bar_console()
         self._refresh_console_runners_footer(current)
-        self.plugin_coord.dispatch_workspace_opened(ws.id)
         # Safety net: clicks em RunnerChildWidget muitas vezes não
         # disparam `itemClicked` (o widget customizado intercepta o
         # mouse). Re-dispatcha o focus a partir do selection_changed
@@ -3533,6 +3544,7 @@ class MainWindow(QMainWindow):
         if current:
             ws = current.data(0, Qt.ItemDataRole.UserRole)
             if isinstance(ws, Workspace):
+                self._last_shown_ws_id = ws.id
                 self.details.show_workspace(ws)
                 self._sync_terminal_for(ws)
 
@@ -5912,6 +5924,7 @@ class MainWindow(QMainWindow):
             return
         updated = dialog.workspace()
         if self.workspaces_coord.replace(updated):
+            self._last_shown_ws_id = updated.id
             self.details.show_workspace(updated)
 
     def delete_workspace(self, workspace: Workspace) -> None:
