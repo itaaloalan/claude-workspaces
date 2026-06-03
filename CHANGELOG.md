@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.82.10] — 2026-06-03
+
+### Correções
+- **Overlay da troca some assim que o conteúdo abre (sem girar "depois").** O hold de
+  150ms de "mínimo visível" segurava o arco girando suave **sobre conteúdo já pronto** —
+  exatamente a percepção de "o loading só começa a girar quando já abriu". Removido: o
+  overlay esconde imediatamente ao fim da cadeia.
+- **Passos da troca mais finos + telemetria.** A cadeia foi de 4 → 7 passos
+  (show_workspace / broadcast / status_bar+plugins / git_panel / sync_terminal /
+  runner_children / footers), com `_refresh_runner_children` (caro) separado do
+  `_sync_terminal_for` via `skip_runner_children=True`. Cada passo agora loga
+  `[SWITCH-PERF] step=<nome> dt=<ms>` + total — dá pra ver no log qual passo domina se
+  a travada persistir em algum workspace.
+
 ## [0.82.9] — 2026-06-03
 
 ### Correções

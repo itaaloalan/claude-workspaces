@@ -969,9 +969,6 @@ class MainWindow(QMainWindow):
 
     # ---------- indicador de carregamento (troca de workspace) ----------
 
-    # Mínimo que o overlay fica visível (evita flash de 1 frame quando a
-    # troca é instantânea). Contado a partir do show.
-    _LOADING_MIN_VISIBLE_MS = 150
     # Fallback: se a cadeia deferida morrer, o overlay nunca fica preso.
     _LOADING_FALLBACK_MS = 1200
 
@@ -986,8 +983,6 @@ class MainWindow(QMainWindow):
         o timer aqui é só fallback."""
         if not self._terminal_pane_widget.isVisible():
             return
-        import time
-        self._loading_shown_at = time.monotonic()
         self._loading_spinner.start()
         self._on_loading_tick(self._loading_spinner.frame())
         self._loading_corner.setVisible(True)
@@ -995,17 +990,11 @@ class MainWindow(QMainWindow):
         self._loading_hide_timer.start(self._LOADING_FALLBACK_MS)
 
     def _finish_switch_loading(self) -> None:
-        """Esconde o overlay assim que a troca terminou, garantindo o mínimo
-        visível pra animação não virar um flash."""
-        import time
-        shown_at = getattr(self, "_loading_shown_at", 0.0)
-        elapsed_ms = (time.monotonic() - shown_at) * 1000.0
-        remaining = int(self._LOADING_MIN_VISIBLE_MS - elapsed_ms)
-        if remaining > 0:
-            self._loading_hide_timer.start(remaining)
-        else:
-            self._loading_hide_timer.stop()
-            self._hide_switch_loading()
+        """Esconde o overlay assim que a troca terminou. Sem "mínimo
+        visível": segurar o arco girando sobre conteúdo já pronto lia como
+        "o loading só começa a girar depois que abriu"."""
+        self._loading_hide_timer.stop()
+        self._hide_switch_loading()
 
     def _hide_switch_loading(self) -> None:
         self._loading_spinner.stop()
@@ -3227,47 +3216,62 @@ class MainWindow(QMainWindow):
             current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
         )
         steps = [
-            # Mais pesado: detecta stacks, rebuilda botões de IDE, sessões.
-            lambda: self.details.show_workspace(ws),
-            lambda: (
-                self._broadcast_workspace(ws),
+            # Detecta stacks, rebuilda botões de IDE, dispara scan de sessões.
+            ("show_workspace", lambda: self.details.show_workspace(ws)),
+            ("broadcast", lambda: self._broadcast_workspace(ws)),
+            ("status_bar+plugins", lambda: (
                 self._update_status_bar(ws),
                 self.plugin_coord.dispatch_workspace_opened(ws.id),
-            ),
-            # Pesado: runner areas + refresh dos children dos consoles.
-            lambda: (
-                self._sync_git_panel_to_active_console(),
-                self._sync_terminal_for(ws),
-            ),
-            lambda: (
+            )),
+            ("git_panel", lambda: self._sync_git_panel_to_active_console()),
+            # Runner areas/hosts; o refresh dos children (caro) é o passo
+            # seguinte — o arco respira entre os dois.
+            ("sync_terminal", lambda: self._sync_terminal_for(
+                ws, skip_runner_children=True
+            )),
+            ("runner_children", lambda: self._refresh_runner_children(ws.id)),
+            ("footers", lambda: (
                 self._refresh_status_bar_console(),
                 self._refresh_console_runners_footer(current),
                 self._dispatch_runner_safety_net(ws, current_data),
-            ),
+            )),
         ]
+        import time
+        self._switch_t0 = time.perf_counter()
         self._run_switch_step(epoch, steps)
 
     def _run_switch_step(self, epoch: int, steps: list) -> None:
         """Executa o próximo passo da troca e re-agenda o resto pro tick
         seguinte — o event loop respira entre passos (paint/timer) e o arco
-        do overlay anima DURANTE a troca, não só depois."""
+        do overlay anima DURANTE a troca, não só depois. Cada passo é
+        cronometrado ([SWITCH-PERF]) pra identificar qual domina o tempo."""
+        import time
         if epoch != getattr(self, "_switch_epoch", 0):
             return  # clique rápido A→B: cadeia obsoleta morre; a nova assume
         # 1 frame síncrono garantido por passo, mesmo se o loop não agendar
         # paint entre os ticks (ângulo vem do relógio — mostra rotação real).
         self._loading_overlay.tick()
+        name, step = steps[0]
+        t0 = time.perf_counter()
         try:
-            steps[0]()
+            step()
         except Exception:
             # Um passo falhando não pode deixar o overlay preso — o fallback
             # de 1200ms (_loading_hide_timer) cobre o resto.
-            log.exception("passo da troca de workspace falhou")
+            log.exception("passo da troca de workspace falhou: %s", name)
+        log.info(
+            "[SWITCH-PERF] step=%s dt=%.1fms",
+            name, (time.perf_counter() - t0) * 1000,
+        )
         rest = steps[1:]
         if rest:
             QTimer.singleShot(0, lambda: self._run_switch_step(epoch, rest))
         else:
-            # Esconde o overlay agora que está tudo pronto (respeitando o
-            # mínimo visível pra animação não virar um flash).
+            log.info(
+                "[SWITCH-PERF] total=%.1fms",
+                (time.perf_counter() - getattr(self, "_switch_t0", t0)) * 1000,
+            )
+            # Esconde o overlay agora que está tudo pronto — sem hold extra.
             self._finish_switch_loading()
 
     def _dispatch_runner_safety_net(self, ws: "Workspace", current_data) -> None:
@@ -3738,7 +3742,9 @@ class MainWindow(QMainWindow):
 
     # ---------- terminal ----------
 
-    def _sync_terminal_for(self, workspace: Workspace) -> None:
+    def _sync_terminal_for(
+        self, workspace: Workspace, *, skip_runner_children: bool = False
+    ) -> None:
         # Curtocircuita se já estamos exibindo este workspace — clicks
         # entre filhos do mesmo ws (consoles, runners) não precisam
         # re-rodar `_get_or_create_runner_area` nem
@@ -3762,8 +3768,11 @@ class MainWindow(QMainWindow):
         # Re-instala os runner-children dos consoles desse workspace —
         # cobre o caso de o `claimed_session_id` do terminal ter sido
         # resolvido depois da primeira instalação (signal não chegou ou
-        # o JSONL só apareceu mais tarde).
-        self._refresh_runner_children(workspace.id)
+        # o JSONL só apareceu mais tarde). Na troca de workspace via
+        # overlay, é caro o bastante pra virar passo próprio da cadeia
+        # (skip_runner_children=True) — o arco respira entre os dois.
+        if not skip_runner_children:
+            self._refresh_runner_children(workspace.id)
         # Views contextuais (MCP, Catalog, Hooks) atualizam ao trocar workspace
         # mesmo se já estiverem visíveis — evita mostrar dados do ws anterior.
         if hasattr(self, "mcp_view") and self.main_stack.currentWidget() is self.mcp_view:
