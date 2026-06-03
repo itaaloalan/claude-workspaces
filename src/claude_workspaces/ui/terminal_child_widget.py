@@ -280,6 +280,7 @@ class TerminalChildWidget(QWidget):
         self._model: str = ""
         self._branch: str = ""
         self._modified: int = 0
+        self._is_worktree: bool = False
         self._pr_urls: list[str] = []
 
         # Bloco de ações fica na própria title row, à direita do título —
@@ -664,27 +665,39 @@ class TerminalChildWidget(QWidget):
         self._pr_chips_layout.addWidget(chip)
         self._pr_chips_container.setVisible(True)
 
-    def update_git_info(self, branch: str, modified: int) -> None:
+    def update_git_info(
+        self, branch: str, modified: int, is_worktree: bool = False
+    ) -> None:
         """Atualiza o label do lado direito com branch e contagem de
         arquivos modificados (working tree + staged + untracked).
         `branch` vazio = pasta não é repo git → esconde o label.
+        `is_worktree` troca o glifo por 🌿 verde — console rodando numa
+        git worktree isolada (mesmo badge do header do terminal pane).
         """
         self._branch = branch
         self._modified = modified
+        self._is_worktree = is_worktree
         if not branch:
             self._git_label.setVisible(False)
             self._git_label.setText("")
             return
         # Encurta nomes longos pra não dominar a row do chip
         b = branch if len(branch) <= 18 else branch[:17] + "…"
+        glyph = (
+            f"<span style='color: #5ac38a;'>🌿 {b}</span>"
+            if is_worktree
+            else f"⎇ {b}"
+        )
         if modified > 0:
             self._git_label.setText(
-                f"⎇ {b}  <span style='color: {theme.WARNING};'>●{modified}</span>"
+                f"{glyph}  <span style='color: {theme.WARNING};'>●{modified}</span>"
             )
             tip = f"Branch: {branch} — {modified} arquivo(s) modificado(s)"
         else:
-            self._git_label.setText(f"⎇ {b}")
+            self._git_label.setText(glyph)
             tip = f"Branch: {branch} — working tree limpo"
+        if is_worktree:
+            tip = f"Worktree isolada 🌿\n{tip}"
         self._git_label.setToolTip(tip)
         self._git_label.setVisible(True)
 
@@ -723,6 +736,7 @@ class TerminalChildWidget(QWidget):
             "model_full": self._model,
             "branch": self._branch,
             "modified": self._modified,
+            "is_worktree": self._is_worktree,
             "title": self._title,
             # `pr_url`: último MR/PR (compat). `pr_urls`: todos, pro footer
             # renderizar um link por MR quando a sessão tem várias pastas.

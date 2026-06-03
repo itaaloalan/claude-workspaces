@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.82.9] — 2026-06-03
+
+### Correções
+- **Arco do overlay gira DURANTE a troca de workspace de verdade.** O 0.82.6 deferia o
+  trabalho com `singleShot(0)`, mas ele continuava sendo UM bloco síncrono — o event
+  loop ficava bloqueado a troca inteira, o timer de animação não disparava e o arco só
+  girava depois (nos 150ms de mínimo visível, sobre conteúdo pronto). Agora: (1) o
+  ângulo do arco vem do relógio (`time.monotonic()`) em vez de passo fixo por tick —
+  qualquer repaint mostra a posição real do tempo decorrido; (2) a troca roda em 4
+  passos encadeados um por tick (`_run_switch_step`), com `LoadingOverlay.tick()`
+  (frame síncrono forçado) entre passos — o loop respira e o arco anima junto com o
+  carregamento. Epoch guard por passo mantém cliques rápidos A→B seguros.
+
+### Novidades
+- **Badge de worktree na sidebar.** A linha do console na sidebar agora mostra
+  `🌿 branch` em verde (no lugar de `⎇ branch`) quando o console roda numa git
+  worktree isolada — mesmo badge do header do terminal pane. Tooltip indica
+  "Worktree isolada" e `status_info()` expõe `is_worktree` pro footer.
+
 ## [0.82.8] — 2026-06-03
 
 ### Correções

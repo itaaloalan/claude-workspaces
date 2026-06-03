@@ -3211,9 +3211,11 @@ class MainWindow(QMainWindow):
         self._dispatch_runner_safety_net(ws, current_data)
 
     def _finish_workspace_switch(self, epoch: int) -> None:
-        """Conclui a troca de workspace deferida por `_on_selection_changed`
-        (roda no tick seguinte, com o arco do overlay já girando). Epoch
-        descarta cadeias obsoletas em cliques rápidos A→B."""
+        """Conclui a troca de workspace deferida por `_on_selection_changed`.
+        O trabalho é quebrado em PASSOS encadeados um por tick do event loop
+        (`_run_switch_step`) — um bloco síncrono único bloqueava o loop a
+        troca inteira e o arco do overlay só girava DEPOIS do conteúdo
+        pronto. Epoch descarta cadeias obsoletas em cliques rápidos A→B."""
         if epoch != getattr(self, "_switch_epoch", 0):
             return
         current = self.list_widget.currentItem()
@@ -3221,21 +3223,52 @@ class MainWindow(QMainWindow):
         if ws is None:
             self._hide_switch_loading()
             return
-        self.details.show_workspace(ws)
-        self._broadcast_workspace(ws)
-        self._update_status_bar(ws)
-        self.plugin_coord.dispatch_workspace_opened(ws.id)
-        self._sync_git_panel_to_active_console()
-        self._sync_terminal_for(ws)
-        self._refresh_status_bar_console()
-        self._refresh_console_runners_footer(current)
         current_data = (
             current.data(0, Qt.ItemDataRole.UserRole) if current is not None else None
         )
-        self._dispatch_runner_safety_net(ws, current_data)
-        # Esconde o overlay agora que está tudo pronto (respeitando o
-        # mínimo visível pra animação não virar um flash).
-        self._finish_switch_loading()
+        steps = [
+            # Mais pesado: detecta stacks, rebuilda botões de IDE, sessões.
+            lambda: self.details.show_workspace(ws),
+            lambda: (
+                self._broadcast_workspace(ws),
+                self._update_status_bar(ws),
+                self.plugin_coord.dispatch_workspace_opened(ws.id),
+            ),
+            # Pesado: runner areas + refresh dos children dos consoles.
+            lambda: (
+                self._sync_git_panel_to_active_console(),
+                self._sync_terminal_for(ws),
+            ),
+            lambda: (
+                self._refresh_status_bar_console(),
+                self._refresh_console_runners_footer(current),
+                self._dispatch_runner_safety_net(ws, current_data),
+            ),
+        ]
+        self._run_switch_step(epoch, steps)
+
+    def _run_switch_step(self, epoch: int, steps: list) -> None:
+        """Executa o próximo passo da troca e re-agenda o resto pro tick
+        seguinte — o event loop respira entre passos (paint/timer) e o arco
+        do overlay anima DURANTE a troca, não só depois."""
+        if epoch != getattr(self, "_switch_epoch", 0):
+            return  # clique rápido A→B: cadeia obsoleta morre; a nova assume
+        # 1 frame síncrono garantido por passo, mesmo se o loop não agendar
+        # paint entre os ticks (ângulo vem do relógio — mostra rotação real).
+        self._loading_overlay.tick()
+        try:
+            steps[0]()
+        except Exception:
+            # Um passo falhando não pode deixar o overlay preso — o fallback
+            # de 1200ms (_loading_hide_timer) cobre o resto.
+            log.exception("passo da troca de workspace falhou")
+        rest = steps[1:]
+        if rest:
+            QTimer.singleShot(0, lambda: self._run_switch_step(epoch, rest))
+        else:
+            # Esconde o overlay agora que está tudo pronto (respeitando o
+            # mínimo visível pra animação não virar um flash).
+            self._finish_switch_loading()
 
     def _dispatch_runner_safety_net(self, ws: "Workspace", current_data) -> None:
         # Safety net: clicks em RunnerChildWidget muitas vezes não
@@ -5813,7 +5846,7 @@ class MainWindow(QMainWindow):
             term = self._terminal_widget_for(tab_id)
             if term is None or term.claude_cwd() != folder:
                 continue
-            widget.update_git_info(branch, modified)
+            widget.update_git_info(branch, modified, term.is_worktree())
         # Aciona busca de PR/MR em paralelo sempre que a branch é conhecida.
         if branch:
             self._pr_poller.request(folder, branch)
