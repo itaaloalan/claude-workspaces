@@ -221,3 +221,92 @@ def test_claude_session_label_with_origin():
         origin_cwd="/home/user/my-project",
     )
     assert "[my-project]" in s.label(include_origin=True)
+
+
+# ------------------------------------------------------- scan_worktree_adds
+
+
+def _bash_line(command: str) -> str:
+    return json.dumps({
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "name": "Bash",
+                "input": {"command": command},
+            }],
+        },
+    })
+
+
+def test_scan_worktree_adds_detects_skill_style(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(
+        _bash_line('git worktree add "/repo.claude/ws_feat_x" -b "feat/x" "origin/develop"')
+        + "\n",
+        encoding="utf-8",
+    )
+    hits, offset = scan_worktree_adds(f, 0)
+    assert hits == [("/repo.claude/ws_feat_x", "feat/x")]
+    assert offset == f.stat().st_size
+
+
+def test_scan_worktree_adds_detects_b_before_path(tmp_path: Path):
+    # Ordem usada pelo git_worktree.add_worktree: add -b <branch> <path> <base>
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(
+        _bash_line("git worktree add -b claude/123 /tmp/wt main") + "\n",
+        encoding="utf-8",
+    )
+    hits, _ = scan_worktree_adds(f, 0)
+    assert hits == [("/tmp/wt", "claude/123")]
+
+
+def test_scan_worktree_adds_incremental_offset(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(_bash_line("ls -la") + "\n", encoding="utf-8")
+    hits, offset = scan_worktree_adds(f, 0)
+    assert hits == []
+    # Nova linha com worktree add: só ela é lida a partir do offset.
+    with f.open("a", encoding="utf-8") as fp:
+        fp.write(_bash_line('git worktree add "/tmp/wt2" -b "fix/y"') + "\n")
+    hits, offset2 = scan_worktree_adds(f, offset)
+    assert hits == [("/tmp/wt2", "fix/y")]
+    assert offset2 > offset
+    # Re-scan no offset final: nada novo.
+    hits, _ = scan_worktree_adds(f, offset2)
+    assert hits == []
+
+
+def test_scan_worktree_adds_ignores_partial_line(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    full = _bash_line('git worktree add "/tmp/wt3"') + "\n"
+    partial = full[: len(full) // 2]  # sessão ainda escrevendo
+    f.write_text(partial, encoding="utf-8")
+    hits, offset = scan_worktree_adds(f, 0)
+    assert hits == [] and offset == 0
+    # Completa a linha → próximo scan pega.
+    f.write_text(full, encoding="utf-8")
+    hits, _ = scan_worktree_adds(f, 0)
+    assert hits == [("/tmp/wt3", "")]
+
+
+def test_scan_worktree_adds_ignores_non_bash_mentions(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    # Texto de assistant falando sobre worktree add (não é tool_use Bash).
+    line = json.dumps({
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "vou rodar git worktree add em /x"}],
+        },
+    })
+    f.write_text(line + "\n", encoding="utf-8")
+    hits, _ = scan_worktree_adds(f, 0)
+    assert hits == []

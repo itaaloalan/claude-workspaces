@@ -170,6 +170,10 @@ class TerminalWidget(QWidget):
     # Emitido quando uma URL de PR do GitHub é detectada no output pela
     # primeira vez na sessão. Propaga pra sidebar e status bar via MainWindow.
     pr_detected = Signal(str)
+    # Emitido quando a SESSÃO cria um git worktree (ex.: skill
+    # /criar-worktree) e o console o adota — path do worktree + branch.
+    # Path vazio = associação desfeita (worktree removido).
+    worktree_adopted = Signal(str, str)
 
     # IDs de sessões já reivindicadas por outros TerminalWidgets vivos.
     # Why: dois terminais no mesmo cwd disputam o mesmo dir de JSONLs e
@@ -224,6 +228,13 @@ class TerminalWidget(QWidget):
         # expostos via getters pra alimentar runners/git panel/footer.
         self._worktree_label: str = ""
         self._is_worktree: bool = False
+        # Worktree criado PELA sessão (skill /criar-worktree) e adotado em
+        # runtime — dir vigia git status/sidebar; offset/path controlam o
+        # scan incremental do JSONL (offset 0 → restart re-associa).
+        self._worktree_dir: str = ""
+        self._wt_scan_offset: int = 0
+        self._wt_scan_path: str = ""
+        self._wt_scan_last: float = 0.0
         self._claude_resume_id: str | None = None
         self._claude_start_time: float = 0.0
         self._session_preview: str | None = None
@@ -239,6 +250,10 @@ class TerminalWidget(QWidget):
         # `effective_title()`. Persistido em `session_marks.json` por
         # session_id assim que a sessão é reivindicada.
         self._custom_name: str = ""
+        # mtime do session_marks.json visto no último poll — detecta
+        # renames externos (skill /criar-worktree etc.) escritos direto
+        # no arquivo enquanto a sessão está aberta.
+        self._marks_mtime_seen: float = 0.0
         # Sinaliza que esta sessão foi reaberta no startup (--resume após
         # fechar/abrir o app). Usado pra decidir se o botão ▶ continuar
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
@@ -572,6 +587,34 @@ class TerminalWidget(QWidget):
             self._last_status, self._last_working, self._last_needs_decision
         )
 
+    def _check_external_rename(self) -> None:
+        """Detecta rename feito por FORA do app: a skill /criar-worktree
+        (ou qualquer processo) pode escrever `custom_name` direto no
+        session_marks.json. Compara o mtime do arquivo (stat barato a cada
+        poll) e, quando muda, re-lê o nome da sessão reivindicada e
+        propaga pra sidebar via activity_changed — mesmo caminho do
+        rename interno (set_custom_name)."""
+        sid = self._claimed_session_id
+        if not sid:
+            return
+        try:
+            from ..session_marks import get_custom_name, marks_mtime
+            mtime = marks_mtime()
+            if mtime == self._marks_mtime_seen:
+                return
+            self._marks_mtime_seen = mtime
+            saved = get_custom_name(sid)
+        except Exception:
+            log.debug("falha ao checar rename externo", exc_info=True)
+            return
+        # Só aplica nome não-vazio: entrada ausente/limpa não apaga um
+        # rename feito dentro do app nesta execução.
+        if saved and saved != self._custom_name:
+            self._custom_name = saved
+            self.activity_changed.emit(
+                self._last_status, self._last_working, self._last_needs_decision
+            )
+
     def _try_resolve_session(self) -> None:
         if self._session_resolved or not self._claude_cwd:
             return
@@ -677,6 +720,64 @@ class TerminalWidget(QWidget):
         """True se o cwd do console é um git worktree isolado."""
         return bool(getattr(self, "_is_worktree", False))
 
+    def worktree_dir(self) -> str:
+        """Dir do worktree adotado em runtime (criado pela sessão via
+        /criar-worktree). "" quando o console não adotou worktree."""
+        return getattr(self, "_worktree_dir", "")
+
+    def _scan_session_worktrees(self) -> None:
+        """Scan incremental (throttled ~1s) do JSONL da sessão procurando
+        `git worktree add` rodado pela própria sessão. Ao achar um worktree
+        válido, adota: 🌿 na sidebar/header e git status do worktree."""
+        now = time.monotonic()
+        if now - self._wt_scan_last < 1.0:
+            return
+        self._wt_scan_last = now
+        # Worktree adotado sumiu (ex.: /criar-worktree remover)? Desfaz.
+        if self._worktree_dir and not Path(self._worktree_dir).is_dir():
+            self._worktree_dir = ""
+            self._is_worktree = False
+            self._worktree_label = ""
+            self.worktree_adopted.emit("", "")
+        path = self.claimed_session_path()
+        if path is None or self.backend() != "claude":
+            return
+        spath = str(path)
+        if spath != self._wt_scan_path:
+            # Sessão (re)vinculada: recomeça o scan do zero — restart/resume
+            # re-encontra worktrees criados antes neste transcript.
+            self._wt_scan_path = spath
+            self._wt_scan_offset = 0
+        from ..claude_sessions import scan_worktree_adds
+        try:
+            hits, self._wt_scan_offset = scan_worktree_adds(
+                path, self._wt_scan_offset
+            )
+        except Exception:
+            log.debug("scan de worktree no JSONL falhou", exc_info=True)
+            return
+        for wt_path, branch in hits:
+            p = Path(wt_path)
+            if not p.is_absolute() and self._claude_cwd:
+                p = Path(self._claude_cwd) / p
+            self.adopt_worktree(str(p), branch)
+
+    def adopt_worktree(self, path: str, branch: str = "") -> None:
+        """Associa o console a um git worktree criado durante a sessão.
+        Valida que o path é mesmo uma worktree linkada antes de adotar."""
+        from ..git_worktree import current_branch, is_worktree_path
+        if not Path(path).is_dir() or not is_worktree_path(path):
+            return
+        if path == self._worktree_dir:
+            return
+        if not branch:
+            branch = current_branch(path)
+        self._worktree_dir = path
+        self._is_worktree = True
+        self._worktree_label = f" · {branch}" if branch else " · isolado"
+        log.info("console adotou worktree %s (branch=%s)", path, branch)
+        self.worktree_adopted.emit(path, branch)
+
     def backend(self) -> str:
         return getattr(self, "_backend", "claude")
 
@@ -710,6 +811,12 @@ class TerminalWidget(QWidget):
         )
         # Tenta resolver o título da sessão (Claude grava JSONL ~1-3s após start)
         self._try_resolve_session()
+        # Rename externo (skill escrevendo session_marks.json): aplica
+        # antes dos early-returns abaixo pra sidebar atualizar mesmo idle.
+        self._check_external_rename()
+        # Worktrees criados pela sessão (skill /criar-worktree): scan
+        # incremental do JSONL, throttled — antes dos early-returns abaixo.
+        self._scan_session_worktrees()
         # Verifica callback de "pronto" independente do dirty check —
         # depende do buffer corrente, não do diff de status
         if self._ready_callback is not None and has_idle_marker(

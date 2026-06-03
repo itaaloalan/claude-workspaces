@@ -5120,6 +5120,21 @@ class MainWindow(QMainWindow):
         ws = self.workspaces_coord.find_by_id(workspace_id)
         return ws is not None and ws.minimized
 
+    def _on_worktree_adopted(self, path: str, branch: str) -> None:
+        """A sessão de um console criou (ou removeu) um git worktree em
+        runtime — pede git status do worktree na hora (chip 🌿 da sidebar
+        via _on_repo_status_ready) e atualiza o header do pane."""
+        if path:
+            self._repo_poller.request(path)
+        else:
+            # Associação desfeita (worktree removido) — re-polla o cwd pra
+            # voltar o chip ao repo principal.
+            term = self.sender()
+            cwd = term.claude_cwd() if isinstance(term, TerminalWidget) else ""
+            if cwd:
+                self._repo_poller.request(cwd)
+        self._refresh_terminal_pane_title()
+
     def _on_notif_open_target(self, notification) -> None:
         """Click em 'Abrir' num card do NotificationCenter."""
         ws_id = notification.workspace_id
@@ -5278,6 +5293,12 @@ class MainWindow(QMainWindow):
         if term is not None:
             term.pr_detected.connect(widget.set_pr_url)
             term.pr_detected.connect(lambda _url: self._refresh_status_bar_console())
+            # Worktree adotado em runtime (skill /criar-worktree): poll do
+            # git status do worktree + header com 🌿 na hora. Guard contra
+            # conexão duplicada — este setup roda a cada rebuild da sidebar.
+            if not getattr(term, "_wt_signal_wired", False):
+                term._wt_signal_wired = True
+                term.worktree_adopted.connect(self._on_worktree_adopted)
 
     def _add_terminal_child(
         self,
@@ -5472,6 +5493,10 @@ class MainWindow(QMainWindow):
             cwd = term.claude_cwd()
             if cwd:
                 self._repo_poller.request(cwd)
+            # Worktree adotado em runtime (skill /criar-worktree): o chip da
+            # sidebar passa a refletir o status DELE, então polla também.
+            if term.worktree_dir():
+                self._repo_poller.request(term.worktree_dir())
             # Pastas extra (--add-dir) podem ter repos git próprios com MR/PR
             # independentes. Pede status direto aqui (não só como efeito
             # colateral encadeado em _on_repo_status_ready) pra garantir que
@@ -5843,9 +5868,10 @@ class MainWindow(QMainWindow):
     def _on_repo_status_ready(
         self, folder: str, branch: str, modified: int
     ) -> None:
-        """Aplica branch+contagem em todos os children cuja claude_cwd
-        bate com `folder`. Um mesmo folder pode aparecer em vários
-        consoles do mesmo (ou de outro) workspace."""
+        """Aplica branch+contagem em todos os children cujo alvo git bate
+        com `folder`. O alvo é o worktree adotado em runtime (quando a
+        sessão criou um via /criar-worktree) ou, sem worktree, o claude_cwd.
+        Um mesmo folder pode aparecer em vários consoles."""
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
             if item is None:
                 continue
@@ -5853,7 +5879,10 @@ class MainWindow(QMainWindow):
             if not isinstance(widget, TerminalChildWidget):
                 continue
             term = self._terminal_widget_for(tab_id)
-            if term is None or term.claude_cwd() != folder:
+            if term is None:
+                continue
+            target = term.worktree_dir() or term.claude_cwd()
+            if target != folder:
                 continue
             widget.update_git_info(branch, modified, term.is_worktree())
         # Aciona busca de PR/MR em paralelo sempre que a branch é conhecida.

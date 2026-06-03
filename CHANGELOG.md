@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.83.0] — 2026-06-03
+
+### Novidades
+- **Console adota worktree criado pela própria sessão (skill /criar-worktree).** O
+  TerminalWidget agora faz scan incremental do JSONL da sessão (throttled ~1s, por
+  offset de bytes) procurando `git worktree add` rodado via Bash. Ao detectar um
+  worktree válido (`is_worktree_path`), o console adota: chip da sidebar vira
+  `🌿 <branch>` com o git status DO WORKTREE (não mais do repo principal), o header do
+  pane ganha o badge na hora, e o git poller passa a vigiar o diretório do worktree.
+  Restart/resume re-associa (scan refaz o transcript); `/criar-worktree remover` desfaz
+  a associação e o chip volta ao repo principal. Suporta as duas ordens de argumento
+  (`add <path> -b <branch>` e `add -b <branch> <path>`), com aspas/paths com espaço.
+
 ## [0.82.10] — 2026-06-03
 
 ### Correções

@@ -155,6 +155,87 @@ def read_recent_turns(
     return all_turns[-max_total:]
 
 
+def scan_worktree_adds(
+    jsonl_path: Path, offset: int
+) -> tuple[list[tuple[str, str]], int]:
+    """Lê linhas novas do JSONL a partir de `offset` (bytes) procurando
+    comandos Bash `git worktree add ...` executados pela sessão (ex.: skill
+    /criar-worktree). Devolve ([(worktree_path, branch_ou_vazio), ...],
+    novo_offset).
+
+    Detecção barata: substring 'worktree add' na linha crua antes do
+    json.loads. Só consome linhas terminadas em \\n — a última pode estar
+    parcial (sessão ainda escrevendo) e fica pro próximo scan. Quem chama
+    valida o path (is_dir + is_worktree_path) antes de associar."""
+    import shlex
+
+    try:
+        with jsonl_path.open("rb") as fp:
+            fp.seek(offset)
+            data = fp.read()
+    except OSError:
+        return [], offset
+    if not data:
+        return [], offset
+    end = data.rfind(b"\n")
+    if end < 0:
+        return [], offset
+    new_offset = offset + end + 1
+    hits: list[tuple[str, str]] = []
+    for raw in data[: end + 1].splitlines():
+        if b"worktree add" not in raw:
+            continue
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        inner = msg.get("message")
+        if not isinstance(inner, dict):
+            continue
+        content = inner.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if (
+                not isinstance(block, dict)
+                or block.get("type") != "tool_use"
+                or block.get("name") != "Bash"
+            ):
+                continue
+            cmd = str((block.get("input") or {}).get("command") or "")
+            if "worktree add" not in cmd:
+                continue
+            try:
+                toks = shlex.split(cmd)
+            except ValueError:
+                toks = cmd.split()
+            # Acha o par "worktree add" e parseia o resto posicionalmente —
+            # cobre tanto `add <path> -b <branch>` (skill) quanto
+            # `add -b <branch> <path> [base]` (git_worktree.add_worktree).
+            for i in range(len(toks) - 1):
+                if toks[i] != "worktree" or toks[i + 1] != "add":
+                    continue
+                rest = toks[i + 2:]
+                branch = ""
+                positional: list[str] = []
+                j = 0
+                while j < len(rest):
+                    t = rest[j]
+                    if t in ("-b", "-B") and j + 1 < len(rest):
+                        branch = rest[j + 1]
+                        j += 2
+                        continue
+                    if t.startswith("-"):
+                        j += 1
+                        continue
+                    positional.append(t)
+                    j += 1
+                if positional:
+                    hits.append((positional[0], branch))
+                break
+    return hits, new_offset
+
+
 def list_sessions(project_path: str, limit: int = 15) -> list[ClaudeSession]:
     d = project_sessions_dir(project_path)
     if not d.is_dir():
