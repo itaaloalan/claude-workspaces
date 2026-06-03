@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.81.2] — 2026-06-03
+
+### Novidades
+- **Badge de worktree no header do console.** Quando o console roda numa git worktree
+  isolada, o cabeçalho do terminal pane passa a exibir um badge destacado
+  **🌿 worktree · \<nome\>** na linha 2 (ao lado de branch/modelo/mcp), deixando claro
+  que aquele console está numa working tree separada e em qual. Lê de
+  `TerminalWidget.is_worktree()`/`worktree_label()`. O badge de MCP (scope=project)
+  continua como antes.
+
 ## [0.81.1] — 2026-06-03
 
 ### Melhorias

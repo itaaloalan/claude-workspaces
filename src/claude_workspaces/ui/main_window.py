@@ -3665,6 +3665,20 @@ class MainWindow(QMainWindow):
                         )
         except Exception:
             pass
+        # Worktree: badge destacado quando o console roda numa git worktree
+        # isolada. `worktree_label()` vem como " · <branch>" — extrai o nome.
+        worktree_html = ""
+        if term.is_worktree():
+            from html import escape
+            wt = term.worktree_label().strip().lstrip("·").strip()
+            label = wt or "isolado"
+            if len(label) > 30:
+                label = label[:29] + "…"
+            worktree_html = (
+                f" <span style='color:#555'>·</span> "
+                f"<span style='color:#9aa0a6'>worktree</span> "
+                f"<span style='color:#5ac38a;font-weight:600'>🌿 {escape(label)}</span>"
+            )
         # MCPs do workspace (scope=project) — exclui MCPs globais do user
         # (~/.claude.json) que são comuns a todos os workspaces e poluem.
         mcp_html = ""
@@ -3692,7 +3706,7 @@ class MainWindow(QMainWindow):
         _DOT_PREFIX = " <span style='color:#555'>·</span> "
         line2_parts: list[str] = [
             frag[len(_DOT_PREFIX):] if frag.startswith(_DOT_PREFIX) else frag
-            for frag in (branch_html, model_html, mcp_html)
+            for frag in (branch_html, worktree_html, model_html, mcp_html)
             if frag
         ]
         line2 = _DOT_PREFIX.join(line2_parts)
