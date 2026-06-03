@@ -188,6 +188,8 @@ class MainWindow(QMainWindow):
             lambda _c: self._refresh_unread_badges()
         )
         self.notif_service.reminder_due.connect(self._on_notif_reminder_due)
+        # Workspace minimizado não notifica nada (popup, discord, tray, sino).
+        self.notif_service.set_workspace_silencer(self._workspace_is_minimized)
         # Inicializa a contagem do sino imediatamente — service pode ter
         # itens vindos do disco antes do primeiro signal.
         self.top_bar.set_inbox_count(self.notif_service.unread_count())
@@ -4780,6 +4782,12 @@ class MainWindow(QMainWindow):
                 return
             self._ready_alert_last[tab_id] = now
         ws = self.workspaces_coord.find_by_id(info.get("workspace_id", ""))
+        # Workspace minimizado não notifica nada — early-return antes do
+        # notify() e do fallback tray.showMessage (o silencer do service só
+        # cobre o primeiro).
+        if ws is not None and ws.minimized:
+            log.debug("inbox_alert suprimido — workspace %s minimizado", ws.id)
+            return
         ws_name = ws.name if ws else "Workspace"
         kind = info.get("kind", "ready")
         if is_reminder:
@@ -5044,6 +5052,12 @@ class MainWindow(QMainWindow):
     def _workspace_name_for_notif(self, workspace_id: str) -> str:
         ws = self.workspaces_coord.find_by_id(workspace_id)
         return ws.name if ws else workspace_id
+
+    def _workspace_is_minimized(self, workspace_id: str) -> bool:
+        """Silencer do NotificationService: workspace minimizado não
+        notifica nada (popup, discord, tray, sino, reminders)."""
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        return ws is not None and ws.minimized
 
     def _on_notif_open_target(self, notification) -> None:
         """Click em 'Abrir' num card do NotificationCenter."""

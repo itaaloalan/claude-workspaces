@@ -204,6 +204,36 @@ def test_service_muted_workspace_is_silenced(tmp_path: Path):
     assert a is None and b is not None
 
 
+def test_service_workspace_silencer_suppresses_notify(tmp_path: Path):
+    svc = NotificationService(tmp_path / "notif.json")
+    svc.set_workspace_silencer(lambda ws_id: ws_id == "w-min")
+    added = []
+    svc.notification_added.connect(lambda n: added.append(n))
+    a = svc.notify(NotificationKind.AGENT_WAITING, "t", workspace_id="w-min")
+    b = svc.notify(NotificationKind.AGENT_WAITING, "t", workspace_id="w-ok")
+    assert a is None, "workspace silenciado nem cria a entrada"
+    assert b is not None
+    assert len(added) == 1
+    assert svc.list(workspace_id="w-min") == []
+
+
+def test_service_workspace_silencer_skips_reminders(tmp_path: Path):
+    svc = NotificationService(tmp_path / "notif.json")
+    n = svc.notify(NotificationKind.AGENT_WAITING, "t", workspace_id="w1")
+    assert n is not None
+    # Workspace minimizado depois da notificação criada: reminder não dispara.
+    svc.set_workspace_silencer(lambda ws_id: ws_id == "w1")
+    svc._last_reminder[n.id] = 0.0  # força "já passou do intervalo"
+    fired = []
+    svc.reminder_due.connect(lambda x: fired.append(x))
+    svc._tick_reminders()
+    assert fired == []
+    # Restaurado → reminder volta a disparar.
+    svc.set_workspace_silencer(None)
+    svc._tick_reminders()
+    assert len(fired) == 1
+
+
 def test_service_unread_by_workspace_and_session(tmp_path: Path):
     svc = NotificationService(tmp_path / "notif.json")
     svc.notify(NotificationKind.AGENT_WAITING, "a", workspace_id="w1", session_id="s1")

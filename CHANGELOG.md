@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.82.7] — 2026-06-03
+
+### Novidades
+- **Workspace minimizado não notifica nada.** Minimizar um workspace agora silencia
+  automaticamente todas as notificações dele — popup nativo D-Bus, Discord, tray, sino/
+  NotificationCenter e reminders. A notificação nem é criada: o `NotificationService`
+  ganhou um silencer injetável (`set_workspace_silencer`) avaliado em cada `notify()` e
+  em `_tick_reminders()` (cobre pendências criadas antes de minimizar), e o
+  `_on_inbox_alert` faz early-return pro fallback `tray.showMessage` que não passa pelo
+  service. Notificações globais sem workspace (ex.: aviso de uso do plano) seguem
+  normais, e restaurar o workspace volta a notificar.
+
 ## [0.82.6] — 2026-06-03
 
 ### Melhorias

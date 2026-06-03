@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +69,24 @@ class NotificationService(QObject):
         # Última vez que cada entrada foi relembrada (in-memory; não persiste —
         # se o app reinicia, melhor relembrar de novo).
         self._last_reminder: dict[str, float] = {}
+        # Silencer injetável: callable(workspace_id) -> True pra suprimir
+        # notificações do workspace (ex.: minimizado). Avaliado a cada
+        # notify/reminder — estado dinâmico, não preferência persistida.
+        self._workspace_silencer: Callable[[str], bool] | None = None
+
+    def set_workspace_silencer(self, fn: Callable[[str], bool] | None) -> None:
+        """Callable(workspace_id) -> True pra suprimir notificações do
+        workspace (ex.: minimizado). Avaliado a cada notify/reminder."""
+        self._workspace_silencer = fn
+
+    def _workspace_is_silenced(self, workspace_id: str | None) -> bool:
+        if not workspace_id or self._workspace_silencer is None:
+            return False
+        try:
+            return bool(self._workspace_silencer(workspace_id))
+        except Exception:
+            log.debug("workspace_silencer falhou", exc_info=True)
+            return False
 
     # ---------------------------------------------------------- preferences
 
@@ -121,6 +140,11 @@ class NotificationService(QObject):
         # Mute por workspace
         if workspace_id and workspace_id in (self._preferences.get("muted_workspaces") or []):
             log.debug("notif silenciada (workspace %s mutado)", workspace_id)
+            return None
+        # Silencer dinâmico (workspace minimizado): nem cria a entrada —
+        # nada de popup, discord, tray ou sino.
+        if self._workspace_is_silenced(workspace_id):
+            log.debug("notif silenciada (workspace %s minimizado)", workspace_id)
             return None
 
         candidate = Notification.make(
@@ -257,7 +281,9 @@ class NotificationService(QObject):
         secs = max(15, int(self._preferences.get("reminder_seconds", 120)))
         now = time.time()
         for n in self._store.actionable_pending():
-            if n.seen:
+            # Workspace silenciado (minimizado) não recebe nem reminders de
+            # pendências criadas antes de minimizar.
+            if n.seen or self._workspace_is_silenced(n.workspace_id):
                 continue
             last = self._last_reminder.get(n.id, n.created_at)
             if (now - last) >= secs:
