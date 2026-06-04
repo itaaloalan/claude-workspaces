@@ -1765,6 +1765,7 @@ class MainWindow(QMainWindow):
         self._set_console_runners_footer = builder.set_console_runners
         builder.console_runner_requested.connect(self._open_footer_runner)
         builder.runner_toggle_requested.connect(self._toggle_runner_from_sidebar)
+        builder.runner_restart_requested.connect(self._restart_runner_from_sidebar)
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -2907,7 +2908,16 @@ class MainWindow(QMainWindow):
             widget = RunnerChildWidget(
                 runner.name or "(runner)",
                 lambda rid=runner.id, wid=ws.id: self._toggle_runner_from_sidebar(wid, rid),
+                on_restart=lambda rid=runner.id, wid=ws.id:
+                    self._restart_runner_from_sidebar(wid, rid),
             )
+            # Menu 📁: apontar o runner pro diretório de um console aberto.
+            widget.set_cwd_menu(
+                lambda wid=ws.id: self._console_dirs_for(wid),
+                lambda path, rid=runner.id, wid=ws.id:
+                    self._point_runner_cwd(wid, rid, path),
+            )
+            cwd = runner.cwd or (ws.primary_folder or "")
             area = self._runner_areas.get(ws.id)
             if area is not None:
                 rw = area.widget_for(runner.id)
@@ -2915,11 +2925,13 @@ class MainWindow(QMainWindow):
                     widget.set_state(rw.current_state())
                     widget.set_url(rw.current_url())
                     widget.set_status(rw.current_status_label())
+                    cwd = rw.effective_cwd()
                     child.setSizeHint(0, QSize(0, widget.preferred_height() + 2))
             else:
                 # Sem RunnerArea instanciada ainda → usa o browser_url da
                 # config como fallback (URL detectada precisa do runtime).
                 widget.set_url(runner.browser_url or "")
+            widget.set_cwd(cwd)
             group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
@@ -2948,14 +2960,17 @@ class MainWindow(QMainWindow):
                 term_item.removeChild(child_item)
         return
 
-    def _toggle_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
-        """Inicia/para um runner pela sidebar. Cria a RunnerArea sob
-        demanda (lazy) — necessário pra workspaces nunca abertos. Tenta
-        primeiro o painel do workspace; depois cai pros painéis de console
-        (runners scoped a um session_id moram em outra RunnerArea)."""
+    def _runner_widget_from_sidebar(
+        self, workspace_id: str, runner_id: str
+    ):
+        """Resolve o RunnerWidget de um runner clicado na sidebar. Cria a
+        RunnerArea sob demanda (lazy) — necessário pra workspaces nunca
+        abertos. Tenta primeiro o painel do workspace; depois cai pros
+        painéis de console (runners scoped a um session_id moram em outra
+        RunnerArea). None se não achou."""
         ws = self.workspaces_coord.find_by_id(workspace_id)
         if ws is None:
-            return
+            return None
         rw = None
         area = self._get_or_create_runner_area(ws)
         if area is not None:
@@ -2965,12 +2980,51 @@ class MainWindow(QMainWindow):
                 rw = carea.widget_for(runner_id)
                 if rw is not None:
                     break
+        return rw
+
+    def _toggle_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
+        """Inicia/para um runner pela sidebar."""
+        rw = self._runner_widget_from_sidebar(workspace_id, runner_id)
         if rw is None:
             return
         if rw.is_running():
             rw.stop()
         else:
             rw.start()
+
+    def _restart_runner_from_sidebar(self, workspace_id: str, runner_id: str) -> None:
+        """Reinicia um runner pela sidebar (botão ↻)."""
+        rw = self._runner_widget_from_sidebar(workspace_id, runner_id)
+        if rw is not None:
+            rw.restart()
+
+    def _point_runner_cwd(
+        self, workspace_id: str, runner_id: str, path: str
+    ) -> None:
+        """Aponta o cwd do runner (menu 📁 da sidebar) — "" volta ao padrão.
+        Aplica no próximo start/restart (RunnerWidget.set_cwd_override)."""
+        rw = self._runner_widget_from_sidebar(workspace_id, runner_id)
+        if rw is not None:
+            rw.set_cwd_override(path)
+
+    def _find_runner_child_widget(self, workspace_id: str, runner_id: str):
+        """RunnerChildWidget da linha do runner na sidebar, ou None."""
+        from .runner_child_widget import RunnerChildWidget
+        item = self._runner_tree_items.get(workspace_id, {}).get(runner_id)
+        if item is None:
+            return None
+        widget = self.list_widget.itemWidget(item, 0)
+        return widget if isinstance(widget, RunnerChildWidget) else None
+
+    def _on_runner_cwd_changed(
+        self, workspace_id: str, runner_id: str, cwd: str
+    ) -> None:
+        """Cwd efetivo de um runner mudou (chip 📁 do painel ou da sidebar) —
+        espelha na linha da sidebar e no footer."""
+        widget = self._find_runner_child_widget(workspace_id, runner_id)
+        if widget is not None:
+            widget.set_cwd(cwd)
+        self._refresh_console_runners_footer()
 
     def _refresh_runner_children(self, workspace_id: str) -> None:
         ws_item = self._find_workspace_item(workspace_id)
@@ -3326,11 +3380,12 @@ class MainWindow(QMainWindow):
                     return area
             return None
 
-        rows: list[tuple[str, str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str, str, str]] = []
         for runner in runners:
             state = "idle"
             status = "parado"
             url = runner.browser_url or ""
+            cwd = runner.cwd or (ws.primary_folder or "")
             scope = "console" if runner.console_session_id else "workspace"
             area = _area_for_runner(runner)
             if area is not None:
@@ -3339,13 +3394,15 @@ class MainWindow(QMainWindow):
                     state = rw.current_state()
                     status = rw.current_status_label()
                     url = rw.current_url() or url
+                    cwd = rw.effective_cwd()
             scope_label = scope
             if runner.console_session_id:
                 branch = self._console_branch_for(runner.console_session_id)
                 if branch:
                     scope_label = f"{scope} · 🌿 {branch}"
             rows.append(
-                (ws.id, runner.id, runner.name or "(runner)", state, f"{scope_label} · {status}", url)
+                (ws.id, runner.id, runner.name or "(runner)", state,
+                 f"{scope_label} · {status}", url, cwd)
             )
         setter(rows)
 
@@ -3956,7 +4013,10 @@ class MainWindow(QMainWindow):
         area = self._active_terminal_area()
         term = area.tabs.currentWidget() if area is not None else None
         if isinstance(term, TerminalWidget):
-            cwd = term.claude_cwd()
+            # Worktree adotado em runtime tem precedência sobre o cwd do
+            # launch — sem isso o painel Git mostrava a branch do repo
+            # principal enquanto o console trabalhava no worktree.
+            cwd = term.worktree_dir() or term.claude_cwd()
             if cwd:
                 folders = [cwd, *term.extra_dirs()]
         panel.set_folders_override(folders)
@@ -4029,6 +4089,9 @@ class MainWindow(QMainWindow):
         )
         area.runner_status_changed.connect(
             lambda rid, txt, wid=ws.id: self._on_runner_status_changed(wid, rid, txt)
+        )
+        area.runner_cwd_changed.connect(
+            lambda rid, cwd, wid=ws.id: self._on_runner_cwd_changed(wid, rid, cwd)
         )
         return area
 
@@ -4159,6 +4222,10 @@ class MainWindow(QMainWindow):
         area.runner_status_changed.connect(
             lambda rid, txt, wid=workspace.id:
                 self._on_runner_status_changed(wid, rid, txt)
+        )
+        area.runner_cwd_changed.connect(
+            lambda rid, cwd, wid=workspace.id:
+                self._on_runner_cwd_changed(wid, rid, cwd)
         )
         self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
         # Painel mora no pane "Runners console" (separado) — não embute mais
@@ -5177,6 +5244,9 @@ class MainWindow(QMainWindow):
                 if area is not None:
                     area.set_default_cwd(path or (term.claude_cwd() or ""))
         self._refresh_terminal_pane_title()
+        # Painel Git (Ferramentas) passa a inspecionar o worktree do console
+        # ativo — sem isso mostrava a branch do repo principal.
+        self._sync_git_panel_to_active_console()
 
     def _on_notif_open_target(self, notification) -> None:
         """Click em 'Abrir' num card do NotificationCenter."""

@@ -87,6 +87,7 @@ class RunnerChildWidget(QWidget):
         self,
         name: str,
         on_toggle: Callable[[], None],
+        on_restart: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -161,6 +162,27 @@ class RunnerChildWidget(QWidget):
         self._addr_label.mousePressEvent = self._on_addr_clicked  # type: ignore[assignment]
         card_layout.addWidget(self._addr_label, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # Chip 📁: aponta o runner pro diretório de um console (worktree).
+        # Hover-only, igual aos demais botões de ação.
+        self._cwd_btn = QPushButton("📁")
+        self._cwd_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cwd_btn.setFixedSize(24, 24)
+        self._cwd_btn.setStyleSheet(_BTN_QSS)
+        self._cwd_btn.setToolTip("Apontar o runner pro diretório de um console")
+        self._cwd_btn.clicked.connect(self._open_cwd_menu)
+        self._cwd_btn.setVisible(False)
+        card_layout.addWidget(self._cwd_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self._restart_btn = QPushButton("↻")
+        self._restart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._restart_btn.setFixedSize(24, 24)
+        self._restart_btn.setStyleSheet(_BTN_QSS)
+        self._restart_btn.setToolTip("Reiniciar runner")
+        if on_restart is not None:
+            self._restart_btn.clicked.connect(lambda _=False: on_restart())
+        self._restart_btn.setVisible(False)
+        card_layout.addWidget(self._restart_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self._toggle_btn = QPushButton("▶")
         self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.setFixedSize(24, 24)
@@ -172,21 +194,86 @@ class RunnerChildWidget(QWidget):
         card_layout.addWidget(self._toggle_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._state = "idle"
+        # Cwd efetivo do runner (📁 na linha de status; path no tooltip).
+        self._cwd_path: str = ""
+        self._cwd_options_provider: Callable | None = None
+        self._on_cwd_selected: Callable[[str], None] | None = None
+        self._has_restart = on_restart is not None
         self._apply_state()
 
     # ---- hover: show/hide action buttons --------------------------------
 
     def enterEvent(self, event) -> None:  # noqa: D401
         self._toggle_btn.setVisible(True)
+        self._restart_btn.setVisible(self._has_restart)
+        self._cwd_btn.setVisible(self._on_cwd_selected is not None)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: D401
         self._toggle_btn.setVisible(False)
+        self._restart_btn.setVisible(False)
+        self._cwd_btn.setVisible(False)
         super().leaveEvent(event)
+
+    # ---- cwd (📁) --------------------------------------------------------
+
+    def set_cwd(self, path: str) -> None:
+        """Cwd efetivo do runner — mostra `📁 <pasta>` na linha de status e
+        o path completo no tooltip do card."""
+        self._cwd_path = (path or "").strip()
+        self._apply_state()
+        self._refresh_tooltip()
+
+    def set_cwd_menu(
+        self,
+        provider: Callable,
+        on_selected: Callable[[str], None],
+    ) -> None:
+        """`provider() -> list[(label, path)]` com os diretórios dos consoles
+        abertos; `on_selected(path)` aponta o runner ("" = padrão)."""
+        self._cwd_options_provider = provider
+        self._on_cwd_selected = on_selected
+
+    def _open_cwd_menu(self) -> None:
+        if self._on_cwd_selected is None:
+            return
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+
+        def add_option(label: str, path: str, target: str) -> None:
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(bool(path) and path == self._cwd_path)
+            act.triggered.connect(
+                lambda _=False, t=target: self._on_cwd_selected(t)
+            )
+
+        add_option("Padrão do runner", "", "")
+        dirs: list[tuple[str, str]] = []
+        if self._cwd_options_provider is not None:
+            try:
+                dirs = list(self._cwd_options_provider() or [])
+            except Exception:
+                pass
+        if dirs:
+            menu.addSeparator()
+            sec = menu.addAction("Consoles abertos")
+            sec.setEnabled(False)
+            for label, path in dirs:
+                if path:
+                    add_option(f"{label}  ({path})", path, path)
+        menu.exec(self._cwd_btn.mapToGlobal(self._cwd_btn.rect().bottomLeft()))
+
+    def _refresh_tooltip(self) -> None:
+        name = self._name_label.text()
+        if self._cwd_path:
+            self.setToolTip(f"{name}\nDiretório: {self._cwd_path}")
+        else:
+            self.setToolTip(name)
 
     def set_name(self, name: str) -> None:
         self._name_label.setText(name)
-        self.setToolTip(name)
+        self._refresh_tooltip()
 
     def set_url(self, url: str) -> None:
         """Mostra host:port a partir de uma URL. Vazio = esconde a label."""
@@ -224,7 +311,7 @@ class RunnerChildWidget(QWidget):
             # (mockup pedido pelo usuário: "Startando..." enquanto o
             # browser não abre).
             text = "Startando..." if status == "startando" else status
-            self._status_label.setText(f"●  {text}")
+            self._status_label.setText(f"●  {text}{self._cwd_suffix()}")
             self._status_label.setStyleSheet(
                 f"color: {theme.WARNING}; font-size: 10px;"
             )
@@ -238,11 +325,18 @@ class RunnerChildWidget(QWidget):
         self._state = state if state in _STATE_COLOR else "idle"
         self._apply_state()
 
+    def _cwd_suffix(self) -> str:
+        """Sufixo `· 📁 <pasta>` da linha de status (vazio sem cwd)."""
+        if not self._cwd_path:
+            return ""
+        from pathlib import Path
+        return f"  ·  📁 {Path(self._cwd_path).name}"
+
     def _apply_state(self) -> None:
         color = _STATE_COLOR.get(self._state, theme.TEXT_FAINT)
         label = _STATE_LABEL.get(self._state, "Idle")
         # Bolinha colorida no início do status line.
-        self._status_label.setText(f"●  {label}")
+        self._status_label.setText(f"●  {label}{self._cwd_suffix()}")
         self._status_label.setStyleSheet(
             f"color: {color}; font-size: 10px;"
         )

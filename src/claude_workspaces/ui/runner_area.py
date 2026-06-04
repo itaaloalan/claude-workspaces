@@ -69,6 +69,7 @@ class RunnerArea(QWidget):
     runner_state_changed = Signal(str, str)  # runner_id, state
     runner_url_changed = Signal(str, str)    # runner_id, url ("" = desconhecido)
     runner_status_changed = Signal(str, str)  # runner_id, status_label
+    runner_cwd_changed = Signal(str, str)    # runner_id, cwd efetivo
 
     def __init__(
         self,
@@ -334,6 +335,9 @@ class RunnerArea(QWidget):
         )
         widget.status_changed.connect(
             lambda txt, w=widget: self.runner_status_changed.emit(w.runner_id(), txt)
+        )
+        widget.cwd_changed.connect(
+            lambda cwd, w=widget: self.runner_cwd_changed.emit(w.runner_id(), cwd)
         )
 
     def _on_runner_state(self, widget: RunnerWidget) -> None:

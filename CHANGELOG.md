@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.83.3] — 2026-06-04
+
+### Novidades
+- **📁 do runner também na sidebar.** A linha do runner sob o workspace agora mostra
+  `● Running · 📁 <pasta>` (path completo no tooltip) e ganhou, no hover, um botão 📁
+  com o mesmo menu do painel central — apontar o runner pro diretório de qualquer
+  console aberto (🌿 worktrees inclusos) sem abrir o painel. O bloco "Runners do
+  workspace" do footer também exibe `📁 <pasta>` na sub-linha. Mudanças de cwd (por
+  qualquer chip) propagam pra todas as superfícies via novo signal `cwd_changed`.
+- **Botão ↻ de restart na sidebar.** Na linha do runner (hover) e nas rows do footer —
+  combo natural com o 📁: aponta pro worktree e reinicia ali.
+- **Banner de diretório no início de cada execução do runner.** Todo start/restart
+  escreve no terminal do runner `📁 rodando em: <path>` (com `🌿 <branch>` quando o
+  diretório é um worktree) — fica registrado no log onde aquela execução rodou.
+
+### Correções
+- **Painel Git (Ferramentas) mostrava a branch errada com worktree adotado.** O painel
+  inspecionava o `claude_cwd()` do launch (repo principal → ex.: `develop`) mesmo com o
+  console trabalhando num worktree criado via /criar-worktree. Agora usa
+  `worktree_dir() or claude_cwd()` e re-sincroniza no momento da adoção.
+
 ## [0.83.2] — 2026-06-04
 
 ### Novidades

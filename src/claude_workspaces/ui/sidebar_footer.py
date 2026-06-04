@@ -97,8 +97,10 @@ class _RunnerFooterRow(QWidget):
         state: str,
         status: str,
         url: str,
+        cwd: str,
         on_open: Callable[[str, str], None],
         on_toggle: Callable[[str, str], None],
+        on_restart: Callable[[str, str], None],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -106,8 +108,12 @@ class _RunnerFooterRow(QWidget):
         self._runner_id = runner_id
         self._on_open = on_open
         self._on_toggle = on_toggle
+        self._on_restart = on_restart
+        tip = "Abrir runner no painel central"
+        if cwd:
+            tip = f"Diretório: {cwd}\n{tip}"
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setToolTip("Abrir runner no painel central")
+        self.setToolTip(tip)
         self.setStyleSheet(
             "QWidget { background: rgba(255,255,255,7); border: 1px solid rgba(255,255,255,14); "
             "border-radius: 6px; } QWidget QLabel { background: transparent; border: 0; } "
@@ -124,6 +130,9 @@ class _RunnerFooterRow(QWidget):
         layout.addWidget(dot)
 
         sub = status or ("rodando" if state == "running" else "parado")
+        if cwd:
+            from pathlib import Path
+            sub = f"{sub} · 📁 {Path(cwd).name}"
         if url:
             sub = f"{sub} · {url}"
         text = QLabel(
@@ -133,6 +142,12 @@ class _RunnerFooterRow(QWidget):
         text.setTextFormat(Qt.TextFormat.RichText)
         text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         layout.addWidget(text, stretch=1)
+
+        self._restart_btn = self._action_btn("↻", "Reiniciar runner")
+        self._restart_btn.clicked.connect(
+            lambda _=False: self._on_restart(self._workspace_id, self._runner_id)
+        )
+        layout.addWidget(self._restart_btn)
 
         action_text = "■" if state == "running" else "▶"
         action_tip = "Parar runner" if state == "running" else "Iniciar runner"
@@ -180,6 +195,7 @@ class SidebarFooter(QWidget):
 
     console_runner_requested = Signal(str, str)  # workspace_id, runner_id
     runner_toggle_requested = Signal(str, str)  # workspace_id, runner_id
+    runner_restart_requested = Signal(str, str)  # workspace_id, runner_id
 
     def __init__(
         self,
@@ -394,11 +410,11 @@ class SidebarFooter(QWidget):
             self._min_chip.setVisible(False)
 
     def set_console_runners(
-        self, runners: list[tuple[str, str, str, str, str, str]]
+        self, runners: list[tuple[str, str, str, str, str, str, str]]
     ) -> None:
         """Atualiza a lista contextual de runners do workspace selecionado.
 
-        Tupla: (workspace_id, runner_id, name, state, status, url).
+        Tupla: (workspace_id, runner_id, name, state, status, url, cwd).
         """
         while self._runner_rows.count():
             item = self._runner_rows.takeAt(0)
@@ -417,9 +433,11 @@ class SidebarFooter(QWidget):
         self._runner_workspace_id = workspace_id
         self._runner_chip.setText(f"{len(runners)} runner" + ("s" if len(runners) != 1 else ""))
         self._runner_chip.setVisible(True)
-        for workspace_id, runner_id, name, state, status, url in runners:
+        for workspace_id, runner_id, name, state, status, url, cwd in runners:
             self._runner_rows.addWidget(
-                self._make_runner_row(workspace_id, runner_id, name, state, status, url)
+                self._make_runner_row(
+                    workspace_id, runner_id, name, state, status, url, cwd
+                )
             )
         self._runner_rows.addStretch(1)
         if workspace_changed or self._runner_collapsed_workspace_id != self._runner_workspace_id:
@@ -434,6 +452,7 @@ class SidebarFooter(QWidget):
         state: str,
         status: str,
         url: str,
+        cwd: str,
     ) -> QWidget:
         return _RunnerFooterRow(
             workspace_id,
@@ -442,8 +461,10 @@ class SidebarFooter(QWidget):
             state,
             status,
             url,
+            cwd,
             lambda wid, rid: self.console_runner_requested.emit(wid, rid),
             lambda wid, rid: self.runner_toggle_requested.emit(wid, rid),
+            lambda wid, rid: self.runner_restart_requested.emit(wid, rid),
         )
 
 

@@ -54,6 +54,9 @@ class RunnerWidget(QWidget):
     # "erro"/"carregando"). Espelha o que aparece à esquerda do toolbar do
     # runner, em forma resumida pra ser exibido na sidebar.
     status_changed = Signal(str)
+    # Cwd efetivo mudou (override do chip 📁, default do painel ou config).
+    # Consumido pela sidebar pra refletir o 📁 sem abrir o painel.
+    cwd_changed = Signal(str)
 
     def __init__(
         self,
@@ -227,8 +230,11 @@ class RunnerWidget(QWidget):
     def set_default_cwd(self, cwd: str) -> None:
         """Atualiza o cwd padrão usado quando `runner.cwd` está vazio.
         Usado pelo painel de console pra apontar ao worktree do console."""
+        before = self.effective_cwd()
         self._default_cwd = cwd
         self._refresh_cwd_chip()
+        if self.effective_cwd() != before:
+            self.cwd_changed.emit(self.effective_cwd())
 
     def set_console_dirs_provider(self, fn) -> None:
         """Callable() -> list[(label, path)] com os diretórios dos consoles
@@ -271,7 +277,7 @@ class RunnerWidget(QWidget):
             act.setCheckable(True)
             act.setChecked(bool(path) and path == current)
             act.triggered.connect(
-                lambda _=False, o=override: self._set_cwd_override(o)
+                lambda _=False, o=override: self.set_cwd_override(o)
             )
 
         base = self._runner.cwd or self._default_cwd
@@ -293,7 +299,9 @@ class RunnerWidget(QWidget):
                 add_option(f"{label}  ({path})", path, path)
         menu.exec(self._cwd_btn.mapToGlobal(self._cwd_btn.rect().bottomLeft()))
 
-    def _set_cwd_override(self, path: str) -> None:
+    def set_cwd_override(self, path: str) -> None:
+        """Aponta o runner pra `path` (runtime; "" volta ao padrão). Também
+        usado pela sidebar — emite cwd_changed pra UI refletir."""
         if path == self._cwd_override:
             return
         self._cwd_override = path
@@ -302,12 +310,16 @@ class RunnerWidget(QWidget):
             self._status.setText(
                 "● cwd alterado — reinicie o runner pra aplicar"
             )
+        self.cwd_changed.emit(self.effective_cwd())
 
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
         old_url = (self._runner.browser_url or "").strip()
+        before_cwd = self.effective_cwd()
         self._runner = runner
         self._refresh_cwd_chip()
+        if self.effective_cwd() != before_cwd:
+            self.cwd_changed.emit(self.effective_cwd())
         if runner.name != old_name:
             self.config_label_changed.emit(runner.name or "(runner)")
         new_url = (runner.browser_url or "").strip()
@@ -402,6 +414,10 @@ class RunnerWidget(QWidget):
             self._browser_opened_this_start = False
             self._ready_pattern_matched = False
             self._rodando_emitted = False
+            # Banner com o diretório/worktree no INÍCIO de cada execução —
+            # com vários consoles/worktrees, deixa explícito onde o runner
+            # está rodando sem precisar abrir o chip 📁.
+            self._emit_cwd_banner(cwd)
         try:
             self.session.start(argv, cwd, env=self._runner.env or None)
         except OSError as e:
@@ -423,6 +439,28 @@ class RunnerWidget(QWidget):
             cmd, intent = self._pending_cmd
             self._pending_cmd = None
             self._spawn(cmd, intent)
+
+    def _emit_cwd_banner(self, cwd: str) -> None:
+        """Escreve no terminal do runner (e no log) uma linha com o
+        diretório em que esta execução vai rodar — e a branch 🌿 quando o
+        diretório é um git worktree linkado."""
+        suffix = ""
+        try:
+            from ..git_worktree import current_branch, is_worktree_path
+            if cwd and is_worktree_path(cwd):
+                br = current_branch(cwd)
+                suffix = f" \x1b[38;5;78m🌿 {br or 'worktree'}\x1b[0m"
+        except Exception:
+            log.debug("detecção de worktree pro banner falhou", exc_info=True)
+        banner = (
+            f"\r\n\x1b[38;5;110m📁 rodando em: {cwd or '(indefinido)'}"
+            f"\x1b[0m{suffix}\r\n\r\n"
+        )
+        self._log_buf = (self._log_buf + banner)[-self._log_buf_max:]
+        try:
+            self.bridge.output_to_terminal.emit(banner.encode("utf-8"))
+        except Exception:
+            log.debug("emit do banner de cwd falhou", exc_info=True)
 
     def _on_pty_output(self, data: bytes) -> None:
         try:
