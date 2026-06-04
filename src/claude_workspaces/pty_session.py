@@ -45,9 +45,10 @@ class PtySession(QObject):
         argv: list[str],
         cwd: str,
         env: dict[str, str] | None = None,
+        kill_group_on_replace: bool = True,
     ) -> None:
         if self.pid is not None:
-            self.terminate()
+            self.terminate(kill_group=kill_group_on_replace)
 
         log.info("Starting pty: %s (cwd=%s)", argv, cwd)
         try:
@@ -133,8 +134,8 @@ class PtySession(QObject):
         except OSError:
             pass
 
-    def terminate(self) -> None:
-        """Mata o processo do pty e tudo abaixo dele.
+    def terminate(self, kill_group: bool = True) -> None:
+        """Mata o processo do pty e (por padrão) tudo abaixo dele.
 
         Why killpg em vez de kill: programas como `npm start` rodam um
         node filho — SIGHUP só no bash/npm wrapper deixa o node solto,
@@ -147,16 +148,28 @@ class PtySession(QObject):
         ainda existe ~600ms depois — agendado via QTimer pra não
         bloquear a UI. Sem o fallback, asadmin/java do GlassFish ficava
         órfão entre restarts do app.
+
+        Why kill_group=False existe: quando um runner roda um comando
+        substituto no mesmo PTY (stop_cmd/restart_cmd), é esse comando
+        que gerencia o serviço de fundo — matar o grupo inteiro derruba
+        o serviço junto (o SIGKILL do fallback matava o DAS do GlassFish
+        antes do `asadmin redeploy` do restart_cmd rodar). No modo soft,
+        só o filho direto (tipicamente um `tail -F`) morre; processos
+        foreground pendurados ainda caem via SIGHUP do kernel quando o
+        session leader sai.
         """
         pid = self.pid
         if pid is not None:
             try:
-                os.killpg(pid, signal.SIGTERM)
-                self._schedule_sigkill(pid)
+                if kill_group:
+                    os.killpg(pid, signal.SIGTERM)
+                else:
+                    os.kill(pid, signal.SIGTERM)
+                self._schedule_sigkill(pid, kill_group=kill_group)
             except OSError:
                 try:
                     os.kill(pid, signal.SIGTERM)
-                    self._schedule_sigkill(pid)
+                    self._schedule_sigkill(pid, kill_group=False)
                 except OSError:
                     pass
         # Cleanup do FD/notifier — depois disso o filho perde o
@@ -172,10 +185,23 @@ class PtySession(QObject):
             self.finished.emit()
             self.finished_with_status.emit(self.last_exit_code if self.last_exit_code is not None else -1)
 
-    def _schedule_sigkill(self, pid: int) -> None:
+    def _schedule_sigkill(self, pid: int, kill_group: bool = True) -> None:
         from PySide6.QtCore import QTimer
 
         def _kill() -> None:
+            if not kill_group:
+                # Modo soft (comando substituto): SIGKILL só no filho
+                # direto — o resto do grupo (serviço de fundo) fica vivo.
+                try:
+                    os.kill(pid, 0)
+                except OSError:
+                    return  # processo já morreu/reaped
+                log.warning("pid=%s não respondeu a SIGTERM, enviando SIGKILL", pid)
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                return
             try:
                 os.killpg(pid, 0)
             except OSError:

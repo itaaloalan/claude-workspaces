@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.83.5] — 2026-06-04
+
+### Correções
+- **Restart de runner com `restart_cmd` não derruba mais o serviço de fundo.** Ao
+  reiniciar (↻), o PTY anterior era morto com `killpg` + fallback SIGKILL no grupo
+  inteiro — isso matava o DAS do GlassFish (que vive no mesmo process group do
+  `exec tail -F` do start_cmd) antes do `asadmin redeploy` do restart_cmd rodar,
+  falhando com "Remote server does not listen for requests on [localhost:4848]".
+  Agora, quando o runner roda um comando substituto (stop_cmd/restart_cmd), só o
+  filho direto do PTY morre (`kill` no pid, SIGKILL fallback idem) — o comando
+  substituto é quem gerencia o serviço. Sem stop_cmd/restart_cmd, o killpg de
+  grupo continua (caso `npm start`). Bônus: stop com stop_cmd virou um stop
+  gracioso de verdade (o `asadmin stop-domain` roda com o domínio ainda vivo).
+
 ## [0.83.4] — 2026-06-04
 
 ### Novidades

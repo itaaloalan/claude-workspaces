@@ -435,7 +435,18 @@ class RunnerWidget(QWidget):
             # está rodando sem precisar abrir o chip 📁.
             self._emit_cwd_banner(cwd)
         try:
-            self.session.start(argv, cwd, env=self._runner.env or None)
+            # Intents "stop"/"restart" só chegam aqui quando o runner tem
+            # stop_cmd/restart_cmd — comandos substitutos que gerenciam o
+            # serviço de fundo eles mesmos. Nesses casos o PTY anterior
+            # (tipicamente `exec tail -F`) morre sozinho (kill no pid, não
+            # killpg): matar o grupo derrubava o DAS do GlassFish antes do
+            # `asadmin redeploy` do restart_cmd rodar.
+            self.session.start(
+                argv,
+                cwd,
+                env=self._runner.env or None,
+                kill_group_on_replace=(intent == "start"),
+            )
         except OSError as e:
             log.exception("Falha ao iniciar runner")
             self._set_state("error", f"(erro) {e}")

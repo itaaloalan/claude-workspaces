@@ -5,6 +5,7 @@ ausente, terminate idempotente, _on_readable EOF, pending_size.
 
 from __future__ import annotations
 
+import signal
 from unittest.mock import patch
 
 import pytest
@@ -43,6 +44,54 @@ def test_resize_ignores_invalid_dims(session):
 def test_terminate_without_pid_safe(session):
     session.terminate()  # não levanta
     assert session.pid is None
+
+
+def test_terminate_kills_group_by_default(session):
+    """terminate() padrão usa killpg (varre o grupo inteiro)."""
+    session.pid = 12345
+    session.master_fd = None
+    calls = []
+    with patch("claude_workspaces.pty_session.os.killpg",
+               side_effect=lambda pid, sig: calls.append(("killpg", pid, sig))), \
+         patch("claude_workspaces.pty_session.os.kill",
+               side_effect=lambda pid, sig: calls.append(("kill", pid, sig))), \
+         patch("claude_workspaces.pty_session.os.waitpid", return_value=(12345, 0)), \
+         patch.object(session, "_schedule_sigkill") as sched:
+        session.terminate()
+    assert ("killpg", 12345, signal.SIGTERM) in calls
+    assert not any(c[0] == "kill" for c in calls)
+    sched.assert_called_once_with(12345, kill_group=True)
+
+
+def test_terminate_soft_kills_only_direct_child(session):
+    """terminate(kill_group=False) — comando substituto (stop_cmd/
+    restart_cmd) gerencia o serviço de fundo; só o filho direto morre."""
+    session.pid = 12345
+    session.master_fd = None
+    calls = []
+    with patch("claude_workspaces.pty_session.os.killpg",
+               side_effect=lambda pid, sig: calls.append(("killpg", pid, sig))), \
+         patch("claude_workspaces.pty_session.os.kill",
+               side_effect=lambda pid, sig: calls.append(("kill", pid, sig))), \
+         patch("claude_workspaces.pty_session.os.waitpid", return_value=(12345, 0)), \
+         patch.object(session, "_schedule_sigkill") as sched:
+        session.terminate(kill_group=False)
+    assert ("kill", 12345, signal.SIGTERM) in calls
+    assert not any(c[0] == "killpg" for c in calls)
+    sched.assert_called_once_with(12345, kill_group=False)
+
+
+def test_start_replacing_passes_kill_group_to_terminate(session):
+    """start(kill_group_on_replace=False) repassa o modo soft pro
+    terminate do processo anterior — caminho do restart_cmd."""
+    session.pid = 12345
+    with patch.object(session, "terminate") as term, \
+         patch("claude_workspaces.pty_session.pty.fork",
+               side_effect=OSError("sem fork em teste")), \
+         pytest.raises(OSError):
+        session.start(["bash", "-lc", "true"], "/tmp",
+                      kill_group_on_replace=False)
+    term.assert_called_once_with(kill_group=False)
 
 
 def test_on_readable_emits_finished_on_eof(session):
