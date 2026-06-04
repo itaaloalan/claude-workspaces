@@ -13,6 +13,7 @@ Funções públicas:
 
 import json
 import logging
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -59,13 +60,66 @@ def _parse_timestamp(value: str) -> datetime | None:
         return None
 
 
-def _iter_invocations() -> Iterator[tuple[str, str, str, datetime | None]]:
+# Cache por arquivo: path → (mtime, size, invocations parseadas). Os JSONLs
+# de ~/.claude/projects somam centenas de MB; reler tudo a cada agregação
+# travava a UI por segundos. Arquivo cujo (mtime, size) não mudou reusa o
+# resultado — re-agregar vira ~N stats + só os arquivos que mudaram.
+_invocations_cache: dict[str, tuple[float, int, list]] = {}
+_cache_lock = threading.Lock()
+
+
+def _parse_file_invocations(
+    jsonl: Path,
+) -> list[tuple[str, str, str, datetime | None]]:
+    out: list[tuple[str, str, str, datetime | None]] = []
+    with jsonl.open(encoding="utf-8") as fp:
+        for line in fp:
+            # Filtro barato antes do json.loads — a imensa maioria das
+            # linhas não tem tool_use de Skill/Task.
+            if '"Skill"' not in line and '"Task"' not in line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") != "assistant":
+                continue
+            inner = msg.get("message")
+            if not isinstance(inner, dict):
+                continue
+            content = inner.get("content")
+            if not isinstance(content, list):
+                continue
+            ts = _parse_timestamp(msg.get("timestamp", ""))
+            cwd = msg.get("cwd", "") or ""
+            for c in content:
+                if not isinstance(c, dict):
+                    continue
+                if c.get("type") != "tool_use":
+                    continue
+                tool_name = c.get("name")
+                input_d = c.get("input") or {}
+                if tool_name == "Skill":
+                    skill = input_d.get("skill")
+                    if isinstance(skill, str) and skill:
+                        out.append((KIND_SKILL, skill, cwd, ts))
+                elif tool_name == "Task":
+                    agent = input_d.get("subagent_type")
+                    if isinstance(agent, str) and agent:
+                        out.append((KIND_AGENT, agent, cwd, ts))
+    return out
+
+
+def _iter_invocations(
+    base: Path | None = None,
+) -> Iterator[tuple[str, str, str, datetime | None]]:
     """Itera (kind, name, cwd, timestamp) sobre TODAS as sessões.
 
     Skill: tool_use name=='Skill' → input.skill
     Agent: tool_use name=='Task'  → input.subagent_type
     """
-    base = Path.home() / ".claude" / "projects"
+    if base is None:
+        base = Path.home() / ".claude" / "projects"
     if not base.is_dir():
         return
     try:
@@ -77,46 +131,31 @@ def _iter_invocations() -> Iterator[tuple[str, str, str, datetime | None]]:
             continue
         for jsonl in proj.glob("*.jsonl"):
             try:
-                with jsonl.open(encoding="utf-8") as fp:
-                    for line in fp:
-                        try:
-                            msg = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if msg.get("type") != "assistant":
-                            continue
-                        inner = msg.get("message")
-                        if not isinstance(inner, dict):
-                            continue
-                        content = inner.get("content")
-                        if not isinstance(content, list):
-                            continue
-                        ts = _parse_timestamp(msg.get("timestamp", ""))
-                        cwd = msg.get("cwd", "") or ""
-                        for c in content:
-                            if not isinstance(c, dict):
-                                continue
-                            if c.get("type") != "tool_use":
-                                continue
-                            tool_name = c.get("name")
-                            input_d = c.get("input") or {}
-                            if tool_name == "Skill":
-                                skill = input_d.get("skill")
-                                if isinstance(skill, str) and skill:
-                                    yield (KIND_SKILL, skill, cwd, ts)
-                            elif tool_name == "Task":
-                                agent = input_d.get("subagent_type")
-                                if isinstance(agent, str) and agent:
-                                    yield (KIND_AGENT, agent, cwd, ts)
+                st = jsonl.stat()
+            except OSError:
+                continue
+            key = str(jsonl)
+            with _cache_lock:
+                hit = _invocations_cache.get(key)
+            if hit is not None and hit[0] == st.st_mtime and hit[1] == st.st_size:
+                yield from hit[2]
+                continue
+            try:
+                invocations = _parse_file_invocations(jsonl)
             except OSError as e:
                 log.debug("Skip %s: %s", jsonl, e)
                 continue
+            with _cache_lock:
+                _invocations_cache[key] = (st.st_mtime, st.st_size, invocations)
+            yield from invocations
 
 
-def aggregate_usage() -> dict[tuple[str, str], SkillUsage]:
+def aggregate_usage(
+    base: Path | None = None,
+) -> dict[tuple[str, str], SkillUsage]:
     """Agrega uso por (kind, name). kind ∈ {KIND_SKILL, KIND_AGENT}."""
     out: dict[tuple[str, str], SkillUsage] = {}
-    for kind, name, cwd, ts in _iter_invocations():
+    for kind, name, cwd, ts in _iter_invocations(base):
         key = (kind, name)
         u = out.get(key)
         if u is None:

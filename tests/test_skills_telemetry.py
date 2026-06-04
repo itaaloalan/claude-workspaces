@@ -137,3 +137,59 @@ def test_last_used_label():
     assert u.last_used_label() in {"agora", "0h atrás"}
     u.last_used = datetime.now(UTC) - timedelta(days=2)
     assert "d atrás" in u.last_used_label()
+
+
+# ---------------------------------------------------- cache por arquivo
+
+
+def test_aggregate_usage_with_base_param(tmp_path):
+    proj = tmp_path / "projects" / "p1"
+    _write_session(proj, "s1", [
+        _assistant("2026-05-10T10:00:00Z", [
+            _tool_use("Skill", {"skill": "flyway"}),
+        ]),
+    ])
+    usage = aggregate_usage(base=tmp_path / "projects")
+    assert usage[(KIND_SKILL, "flyway")].count == 1
+
+
+def test_aggregate_usage_cache_detects_file_change(tmp_path):
+    proj = tmp_path / "projects" / "p1"
+    _write_session(proj, "s1", [
+        _assistant("2026-05-10T10:00:00Z", [
+            _tool_use("Skill", {"skill": "flyway"}),
+        ]),
+    ])
+    base = tmp_path / "projects"
+    assert aggregate_usage(base=base)[(KIND_SKILL, "flyway")].count == 1
+    # Reescreve com MAIS um uso (size muda → cache invalida).
+    _write_session(proj, "s1", [
+        _assistant("2026-05-10T10:00:00Z", [
+            _tool_use("Skill", {"skill": "flyway"}),
+        ]),
+        _assistant("2026-05-11T10:00:00Z", [
+            _tool_use("Skill", {"skill": "flyway"}),
+        ]),
+    ])
+    assert aggregate_usage(base=base)[(KIND_SKILL, "flyway")].count == 2
+
+
+def test_aggregate_usage_cache_skips_unchanged_file(tmp_path, monkeypatch):
+    proj = tmp_path / "projects" / "p1"
+    _write_session(proj, "s1", [
+        _assistant("2026-05-10T10:00:00Z", [
+            _tool_use("Skill", {"skill": "flyway"}),
+        ]),
+    ])
+    base = tmp_path / "projects"
+    assert aggregate_usage(base=base)[(KIND_SKILL, "flyway")].count == 1
+    # Segunda agregação não deve REPARSEAR o arquivo intacto.
+    import claude_workspaces.skills_telemetry as st
+    calls = []
+    orig = st._parse_file_invocations
+    monkeypatch.setattr(
+        st, "_parse_file_invocations",
+        lambda p: (calls.append(str(p)), orig(p))[1],
+    )
+    assert aggregate_usage(base=base)[(KIND_SKILL, "flyway")].count == 1
+    assert calls == [], "arquivo intacto reparseado (cache não funcionou)"

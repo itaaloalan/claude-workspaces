@@ -1,6 +1,13 @@
 import logging
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QObject,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -49,6 +56,41 @@ _CHIP_CSS = (
 )
 
 
+class _CatalogScanSignals(QObject):
+    done = Signal(int, list, dict, dict)  # epoch, items, usage, lint
+
+
+class _CatalogScanTask(QRunnable):
+    """Computa catálogo + uso + lint FORA da UI thread. `aggregate_usage`
+    lê os JSONLs de ~/.claude/projects (centenas de MB na primeira vez);
+    síncrono na UI thread era o que travava a troca de workspace por
+    segundos (passo `broadcast` do [SWITCH-PERF])."""
+
+    def __init__(self, epoch: int, folders: list[str]) -> None:
+        super().__init__()
+        self.epoch = epoch
+        self.folders = folders
+        self.signals = _CatalogScanSignals()
+
+    def run(self) -> None:
+        items: list[ClaudeItem] = []
+        usage: dict = {}
+        lint: dict = {}
+        try:
+            items = list_all_items(self.folders)
+        except Exception:
+            log.exception("Falha listando catálogo de skills/agents")
+        try:
+            usage = aggregate_usage()
+        except Exception:
+            log.exception("Falha agregando uso de skills/agents")
+        try:
+            lint = lint_all(items)
+        except Exception:
+            log.exception("Falha rodando lint do catálogo")
+        self.signals.done.emit(self.epoch, items, usage, lint)
+
+
 class SkillsPanel(QWidget):
     """Lista skills + agents + commands disponíveis no Claude.
     Filtros por tipo e fonte; click copia a invocação."""
@@ -71,6 +113,10 @@ class SkillsPanel(QWidget):
         self._all: list[ClaudeItem] = []
         self._usage: dict[tuple[str, str], SkillUsage] = {}
         self._lint: dict = {}
+        # Refresh assíncrono: epoch descarta resultados obsoletos quando o
+        # workspace troca de novo antes do scan anterior terminar.
+        self._refresh_epoch = 0
+        self._scan_pool = QThreadPool.globalInstance()
         self._show_zombies_only: bool = False
         self._show_lint_only: bool = False
         self._kind_filter = self.KIND_FILTER_ALL
@@ -239,18 +285,24 @@ class SkillsPanel(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
+        """Agenda o scan (catálogo + uso + lint) fora da UI thread e retorna
+        na hora — `aggregate_usage` lê os JSONLs de todas as sessões e
+        bloqueava a troca de workspace por segundos. O conteúdo anterior
+        permanece visível até o resultado chegar (sem placeholder piscando)."""
         folders = self.workspace.folders if self.workspace else []
-        self._all = list_all_items(folders)
-        try:
-            self._usage = aggregate_usage()
-        except Exception:
-            log.exception("Falha agregando uso de skills/agents")
-            self._usage = {}
-        try:
-            self._lint = lint_all(self._all)
-        except Exception:
-            log.exception("Falha rodando lint do catálogo")
-            self._lint = {}
+        self._refresh_epoch += 1
+        task = _CatalogScanTask(self._refresh_epoch, list(folders))
+        task.signals.done.connect(self._on_scan_done)
+        self._scan_pool.start(task)
+
+    def _on_scan_done(
+        self, epoch: int, items: list, usage: dict, lint: dict
+    ) -> None:
+        if epoch != self._refresh_epoch:
+            return  # workspace já trocou de novo — resultado obsoleto
+        self._all = items
+        self._usage = usage
+        self._lint = lint
         self._render()
 
     def _usage_for(self, item: ClaudeItem) -> SkillUsage | None:

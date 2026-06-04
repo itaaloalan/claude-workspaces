@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.83.1] — 2026-06-04
+
+### Correções
+- **Achado e morto o vilão do loading congelado: SkillsPanel lia 453MB de JSONL na UI
+  thread a cada troca de workspace.** A telemetria [SWITCH-PERF] do 0.82.10 mostrou
+  `step=broadcast dt=1545–2637ms` dominando a troca — era o
+  `SkillsPanel.set_workspace → refresh()` rodando `aggregate_usage()` síncrono, que
+  lê e parseia TODOS os JSONLs de `~/.claude/projects` (453MB / 713 arquivos hoje).
+  Três fixes:
+  1. `skills_telemetry`: cache por arquivo (path → mtime/size/invocações) — arquivo
+     intacto não é relido; re-agregar vira ~N stats + só o que mudou. Filtro barato
+     por substring antes do json.loads.
+  2. `SkillsPanel.refresh()` assíncrono (QRunnable + epoch, padrão _SessionScanTask) —
+     a troca de workspace não espera mais o scan; o painel atualiza quando o worker
+     termina, mantendo o conteúdo anterior enquanto isso.
+  3. `broadcast_workspace` agora loga `[SWITCH-PERF] panel=<nome> dt=<ms>` por painel —
+     próximo painel lento aparece no log na hora.
+
 ## [0.83.0] — 2026-06-03
 
 ### Novidades

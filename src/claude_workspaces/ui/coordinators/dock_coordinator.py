@@ -68,14 +68,22 @@ class DockCoordinator(QObject):
 
     def broadcast_workspace(self, workspace: Workspace | None) -> None:
         """Notifica todos os painéis sobre mudança de workspace. Um
-        painel quebrado não derruba os outros (cada chamada é try/except)."""
+        painel quebrado não derruba os outros (cada chamada é try/except).
+        Cada painel é cronometrado ([SWITCH-PERF]) — set_workspace pesado
+        aqui congela o overlay da troca de workspace."""
+        import time
         for panel in self._panels:
+            t0 = time.perf_counter()
             try:
                 panel.set_workspace(workspace)
             except Exception:
                 log.exception(
                     "set_workspace falhou em %s", type(panel).__name__
                 )
+            log.info(
+                "[SWITCH-PERF] panel=%s dt=%.1fms",
+                type(panel).__name__, (time.perf_counter() - t0) * 1000,
+            )
 
     def _on_panel_toggled(self, panel_id: str, is_open: bool) -> None:
         self.settings.right_dock_collapsed[panel_id] = not is_open
