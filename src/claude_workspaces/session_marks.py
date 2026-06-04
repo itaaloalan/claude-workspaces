@@ -30,6 +30,17 @@ def _marks_file() -> Path:
     return config_dir() / "session_marks.json"
 
 
+def marks_mtime() -> float:
+    """mtime do session_marks.json (0.0 se não existe). Stat barato —
+    usado pelo TerminalWidget pra detectar renames feitos por FORA do
+    app (ex: a skill /criar-worktree escrevendo custom_name direto no
+    arquivo) sem precisar re-parsear o JSON a cada poll."""
+    try:
+        return _marks_file().stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def load_marks() -> dict[str, dict]:
     path = _marks_file()
     if not path.exists():

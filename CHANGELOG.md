@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.84.1] — 2026-06-04
+
+### Correções
+- **`marks_mtime()` que faltava no `session_marks.py`.** O `terminal_widget.py`
+  já importava o helper (detecção de renames externos no session_marks.json por
+  stat de mtime, sem re-parsear o JSON a cada poll), mas o arquivo companheiro
+  tinha ficado fora do commit — instalação a partir de um clone limpo quebrava
+  com ImportError.
+
 ## [0.84.0] — 2026-06-04
 
 ### Novidades
