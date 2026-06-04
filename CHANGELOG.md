@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.84.0] — 2026-06-04
+
+### Novidades
+- **Visualização do plano (plan mode) da sessão.** Quando o Claude cria um plano,
+  um chip **📋 Plano** aparece no header do terminal pane (centro) — clicar abre
+  uma janela com o markdown renderizado, com "📂 Abrir no editor" (aba central) e
+  "📋 Copiar caminho". Também há um painel **Plano** novo no dock direito (strip 📋)
+  que mostra o plano da sessão do console ativo inline e acompanha trocas de
+  console e reescritas do plano automaticamente. O plano é descoberto pelo
+  transcript da sessão (última referência a `~/.claude/plans/*.md`), com scan
+  tail-first fora da UI thread (QThreadPool) e cache por mtime+size — transcripts
+  de centenas de MB não travam a UI (medido: 55ms num JSONL de 40MB, frio).
+
 ## [0.83.5] — 2026-06-04
 
 ### Correções

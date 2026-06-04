@@ -2,7 +2,7 @@ import logging
 from datetime import UTC
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -217,6 +217,14 @@ class MainWindow(QMainWindow):
         # 30s e emite `long_running` ao passar do threshold (5 min).
         self._working_since: dict[int, float] = {}
         self._long_running_notified: set[int] = set()
+        # Plano (plan mode) da sessão do console ativo. O scan do
+        # transcript roda no QThreadPool; epoch descarta resultados
+        # obsoletos e `_plan_scan_last_key` (path+mtime+size) curto-
+        # circuita re-scans quando o transcript não mudou.
+        self._active_plan = None
+        self._plan_scan_epoch = 0
+        self._plan_scan_last_key: tuple | None = None
+        self._plan_dialog = None
         self._long_running_timer = QTimer(self)
         self._long_running_timer.setInterval(30_000)
         self._long_running_timer.timeout.connect(self._scan_long_running)
@@ -1164,6 +1172,13 @@ class MainWindow(QMainWindow):
             factory=lambda mw: MemoryPanel(),
             default_open=False,
         ),
+        DockPanelSpec(
+            panel_id="plans",
+            title="Plano",
+            icon="📋",
+            factory=lambda mw: mw._build_plans_panel(),
+            default_open=False,
+        ),
     ]
 
     def _build_files_panel(self) -> QWidget:
@@ -1220,6 +1235,84 @@ class MainWindow(QMainWindow):
         # Garante que tabsClosable está ON pra essa aba poder fechar
         self._bottom_tabs.setTabsClosable(True)
         self._refresh_terminal_tabs_bar()
+
+    def _build_plans_panel(self) -> QWidget:
+        """Factory pro PlansPanel no right dock — mostra o plano (plan
+        mode) da sessão do console ativo, inline."""
+        from .plans_panel import PlansPanel
+        panel = PlansPanel(
+            on_refresh=lambda: self._refresh_active_plan(force=True)
+        )
+        panel.open_dialog_requested.connect(self._open_current_plan_dialog)
+        return panel
+
+    def _refresh_active_plan(self, force: bool = False) -> None:
+        """Descobre o plano (plan mode) da sessão do console ativo e
+        atualiza chip 📋 + PlansPanel. Chamado a cada activity/troca de
+        console: o stat do transcript é barato e curto-circuita por
+        (path, mtime, size); o scan em si roda no QThreadPool porque
+        transcripts podem ter centenas de MB."""
+        if not hasattr(self, "_plan_chip_btn"):
+            return
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        transcript = None
+        if isinstance(term, TerminalWidget) and term.backend() == "claude":
+            transcript = term.claimed_session_path()
+        if transcript is None:
+            self._plan_scan_last_key = None
+            self._apply_active_plan(None)
+            return
+        import os as _os
+        try:
+            st = _os.stat(transcript)
+        except OSError:
+            self._plan_scan_last_key = None
+            self._apply_active_plan(None)
+            return
+        key = (str(transcript), st.st_mtime_ns, st.st_size)
+        if not force and key == self._plan_scan_last_key:
+            return
+        self._plan_scan_last_key = key
+        self._plan_scan_epoch += 1
+        from .plans_panel import PlanScanTask
+        task = PlanScanTask(self._plan_scan_epoch, transcript)
+        task.signals.done.connect(self._on_plan_scan_done)
+        QThreadPool.globalInstance().start(task)
+
+    def _on_plan_scan_done(self, epoch: int, info) -> None:
+        if epoch != self._plan_scan_epoch:
+            return  # console ativo já trocou — resultado obsoleto
+        self._apply_active_plan(info)
+
+    def _apply_active_plan(self, info) -> None:
+        """Aplica o PlanInfo (ou None) no chip, painel e dialog aberto."""
+        if self._active_plan is info and info is None:
+            return
+        self._active_plan = info
+        self._plan_chip_btn.setVisible(info is not None)
+        if info is not None:
+            self._plan_chip_btn.setToolTip(f"Ver plano: {info.title}")
+        panel = getattr(self, "_plans_panel", None)
+        if panel is not None:
+            panel.set_plan(info)
+        # Dialog aberto acompanha reescritas do plano da mesma sessão
+        dlg = self._plan_dialog
+        if dlg is not None and info is not None and dlg.isVisible():
+            dlg.reload(info)
+
+    def _open_current_plan_dialog(self) -> None:
+        info = self._active_plan
+        if info is None:
+            return
+        from .plan_view_dialog import PlanViewDialog
+        dlg = PlanViewDialog(
+            info,
+            open_in_editor=self._open_file_as_central_tab,
+            parent=self,
+        )
+        self._plan_dialog = dlg
+        dlg.show()
 
     def _build_right_dock(self) -> QWidget:
         self.dock_coord = DockCoordinator(
@@ -1360,6 +1453,23 @@ class MainWindow(QMainWindow):
         th_layout.addWidget(self._terminal_pane_title, stretch=1)
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB2
+        # Chip 📋 com o plano (plan mode) da sessão do console ativo —
+        # aparece quando o transcript referencia um ~/.claude/plans/*.md.
+        # Mesmo visual do chip 📁 do runner.
+        self._plan_chip_btn = _QPB2("📋 Plano")
+        self._plan_chip_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+        )
+        self._plan_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._plan_chip_btn.setToolTip(
+            "Ver o plano criado por esta sessão (plan mode)"
+        )
+        self._plan_chip_btn.clicked.connect(self._open_current_plan_dialog)
+        self._plan_chip_btn.setVisible(False)
+        th_layout.addWidget(self._plan_chip_btn)
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
             ic("fa5s.window-minimize", color="#c8c8c8")
@@ -4194,6 +4304,11 @@ class MainWindow(QMainWindow):
             lambda sid, w=workspace, t=terminal:
                 self._on_terminal_session_id_changed(w, t, sid)
         )
+        # Sessão reivindicada tarde (claim acontece após o 1º output):
+        # re-resolve o plano do console ativo.
+        terminal.claimed_session_id_changed.connect(
+            lambda _sid: self._refresh_active_plan()
+        )
 
     def _ensure_terminal_runner_panel(self, workspace: Workspace, terminal) -> RunnerArea:
         existing = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
@@ -4631,6 +4746,15 @@ class MainWindow(QMainWindow):
         )
         area.tab_activity_changed.connect(
             lambda *_a: self._refresh_terminal_pane_title()
+        )
+        # Chip 📋 / PlansPanel seguem o console ativo. Seguro chamar a
+        # cada activity: `_refresh_active_plan` curto-circuita por
+        # stat (mtime+size) do transcript antes de escanear.
+        area.tabs.currentChanged.connect(
+            lambda _i: self._refresh_active_plan()
+        )
+        area.tab_activity_changed.connect(
+            lambda *_a: self._refresh_active_plan()
         )
 
     def _handle_tab_activity(
