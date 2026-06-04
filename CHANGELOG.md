@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.83.4] — 2026-06-04
+
+### Novidades
+- **Runner lembra o último diretório apontado (📁 persiste entre restarts).** O
+  apontamento do chip 📁 agora grava em `RunnerConfig.last_cwd` (workspaces.json) e é
+  restaurado quando o RunnerWidget renasce — reabrir o app mantém o runner apontando
+  pro worktree escolhido. Salvaguardas: diretório que sumiu entre sessões (worktree
+  removido) cai de volta no padrão silenciosamente; sumiu com o app aberto, o próximo
+  start limpa o apontamento antes de rodar (sem erro de cwd inexistente). O campo é
+  local da máquina — removido no export de runners (igual gen_session_id/gen_cwd).
+  Sidebar/footer exibem o last_cwd persistido mesmo antes da RunnerArea ser criada.
+  (Runners de console seguem o worktree adotado automaticamente desde o 0.83.3.)
+
 ## [0.83.3] — 2026-06-04
 
 ### Novidades

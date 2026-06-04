@@ -88,9 +88,13 @@ class RunnerWidget(QWidget):
         # o texto do _status; emitida via status_changed pra sidebar.
         self._status_label: str = "parado"
         # Override de cwd escolhido pelo usuário no chip 📁 (ex.: apontar o
-        # runner pro worktree de um console específico). Runtime-only — não
-        # persiste na config. Tem precedência sobre runner.cwd/default.
+        # runner pro worktree de um console específico). Tem precedência
+        # sobre runner.cwd/default. Persiste em runner.last_cwd — restart
+        # do app mantém o último apontamento (se o diretório ainda existir;
+        # worktree removido entre sessões cai de volta no padrão).
         self._cwd_override: str = ""
+        if runner.last_cwd and Path(runner.last_cwd).is_dir():
+            self._cwd_override = runner.last_cwd
         # Provider de diretórios dos consoles abertos do workspace —
         # lista de (label, path) injetada pela RunnerArea/main_window.
         self._console_dirs_provider = None
@@ -300,11 +304,14 @@ class RunnerWidget(QWidget):
         menu.exec(self._cwd_btn.mapToGlobal(self._cwd_btn.rect().bottomLeft()))
 
     def set_cwd_override(self, path: str) -> None:
-        """Aponta o runner pra `path` (runtime; "" volta ao padrão). Também
-        usado pela sidebar — emite cwd_changed pra UI refletir."""
+        """Aponta o runner pra `path` ("" volta ao padrão). Também usado
+        pela sidebar — emite cwd_changed pra UI refletir. Grava em
+        runner.last_cwd (objeto compartilhado com ws.runners); quem persiste
+        o workspace é o main_window no handler de cwd_changed."""
         if path == self._cwd_override:
             return
         self._cwd_override = path
+        self._runner.last_cwd = path
         self._refresh_cwd_chip()
         if self._state == "running":
             self._status.setText(
@@ -317,6 +324,10 @@ class RunnerWidget(QWidget):
         old_url = (self._runner.browser_url or "").strip()
         before_cwd = self.effective_cwd()
         self._runner = runner
+        # O dialog de edição pode entregar um RunnerConfig sem o last_cwd —
+        # re-aplica o apontamento ativo pra não perder a persistência.
+        if self._cwd_override:
+            self._runner.last_cwd = self._cwd_override
         self._refresh_cwd_chip()
         if self.effective_cwd() != before_cwd:
             self.cwd_changed.emit(self.effective_cwd())
@@ -405,6 +416,11 @@ class RunnerWidget(QWidget):
         # não realizado deixava os processos parados — o widget enfileirava
         # `_pending_cmd` esperando um bridge que demorava demais a ficar
         # ready em painel ainda não visível.
+        # Apontamento pra diretório que sumiu (worktree removido com o app
+        # aberto) → volta ao padrão antes de resolver, evitando start num
+        # cwd inexistente. set_cwd_override re-sincroniza chip/sidebar.
+        if self._cwd_override and not Path(self._cwd_override).is_dir():
+            self.set_cwd_override("")
         cwd = self.effective_cwd()
         argv = ["bash", "-lc", cmd]
         # Reset do estado de detecção a cada start/restart pra reabrir

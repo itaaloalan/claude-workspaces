@@ -35,7 +35,11 @@ def export_runners(
                 # id é local; console_session_id é re-stampado no import.
                 # gen_session_id/gen_cwd referenciam um JSONL em
                 # ~/.claude/projects/ dessa máquina — não portável.
-                if k not in ("id", "console_session_id", "gen_session_id", "gen_cwd")
+                # last_cwd é path local (apontamento do chip 📁) — idem.
+                if k not in (
+                    "id", "console_session_id", "gen_session_id",
+                    "gen_cwd", "last_cwd",
+                )
             }
             for r in workspace.runners
             if (r.console_session_id or "") == console_session_id

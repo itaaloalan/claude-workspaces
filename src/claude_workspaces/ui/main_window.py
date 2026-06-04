@@ -2917,7 +2917,7 @@ class MainWindow(QMainWindow):
                 lambda path, rid=runner.id, wid=ws.id:
                     self._point_runner_cwd(wid, rid, path),
             )
-            cwd = runner.cwd or (ws.primary_folder or "")
+            cwd = self._runner_display_cwd(runner, ws)
             area = self._runner_areas.get(ws.id)
             if area is not None:
                 rw = area.widget_for(runner.id)
@@ -3007,6 +3007,14 @@ class MainWindow(QMainWindow):
         if rw is not None:
             rw.set_cwd_override(path)
 
+    def _runner_display_cwd(self, runner, ws: "Workspace") -> str:
+        """Cwd a exibir pra um runner sem RunnerWidget realizado: espelha a
+        resolução do widget — last_cwd persistido (se o dir ainda existe) >
+        cwd da config > pasta primária do workspace."""
+        if runner.last_cwd and Path(runner.last_cwd).is_dir():
+            return runner.last_cwd
+        return runner.cwd or (ws.primary_folder or "")
+
     def _find_runner_child_widget(self, workspace_id: str, runner_id: str):
         """RunnerChildWidget da linha do runner na sidebar, ou None."""
         from .runner_child_widget import RunnerChildWidget
@@ -3020,11 +3028,16 @@ class MainWindow(QMainWindow):
         self, workspace_id: str, runner_id: str, cwd: str
     ) -> None:
         """Cwd efetivo de um runner mudou (chip 📁 do painel ou da sidebar) —
-        espelha na linha da sidebar e no footer."""
+        espelha na linha da sidebar e no footer, e persiste o workspace
+        (set_cwd_override grava runner.last_cwd no modelo; aqui salva no
+        JSON pra sobreviver a restart)."""
         widget = self._find_runner_child_widget(workspace_id, runner_id)
         if widget is not None:
             widget.set_cwd(cwd)
         self._refresh_console_runners_footer()
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is not None:
+            self._persist_workspace(ws)
 
     def _refresh_runner_children(self, workspace_id: str) -> None:
         ws_item = self._find_workspace_item(workspace_id)
@@ -3385,7 +3398,7 @@ class MainWindow(QMainWindow):
             state = "idle"
             status = "parado"
             url = runner.browser_url or ""
-            cwd = runner.cwd or (ws.primary_folder or "")
+            cwd = self._runner_display_cwd(runner, ws)
             scope = "console" if runner.console_session_id else "workspace"
             area = _area_for_runner(runner)
             if area is not None:

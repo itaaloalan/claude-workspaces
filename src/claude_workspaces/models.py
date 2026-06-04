@@ -46,6 +46,10 @@ class RunnerConfig:
     # vem do rascunho de runner-gen. Não é portável: removido no export.
     gen_session_id: str = ""
     gen_cwd: str = ""
+    # Último diretório apontado pelo usuário via chip 📁 ("" = padrão).
+    # Persiste o apontamento entre restarts do app — "manter o último
+    # executado". Path da máquina: removido no export, igual aos gen_*.
+    last_cwd: str = ""
     id: str = field(default_factory=_new_id)
 
     def to_dict(self) -> dict:
@@ -69,6 +73,7 @@ class RunnerConfig:
             console_session_id=str(data.get("console_session_id", "")),
             gen_session_id=str(data.get("gen_session_id", "")),
             gen_cwd=str(data.get("gen_cwd", "")),
+            last_cwd=str(data.get("last_cwd", "")),
             id=str(data.get("id") or _new_id()),
         )
 

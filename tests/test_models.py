@@ -112,3 +112,26 @@ def test_launch_paths_empty_raises():
     ws = Workspace(name="x", folders=[])
     with pytest.raises(ValueError):
         ws.launch_paths()
+
+
+def test_runner_config_last_cwd_roundtrip():
+    from claude_workspaces.models import RunnerConfig
+    r = RunnerConfig(name="api", start_cmd="run", last_cwd="/tmp/wt")
+    r2 = RunnerConfig.from_dict(r.to_dict())
+    assert r2.last_cwd == "/tmp/wt"
+    # JSON antigo sem o campo → default vazio.
+    assert RunnerConfig.from_dict({"name": "x"}).last_cwd == ""
+
+
+def test_export_runners_strips_last_cwd(tmp_path):
+    import json
+
+    from claude_workspaces.models import RunnerConfig, Workspace
+    from claude_workspaces.runners_io import export_runners
+    ws = Workspace(name="w", folders=["/tmp"])
+    ws.runners = [RunnerConfig(name="api", start_cmd="run", last_cwd="/tmp/wt")]
+    out = tmp_path / "runners.json"
+    export_runners(ws, out)
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["runners"], "export vazio"
+    assert "last_cwd" not in data["runners"][0]
