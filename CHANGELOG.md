@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.83.2] — 2026-06-04
+
+### Novidades
+- **Chip 📁 no runner: veja e escolha pra onde o runner aponta.** Com vários consoles
+  (cada um podendo estar num worktree), não dava pra saber em qual diretório o runner
+  rodava. O toolbar de cada runner agora tem um chip `📁 <pasta>` mostrando o cwd
+  EFETIVO do próximo start (tooltip com path completo + origem: config do runner /
+  padrão do painel / apontado manualmente). Clicar abre um menu com o padrão do painel
+  e os diretórios dos **consoles abertos** do workspace (com `🌿 branch` quando é
+  worktree) — escolher um redireciona o runner pra lá (runtime, aplica no próximo
+  start/restart; se estiver rodando, o status avisa pra reiniciar).
+- **Runners do console seguem o worktree adotado.** Quando a sessão cria um worktree
+  via /criar-worktree, o painel "Runners console" daquele console passa a usar o
+  worktree como cwd padrão automaticamente (e volta ao cwd original se o worktree for
+  removido).
+
 ## [0.83.1] — 2026-06-04
 
 ### Correções

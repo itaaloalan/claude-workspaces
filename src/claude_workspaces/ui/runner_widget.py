@@ -84,6 +84,13 @@ class RunnerWidget(QWidget):
         # Label curta da fase ("parado" no boot). Espelha em forma reduzida
         # o texto do _status; emitida via status_changed pra sidebar.
         self._status_label: str = "parado"
+        # Override de cwd escolhido pelo usuário no chip 📁 (ex.: apontar o
+        # runner pro worktree de um console específico). Runtime-only — não
+        # persiste na config. Tem precedência sobre runner.cwd/default.
+        self._cwd_override: str = ""
+        # Provider de diretórios dos consoles abertos do workspace —
+        # lista de (label, path) injetada pela RunnerArea/main_window.
+        self._console_dirs_provider = None
 
         # A toolbar tem muitos botões (~8) em linha — a soma dos sizeHints
         # passa de 700px e propagaria mínimo de largura pra toda a hierarquia,
@@ -109,6 +116,20 @@ class RunnerWidget(QWidget):
         )
         self._status.setMinimumWidth(0)
         toolbar.addWidget(self._status)
+
+        # Chip 📁 com o cwd EFETIVO do runner — com vários consoles (cada um
+        # podendo estar num worktree), mostra pra onde o runner aponta e
+        # permite redirecioná-lo pro diretório de um console específico.
+        self._cwd_btn = QPushButton()
+        self._cwd_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+        )
+        self._cwd_btn.clicked.connect(self._open_cwd_menu)
+        toolbar.addWidget(self._cwd_btn)
+        self._refresh_cwd_chip()
         toolbar.addStretch()
 
         # Filtro de log — substring case-insensitive aplicada linha a linha.
@@ -207,11 +228,86 @@ class RunnerWidget(QWidget):
         """Atualiza o cwd padrão usado quando `runner.cwd` está vazio.
         Usado pelo painel de console pra apontar ao worktree do console."""
         self._default_cwd = cwd
+        self._refresh_cwd_chip()
+
+    def set_console_dirs_provider(self, fn) -> None:
+        """Callable() -> list[(label, path)] com os diretórios dos consoles
+        abertos do workspace (worktree quando houver). Alimenta o menu do
+        chip 📁 pra apontar o runner pro diretório de um console."""
+        self._console_dirs_provider = fn
+
+    def effective_cwd(self) -> str:
+        """Cwd em que o próximo start vai rodar: override do usuário (chip
+        📁) > cwd da config do runner > default do painel."""
+        return self._cwd_override or self._runner.cwd or self._default_cwd
+
+    def _refresh_cwd_chip(self) -> None:
+        from pathlib import Path
+        cwd = self.effective_cwd()
+        name = Path(cwd).name if cwd else "?"
+        if self._cwd_override:
+            source = "apontado manualmente (chip 📁)"
+        elif self._runner.cwd:
+            source = "cwd da config do runner"
+        else:
+            source = "pasta padrão do painel"
+        self._cwd_btn.setText(f"📁 {name}")
+        self._cwd_btn.setToolTip(
+            f"Diretório do runner: {cwd or '(indefinido)'}\n"
+            f"Origem: {source}\n"
+            "Clique pra apontar pro diretório de um console "
+            "(aplica no próximo start/restart)."
+        )
+
+    def _open_cwd_menu(self) -> None:
+        from pathlib import Path
+
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        current = self.effective_cwd()
+
+        def add_option(label: str, path: str, override: str) -> None:
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(bool(path) and path == current)
+            act.triggered.connect(
+                lambda _=False, o=override: self._set_cwd_override(o)
+            )
+
+        base = self._runner.cwd or self._default_cwd
+        base_name = Path(base).name if base else "?"
+        add_option(f"Padrão — {base_name}  ({base})", base, "")
+        dirs: list[tuple[str, str]] = []
+        if self._console_dirs_provider is not None:
+            try:
+                dirs = list(self._console_dirs_provider() or [])
+            except Exception:
+                log.debug("console_dirs_provider falhou", exc_info=True)
+        if dirs:
+            menu.addSeparator()
+            sec = menu.addAction("Consoles abertos")
+            sec.setEnabled(False)
+            for label, path in dirs:
+                if not path or path == base:
+                    continue
+                add_option(f"{label}  ({path})", path, path)
+        menu.exec(self._cwd_btn.mapToGlobal(self._cwd_btn.rect().bottomLeft()))
+
+    def _set_cwd_override(self, path: str) -> None:
+        if path == self._cwd_override:
+            return
+        self._cwd_override = path
+        self._refresh_cwd_chip()
+        if self._state == "running":
+            self._status.setText(
+                "● cwd alterado — reinicie o runner pra aplicar"
+            )
 
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
         old_url = (self._runner.browser_url or "").strip()
         self._runner = runner
+        self._refresh_cwd_chip()
         if runner.name != old_name:
             self.config_label_changed.emit(runner.name or "(runner)")
         new_url = (runner.browser_url or "").strip()
@@ -297,7 +393,7 @@ class RunnerWidget(QWidget):
         # não realizado deixava os processos parados — o widget enfileirava
         # `_pending_cmd` esperando um bridge que demorava demais a ficar
         # ready em painel ainda não visível.
-        cwd = self._runner.cwd or self._default_cwd
+        cwd = self.effective_cwd()
         argv = ["bash", "-lc", cmd]
         # Reset do estado de detecção a cada start/restart pra reabrir
         # o browser numa nova execução.

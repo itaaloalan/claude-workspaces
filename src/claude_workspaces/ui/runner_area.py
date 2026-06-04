@@ -91,6 +91,10 @@ class RunnerArea(QWidget):
         # Quando preenchido, é o session_id do console Claude dono deste painel
         # e mostra apenas runners daquele console.
         self._console_session_id = console_session_id
+        # Provider de diretórios dos consoles abertos (menu do chip 📁 dos
+        # RunnerWidgets) — injetado pela main_window via
+        # set_console_dirs_provider.
+        self._console_dirs_provider: Callable | None = None
 
         # RunnerWidget (filha) tem toolbar com muitos botões; propagaria
         # mínimo de largura >600px pra cima até a janela, causando scroll
@@ -215,6 +219,16 @@ class RunnerArea(QWidget):
         self._console_session_id = sid
         self._refresh_from_workspace()
 
+    def set_console_dirs_provider(self, fn: Callable | None) -> None:
+        """Callable() -> list[(label, path)] com os diretórios dos consoles
+        abertos do workspace. Propagado aos RunnerWidgets pro menu do chip
+        📁 (apontar o runner pro diretório/worktree de um console)."""
+        self._console_dirs_provider = fn
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget):
+                w.set_console_dirs_provider(fn)
+
     def set_default_cwd(self, cwd: str) -> None:
         """Atualiza o cwd padrão dos runners deste painel (worktree do
         console) e propaga aos widgets vivos."""
@@ -288,6 +302,7 @@ class RunnerArea(QWidget):
             widget = existing.get(runner.id)
             if widget is None:
                 widget = RunnerWidget(runner, primary, settings=self._settings)
+                widget.set_console_dirs_provider(self._console_dirs_provider)
                 self._wire(widget)
             else:
                 widget.set_default_cwd(primary)

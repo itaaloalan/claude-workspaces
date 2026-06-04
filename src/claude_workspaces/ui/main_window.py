@@ -3961,11 +3961,43 @@ class MainWindow(QMainWindow):
                 folders = [cwd, *term.extra_dirs()]
         panel.set_folders_override(folders)
 
+    def _console_dirs_for(self, workspace_id: str) -> list[tuple[str, str]]:
+        """Diretórios dos consoles abertos do workspace pro menu do chip 📁
+        dos runners: (label '#N título · 🌿 branch', path). O path é o
+        worktree adotado quando houver, senão o cwd do console."""
+        area = self.terminals_coord._areas.get(workspace_id)
+        if area is None:
+            return []
+        out: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for i in range(area.tabs.count()):
+            term = area.tabs.widget(i)
+            if not isinstance(term, TerminalWidget):
+                continue
+            path = term.worktree_dir() or term.claude_cwd() or ""
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            try:
+                label = area._compute_tab_display(term)
+            except Exception:
+                label = term.effective_title() or "console"
+            if len(label) > 40:
+                label = label[:39] + "…"
+            wt = term.worktree_label().strip().lstrip("·").strip()
+            if term.is_worktree() and wt:
+                label = f"{label} · 🌿 {wt}"
+            out.append((label, path))
+        return out
+
     def _get_or_create_runner_area(self, workspace: Workspace) -> RunnerArea:
         area = self._runner_areas.get(workspace.id)
         if area is not None:
             return area
         area = RunnerArea(workspace, settings=self.settings)
+        area.set_console_dirs_provider(
+            lambda wid=workspace.id: self._console_dirs_for(wid)
+        )
         self._runner_areas[workspace.id] = area
         self.runner_host.addWidget(area)
         # StackAll: o widget recém-adicionado fica visível e pintado por
@@ -4100,6 +4132,9 @@ class MainWindow(QMainWindow):
             settings=self.settings,
             console_session_id=sid,
             default_cwd=terminal.claude_cwd() or "",
+        )
+        area.set_console_dirs_provider(
+            lambda wid=workspace.id: self._console_dirs_for(wid)
         )
         area.set_edit_handler(
             lambda runner, w=workspace, a=area:
@@ -5124,15 +5159,23 @@ class MainWindow(QMainWindow):
         """A sessão de um console criou (ou removeu) um git worktree em
         runtime — pede git status do worktree na hora (chip 🌿 da sidebar
         via _on_repo_status_ready) e atualiza o header do pane."""
+        term = self.sender()
         if path:
             self._repo_poller.request(path)
         else:
             # Associação desfeita (worktree removido) — re-polla o cwd pra
             # voltar o chip ao repo principal.
-            term = self.sender()
             cwd = term.claude_cwd() if isinstance(term, TerminalWidget) else ""
             if cwd:
                 self._repo_poller.request(cwd)
+        # O painel "Runners console" desse console segue o worktree: o cwd
+        # padrão dos runners dele passa a ser o worktree adotado (ou volta
+        # ao cwd do console quando desfeito).
+        if isinstance(term, TerminalWidget):
+            for areas in getattr(self, "_console_runner_areas", {}).values():
+                area = areas.get(id(term))
+                if area is not None:
+                    area.set_default_cwd(path or (term.claude_cwd() or ""))
         self._refresh_terminal_pane_title()
 
     def _on_notif_open_target(self, notification) -> None:
