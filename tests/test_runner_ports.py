@@ -272,3 +272,35 @@ def test_apply_port_nao_reconhecido():
     assert apply_port_arg("python coletor.py", 1972) is None
     assert apply_port_arg("", 4202) is None
     assert apply_port_arg("npm start", 0) is None
+
+
+# ---- expand_port_refs ----------------------------------------------------------
+
+
+def test_port_ref_resolve_vizinho():
+    from claude_workspaces.services.runner_expand import expand_port_refs
+
+    ports = {"api jdk 25": 8096, "web": 4202}
+    assert expand_port_refs(
+        "http://localhost:{port:api jdk 25}/api", ports
+    ) == "http://localhost:8096/api"
+
+
+def test_port_ref_case_insensitive_e_trim():
+    from claude_workspaces.services.runner_expand import expand_port_refs
+
+    assert expand_port_refs("{port: API JDK 25 }", {"api jdk 25": 8096}) == "8096"
+
+
+def test_port_ref_desconhecido_fica_intacto():
+    from claude_workspaces.services.runner_expand import expand_port_refs
+
+    assert expand_port_refs("{port:nao-existe}", {"api": 8080}) == "{port:nao-existe}"
+    assert expand_port_refs("{port:api}", {"api": 0}) == "{port:api}"
+
+
+def test_port_ref_sem_placeholder_eh_noop():
+    from claude_workspaces.services.runner_expand import expand_port_refs
+
+    assert expand_port_refs("npm start", {"api": 8080}) == "npm start"
+    assert expand_port_refs("", {"api": 8080}) == ""

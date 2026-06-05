@@ -21,6 +21,30 @@ def expand_port(text: str, port: int) -> str:
     return text.replace("{port}", str(port))
 
 
+_PORT_REF_RE = re.compile(r"\{port:([^}]+)\}")
+
+
+def expand_port_refs(text: str, ports: dict[str, int]) -> str:
+    """Expande `{port:<nome do runner>}` pela porta do runner de mesmo
+    NOME no MESMO escopo (workspace ou console) — permite o frontend
+    referenciar a porta da api da mesma stack: cada cópia de console
+    resolve pros vizinhos dela (web do console A enxerga a api do A).
+
+    Nome casado por igualdade case-insensitive (trim). Referência não
+    encontrada (ou porta 0) fica intacta no texto — visível pro usuário
+    perceber o nome errado.
+    """
+    if not text or "{port:" not in text:
+        return text
+    norm = {k.strip().casefold(): v for k, v in ports.items() if v > 0}
+
+    def _sub(m: re.Match) -> str:
+        port = norm.get(m.group(1).strip().casefold())
+        return str(port) if port else m.group(0)
+
+    return _PORT_REF_RE.sub(_sub, text)
+
+
 def apply_port_arg(cmd: str, port: int) -> str | None:
     """Aplica a porta automaticamente em dev servers conhecidos quando o
     comando não usa `{port}` — anexa a flag ao FINAL do comando, onde a

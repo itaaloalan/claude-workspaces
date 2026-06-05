@@ -173,10 +173,13 @@ class RunnerEditDialog(QDialog):
         self._port.setToolTip(
             "Porta base do runner. Use {port} no Start/Stop/Restart, na URL "
             "do browser e nos valores do env — é substituído por este número "
-            "na hora de rodar. O app também injeta PORT=<porta> no ambiente "
-            "do processo (a menos que você defina PORT manualmente no env). "
-            "Cópias deste runner para consoles/worktrees ganham automaticamente "
-            "a próxima porta livre (base+1, base+2…). 0 = sem porta."
+            "na hora de rodar. {port:<nome>} resolve a porta de OUTRO runner "
+            "do mesmo escopo (ex: web referenciando {port:api}). O app também "
+            "injeta PORT e SERVER_PORT no ambiente (a menos que você os "
+            "defina no env) e aplica --port automaticamente em dev servers "
+            "conhecidos (ng/vite/next/npm). Cópias deste runner para "
+            "consoles/worktrees ganham automaticamente a próxima porta livre "
+            "(base+1, base+2…). 0 = sem porta."
         )
         form.addRow("Porta base:", self._port)
 

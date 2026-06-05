@@ -36,6 +36,7 @@ from ..services.runner_expand import (
     apply_port_arg,
     build_env,
     expand_port,
+    expand_port_refs,
     wrap_with_node_bootstrap,
 )
 from ..services.runner_url_detect import detect_url
@@ -113,6 +114,9 @@ class RunnerWidget(QWidget):
         # Provider de diretórios dos consoles abertos do workspace —
         # lista de (label, path) injetada pela RunnerArea/main_window.
         self._console_dirs_provider = None
+        # Provider nome→porta dos runners do MESMO escopo (placeholder
+        # {port:<nome>} — ex: web referenciando a porta da api da stack).
+        self._scope_ports_provider = None
 
         # A toolbar tem muitos botões (~8) em linha — a soma dos sizeHints
         # passa de 700px e propagaria mínimo de largura pra toda a hierarquia,
@@ -293,6 +297,20 @@ class RunnerWidget(QWidget):
         if self.effective_cwd() != before:
             self.cwd_changed.emit(self.effective_cwd())
 
+    def set_scope_ports_provider(self, fn) -> None:
+        """Callable() -> dict[nome, porta] dos runners do mesmo escopo —
+        resolve o placeholder {port:<nome>} em comandos/env/browser_url."""
+        self._scope_ports_provider = fn
+
+    def _scope_ports(self) -> dict[str, int]:
+        if self._scope_ports_provider is None:
+            return {}
+        try:
+            return dict(self._scope_ports_provider() or {})
+        except Exception:
+            log.debug("scope_ports_provider falhou", exc_info=True)
+            return {}
+
     def set_console_dirs_provider(self, fn) -> None:
         """Callable() -> list[(label, path)] com os diretórios dos consoles
         abertos do workspace (worktree quando houver). Alimenta o menu do
@@ -402,10 +420,11 @@ class RunnerWidget(QWidget):
         self.cwd_changed.emit(self.effective_cwd())
 
     def _effective_browser_url(self) -> str:
-        """browser_url da config com {port} expandido pra porta do runner."""
-        return expand_port(
+        """browser_url da config com {port} (e {port:<nome>}) expandidos."""
+        url = expand_port(
             (self._runner.browser_url or "").strip(), self._runner.port
         )
+        return expand_port_refs(url, self._scope_ports())
 
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
@@ -561,6 +580,10 @@ class RunnerWidget(QWidget):
         # aqui). Persistido fica o literal; a expansão é só na execução.
         had_placeholder = "{port}" in cmd
         cmd = expand_port(cmd, self._runner.port)
+        # {port:<nome>} → porta de outro runner do mesmo escopo (ex: web
+        # apontando pra api da mesma stack/console).
+        scope_ports = self._scope_ports()
+        cmd = expand_port_refs(cmd, scope_ports)
         # "Inteligência" de porta: comando sem {port} mas com porta
         # configurada → anexa a flag em dev servers conhecidos (a última
         # --port vence no ng/vite, sobrepondo hardcoded do package.json).
@@ -600,12 +623,19 @@ class RunnerWidget(QWidget):
             # (tipicamente `exec tail -F`) morre sozinho (kill no pid, não
             # killpg): matar o grupo derrubava o DAS do GlassFish antes do
             # `asadmin redeploy` do restart_cmd rodar.
-            # build_env: expande {port} nos valores e injeta PORT=<porta>
-            # quando o runner tem porta (sem sobrescrever PORT explícito).
+            # build_env: expande {port} nos valores e injeta PORT/SERVER_PORT
+            # quando o runner tem porta (sem sobrescrever explícitos);
+            # {port:<nome>} resolve pros vizinhos do escopo.
+            env = build_env(self._runner.env or {}, self._runner.port)
+            if scope_ports:
+                env = {
+                    k: expand_port_refs(v, scope_ports)
+                    for k, v in env.items()
+                }
             self.session.start(
                 argv,
                 cwd,
-                env=build_env(self._runner.env or {}, self._runner.port) or None,
+                env=env or None,
                 kill_group_on_replace=(intent == "start"),
             )
         except OSError as e:

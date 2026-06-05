@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.96.0] — 2026-06-05
+
+### Novidades
+- **Placeholder `{port:<nome>}` — porta de outro runner do mesmo escopo.**
+  Pra frontend que referencia a API por URL fixa (ex: app.settings.ts do
+  map): o comando/env/browser_url de um runner pode citar a porta de OUTRO
+  runner da mesma stack — `{port:api jdk 25}` resolve pra porta da cópia
+  da api DO MESMO console (cada console enxerga os vizinhos dele). Nome
+  casado por igualdade case-insensitive; referência desconhecida fica
+  intacta no texto (visível pra corrigir). Ex no start_cmd do web:
+  `sed -i -E 's#(localhost:)[0-9]+#\1{port:api jdk 25}#' src/app/app.settings.ts && npm start`.
+
 ## [0.95.1] — 2026-06-05
 
 ### Correções

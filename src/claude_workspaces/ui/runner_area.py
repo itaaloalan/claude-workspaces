@@ -346,6 +346,16 @@ class RunnerArea(QWidget):
     def runners_in_scope(self) -> list[RunnerConfig]:
         return [r for r in self._ws.runners if self._matches_scope(r)]
 
+    def scope_ports(self) -> dict[str, int]:
+        """Nome → porta dos runners DESTE escopo — alimenta o placeholder
+        `{port:<nome>}` (ex: web referenciando a porta da api da mesma
+        stack/console)."""
+        return {
+            (r.name or ""): r.port
+            for r in self.runners_in_scope()
+            if r.port > 0 and (r.name or "").strip()
+        }
+
     def _matches_scope(self, runner: RunnerConfig) -> bool:
         return (runner.console_session_id or "") == self._console_session_id
 
@@ -407,6 +417,7 @@ class RunnerArea(QWidget):
             if widget is None:
                 widget = RunnerWidget(runner, default_cwd, settings=self._settings)
                 widget.set_console_dirs_provider(self._console_dirs_provider)
+                widget.set_scope_ports_provider(self.scope_ports)
                 self._wire(widget)
             else:
                 widget.set_default_cwd(default_cwd)
