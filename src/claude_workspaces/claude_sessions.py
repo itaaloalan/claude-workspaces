@@ -103,6 +103,32 @@ def _extract_text(content) -> str:
     return ""
 
 
+_COMMAND_NAME_RE = re.compile(r"<command-name>(.*?)</command-name>", re.DOTALL)
+_COMMAND_ARGS_RE = re.compile(r"<command-args>(.*?)</command-args>", re.DOTALL)
+_COMMAND_TAGS_RE = re.compile(
+    r"</?(?:command-message|command-name|command-args|command-contents|"
+    r"local-command-stdout)>"
+)
+
+
+def clean_session_text(text: str) -> str:
+    """Prompt de slash command vem no JSONL como XML interno
+    (`<command-message>foo</command-message><command-name>/foo</command-name>
+    <command-args>…</command-args>`) — vira "/foo args" legível, senão o
+    título da sessão na sidebar exibe as tags cruas. Texto sem essas tags
+    passa intacto."""
+    if "<command-" not in text and "<local-command-stdout>" not in text:
+        return text
+    name = _COMMAND_NAME_RE.search(text)
+    if name and name.group(1).strip():
+        out = name.group(1).strip()
+        args = _COMMAND_ARGS_RE.search(text)
+        if args and args.group(1).strip():
+            out += " " + args.group(1).strip()
+        return out
+    return _COMMAND_TAGS_RE.sub("", text).strip()
+
+
 def _read_first_user_message(jsonl_path: Path) -> str:
     """Lê a primeira mensagem do usuário (texto) num arquivo .jsonl de sessão."""
     try:
@@ -117,7 +143,7 @@ def _read_first_user_message(jsonl_path: Path) -> str:
                 inner = msg.get("message")
                 if not isinstance(inner, dict):
                     continue
-                text = _extract_text(inner.get("content"))
+                text = clean_session_text(_extract_text(inner.get("content")))
                 if text:
                     return text
     except OSError:
@@ -146,6 +172,8 @@ def read_recent_turns(
                 if not isinstance(inner, dict):
                     continue
                 text = _extract_text(inner.get("content"))
+                if msg_type == "user":
+                    text = clean_session_text(text)
                 if not text:
                     continue
                 all_turns.append((msg_type, text))

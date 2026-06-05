@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.93.2] — 2026-06-05
+
+### Correções
+- **Título de sessão iniciada por slash command não mostra mais as tags
+  cruas.** Sessões que começam com `/comando` gravam o prompt no JSONL como
+  XML interno (`<command-message>…</command-message><command-name>…`) e a
+  sidebar/abas exibiam isso literalmente. `clean_session_text()` converte
+  pra forma legível ("/criar-worktree args"); texto normal (inclusive com
+  `<` legítimo) passa intacto. Vale pro título da sessão (preview do
+  primeiro prompt) e pros turnos recentes (briefings/notificações).
+
 ## [0.93.1] — 2026-06-05
 
 ### Correções
