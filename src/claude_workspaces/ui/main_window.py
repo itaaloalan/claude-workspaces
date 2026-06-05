@@ -1470,6 +1470,24 @@ class MainWindow(QMainWindow):
         self._plan_chip_btn.clicked.connect(self._open_current_plan_dialog)
         self._plan_chip_btn.setVisible(False)
         th_layout.addWidget(self._plan_chip_btn)
+        # Chip 🌿 — worktree do console ativo: alternar a sessão pra outro
+        # worktree (EnterWorktree) ou abrir um console novo num worktree
+        # existente. Mesmos helpers do menu de contexto da sidebar.
+        self._worktree_chip_btn = _QPB2("🌿 Worktree")
+        self._worktree_chip_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+        )
+        self._worktree_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._worktree_chip_btn.setToolTip(
+            "Alternar esta sessão para outro worktree ou abrir um console "
+            "novo num worktree existente"
+        )
+        self._worktree_chip_btn.clicked.connect(self._open_pane_worktree_menu)
+        self._worktree_chip_btn.setVisible(False)
+        th_layout.addWidget(self._worktree_chip_btn)
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
             ic("fa5s.window-minimize", color="#c8c8c8")
@@ -2029,6 +2047,14 @@ class MainWindow(QMainWindow):
             )
             menu.addAction(rename_act)
             menu.addSeparator()
+            ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id, "")
+            owner_ws = next(
+                (w for w in self.workspaces if w.id == ws_id), None
+            )
+            if owner_ws is not None:
+                self._add_open_in_worktree_menu(menu, owner_ws)
+                if term.is_running():
+                    self._add_switch_to_worktree_menu(menu, owner_ws, term)
             if term.is_running():
                 self._add_session_info_actions(menu, term)
                 continue_act = QAction("▶ Continuar este console", menu)
@@ -2082,6 +2108,128 @@ class MainWindow(QMainWindow):
         if menu.isEmpty():
             return
         menu.exec_(self.list_widget.viewport().mapToGlobal(pos))
+
+    def _add_open_in_worktree_menu(self, menu: QMenu, workspace: Workspace) -> None:
+        from ..git_worktree import list_worktrees
+
+        entries: list[tuple[str, str, str]] = []
+        for folder in workspace.folders:
+            repo = Path(folder)
+            if not (repo / ".git").exists():
+                continue
+            for wt in list_worktrees(str(repo)):
+                path = wt.get("worktree", "")
+                if not path or Path(path).resolve() == repo.resolve():
+                    continue
+                branch = wt.get("branch", "")
+                if branch.startswith("refs/heads/"):
+                    branch = branch[len("refs/heads/"):]
+                label = branch or Path(path).name
+                entries.append((repo.name, label, path))
+        if not entries:
+            return
+        sub = menu.addMenu("🌿 Abrir console em worktree")
+        sub.setToolTipsVisible(True)
+        last_repo = ""
+        for repo_name, label, path in entries:
+            if repo_name != last_repo:
+                header = QAction(repo_name, sub)
+                header.setEnabled(False)
+                sub.addAction(header)
+                last_repo = repo_name
+            act = QAction(f"🌿 {label}", sub)
+            act.setToolTip(path)
+            act.triggered.connect(
+                lambda _c=False, w=workspace, p=path: self._launch_claude_for(
+                    w, "", p
+                )
+            )
+            sub.addAction(act)
+        menu.addSeparator()
+
+    def _add_switch_to_worktree_menu(
+        self, menu: QMenu, workspace: Workspace, term: "TerminalWidget"
+    ) -> None:
+        from ..git_worktree import list_worktrees
+
+        cwd = getattr(term, "_claude_cwd", "") or ""
+        if not cwd:
+            return
+        cwd_res = Path(cwd).resolve()
+        repo_wts: list[dict] = []
+        main_path: Path | None = None
+        for folder in workspace.folders:
+            wts = list_worktrees(folder)
+            paths = [
+                Path(w["worktree"]).resolve()
+                for w in wts
+                if w.get("worktree")
+            ]
+            if cwd_res in paths:
+                repo_wts = wts
+                main_path = Path(folder).resolve()
+                break
+        entries: list[tuple[str, str]] = []
+        for wt in repo_wts:
+            path = wt.get("worktree", "")
+            if not path:
+                continue
+            p_res = Path(path).resolve()
+            if p_res == cwd_res or p_res == main_path:
+                continue
+            branch = wt.get("branch", "")
+            if branch.startswith("refs/heads/"):
+                branch = branch[len("refs/heads/"):]
+            entries.append((branch or Path(path).name, path))
+        if not entries:
+            return
+        sub = menu.addMenu("🌿 Alternar esta sessão para worktree")
+        sub.setToolTipsVisible(True)
+        for label, path in entries:
+            act = QAction(f"🌿 {label}", sub)
+            act.setToolTip(
+                f"Pede pro Claude desta sessão entrar em {path} "
+                f"(EnterWorktree)"
+            )
+            act.triggered.connect(
+                lambda _c=False, t=term, p=path: t.send_text(
+                    f'Use a ferramenta EnterWorktree com path "{p}" '
+                    f"para alternar esta sessão para esse worktree.",
+                    submit=True,
+                )
+            )
+            sub.addAction(act)
+        menu.addSeparator()
+
+    def _open_pane_worktree_menu(self) -> None:
+        """Menu do chip 🌿 no header do terminal pane: alternar a sessão
+        ativa pra outro worktree (EnterWorktree) e/ou abrir um console novo
+        num worktree existente — reusa os mesmos helpers do menu de
+        contexto da sidebar."""
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        ws = None
+        if area is not None:
+            for ws_id, a in self.terminals_coord._areas.items():
+                if a is area:
+                    ws = self.workspaces_coord.find_by_id(ws_id)
+                    break
+        if ws is None or not isinstance(term, TerminalWidget):
+            return
+        menu = QMenu(self)
+        if term.is_running():
+            self._add_switch_to_worktree_menu(menu, ws, term)
+        self._add_open_in_worktree_menu(menu, ws)
+        if menu.isEmpty():
+            act = menu.addAction(
+                "(nenhum worktree neste workspace — use /criar-worktree)"
+            )
+            act.setEnabled(False)
+        menu.exec(
+            self._worktree_chip_btn.mapToGlobal(
+                self._worktree_chip_btn.rect().bottomLeft()
+            )
+        )
 
     def _add_session_info_actions(self, menu: QMenu, term: "TerminalWidget") -> None:
         """Prefixa o menu de contexto do console com infos da sessão Claude:
@@ -3987,11 +4135,15 @@ class MainWindow(QMainWindow):
                 "<span style='color:#666'>Claude console — "
                 "selecione um console no sidebar</span>"
             )
+            if hasattr(self, "_worktree_chip_btn"):
+                self._worktree_chip_btn.setVisible(False)
             if getattr(self, "_terminal_pane_title_last", None) != placeholder:
                 log.info("[HEADER] → placeholder (ws/area/term faltando)")
                 self._terminal_pane_title.setText(placeholder)
                 self._terminal_pane_title_last = placeholder
             return
+        if hasattr(self, "_worktree_chip_btn"):
+            self._worktree_chip_btn.setVisible(True)
         # `#N título` no mesmo formato usado pelo sidebar/área.
         try:
             display = area._compute_tab_display(term)

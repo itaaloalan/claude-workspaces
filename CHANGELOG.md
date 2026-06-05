@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.86.0] — 2026-06-05
+
+### Novidades
+- **Chip 🌿 Worktree no header do terminal pane.** Ao lado do chip 📋 Plano:
+  abre menu pra **alternar a sessão ativa** pra outro worktree (manda um
+  EnterWorktree pro Claude da sessão) ou **abrir um console novo** num worktree
+  existente do workspace. Visível sempre que há um console ativo no pane.
+- **Worktrees no menu de contexto da sidebar (consoles).** Submenus "🌿 Abrir
+  console em worktree" e "🌿 Alternar esta sessão para worktree" no clique
+  direito de um console.
+- **Launch dialog: abrir em worktree existente.** Combo "Abrir em worktree
+  existente" lista os worktrees dos repos do workspace; selecionando um, o
+  console nasce direto nele (desabilita as opções de criar worktree/branch).
+
 ## [0.85.0] — 2026-06-05
 
 ### Novidades

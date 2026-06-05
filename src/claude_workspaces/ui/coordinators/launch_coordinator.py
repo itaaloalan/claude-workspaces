@@ -96,24 +96,34 @@ class LaunchCoordinator(QObject):
             dialog = LaunchClaudeDialog(workspace, self.settings, parent=self._parent_window)
             if not dialog.exec():
                 return None
-            plan = plan_from_dialog(
-                dialog.result_folders(),
-                dialog.result_isolate(),
-                dialog.result_create_branch(),
-                dialog.result_branch(),
-                dialog.result_base_branch(),
-            )
-            if not plan.ok:
-                if plan.error:
-                    QMessageBox.warning(
-                        self._parent_window,
-                        "Falha ao preparar launch",
-                        plan.error,
-                    )
-                return None
-            cwd, extras = plan.cwd, plan.extras
-            worktree_label = plan.worktree_label
-            is_worktree = plan.is_worktree
+            existing_wt = dialog.result_existing_worktree()
+            if existing_wt is not None:
+                repo_folder, wt_path, wt_branch = existing_wt
+                cwd = wt_path
+                extras = [
+                    f for f in dialog.result_folders() if f != repo_folder
+                ]
+                worktree_label = f" · {wt_branch}" if wt_branch else " · isolado"
+                is_worktree = True
+            else:
+                plan = plan_from_dialog(
+                    dialog.result_folders(),
+                    dialog.result_isolate(),
+                    dialog.result_create_branch(),
+                    dialog.result_branch(),
+                    dialog.result_base_branch(),
+                )
+                if not plan.ok:
+                    if plan.error:
+                        QMessageBox.warning(
+                            self._parent_window,
+                            "Falha ao preparar launch",
+                            plan.error,
+                        )
+                    return None
+                cwd, extras = plan.cwd, plan.extras
+                worktree_label = plan.worktree_label
+                is_worktree = plan.is_worktree
             initial_prompt = dialog.result_initial_prompt()
             submit_initial_prompt = bool(initial_prompt.strip())
 

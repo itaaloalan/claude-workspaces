@@ -4,6 +4,7 @@
 - e nele: criar nova branch OU usar uma branch existente."""
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 from ..git_status import get_status
 from ..git_worktree import (
     list_local_branches,
+    list_worktrees,
     suggest_branch_name,
     worktree_path_for,
 )
@@ -115,6 +117,29 @@ class LaunchClaudeDialog(QDialog):
             )
         v.addWidget(git_hdr)
 
+        self.worktree_combo = QComboBox()
+        self.worktree_combo.addItem("(nenhum)", None)
+        for folder in workspace.folders:
+            repo = Path(folder)
+            if not (repo / ".git").exists():
+                continue
+            for wt in list_worktrees(folder):
+                wt_path = wt.get("worktree", "")
+                if not wt_path or Path(wt_path).resolve() == repo.resolve():
+                    continue
+                wt_branch = wt.get("branch", "")
+                if wt_branch.startswith("refs/heads/"):
+                    wt_branch = wt_branch[len("refs/heads/"):]
+                label = f"{repo.name}: 🌿 {wt_branch or Path(wt_path).name}"
+                self.worktree_combo.addItem(
+                    label, (folder, wt_path, wt_branch)
+                )
+        self._has_existing_worktrees = self.worktree_combo.count() > 1
+        if self._has_existing_worktrees:
+            wt_form = QFormLayout()
+            wt_form.addRow("Abrir em worktree existente:", self.worktree_combo)
+            v.addLayout(wt_form)
+
         # Defaults: workspace override > settings
         isolate_default = (
             workspace.default_isolate_worktree
@@ -198,6 +223,9 @@ class LaunchClaudeDialog(QDialog):
         v.addWidget(self.initial_prompt_edit)
 
         # Wiring
+        self.worktree_combo.currentIndexChanged.connect(
+            self._on_existing_worktree_changed
+        )
         self.isolate_chk.toggled.connect(self._on_isolate_toggled)
         self.new_branch_chk.toggled.connect(self._on_new_branch_toggled)
         self.branch_edit.textChanged.connect(self._refresh_preview)
@@ -222,6 +250,10 @@ class LaunchClaudeDialog(QDialog):
         self._sync_enabled_states()
         self._refresh_preview()
 
+    def _on_existing_worktree_changed(self, _index: int) -> None:
+        self._sync_enabled_states()
+        self._refresh_preview()
+
     def _on_isolate_toggled(self, checked: bool) -> None:
         self.new_branch_chk.setEnabled(checked and self._is_repo)
         self._sync_enabled_states()
@@ -232,13 +264,23 @@ class LaunchClaudeDialog(QDialog):
         self._refresh_preview()
 
     def _sync_enabled_states(self) -> None:
-        isolating = self.isolate_chk.isChecked() and self._is_repo
+        using_existing_wt = self.worktree_combo.currentData() is not None
+        isolating = (
+            self.isolate_chk.isChecked()
+            and self._is_repo
+            and not using_existing_wt
+        )
         new_branch = self.new_branch_chk.isChecked()
+        self.isolate_chk.setEnabled(self._is_repo and not using_existing_wt)
         # new_branch_chk: sempre disponível em repo (mesmo sem worktree)
-        self.new_branch_chk.setEnabled(self._is_repo)
+        self.new_branch_chk.setEnabled(self._is_repo and not using_existing_wt)
         # branch_edit + base_edit: relevantes quando create_branch=True
-        self.branch_edit.setEnabled(self._is_repo and new_branch)
-        self.base_combo.setEnabled(self._is_repo and new_branch)
+        self.branch_edit.setEnabled(
+            self._is_repo and new_branch and not using_existing_wt
+        )
+        self.base_combo.setEnabled(
+            self._is_repo and new_branch and not using_existing_wt
+        )
         # existing_combo: só faz sentido em worktree (sem isolate, ficamos
         # na branch atual; o combo não muda nada)
         self.existing_combo.setEnabled(isolating and not new_branch)
@@ -246,6 +288,10 @@ class LaunchClaudeDialog(QDialog):
     def _refresh_preview(self) -> None:
         folders = self.result_folders()
         self._ok_btn.setEnabled(bool(folders))
+        existing = self.worktree_combo.currentData()
+        if existing is not None:
+            self.path_preview.setText(existing[1])
+            return
         if not self.isolate_chk.isChecked() or not folders:
             self.path_preview.setText("(rodar na pasta primária marcada, sem worktree)")
             return
@@ -278,3 +324,7 @@ class LaunchClaudeDialog(QDialog):
 
     def result_initial_prompt(self) -> str:
         return self.initial_prompt_edit.toPlainText().strip()
+
+    def result_existing_worktree(self) -> tuple[str, str, str] | None:
+        """(repo_folder, worktree_path, branch) ou None quando '(nenhum)'."""
+        return self.worktree_combo.currentData()
