@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from ..models import RunnerConfig
 from ..pty_session import PtySession
+from ..services.runner_expand import build_env, expand_port
 from ..services.runner_url_detect import detect_url
 from ..settings import Settings
 from .terminal_widget import STATIC_DIR, TerminalBridge
@@ -78,8 +79,11 @@ class RunnerWidget(QWidget):
         self._ready_pattern_matched: bool = False
         self._rodando_emitted: bool = False
         # URL atual conhecida pelo widget (config ou detectada). Mantida pra
-        # sincronizar a sidebar (host:port). Inicializa a partir da config.
-        self._current_url: str = (runner.browser_url or "").strip()
+        # sincronizar a sidebar (host:port). Inicializa a partir da config
+        # (com {port} já expandido pra porta do runner).
+        self._current_url: str = expand_port(
+            (runner.browser_url or "").strip(), runner.port
+        )
         # Buffer de log pra "Copiar log" — guarda os últimos ~1MB. Não
         # reseta a cada start (mantém histórico cross-restart pra debug).
         self._log_buf: str = ""
@@ -319,9 +323,15 @@ class RunnerWidget(QWidget):
             )
         self.cwd_changed.emit(self.effective_cwd())
 
+    def _effective_browser_url(self) -> str:
+        """browser_url da config com {port} expandido pra porta do runner."""
+        return expand_port(
+            (self._runner.browser_url or "").strip(), self._runner.port
+        )
+
     def update_config(self, runner: RunnerConfig) -> None:
         old_name = self._runner.name
-        old_url = (self._runner.browser_url or "").strip()
+        old_url = self._effective_browser_url()
         before_cwd = self.effective_cwd()
         self._runner = runner
         # O dialog de edição pode entregar um RunnerConfig sem o last_cwd —
@@ -333,7 +343,7 @@ class RunnerWidget(QWidget):
             self.cwd_changed.emit(self.effective_cwd())
         if runner.name != old_name:
             self.config_label_changed.emit(runner.name or "(runner)")
-        new_url = (runner.browser_url or "").strip()
+        new_url = self._effective_browser_url()
         # browser_url da config tem prioridade sobre URL detectada — se
         # mudou, sincroniza a sidebar; se ficou vazio e tínhamos detectado
         # algo, mantém o detectado.
@@ -422,6 +432,9 @@ class RunnerWidget(QWidget):
         if self._cwd_override and not Path(self._cwd_override).is_dir():
             self.set_cwd_override("")
         cwd = self.effective_cwd()
+        # {port} → porta do runner (start/stop/restart_cmd passam todos por
+        # aqui). Persistido fica o literal; a expansão é só na execução.
+        cmd = expand_port(cmd, self._runner.port)
         argv = ["bash", "-lc", cmd]
         # Reset do estado de detecção a cada start/restart pra reabrir
         # o browser numa nova execução.
@@ -441,10 +454,12 @@ class RunnerWidget(QWidget):
             # (tipicamente `exec tail -F`) morre sozinho (kill no pid, não
             # killpg): matar o grupo derrubava o DAS do GlassFish antes do
             # `asadmin redeploy` do restart_cmd rodar.
+            # build_env: expande {port} nos valores e injeta PORT=<porta>
+            # quando o runner tem porta (sem sobrescrever PORT explícito).
             self.session.start(
                 argv,
                 cwd,
-                env=self._runner.env or None,
+                env=build_env(self._runner.env or {}, self._runner.port) or None,
                 kill_group_on_replace=(intent == "start"),
             )
         except OSError as e:
@@ -479,6 +494,8 @@ class RunnerWidget(QWidget):
                 suffix = f" \x1b[38;5;78m🌿 {br or 'worktree'}\x1b[0m"
         except Exception:
             log.debug("detecção de worktree pro banner falhou", exc_info=True)
+        if self._runner.port > 0:
+            suffix += f" \x1b[38;5;180m:{self._runner.port}\x1b[0m"
         banner = (
             f"\r\n\x1b[38;5;110m📁 rodando em: {cwd or '(indefinido)'}"
             f"\x1b[0m{suffix}\r\n\r\n"
@@ -535,7 +552,7 @@ class RunnerWidget(QWidget):
             if not self._ready_pattern_matched:
                 return
 
-        url = self._runner.browser_url.strip() or detect_url(self._output_buf)
+        url = self._effective_browser_url() or detect_url(self._output_buf)
         if not url:
             return
         self._browser_opened_this_start = True

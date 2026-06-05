@@ -33,6 +33,12 @@ class RunnerConfig:
     # terminar — ex: Glassfish, onde a URL final só é válida após
     # "Application [ogpms] deployed successfully".
     ready_pattern: str = ""
+    # Porta base do runner. 0 = runner sem porta (expansão desligada).
+    # Quando > 0: `{port}` é substituído nos comandos/browser_url/env na
+    # hora de rodar, e `PORT=<porta>` é injetada no env do processo (sem
+    # sobrescrever um PORT explícito). Cópias console-scoped ganham a
+    # próxima porta livre a partir da base (ver services/port_alloc.py).
+    port: int = 0
     # Escopo do runner. Vazio = pertence ao workspace (comportamento
     # antigo, aparece no painel inferior do workspace). Quando preenchido
     # com o session_id de um console Claude, o runner pertence àquele
@@ -59,6 +65,10 @@ class RunnerConfig:
     def from_dict(cls, data: dict) -> "RunnerConfig":
         env_raw = data.get("env") or {}
         env = {str(k): str(v) for k, v in env_raw.items()} if isinstance(env_raw, dict) else {}
+        try:
+            port = int(data.get("port") or 0)
+        except (TypeError, ValueError):
+            port = 0
         return cls(
             name=str(data.get("name", "")),
             start_cmd=str(data.get("start_cmd", "")),
@@ -70,6 +80,7 @@ class RunnerConfig:
             open_browser_on_ready=bool(data.get("open_browser_on_ready", False)),
             browser_url=str(data.get("browser_url", "")),
             ready_pattern=str(data.get("ready_pattern", "")),
+            port=port,
             console_session_id=str(data.get("console_session_id", "")),
             gen_session_id=str(data.get("gen_session_id", "")),
             gen_cwd=str(data.get("gen_cwd", "")),

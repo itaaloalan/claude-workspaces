@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.87.0] — 2026-06-05
+
+### Novidades
+- **Porta por console/worktree nos runners.** Pra rodar a mesma stack em vários
+  worktrees em paralelo sem colisão de porta:
+  - Campo **Porta base** no runner (dialog de edição). Use `{port}` no
+    Start/Stop/Restart, na URL do browser e nos valores do env — é substituído
+    pela porta na hora de rodar (nunca persistido expandido). O app também
+    injeta `PORT=<porta>` no ambiente do processo, sem sobrescrever um PORT
+    definido manualmente. Porta 0 = comportamento antigo, sem expansão.
+  - **Alocação automática**: ao copiar runners pro escopo de um console
+    ("↗ Copiar do workspace" ou o botão novo), cada cópia ganha a próxima
+    porta livre a partir da base (pula portas de outros runners do workspace
+    e portas ocupadas no SO via bind test). Re-cópia mantém a porta já
+    alocada. Helpers em `services/port_alloc.py` e `services/runner_expand.py`
+    (expansão via str.replace — `awk '{print}'`/`${VAR}` intactos).
+  - Botão **"⬇ Subir stack aqui"** no header do painel Runners do console:
+    copia os runners workspace-scoped pro console (remapeando portas, já
+    apontados pro worktree) e inicia todos. Cópias existentes são recriadas e
+    re-iniciadas — o PTY antigo é terminado sem rodar o stop_cmd (limitação
+    conhecida pra serviços externos tipo Glassfish DAS).
+  - O banner "📁 rodando em:" do runner agora mostra a porta (`:8081`).
+
 ## [0.86.1] — 2026-06-05
 
 ### Correções

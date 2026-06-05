@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -165,6 +166,20 @@ class RunnerEditDialog(QDialog):
         )
         form.addRow("Padrão de pronto:", self._ready_pattern)
 
+        self._port = QSpinBox()
+        self._port.setRange(0, 65535)
+        self._port.setValue(base.port)
+        self._port.setSpecialValueText("(sem porta)")
+        self._port.setToolTip(
+            "Porta base do runner. Use {port} no Start/Stop/Restart, na URL "
+            "do browser e nos valores do env — é substituído por este número "
+            "na hora de rodar. O app também injeta PORT=<porta> no ambiente "
+            "do processo (a menos que você defina PORT manualmente no env). "
+            "Cópias deste runner para consoles/worktrees ganham automaticamente "
+            "a próxima porta livre (base+1, base+2…). 0 = sem porta."
+        )
+        form.addRow("Porta base:", self._port)
+
         layout.addLayout(form)
 
         # Editando um runner existente → IA ajusta SÓ este runner, recebendo
@@ -256,5 +271,6 @@ class RunnerEditDialog(QDialog):
             open_browser_on_ready=self._open_browser.isChecked(),
             browser_url=self._browser_url.text().strip(),
             ready_pattern=self._ready_pattern.text().strip(),
+            port=self._port.value(),
             env=(base.env if base else {}),
         )

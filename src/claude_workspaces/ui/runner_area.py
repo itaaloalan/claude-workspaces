@@ -150,6 +150,20 @@ class RunnerArea(QWidget):
         self._point_all_btn.clicked.connect(self._open_point_all_menu)
         h.addWidget(self._point_all_btn)
 
+        # Só em painel de console: copia a stack do workspace pra cá
+        # (remapeando portas) e sobe tudo de uma vez.
+        if console_session_id:
+            self._raise_stack_btn = QPushButton("⬇ Subir stack aqui")
+            self._raise_stack_btn.setStyleSheet(_RUNNER_BTN_QSS)
+            self._raise_stack_btn.setToolTip(
+                "Copia os runners do workspace pra este console — cada um "
+                "ganha a próxima porta livre a partir da porta base (campo "
+                "Porta base + {port} no comando) — e inicia todos. Cópias "
+                "já existentes são recriadas e re-iniciadas."
+            )
+            self._raise_stack_btn.clicked.connect(self._raise_stack_here)
+            h.addWidget(self._raise_stack_btn)
+
         self._more_btn = QPushButton("⋯")
         self._more_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._more_btn.setFixedWidth(32)
@@ -665,11 +679,27 @@ class RunnerArea(QWidget):
             self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft())
         )
 
+    def _raise_stack_here(self) -> None:
+        """Botão "⬇ Subir stack aqui": copia os runners workspace-scoped
+        pro escopo deste console (com remap de porta no
+        _copy_runners_to_console) e inicia todos os habilitados."""
+        ws_runners = [
+            r for r in self._ws.runners if not (r.console_session_id or "")
+        ]
+        if not ws_runners:
+            from .persistent_toast import flash_toast
+            flash_toast("Nenhum runner no workspace para subir aqui.")
+            return
+        self._copy_runners_to_console(ws_runners)
+        self.run_all()
+
     def _copy_runners_to_console(self, sources: list[RunnerConfig]) -> None:
         if not sources or not self._console_session_id:
             return
         added = 0
         replaced = 0
+        from ..services.port_alloc import next_free_port, used_ports_in_workspace
+
         for src in sources:
             data = src.to_dict()
             data.pop("id", None)
@@ -685,6 +715,29 @@ class RunnerArea(QWidget):
                 ),
                 -1,
             )
+            # Remap de porta da cópia console-scoped: re-cópia mantém a
+            # porta já alocada da cópia anterior (estável entre "Subir
+            # stack aqui" repetidos); cópia nova ganha a próxima livre a
+            # partir da base — recomputado a cada iteração pra cópias do
+            # mesmo lote não colidirem entre si. O runner workspace-scope
+            # (port=base) conta como usado → 1ª cópia pega base+1.
+            if clone.port > 0:
+                prev = (
+                    self._ws.runners[existing_idx] if existing_idx >= 0 else None
+                )
+                if prev is not None and prev.port > 0:
+                    clone.port = prev.port
+                else:
+                    try:
+                        clone.port = next_free_port(
+                            clone.port, used_ports_in_workspace(self._ws)
+                        )
+                    except RuntimeError:
+                        _logger().warning(
+                            "sem porta livre a partir de %d pro runner %r — "
+                            "mantendo a base",
+                            clone.port, clone.name,
+                        )
             if existing_idx >= 0:
                 self._ws.runners[existing_idx] = clone
                 replaced += 1
