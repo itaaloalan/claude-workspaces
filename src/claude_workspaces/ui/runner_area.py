@@ -544,6 +544,12 @@ class RunnerArea(QWidget):
                 w.set_cwd_override(path)
 
     def _remove_all(self) -> None:
+        self.remove_all_in_scope()
+
+    def remove_all_in_scope(self) -> None:
+        """Confirma e remove todos os runners deste escopo (workspace ou
+        console). Público: chamado pelo menu ⋯, pelo 🗑 do rodapé da sidebar
+        e pelo menu de contexto do console."""
         in_scope = [r for r in self._ws.runners if self._matches_scope(r)]
         if not in_scope:
             QMessageBox.information(

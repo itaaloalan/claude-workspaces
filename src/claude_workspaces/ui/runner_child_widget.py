@@ -196,6 +196,8 @@ class RunnerChildWidget(QWidget):
         self._state = "idle"
         # Cwd efetivo do runner (📁 na linha de status; path no tooltip).
         self._cwd_path: str = ""
+        # Porta base do runner (`:8081` na linha de status; 0 = sem porta).
+        self._port: int = 0
         self._cwd_options_provider: Callable | None = None
         self._on_cwd_selected: Callable[[str], None] | None = None
         self._has_restart = on_restart is not None
@@ -223,6 +225,15 @@ class RunnerChildWidget(QWidget):
         self._cwd_path = (path or "").strip()
         self._apply_state()
         self._refresh_tooltip()
+
+    def set_port(self, port: int) -> None:
+        """Porta base do runner — mostra `:8081` na linha de status
+        (0 = sem porta, sem sufixo)."""
+        port = int(port or 0)
+        if port == self._port:
+            return
+        self._port = port
+        self._apply_state()
 
     def set_cwd_menu(
         self,
@@ -326,11 +337,15 @@ class RunnerChildWidget(QWidget):
         self._apply_state()
 
     def _cwd_suffix(self) -> str:
-        """Sufixo `· 📁 <pasta>` da linha de status (vazio sem cwd)."""
-        if not self._cwd_path:
-            return ""
-        from pathlib import Path
-        return f"  ·  📁 {Path(self._cwd_path).name}"
+        """Sufixo `· :porta · 📁 <pasta>` da linha de status (cada parte
+        some quando vazia)."""
+        suffix = ""
+        if self._port > 0:
+            suffix += f"  ·  :{self._port}"
+        if self._cwd_path:
+            from pathlib import Path
+            suffix += f"  ·  📁 {Path(self._cwd_path).name}"
+        return suffix
 
     def _apply_state(self) -> None:
         color = _STATE_COLOR.get(self._state, theme.TEXT_FAINT)

@@ -1894,6 +1894,9 @@ class MainWindow(QMainWindow):
         builder.console_runner_requested.connect(self._open_footer_runner)
         builder.runner_toggle_requested.connect(self._toggle_runner_from_sidebar)
         builder.runner_restart_requested.connect(self._restart_runner_from_sidebar)
+        builder.console_runners_remove_requested.connect(
+            self._remove_active_console_runners
+        )
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -2056,6 +2059,22 @@ class MainWindow(QMainWindow):
                 if term.is_running():
                     self._add_switch_to_worktree_menu(menu, owner_ws, term)
                 self._add_remove_worktree_menu(menu, owner_ws)
+                # Remoção em lote dos runners deste console — só quando
+                # existem runners no escopo dele.
+                sids = self._console_runner_sids(term)
+                if any(
+                    (r.console_session_id or "") in sids
+                    for r in owner_ws.runners
+                ):
+                    rm_runners_act = QAction(
+                        "✕ Remover runners deste console", menu
+                    )
+                    rm_runners_act.triggered.connect(
+                        lambda _c=False, w=owner_ws, t=term:
+                            self._remove_console_runners_for(w, t)
+                    )
+                    menu.addAction(rm_runners_act)
+                    menu.addSeparator()
             if term.is_running():
                 self._add_session_info_actions(menu, term)
                 continue_act = QAction("▶ Continuar este console", menu)
@@ -3351,6 +3370,7 @@ class MainWindow(QMainWindow):
                 # config como fallback (URL detectada precisa do runtime).
                 widget.set_url(runner.browser_url or "")
             widget.set_cwd(cwd)
+            widget.set_port(runner.port)
             group.addChild(child)
             self.list_widget.setItemWidget(child, 0, widget)
             self._runner_tree_items[ws.id][runner.id] = child
@@ -3849,12 +3869,15 @@ class MainWindow(QMainWindow):
                     url = rw.current_url() or url
                     cwd = rw.effective_cwd()
             # O scope sai do texto da linha (vira o sub-header do grupo);
-            # console mantém o 🌿 branch do worktree dono.
+            # console mantém o 🌿 branch do worktree dono. Porta base na
+            # frente quando configurada.
             status_label = status
             if runner.console_session_id:
                 branch = self._console_branch_for(runner.console_session_id)
                 if branch:
                     status_label = f"🌿 {branch} · {status}"
+            if runner.port > 0:
+                status_label = f":{runner.port} · {status_label}"
             rows.append(
                 (ws.id, runner.id, runner.name or "(runner)", state,
                  status_label, url, cwd, scope)
@@ -4574,6 +4597,44 @@ class MainWindow(QMainWindow):
             return
         console_area = self._ensure_terminal_runner_panel(workspace, term)
         console_area.raise_stack_here()
+
+    def _console_runner_sids(self, terminal) -> set[str]:
+        """Session ids que identificam os runners de um console (o sid real
+        reivindicado + a chave pending usada antes da resolução)."""
+        sids = {self._pending_console_key(terminal)}
+        sid = terminal.claimed_session_id() if hasattr(
+            terminal, "claimed_session_id"
+        ) else ""
+        if sid:
+            sids.add(sid)
+        return sids
+
+    def _remove_console_runners_for(self, workspace: Workspace, terminal) -> None:
+        """Remove (com confirmação) todos os runners console-scoped de um
+        console — 🗑 do rodapé e menu de contexto do console."""
+        from .persistent_toast import flash_toast
+        sids = self._console_runner_sids(terminal)
+        if not any(
+            (r.console_session_id or "") in sids for r in workspace.runners
+        ):
+            flash_toast("Este console não tem runners.")
+            return
+        area = self._ensure_terminal_runner_panel(workspace, terminal)
+        area.remove_all_in_scope()
+
+    def _remove_active_console_runners(self, workspace_id: str) -> None:
+        """🗑 da seção "console" do rodapé: remove os runners do console
+        ativo do workspace."""
+        from .persistent_toast import flash_toast
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is None:
+            return
+        t_area = self.terminals_coord._areas.get(ws.id)
+        term = t_area.tabs.currentWidget() if t_area is not None else None
+        if not isinstance(term, TerminalWidget):
+            flash_toast("Nenhum console aberto neste workspace.")
+            return
+        self._remove_console_runners_for(ws, term)
 
     # ---- bulk actions disparadas pelo header da sidebar ------------------
 

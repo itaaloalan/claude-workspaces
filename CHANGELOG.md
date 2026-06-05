@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.89.0] — 2026-06-05
+
+### Novidades
+- **Remoção fácil dos runners do console.** Duas portas de entrada novas pra
+  remover de uma vez as cópias console-scoped (criadas pelo "⬇ Subir stack"):
+  - botão **🗑** no sub-header da seção "console" do rodapé da sidebar —
+    remove os runners do console ativo;
+  - item **"✕ Remover runners deste console"** no menu de contexto do console
+    na sidebar (aparece só quando o console tem runners).
+  Ambos reusam a confirmação do painel (lista os nomes, para os que estão
+  rodando, não toca em runners de outros escopos).
+- **Porta visível na sidebar.** A porta base aparece nas linhas de runner:
+  na árvore (`●  parado  ·  :8081  ·  📁 map-api`) e no rodapé
+  (`:8081 · 🌿 branch · parado`). Mudar a porta pelo chip `:porta` do painel
+  atualiza a sidebar na hora.
+
 ## [0.88.1] — 2026-06-05
 
 ### Novidades

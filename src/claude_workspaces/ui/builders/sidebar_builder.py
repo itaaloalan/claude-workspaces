@@ -496,6 +496,9 @@ class SidebarBuilder:
         self.console_runner_requested = self._footer.console_runner_requested
         self.runner_toggle_requested = self._footer.runner_toggle_requested
         self.runner_restart_requested = self._footer.runner_restart_requested
+        self.console_runners_remove_requested = (
+            self._footer.console_runners_remove_requested
+        )
         self.set_console_runners = self._footer.set_console_runners
         self.version_label = self._footer.version_label
         self.minimized_tray = self._footer.minimized_tray

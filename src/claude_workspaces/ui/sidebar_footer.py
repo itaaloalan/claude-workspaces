@@ -196,6 +196,9 @@ class SidebarFooter(QWidget):
     console_runner_requested = Signal(str, str)  # workspace_id, runner_id
     runner_toggle_requested = Signal(str, str)  # workspace_id, runner_id
     runner_restart_requested = Signal(str, str)  # workspace_id, runner_id
+    # 🗑 do header da seção "console": remover todos os runners do console
+    # ativo do workspace exibido.
+    console_runners_remove_requested = Signal(str)  # workspace_id
 
     def __init__(
         self,
@@ -470,7 +473,32 @@ class SidebarFooter(QWidget):
             lbl.clicked.connect(
                 lambda s=scope: self._toggle_runner_scope(s)
             )
-            self._runner_rows.addWidget(lbl)
+            if scope != "console":
+                self._runner_rows.addWidget(lbl)
+                return
+            # Seção console: label + 🗑 (remover todos os runners do
+            # console ativo) na mesma linha.
+            row = QWidget()
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(4)
+            rl.addWidget(lbl, stretch=1)
+            trash = QPushButton("🗑")
+            trash.setFixedSize(18, 16)
+            trash.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            trash.setToolTip("Remover todos os runners deste console")
+            trash.setStyleSheet(
+                "QPushButton { background: transparent; border: 0; "
+                f"color: {theme.TEXT_DISABLED}; font-size: 10px; }}"
+                "QPushButton:hover { color: #e06c75; }"
+            )
+            trash.clicked.connect(
+                lambda _c=False: self.console_runners_remove_requested.emit(
+                    self._runner_workspace_id
+                )
+            )
+            rl.addWidget(trash)
+            self._runner_rows.addWidget(row)
 
         last_scope = ""
         for workspace_id, runner_id, name, state, status, url, cwd, scope in rows:
