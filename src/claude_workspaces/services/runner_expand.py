@@ -19,6 +19,29 @@ def expand_port(text: str, port: int) -> str:
     return text.replace("{port}", str(port))
 
 
+# Bootstrap de dependências node pra diretório recém-criado: worktree novo
+# não tem node_modules, então binários locais (`ng`, `vite`, …) quebram com
+# "comando não encontrado". Só dispara quando há package.json SEM
+# node_modules no cwd do runner; respeita o lockfile (pnpm/yarn/npm). Se o
+# install falhar, o comando original nem roda (&&) — o erro real aparece.
+_NODE_BOOTSTRAP = (
+    "if [ -f package.json ] && [ ! -d node_modules ]; then "
+    "echo '📦 node_modules ausente — instalando dependências…'; "
+    "if [ -f pnpm-lock.yaml ]; then pnpm install; "
+    "elif [ -f yarn.lock ]; then yarn install; "
+    "else npm install; fi; "
+    "fi && "
+)
+
+
+def wrap_with_node_bootstrap(cmd: str) -> str:
+    """Prefixa `cmd` com o bootstrap de node_modules (no-op em diretórios
+    sem package.json ou já instalados)."""
+    if not cmd.strip():
+        return cmd
+    return _NODE_BOOTSTRAP + cmd
+
+
 def build_env(env: dict[str, str], port: int) -> dict[str, str]:
     """Env final do processo do runner: expande `{port}` nos VALORES (não
     nas chaves) e injeta `PORT=<port>` quando `port > 0` e o usuário não

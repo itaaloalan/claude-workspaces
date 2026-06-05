@@ -32,7 +32,11 @@ from PySide6.QtWidgets import (
 
 from ..models import RunnerConfig
 from ..pty_session import PtySession
-from ..services.runner_expand import build_env, expand_port
+from ..services.runner_expand import (
+    build_env,
+    expand_port,
+    wrap_with_node_bootstrap,
+)
 from ..services.runner_url_detect import detect_url
 from ..settings import Settings
 from .terminal_widget import STATIC_DIR, TerminalBridge
@@ -490,6 +494,12 @@ class RunnerWidget(QWidget):
         # {port} → porta do runner (start/stop/restart_cmd passam todos por
         # aqui). Persistido fica o literal; a expansão é só na execução.
         cmd = expand_port(cmd, self._runner.port)
+        # Texto exibido no status — sem o prefixo de bootstrap abaixo.
+        display_cmd = cmd
+        # Worktree recém-criado não tem node_modules — instala deps antes
+        # do start quando há package.json sem node_modules (no-op senão).
+        if intent in ("start", "restart"):
+            cmd = wrap_with_node_bootstrap(cmd)
         argv = ["bash", "-lc", cmd]
         # Reset do estado de detecção a cada start/restart pra reabrir
         # o browser numa nova execução.
@@ -528,7 +538,9 @@ class RunnerWidget(QWidget):
             label = "startando"
         else:
             label = {"stop": "parando"}.get(intent, intent)
-        self._set_state("running", f"● {label}: {cmd[:80]}", status_label=label)
+        self._set_state(
+            "running", f"● {label}: {display_cmd[:80]}", status_label=label
+        )
 
     def _on_bridge_ready(self) -> None:
         self._bridge_ready = True

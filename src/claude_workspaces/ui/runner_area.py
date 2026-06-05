@@ -225,6 +225,9 @@ class RunnerArea(QWidget):
         # scope) — main_window resolve o console ativo e dispara o
         # _raise_stack_here do painel dele.
         self._raise_stack_on_console_handler: Callable[[], None] | None = None
+        # Callback do "🗂 Runners de consoles…" (menu ⋯) — abre o dialog
+        # de gerenciamento dos runners console-scoped do workspace.
+        self._manage_console_runners_handler: Callable[[], None] | None = None
 
         self._refresh_from_workspace()
 
@@ -242,6 +245,11 @@ class RunnerArea(QWidget):
         self, handler: Callable[[], None]
     ) -> None:
         self._raise_stack_on_console_handler = handler
+
+    def set_manage_console_runners_handler(
+        self, handler: Callable[[], None]
+    ) -> None:
+        self._manage_console_runners_handler = handler
 
     def workspace(self) -> Workspace:
         return self._ws
@@ -649,6 +657,11 @@ class RunnerArea(QWidget):
     def _open_more_menu(self) -> None:
         menu = QMenu(self)
         menu.addAction("✕ Remover todos", self._remove_all)
+        if self._manage_console_runners_handler is not None:
+            menu.addAction(
+                "🗂 Runners de consoles…",
+                self._manage_console_runners_handler,
+            )
         menu.addSeparator()
         menu.addAction("Importar", self._import_runners)
         menu.addAction("Exportar", self._export_runners)

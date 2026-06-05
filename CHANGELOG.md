@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.92.0] — 2026-06-05
+
+### Novidades
+- **Dialog "🗂 Runners de consoles".** Mostra quantas sessões/consoles têm
+  runners (🟢 aberto / ⚪ fechado, título da sessão resolvido pelo transcript,
+  N runners com portas) e remove por grupo ou todos os órfãos de consoles
+  fechados de uma vez ("🗑 Remover de consoles fechados"). Acessível pelo
+  menu ⋯ dos painéis de runners e pelo menu de contexto do workspace na
+  sidebar (quando há runners console-scoped). Runners de console aberto são
+  parados antes de remover.
+- **Bootstrap automático de node_modules.** Subir a stack num worktree
+  recém-criado quebrava com `ng: comando não encontrado` (worktree novo não
+  tem node_modules). Agora todo start/restart confere: há `package.json`
+  sem `node_modules` no cwd? → roda `pnpm/yarn/npm install` (conforme o
+  lockfile) antes do comando; em diretório já instalado é no-op. Se o
+  install falhar, o start não roda (o erro real aparece no log).
+
 ## [0.91.0] — 2026-06-05
 
 ### Correções

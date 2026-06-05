@@ -184,3 +184,24 @@ def test_runner_config_port_parse_string_e_invalido():
     assert RunnerConfig.from_dict({"port": "3000"}).port == 3000
     assert RunnerConfig.from_dict({"port": "abc"}).port == 0
     assert RunnerConfig.from_dict({"port": None}).port == 0
+
+
+# ---- wrap_with_node_bootstrap ------------------------------------------------
+
+
+def test_bootstrap_prefixa_o_comando():
+    from claude_workspaces.services.runner_expand import wrap_with_node_bootstrap
+
+    out = wrap_with_node_bootstrap("npm start")
+    assert out.endswith("npm start")
+    assert "package.json" in out and "node_modules" in out
+    assert "pnpm-lock.yaml" in out and "yarn.lock" in out
+    # Falha do install impede o start (&&).
+    assert "fi && npm start" in out
+
+
+def test_bootstrap_comando_vazio_intacto():
+    from claude_workspaces.services.runner_expand import wrap_with_node_bootstrap
+
+    assert wrap_with_node_bootstrap("") == ""
+    assert wrap_with_node_bootstrap("   ") == "   "

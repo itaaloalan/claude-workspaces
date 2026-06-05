@@ -2130,6 +2130,15 @@ class MainWindow(QMainWindow):
             menu.addAction(min_act)
             menu.addSeparator()
             self._add_remove_worktree_menu(menu, ws)
+            if any((r.console_session_id or "") for r in ws.runners):
+                manage_act = QAction("🗂 Runners de consoles…", menu)
+                manage_act.setToolTip(
+                    "Ver quais consoles/sessões têm runners e remover"
+                )
+                manage_act.triggered.connect(
+                    lambda _c=False, w=ws: self._open_console_runners_manager(w)
+                )
+                menu.addAction(manage_act)
             terms = self._running_terminals_for_workspace(ws.id)
             if terms:
                 menu.addSeparator()
@@ -4597,6 +4606,9 @@ class MainWindow(QMainWindow):
         area.set_raise_stack_on_console_handler(
             lambda w=ws: self._raise_stack_on_active_console(w)
         )
+        area.set_manage_console_runners_handler(
+            lambda w=ws: self._open_console_runners_manager(w)
+        )
         area.runners_changed.connect(lambda w=ws: self._persist_workspace(w))
         area.runners_changed.connect(
             lambda wid=ws.id: self._refresh_runner_children(wid)
@@ -4636,6 +4648,101 @@ class MainWindow(QMainWindow):
             return
         console_area = self._ensure_terminal_runner_panel(workspace, term)
         console_area.raise_stack_here()
+
+    def _console_runner_groups(self, ws: Workspace) -> list[dict]:
+        """Grupos de runners console-scoped de um workspace, um por
+        console_session_id — alimenta o ConsoleRunnersDialog."""
+        by_sid: dict[str, list] = {}
+        for r in ws.runners:
+            sid = (r.console_session_id or "").strip()
+            if sid:
+                by_sid.setdefault(sid, []).append(r)
+        if not by_sid:
+            return []
+        # Consoles abertos: sid (real e pending) → (term, título da aba).
+        open_labels: dict[str, str] = {}
+        t_area = self.terminals_coord._areas.get(ws.id)
+        if t_area is not None:
+            for i in range(t_area.tabs.count()):
+                term = t_area.tabs.widget(i)
+                if not isinstance(term, TerminalWidget):
+                    continue
+                try:
+                    label = t_area._compute_tab_display(term)
+                except Exception:
+                    label = term.effective_title() or "console"
+                wt = term.worktree_label().strip().lstrip("·").strip()
+                if term.is_worktree() and wt:
+                    label = f"{label} · 🌿 {wt}"
+                for sid in self._console_runner_sids(term):
+                    open_labels[sid] = label
+        # Sessões persistidas (consoles fechados) — título por id.
+        closed_labels: dict[str, str] = {}
+        try:
+            from ..claude_sessions import list_sessions_for_paths
+            for s in list_sessions_for_paths(list(ws.folders), limit=50):
+                closed_labels[s.id] = s.label(include_origin=True)
+        except Exception:
+            log.debug("scan de sessões pro manager falhou", exc_info=True)
+        groups: list[dict] = []
+        for sid, runners in by_sid.items():
+            is_open = sid in open_labels
+            if is_open:
+                label = open_labels[sid]
+            elif sid in closed_labels:
+                label = closed_labels[sid]
+            elif sid.startswith("pending:"):
+                label = "(console fechado — sessão não identificada)"
+            else:
+                label = f"(console fechado) {sid[:12]}…"
+            groups.append({
+                "sid": sid,
+                "label": label,
+                "open": is_open,
+                "runners": [
+                    (r.name or "(runner)") + (f" :{r.port}" if r.port > 0 else "")
+                    for r in runners
+                ],
+            })
+        # Abertos primeiro, depois fechados.
+        groups.sort(key=lambda g: (not g["open"], g["label"]))
+        return groups
+
+    def _remove_runners_by_sid(self, ws: Workspace, sid: str) -> None:
+        """Remove todos os runners de um console_session_id: para os
+        processos vivos (se o painel do console existe), tira do modelo e
+        persiste. Sem confirmação — quem confirma é o chamador (dialog)."""
+        ids = {
+            r.id for r in ws.runners
+            if (r.console_session_id or "") == sid
+        }
+        if not ids:
+            return
+        for area in self._console_runner_areas.get(ws.id, {}).values():
+            if area.console_session_id() != sid:
+                continue
+            for rid in ids:
+                rw = area.widget_for(rid)
+                if rw is not None and rw.is_running():
+                    rw.terminate()
+        ws.runners = [r for r in ws.runners if r.id not in ids]
+        self._persist_workspace(ws)
+        for area in self._console_runner_areas.get(ws.id, {}).values():
+            if area.console_session_id() == sid:
+                area._refresh_from_workspace()
+        self._refresh_runner_children(ws.id)
+        self._refresh_console_runners_footer()
+
+    def _open_console_runners_manager(self, workspace: Workspace) -> None:
+        """Dialog "Runners de consoles": quantos consoles têm runners e
+        remoção por grupo / órfãos."""
+        from .console_runners_dialog import ConsoleRunnersDialog
+        dlg = ConsoleRunnersDialog(
+            groups_provider=lambda w=workspace: self._console_runner_groups(w),
+            on_remove=lambda sid, w=workspace: self._remove_runners_by_sid(w, sid),
+            parent=self,
+        )
+        dlg.exec()
 
     def _raise_stack_on_active_console_by_id(self, workspace_id: str) -> None:
         """⬇ da seção "console" do rodapé — resolve o workspace pelo id."""
@@ -4796,6 +4903,9 @@ class MainWindow(QMainWindow):
         )
         area.set_generate_handler(
             lambda w=workspace: self._generate_runner_with_claude(w)
+        )
+        area.set_manage_console_runners_handler(
+            lambda w=workspace: self._open_console_runners_manager(w)
         )
         area.runners_changed.connect(lambda w=workspace: self._persist_workspace(w))
         area.runners_changed.connect(
