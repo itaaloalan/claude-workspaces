@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.97.1] — 2026-06-05
+
+### Correções
+- **Sidebar agora coincide com as abas do centro (de verdade).** O fix da
+  0.96.1 era sobrescrito na sequência: `_refresh_workspace_child_titles`
+  (re-desambiguação, chamado no fim de todo re-anexo) reaplicava o display
+  de TODOS os consoles a partir do título BASE ("claude (resume)") — e como
+  os bases colidem, ainda ganhavam sufixos #1/#2 cruzados. A re-desambiguação
+  e o `_update_terminal_child` passam a montar o display a partir do título
+  EFETIVO (custom_name > preview > base), igual às abas do centro.
+
 ## [0.97.0] — 2026-06-05
 
 ### Novidades

@@ -6322,12 +6322,16 @@ class MainWindow(QMainWindow):
         if not isinstance(widget, TerminalChildWidget):
             return
         full_title = title
+        display_base = title
         term = self._terminal_widget_for(tab_id)
         if term is not None:
             full_title = term.full_title() or title
+            display_base = term.effective_title() or title
         previous_base = self._tab_base_titles.get(tab_id)
         self._tab_base_titles[tab_id] = title
-        display = self._compute_disambiguated_title(item.parent(), tab_id, title)
+        display = self._compute_disambiguated_title(
+            item.parent(), tab_id, display_base
+        )
         widget.set_title(display, full_title)
         is_plan_mode = term.is_plan_mode if term is not None else False
         state = self._resolve_state(is_working, is_running, needs_decision, is_plan_mode)
@@ -6404,11 +6408,19 @@ class MainWindow(QMainWindow):
             base = self._tab_base_titles.get(sib_id, "")
             if not base:
                 continue
+            # Display usa o título EFETIVO (custom_name > preview > base):
+            # reaplicar a partir do base ("claude (resume)") regredia o
+            # nome resolvido em todo rebuild — e como os bases colidem,
+            # todos ganhavam sufixo #N por cima.
             full = base
+            display_base = base
             term = self._terminal_widget_for(sib_id)
             if term is not None:
                 full = term.full_title() or base
-            display = self._compute_disambiguated_title(ws_item, sib_id, base)
+                display_base = term.effective_title() or base
+            display = self._compute_disambiguated_title(
+                ws_item, sib_id, display_base
+            )
             sib_widget.set_title(display, full)
 
     # ---------- git info na sidebar ----------
