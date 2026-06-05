@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.93.1] — 2026-06-05
+
+### Correções
+- **Painel Git (Ferramentas) segue os worktrees IRMÃOS em workspace
+  multi-repo.** Com o console num worktree, só o repo dele aparecia como
+  worktree — os demais repos (map-web, map-camera…) entravam com o diretório
+  PRINCIPAL. Agora cada extra é traduzido pro worktree de mesma branch do
+  seu repo quando existir (`translate_dir_for_repo`), com cache por
+  (cwd, extras) invalidado quando worktree é criado/adotado/removido pelo
+  app. Sem worktree irmão, o repo continua mostrando o principal.
+
 ## [0.93.0] — 2026-06-05
 
 ### Novidades

@@ -2375,6 +2375,8 @@ class MainWindow(QMainWindow):
                 self, "Falha ao remover worktree", msg or "erro desconhecido"
             )
             return
+        self._git_sync_xlate_cache = {}
+        self._sync_git_panel_to_active_console()
         detalhe = f"Worktree \"{nome}\" removido."
         if branch:
             ok_b, _msg_b = delete_branch(repo_folder, branch)
@@ -2424,6 +2426,8 @@ class MainWindow(QMainWindow):
             return
         path, branch = dlg.created()
         if path:
+            self._git_sync_xlate_cache = {}
+            self._sync_git_panel_to_active_console()
             flash_toast(f"Worktree criado: 🌿 {branch} — {path}")
 
     def _open_pane_worktree_menu(self) -> None:
@@ -4598,7 +4602,29 @@ class MainWindow(QMainWindow):
             # principal enquanto o console trabalhava no worktree.
             cwd = term.worktree_dir() or term.claude_cwd()
             if cwd:
-                folders = [cwd, *term.extra_dirs()]
+                extras = list(term.extra_dirs())
+                # Multi-repo: o worktree do console é de UM repo; os extras
+                # entravam com o diretório PRINCIPAL dos outros repos. Se o
+                # repo do extra tem worktree da MESMA branch, o painel passa
+                # a inspecionar esse worktree irmão (translate_dir_for_repo).
+                # Cacheado por (cwd, extras) — o sync roda a cada clique e o
+                # translate chama git; o cache é limpo quando worktree é
+                # criado/adotado/removido pelo app.
+                if term.worktree_dir() and extras:
+                    cache = getattr(self, "_git_sync_xlate_cache", None)
+                    if cache is None:
+                        cache = self._git_sync_xlate_cache = {}
+                    key = (cwd, tuple(extras))
+                    translated = cache.get(key)
+                    if translated is None:
+                        from ..git_worktree import translate_dir_for_repo
+                        translated = [
+                            translate_dir_for_repo(cwd, e) or e
+                            for e in extras
+                        ]
+                        cache[key] = translated
+                    extras = translated
+                folders = [cwd, *extras]
         panel.set_folders_override(folders)
 
     def _console_dirs_for(self, workspace_id: str) -> list[tuple[str, str]]:
@@ -5994,6 +6020,9 @@ class MainWindow(QMainWindow):
         """A sessão de um console criou (ou removeu) um git worktree em
         runtime — pede git status do worktree na hora (chip 🌿 da sidebar
         via _on_repo_status_ready) e atualiza o header do pane."""
+        # Layout de worktrees mudou → invalida a tradução extra→worktree
+        # do painel Git (sync do console ativo).
+        self._git_sync_xlate_cache = {}
         term = self.sender()
         if path:
             self._repo_poller.request(path)
