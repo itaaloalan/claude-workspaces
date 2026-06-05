@@ -141,6 +141,15 @@ class RunnerArea(QWidget):
         self._stop_all_btn.clicked.connect(self._stop_all)
         h.addWidget(self._stop_all_btn)
 
+        self._point_all_btn = QPushButton("📁 Apontar todos")
+        self._point_all_btn.setStyleSheet(_RUNNER_BTN_QSS)
+        self._point_all_btn.setToolTip(
+            "Mudar o cwd de todos os runners para o worktree/diretório "
+            "de uma sessão Claude"
+        )
+        self._point_all_btn.clicked.connect(self._open_point_all_menu)
+        h.addWidget(self._point_all_btn)
+
         self._more_btn = QPushButton("⋯")
         self._more_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._more_btn.setFixedWidth(32)
@@ -457,6 +466,40 @@ class RunnerArea(QWidget):
             else:
                 log.info("restart_all: start %r", w.config().name)
                 w.start()
+
+    def _open_point_all_menu(self) -> None:
+        """Menu do botão "📁 Apontar todos": lista os diretórios/worktrees
+        das sessões Claude abertas (mesma fonte do chip 📁 individual) e
+        aponta TODOS os runners deste escopo pro escolhido."""
+        menu = QMenu(self)
+        dirs = self._console_dirs_provider() if self._console_dirs_provider else []
+        if not dirs:
+            act = menu.addAction("(nenhum console aberto)")
+            act.setEnabled(False)
+        else:
+            for label, path in dirs:
+                act = menu.addAction(f"📁 {label}")
+                act.triggered.connect(
+                    lambda _checked=False, p=path: self._point_all_to(p)
+                )
+        menu.addSeparator()
+        menu.addAction("↩ Voltar todos ao padrão", lambda: self._point_all_to(""))
+        menu.exec(
+            self._point_all_btn.mapToGlobal(
+                self._point_all_btn.rect().bottomLeft()
+            )
+        )
+
+    def _point_all_to(self, path: str) -> None:
+        """Aponta o cwd de todos os runners deste escopo pra `path`
+        ("" volta ao padrão). Resync defensivo antes de iterar — mesmo
+        racional do restart_all: o painel pode estar fora de fase com
+        `ws.runners`."""
+        self._refresh_from_workspace()
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget):
+                w.set_cwd_override(path)
 
     def _remove_all(self) -> None:
         in_scope = [r for r in self._ws.runners if self._matches_scope(r)]

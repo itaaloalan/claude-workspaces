@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.85.0] — 2026-06-05
+
+### Novidades
+- **Botão "📁 Apontar todos" no header da área de runners.** Abre um menu com os
+  diretórios/worktrees das sessões Claude abertas (mesma fonte do chip 📁
+  individual) e aponta o cwd de TODOS os runners do escopo pro escolhido de uma
+  vez — útil pra mover a stack inteira pro worktree da sessão. Inclui ação
+  "↩ Voltar todos ao padrão" pra limpar os overrides.
+
+### Correções
+- **Mudança em runner não perde mais a seleção do workspace na sidebar.** Mudar a
+  pasta de um runner (chip 📁) ou editá-lo persiste o workspace e dispara o
+  rebuild da lista; a captura da seleção atual só subia um nível de `parent()` —
+  com a árvore profunda (workspace → Sessões Claude → console → runner), o id
+  ficava `None` e o fallback selecionava o PRIMEIRO workspace da lista. Agora a
+  captura usa `_workspace_of_item()`, que sobe todos os níveis.
+
 ## [0.84.1] — 2026-06-04
 
 ### Correções

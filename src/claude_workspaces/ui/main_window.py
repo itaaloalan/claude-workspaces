@@ -2141,16 +2141,17 @@ class MainWindow(QMainWindow):
     # ---------- listagem / filtro / badge ----------
 
     def refresh_list(self) -> None:
+        # Sobe TODOS os níveis até o workspace (_workspace_of_item) — a
+        # árvore é profunda (Workspace → bucket Sessões Claude → console →
+        # runner); subir só um parent() deixava current_id = None quando um
+        # runner/console estava selecionado, e o rebuild caía no fallback
+        # que seleciona o primeiro workspace da lista.
         current_id = None
         current_item = self.list_widget.currentItem()
         if current_item:
-            data = current_item.data(0, Qt.ItemDataRole.UserRole)
-            if isinstance(data, Workspace):
-                current_id = data.id
-            elif current_item.parent():
-                pdata = current_item.parent().data(0, Qt.ItemDataRole.UserRole)
-                if isinstance(pdata, Workspace):
-                    current_id = pdata.id
+            ws = self._workspace_of_item(current_item)
+            if ws is not None:
+                current_id = ws.id
 
         # Batch de paint: desabilita repaints durante a reconstrução inteira
         # da árvore (clear + re-add de N workspaces × M filhos). Sem isso o
