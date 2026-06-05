@@ -99,6 +99,43 @@ def is_worktree_path(path: str) -> bool:
     return a != b
 
 
+def resolve_git_dirs(folder: str) -> tuple[Path, Path] | None:
+    """Resolve (git_dir, common_dir) de uma pasta, sem subprocess.
+
+    Num repo normal `.git` é diretório e git_dir == common_dir. Numa worktree
+    linkada `.git` é um ARQUIVO "gitdir: <path>" apontando para
+    `<repo>/.git/worktrees/<nome>` (onde vivem HEAD/index/logs por-worktree);
+    o common-dir (refs/heads compartilhado) vem do arquivo `commondir` dentro
+    dele. Retorna None se a pasta não é um repo git.
+    """
+    dotgit = Path(folder) / ".git"
+    if dotgit.is_dir():
+        return dotgit, dotgit
+    if not dotgit.is_file():
+        return None
+    try:
+        content = dotgit.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not content.startswith("gitdir:"):
+        return None
+    git_dir = Path(content[len("gitdir:"):].strip())
+    if not git_dir.is_absolute():
+        git_dir = (Path(folder) / git_dir).resolve()
+    common_dir = git_dir
+    commondir_file = git_dir / "commondir"
+    if commondir_file.is_file():
+        try:
+            rel = commondir_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            rel = ""
+        if rel:
+            common_dir = (
+                Path(rel) if Path(rel).is_absolute() else (git_dir / rel).resolve()
+            )
+    return git_dir, common_dir
+
+
 def current_branch(path: str) -> str:
     """Nome da branch atual em `path` ("" se detached/erro)."""
     rc, out = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], path)
@@ -140,6 +177,31 @@ def remove_worktree(worktree_path: str) -> tuple[bool, str]:
     rc, out = _run(
         ["git", "worktree", "remove", "--force", worktree_path], main_repo
     )
+    return rc == 0, out
+
+
+def dirty_files(worktree_path: str) -> list[str]:
+    """Linhas do `git status --short` do worktree ([] se limpo/erro)."""
+    rc, out = _run(["git", "status", "--short"], worktree_path)
+    if rc != 0:
+        return []
+    return [ln for ln in out.splitlines() if ln.strip()]
+
+
+def unpushed_commits(worktree_path: str) -> list[str]:
+    """Commits do HEAD que não estão em NENHUM remote (oneline)."""
+    rc, out = _run(
+        ["git", "log", "--oneline", "HEAD", "--not", "--remotes"],
+        worktree_path,
+    )
+    if rc != 0:
+        return []
+    return [ln for ln in out.splitlines() if ln.strip()]
+
+
+def delete_branch(repo_path: str, branch: str) -> tuple[bool, str]:
+    """`git branch -d` (sem -D): falha se a branch não estiver mergeada."""
+    rc, out = _run(["git", "branch", "-d", branch], repo_path)
     return rc == 0, out
 
 

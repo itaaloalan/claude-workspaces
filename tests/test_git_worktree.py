@@ -6,6 +6,7 @@ from claude_workspaces.git_worktree import (
     add_worktree,
     list_local_branches,
     remove_worktree,
+    resolve_git_dirs,
     safe_dir_name,
     suggest_branch_name,
     worktree_base,
@@ -109,3 +110,61 @@ def test_list_local_branches(repo):
     assert "main" in branches
     assert "feature/a" in branches
     assert "bugfix/b" in branches
+
+
+def test_resolve_git_dirs_repo_normal(repo):
+    dirs = resolve_git_dirs(str(repo))
+    assert dirs is not None
+    git_dir, common_dir = dirs
+    assert git_dir == common_dir == repo / ".git"
+
+
+def test_resolve_git_dirs_worktree(repo):
+    ok, _msg, dest = add_worktree(str(repo), "claude/wt-a")
+    assert ok
+    dirs = resolve_git_dirs(str(dest))
+    assert dirs is not None
+    git_dir, common_dir = dirs
+    # git_dir privado da worktree; common compartilhado no repo principal
+    assert git_dir != common_dir
+    assert git_dir == (repo / ".git" / "worktrees" / git_dir.name).resolve()
+    assert common_dir == (repo / ".git").resolve()
+    assert (git_dir / "HEAD").is_file()
+    assert (common_dir / "refs" / "heads").is_dir()
+
+
+def test_resolve_git_dirs_nao_repo(tmp_path):
+    assert resolve_git_dirs(str(tmp_path)) is None
+
+
+def test_dirty_files_e_unpushed_commits(repo):
+    from claude_workspaces.git_worktree import (
+        dirty_files,
+        unpushed_commits,
+    )
+
+    ok, msg, wt = add_worktree(str(repo), "feat/sujo", None, create_branch=True)
+    assert ok, msg
+    assert dirty_files(str(wt)) == []
+    assert unpushed_commits(str(wt)) != []
+
+    (wt / "novo.txt").write_text("x\n")
+    sujos = dirty_files(str(wt))
+    assert any("novo.txt" in ln for ln in sujos)
+
+
+def test_delete_branch_so_mergeada(repo):
+    from claude_workspaces.git_worktree import delete_branch
+
+    _run(["git", "branch", "mergeada"], repo)
+    ok, _ = delete_branch(str(repo), "mergeada")
+    assert ok
+
+    _run(["git", "checkout", "-q", "-b", "nao-mergeada"], repo)
+    (repo / "g.txt").write_text("y\n")
+    _run(["git", "add", "g.txt"], repo)
+    _run(["git", "commit", "-q", "-m", "extra"], repo)
+    _run(["git", "checkout", "-q", "main"], repo)
+    ok, msg = delete_branch(str(repo), "nao-mergeada")
+    assert not ok
+    assert "nao-mergeada" in msg

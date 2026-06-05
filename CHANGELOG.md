@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.88.0] — 2026-06-05
+
+### Novidades
+- **🗑 Remover worktree direto pelo app.** Submenu "🗑 Remover worktree" no
+  chip 🌿 Worktree do header do pane e nos menus de contexto da sidebar
+  (workspace e console). Lista os worktrees por repo do workspace, desabilita
+  os que estão em uso por um console aberto, e antes de remover confere
+  pendências: arquivos modificados/não rastreados e commits fora de qualquer
+  remote são listados num aviso de perda. Após remover, tenta `git branch -d`
+  (mantém a branch se não mergeada). Nota: workspaces multi-repo podem ter o
+  worktree da mesma branch em mais de um repo — remover um não remove os
+  outros (o menu mostra cada um sob o nome do repo).
+- **Rodapé de runners com seções "workspace" e "console".** As cópias
+  console-scoped (criadas pelo "⬇ Subir stack") não se misturam mais com os
+  runners default: cada grupo aparece sob seu sub-header, e as linhas de
+  console mostram o 🌿 branch do worktree dono no lugar do prefixo antigo.
+
+### Correções
+- **Git panel acompanha consoles em worktree.** O watcher de index/HEAD/reflog
+  resolvia `.git` como diretório — em worktree linkada `.git` é um arquivo
+  `gitdir:`; agora `resolve_git_dirs()` separa o git_dir privado (HEAD/index/
+  logs) do common-dir compartilhado (refs/heads) e o painel reage a commits/
+  checkouts feitos dentro do worktree.
+
 ## [0.87.1] — 2026-06-05
 
 ### Novidades

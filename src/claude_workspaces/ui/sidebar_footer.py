@@ -289,7 +289,7 @@ class SidebarFooter(QWidget):
         rp_layout.setContentsMargins(8, 6, 8, 6)
         rp_layout.setSpacing(5)
 
-        runner_head = QLabel("Runners do workspace")
+        runner_head = QLabel("Runners")
         runner_head.setStyleSheet(
             f"color: {theme.TEXT_FAINT}; font-size: 10px; font-weight: 700; "
             "letter-spacing: 0.5px;"
@@ -410,11 +410,15 @@ class SidebarFooter(QWidget):
             self._min_chip.setVisible(False)
 
     def set_console_runners(
-        self, runners: list[tuple[str, str, str, str, str, str, str]]
+        self,
+        runners: list[tuple[str, str, str, str, str, str, str, str]],
     ) -> None:
         """Atualiza a lista contextual de runners do workspace selecionado.
 
-        Tupla: (workspace_id, runner_id, name, state, status, url, cwd).
+        Tupla: (workspace_id, runner_id, name, state, status, url, cwd,
+        scope) — scope ∈ {"workspace", "console"}; cada grupo é renderizado
+        sob seu próprio sub-header pra cópias de console não se misturarem
+        com os runners default do workspace.
         """
         while self._runner_rows.count():
             item = self._runner_rows.takeAt(0)
@@ -433,7 +437,22 @@ class SidebarFooter(QWidget):
         self._runner_workspace_id = workspace_id
         self._runner_chip.setText(f"{len(runners)} runner" + ("s" if len(runners) != 1 else ""))
         self._runner_chip.setVisible(True)
-        for workspace_id, runner_id, name, state, status, url, cwd in runners:
+
+        def _add_section(title: str) -> None:
+            lbl = QLabel(title)
+            lbl.setStyleSheet(
+                f"color: {theme.TEXT_DISABLED}; font-size: 9px; "
+                "font-weight: 700; letter-spacing: 0.5px; padding-top: 2px;"
+            )
+            self._runner_rows.addWidget(lbl)
+
+        last_scope = ""
+        for workspace_id, runner_id, name, state, status, url, cwd, scope in runners:
+            if scope != last_scope:
+                _add_section(
+                    "console" if scope == "console" else "workspace"
+                )
+                last_scope = scope
             self._runner_rows.addWidget(
                 self._make_runner_row(
                     workspace_id, runner_id, name, state, status, url, cwd

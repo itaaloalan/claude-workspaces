@@ -2055,6 +2055,7 @@ class MainWindow(QMainWindow):
                 self._add_open_in_worktree_menu(menu, owner_ws)
                 if term.is_running():
                     self._add_switch_to_worktree_menu(menu, owner_ws, term)
+                self._add_remove_worktree_menu(menu, owner_ws)
             if term.is_running():
                 self._add_session_info_actions(menu, term)
                 continue_act = QAction("▶ Continuar este console", menu)
@@ -2086,6 +2087,8 @@ class MainWindow(QMainWindow):
             )
             min_act.triggered.connect(lambda _c=False, w=ws: self._minimize_workspace(w))
             menu.addAction(min_act)
+            menu.addSeparator()
+            self._add_remove_worktree_menu(menu, ws)
             terms = self._running_terminals_for_workspace(ws.id)
             if terms:
                 menu.addSeparator()
@@ -2201,6 +2204,130 @@ class MainWindow(QMainWindow):
             sub.addAction(act)
         menu.addSeparator()
 
+    def _add_remove_worktree_menu(self, menu: QMenu, workspace: Workspace) -> None:
+        from ..git_worktree import list_worktrees
+
+        in_use: set[str] = set()
+        area = self.terminals_coord._areas.get(workspace.id)
+        if area is not None:
+            for i in range(area.tabs.count()):
+                t = area.tabs.widget(i)
+                if isinstance(t, TerminalWidget):
+                    for p in (t.worktree_dir(), t.claude_cwd() or ""):
+                        if p:
+                            in_use.add(str(Path(p).resolve()))
+        entries: list[tuple[str, str, str, str, bool]] = []
+        for folder in workspace.folders:
+            repo = Path(folder)
+            if not (repo / ".git").exists():
+                continue
+            for wt in list_worktrees(str(repo)):
+                path = wt.get("worktree", "")
+                if not path or Path(path).resolve() == repo.resolve():
+                    continue
+                branch = wt.get("branch", "")
+                if branch.startswith("refs/heads/"):
+                    branch = branch[len("refs/heads/"):]
+                used = str(Path(path).resolve()) in in_use
+                entries.append(
+                    (repo.name, folder, branch or Path(path).name, path, used)
+                )
+        if not entries:
+            return
+        sub = menu.addMenu("🗑 Remover worktree")
+        sub.setToolTipsVisible(True)
+        last_repo = ""
+        for repo_name, folder, label, path, used in entries:
+            if repo_name != last_repo:
+                header = QAction(repo_name, sub)
+                header.setEnabled(False)
+                sub.addAction(header)
+                last_repo = repo_name
+            act = QAction(f"🗑 {label}" + (" — em uso" if used else ""), sub)
+            act.setToolTip(
+                "Worktree em uso por um console aberto — feche o console antes"
+                if used
+                else path
+            )
+            if used:
+                act.setEnabled(False)
+            else:
+                act.triggered.connect(
+                    lambda _c=False, f=folder, b=label, p=path: (
+                        self._confirm_remove_worktree(f, b, p)
+                    )
+                )
+            sub.addAction(act)
+        menu.addSeparator()
+
+    def _confirm_remove_worktree(
+        self, repo_folder: str, branch: str, path: str
+    ) -> None:
+        from ..git_worktree import (
+            delete_branch,
+            dirty_files,
+            remove_worktree,
+            unpushed_commits,
+        )
+
+        sujos = dirty_files(path)
+        pendentes = unpushed_commits(path)
+        nome = Path(path).name
+        if sujos or pendentes:
+            partes: list[str] = []
+            if sujos:
+                listado = "\n".join(f"  {ln}" for ln in sujos[:12])
+                if len(sujos) > 12:
+                    listado += f"\n  … +{len(sujos) - 12} arquivo(s)"
+                partes.append(
+                    f"Arquivos modificados/não rastreados ({len(sujos)}):\n{listado}"
+                )
+            if pendentes:
+                listado = "\n".join(f"  {ln}" for ln in pendentes[:8])
+                if len(pendentes) > 8:
+                    listado += f"\n  … +{len(pendentes) - 8} commit(s)"
+                partes.append(
+                    f"Commits fora de qualquer remote ({len(pendentes)}):\n{listado}"
+                )
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Icon.Warning)
+            box.setWindowTitle("Worktree com pendências")
+            box.setText(
+                f"O worktree \"{nome}\" (branch {branch}) tem alterações que "
+                f"serão PERDIDAS na remoção:"
+            )
+            box.setInformativeText("\n\n".join(partes))
+            remover_btn = box.addButton(
+                "Remover mesmo assim", QMessageBox.ButtonRole.DestructiveRole
+            )
+            box.addButton(QMessageBox.StandardButton.Cancel)
+            box.exec()
+            if box.clickedButton() is not remover_btn:
+                return
+        else:
+            resposta = QMessageBox.question(
+                self,
+                "Remover worktree",
+                f"Remover o worktree \"{nome}\" (branch {branch})?\n\n{path}",
+            )
+            if resposta != QMessageBox.StandardButton.Yes:
+                return
+        ok, msg = remove_worktree(path)
+        if not ok:
+            QMessageBox.warning(
+                self, "Falha ao remover worktree", msg or "erro desconhecido"
+            )
+            return
+        detalhe = f"Worktree \"{nome}\" removido."
+        if branch:
+            ok_b, _msg_b = delete_branch(repo_folder, branch)
+            detalhe += (
+                f"\nBranch {branch} removida."
+                if ok_b
+                else f"\nBranch {branch} mantida (não mergeada)."
+            )
+        QMessageBox.information(self, "Worktree removido", detalhe)
+
     def _open_pane_worktree_menu(self) -> None:
         """Menu do chip 🌿 no header do terminal pane: alternar a sessão
         ativa pra outro worktree (EnterWorktree) e/ou abrir um console novo
@@ -2220,6 +2347,7 @@ class MainWindow(QMainWindow):
         if term.is_running():
             self._add_switch_to_worktree_menu(menu, ws, term)
         self._add_open_in_worktree_menu(menu, ws)
+        self._add_remove_worktree_menu(menu, ws)
         if menu.isEmpty():
             act = menu.addAction(
                 "(nenhum worktree neste workspace — use /criar-worktree)"
@@ -3688,8 +3816,12 @@ class MainWindow(QMainWindow):
                     return area
             return None
 
-        rows: list[tuple[str, str, str, str, str, str, str]] = []
-        for runner in runners:
+        # Workspace-scope primeiro, console-scope depois — o footer renderiza
+        # cada grupo sob seu próprio sub-header ("workspace"/"console").
+        rows: list[tuple[str, str, str, str, str, str, str, str]] = []
+        for runner in sorted(
+            runners, key=lambda r: bool(r.console_session_id)
+        ):
             state = "idle"
             status = "parado"
             url = runner.browser_url or ""
@@ -3703,14 +3835,16 @@ class MainWindow(QMainWindow):
                     status = rw.current_status_label()
                     url = rw.current_url() or url
                     cwd = rw.effective_cwd()
-            scope_label = scope
+            # O scope sai do texto da linha (vira o sub-header do grupo);
+            # console mantém o 🌿 branch do worktree dono.
+            status_label = status
             if runner.console_session_id:
                 branch = self._console_branch_for(runner.console_session_id)
                 if branch:
-                    scope_label = f"{scope} · 🌿 {branch}"
+                    status_label = f"🌿 {branch} · {status}"
             rows.append(
                 (ws.id, runner.id, runner.name or "(runner)", state,
-                 f"{scope_label} · {status}", url, cwd)
+                 status_label, url, cwd, scope)
             )
         setter(rows)
 

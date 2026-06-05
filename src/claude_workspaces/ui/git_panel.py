@@ -56,6 +56,7 @@ from ..git_actions import (
     fetch as git_fetch,
 )
 from ..git_status import GitFile, GitStatus, get_diff, get_status
+from ..git_worktree import resolve_git_dirs
 from ..models import Workspace
 from . import theme
 from .spinner import Spinner
@@ -688,14 +689,18 @@ class GitPanel(QWidget):
             self._watcher.removePaths(self._watcher.directories())
         targets: list[str] = []
         for folder in repo_folders:
-            git_dir = Path(folder) / ".git"
-            if not git_dir.exists():
+            dirs = resolve_git_dirs(folder)
+            if dirs is None:
                 continue
-            for name in ("index", "HEAD", "FETCH_HEAD", "ORIG_HEAD"):
-                f = git_dir / name
-                if f.exists():
-                    targets.append(str(f))
-            heads = git_dir / "refs" / "heads"
+            # Em worktree linkada git_dir != common_dir: HEAD/index/ORIG_HEAD
+            # são por-worktree (git_dir); refs/heads é compartilhado (common).
+            git_dir, common_dir = dirs
+            for base in dict.fromkeys((git_dir, common_dir)):
+                for name in ("index", "HEAD", "FETCH_HEAD", "ORIG_HEAD"):
+                    f = base / name
+                    if f.exists():
+                        targets.append(str(f))
+            heads = common_dir / "refs" / "heads"
             if heads.is_dir():
                 targets.append(str(heads))
             # Reflog: dispara o drain quando merge/commit/checkout/pull ocorre.
@@ -745,7 +750,11 @@ class GitPanel(QWidget):
         leitura e joga no console. Na primeira vez só registra o tamanho
         (não reproduz histórico). Captura atividade de qualquer origem."""
         for folder in self._active_folders():
-            reflog = Path(folder) / ".git" / "logs" / "HEAD"
+            dirs = resolve_git_dirs(folder)
+            if dirs is None:
+                continue
+            # logs/HEAD é por-worktree: vive no git_dir privado, não no common.
+            reflog = dirs[0] / "logs" / "HEAD"
             if not reflog.is_file():
                 continue
             key = str(reflog)
