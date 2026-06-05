@@ -39,7 +39,7 @@ from ..services.runner_expand import (
     expand_port_refs,
     wrap_with_node_bootstrap,
 )
-from ..services.runner_url_detect import detect_url
+from ..services.runner_url_detect import detect_url, swap_url_port, url_port
 from ..settings import Settings
 from .terminal_widget import STATIC_DIR, TerminalBridge
 
@@ -746,12 +746,25 @@ class RunnerWidget(QWidget):
             if not self._ready_pattern_matched:
                 return
 
-        url = self._effective_browser_url() or detect_url(self._output_buf)
+        cfg = self._effective_browser_url()
+        detected = detect_url(self._output_buf)
+        url = cfg or detected
         if not url:
             return
+        # Config carrega o PATH certo mas pode ter porta hardcoded — a
+        # porta REAL entra no lugar: detectada no log (verdade absoluta)
+        # > alocada no runner > config como está.
+        if cfg:
+            real = url_port(detected or "") or (
+                self._runner.port if self._runner.port > 0 else 0
+            )
+            if real:
+                url = swap_url_port(cfg, real)
         self._browser_opened_this_start = True
         self._set_current_url(url)
-        self._warn_port_mismatch(url)
+        # Aviso de descompasso compara a porta REAL (detectada) — a url
+        # acima pode já ter sido corrigida pro swap e mascararia o caso.
+        self._warn_port_mismatch(detected or url)
         # Sai do label "startando" → "rodando" agora que detectamos o
         # ready/URL e vamos abrir o browser. State continua "running".
         self._emit_status_label("rodando")

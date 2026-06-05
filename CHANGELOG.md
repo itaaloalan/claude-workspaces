@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.97.2] — 2026-06-05
+
+### Correções
+- **"Abrir browser" respeita a porta real do runner.** A URL da config
+  (com porta hardcoded, ex `:4201`) vencia a detectada — a cópia rodando
+  na 4202 abria o browser na 4201. Agora a URL aberta mescla o PATH da
+  config com a porta REAL: detectada no log > alocada no runner > config
+  como está (runner sem porta fica intacto — caso glassfish). O chip 🌐 e
+  a sidebar mostram a URL que realmente abre; o aviso ⚠ de descompasso
+  continua comparando contra a porta detectada.
+
 ## [0.97.1] — 2026-06-05
 
 ### Correções

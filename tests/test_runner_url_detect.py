@@ -154,3 +154,33 @@ def test_pr_label_no_number_falls_back_to_pr():
     # merge_requests SEM número cai em "PR" — caso só teórico, já que
     # detect_pr_url só casa URLs com número.
     assert pr_label_from_url("https://gitlab.com/a/b/-/merge_requests/") == "PR"
+
+
+# ---- url_port / swap_url_port ------------------------------------------------
+
+
+def test_url_port():
+    from claude_workspaces.services.runner_url_detect import url_port
+
+    assert url_port("http://localhost:4201/x") == 4201
+    assert url_port("https://dev.local/x") == 0
+    assert url_port("") == 0
+
+
+def test_swap_url_port_preserva_path_e_query():
+    from claude_workspaces.services.runner_url_detect import swap_url_port
+
+    assert swap_url_port("http://localhost:4201/a/b?q=1", 4202) == (
+        "http://localhost:4202/a/b?q=1"
+    )
+    assert swap_url_port(
+        "http://localhost:8088/ogpms/faces/login/login_ogpms.xhtml", 8089
+    ) == "http://localhost:8089/ogpms/faces/login/login_ogpms.xhtml"
+
+
+def test_swap_url_port_sem_porta_ou_zero_intacta():
+    from claude_workspaces.services.runner_url_detect import swap_url_port
+
+    assert swap_url_port("http://localhost/x", 4202) == "http://localhost/x"
+    assert swap_url_port("http://localhost:4201/x", 0) == "http://localhost:4201/x"
+    assert swap_url_port("", 4202) == ""

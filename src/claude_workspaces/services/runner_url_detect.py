@@ -108,3 +108,29 @@ def pr_label_from_url(url: str) -> str:
     num = pr_number_from_url(url)
     prefix = "MR" if _MR_NUM_RE.search(url) else "PR"
     return f"{prefix} #{num}" if num else prefix
+
+
+_URL_PORT_RE = re.compile(r"(://[^/:\s]+):(\d{1,5})")
+
+
+def url_port(url: str) -> int:
+    """Porta explícita de uma URL (0 quando ausente/inválida)."""
+    m = _URL_PORT_RE.search(url or "")
+    if not m:
+        return 0
+    try:
+        return int(m.group(2))
+    except ValueError:
+        return 0
+
+
+def swap_url_port(url: str, port: int) -> str:
+    """Troca a porta explícita `:NNNN` da URL por `port`, preservando
+    host/path/query. URL sem porta explícita ou `port <= 0` → intacta.
+
+    Usado pelo open-browser do runner: a URL da config carrega o PATH
+    certo mas pode ter a porta hardcoded — a porta REAL (detectada no
+    log ou alocada) entra no lugar."""
+    if port <= 0 or not url:
+        return url
+    return _URL_PORT_RE.sub(lambda m: f"{m.group(1)}:{port}", url, count=1)
