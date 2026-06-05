@@ -2428,7 +2428,12 @@ class MainWindow(QMainWindow):
         if path:
             self._git_sync_xlate_cache = {}
             self._sync_git_panel_to_active_console()
-            flash_toast(f"Worktree criado: 🌿 {branch} — {path}")
+            synced = dlg.synced_configs()
+            extra = (
+                f" ({len(synced)} config(s) locais sincronizadas)"
+                if synced else ""
+            )
+            flash_toast(f"Worktree criado: 🌿 {branch} — {path}{extra}")
 
     def _open_pane_worktree_menu(self) -> None:
         """Menu do chip 🌿 no header do terminal pane: alternar a sessão
@@ -4968,7 +4973,11 @@ class MainWindow(QMainWindow):
             workspace,
             settings=self.settings,
             console_session_id=sid,
-            default_cwd=terminal.claude_cwd() or "",
+            # Worktree adotado em runtime tem precedência sobre o cwd do
+            # launch — painel criado DEPOIS da adoção (ex: "⬇ Subir stack")
+            # nascia apontando pro repo principal e as cópias rodavam fora
+            # do worktree.
+            default_cwd=terminal.worktree_dir() or terminal.claude_cwd() or "",
         )
         area.set_console_dirs_provider(
             lambda wid=workspace.id: self._console_dirs_for(wid)

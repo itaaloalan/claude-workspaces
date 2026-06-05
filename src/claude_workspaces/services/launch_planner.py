@@ -70,6 +70,13 @@ def plan_from_dialog(
             return LaunchPlan(
                 cwd=cwd, extras=extras, error=f"worktree falhou: {msg}"
             )
+        # Worktree nasce com os configs locais do repo principal (banco
+        # local, .env…) — best-effort, não falha o launch.
+        try:
+            from .worktree_bootstrap import sync_local_configs
+            sync_local_configs(cwd, str(dest))
+        except Exception:  # noqa: BLE001 — launch segue mesmo se a cópia falhar
+            pass
         cwd = str(dest)
         label = f" · {branch}"
         return LaunchPlan(

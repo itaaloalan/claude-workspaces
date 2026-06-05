@@ -46,6 +46,7 @@ class NewWorktreeDialog(QDialog):
         self.setMinimumWidth(520)
         self._created_path: str = ""
         self._created_branch: str = ""
+        self._synced_configs: list[str] = []
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -94,6 +95,10 @@ class NewWorktreeDialog(QDialog):
         """(path, branch) do worktree criado ('' se cancelado/falhou)."""
         return self._created_path, self._created_branch
 
+    def synced_configs(self) -> list[str]:
+        """Configs locais copiadas do repo principal pro worktree."""
+        return list(self._synced_configs)
+
     def _on_repo_changed(self) -> None:
         repo = self._repo.currentData() or ""
         self._branches = list_local_branches(repo) if repo else []
@@ -134,6 +139,12 @@ class NewWorktreeDialog(QDialog):
                 self, "Falha ao criar worktree", msg or "erro desconhecido"
             )
             return
+        # Configs locais do repo principal (banco, .env…) → worktree.
+        try:
+            from ..services.worktree_bootstrap import sync_local_configs
+            self._synced_configs = sync_local_configs(repo, str(dest))
+        except Exception:  # noqa: BLE001 — criação vale mesmo sem a cópia
+            self._synced_configs = []
         self._created_path = str(dest)
         self._created_branch = branch
         self.accept()

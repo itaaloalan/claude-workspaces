@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.94.0] — 2026-06-05
+
+### Novidades
+- **Worktree novo nasce com o banco/configs do ambiente atual.** Criar
+  worktree pelo app (➕ Criar worktree e launch dialog) agora copia do repo
+  PRINCIPAL os configs locais que diferem do checkout (application-*.yml/
+  properties, glassfish-resources.xml, appsettings*.json, .env/.env.local,
+  CLAUDE.md, settings.local.json) — o principal é a fonte da verdade (o
+  /trocar-banco mantém ele e o MCP em sincronia). O toast informa quantas
+  configs foram sincronizadas. A skill /criar-worktree ganhou o passo
+  equivalente: lê o banco do MCP (~/.claude.json) e ajusta SÓ o database
+  da config do worktree, reportando `🗄 banco ajustado`.
+
+### Correções
+- **"⬇ Subir stack" usava o repo principal em vez do worktree adotado.**
+  O painel de runners do console criado DEPOIS da adoção do worktree (ex:
+  sessão que rodou /criar-worktree e o app adotou) nascia com default_cwd
+  do launch (`claude_cwd`) — as cópias rodavam fora do worktree. Agora o
+  worktree adotado tem precedência (`worktree_dir() or claude_cwd()`).
+
 ## [0.93.2] — 2026-06-05
 
 ### Correções
