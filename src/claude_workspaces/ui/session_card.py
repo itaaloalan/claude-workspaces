@@ -217,12 +217,22 @@ class SessionCard(QFrame):
         self.star_toggled.emit(self.session, self._starred)
 
     def _title_text(self) -> str:
-        if self.session.preview:
-            text = self.session.preview.replace("\n", " ").strip()
-            if len(text) > 56:
-                return text[:55] + "…"
-            return text
-        return "(sem prompt registrado)"
+        # Nome custom (rename do usuário / skill) tem prioridade — mesmo
+        # título que a sidebar mostra (custom_name > preview do prompt).
+        try:
+            from ..session_marks import get_custom_name
+            name = get_custom_name(self.session.id)
+        except Exception:
+            name = ""
+        text = (
+            name
+            or (self.session.preview or "").replace("\n", " ").strip()
+        )
+        if not text:
+            return "(sem prompt registrado)"
+        if len(text) > 56:
+            return text[:55] + "…"
+        return text
 
     def _when_text(self) -> str:
         when = datetime.fromtimestamp(self.session.mtime)

@@ -56,3 +56,21 @@ def test_first_user_message_limpa_tags(tmp_path):
     ]
     jsonl.write_text("\n".join(json.dumps(ln) for ln in lines), encoding="utf-8")
     assert _read_first_user_message(jsonl) == "/criar-worktree"
+
+
+# ---- branch_to_session_name -------------------------------------------------
+
+
+def test_branch_to_session_name():
+    from claude_workspaces.ui.terminal_widget import branch_to_session_name
+
+    assert branch_to_session_name("fix/extrair-informacoes-lacres") == (
+        "fix: extrair informacoes lacres"
+    )
+    assert branch_to_session_name("feat/campo_poco_secundario") == (
+        "feat: campo poco secundario"
+    )
+    assert branch_to_session_name(" · feat/x-y") == "feat: x y"
+    assert branch_to_session_name("develop") == "develop"
+    assert branch_to_session_name("") == ""
+    assert branch_to_session_name("isolado") == ""

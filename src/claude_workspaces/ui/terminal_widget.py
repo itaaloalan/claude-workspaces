@@ -32,6 +32,21 @@ def _login_shell() -> str:
 
 log = logging.getLogger(__name__)
 
+
+def branch_to_session_name(branch: str) -> str:
+    """Nome de sessão derivado da branch do worktree:
+    `fix/extrair-informacoes-lacres` → "fix: extrair informacoes lacres".
+    Sem `/` vira só a branch com separadores → espaços. "" pra vazio/
+    'isolado' (worktree sem branch)."""
+    branch = (branch or "").strip().lstrip("·").strip()
+    if not branch or branch == "isolado":
+        return ""
+    if "/" in branch:
+        tipo, nome = branch.split("/", 1)
+        nome = nome.replace("-", " ").replace("_", " ").strip()
+        return f"{tipo}: {nome}".strip()
+    return branch.replace("-", " ").replace("_", " ").strip()
+
 STATIC_DIR = Path(__file__).parent / "static"
 
 
@@ -693,6 +708,11 @@ class TerminalWidget(QWidget):
                     self._custom_name = saved
             except Exception:
                 log.debug("falha ao ler custom_name", exc_info=True)
+            # Ainda sem nome e rodando num worktree (lançado direto nele):
+            # batiza com a branch — DEPOIS de carregar os marks, pra nunca
+            # sobrescrever um rename salvo de sessão resumida.
+            if not self._custom_name and self._is_worktree:
+                self._maybe_name_after_branch(self._worktree_label)
         elif self._custom_name:
             # Caso o usuário tenha renomeado antes da sessão resolver —
             # agora que sabemos o session_id, persiste retroativamente.
@@ -793,7 +813,20 @@ class TerminalWidget(QWidget):
         self._is_worktree = True
         self._worktree_label = f" · {branch}" if branch else " · isolado"
         log.info("console adotou worktree %s (branch=%s)", path, branch)
+        # Sessão sem nome ganha o nome do worktree automaticamente
+        # (branch fix/extrair-info → "fix: extrair info").
+        self._maybe_name_after_branch(branch)
         self.worktree_adopted.emit(path, branch)
+
+    def _maybe_name_after_branch(self, branch: str) -> None:
+        """Batiza a sessão com o nome da branch do worktree quando ela
+        ainda não tem nome custom — espelha o rename da skill
+        /criar-worktree pros worktrees criados/adotados pelo app."""
+        if self._custom_name:
+            return
+        name = branch_to_session_name(branch)
+        if name:
+            self.set_custom_name(name)
 
     def backend(self) -> str:
         return getattr(self, "_backend", "claude")

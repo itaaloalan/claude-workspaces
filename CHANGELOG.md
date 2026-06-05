@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.97.0] — 2026-06-05
+
+### Novidades
+- **Sessão batizada automaticamente com o nome do worktree.** Sessão sem
+  nome que cria/adota um worktree (EnterWorktree, /criar-worktree, "Alternar
+  sessão", launch direto em worktree) ganha o nome derivado da branch
+  (`fix/extrair-info` → "fix: extrair info") — mesmo formato do rename da
+  skill. Sessão que JÁ tem nome (rename do usuário ou resumida com nome
+  salvo) nunca é sobrescrita: no launch o batismo só roda depois de carregar
+  o session_marks.
+- **Cards de "Sessões recentes" mostram o mesmo nome da sidebar.** O título
+  do card prioriza o `custom_name` (rename do usuário/skill) e só cai pro
+  preview do prompt quando não há nome — centro e sidebar coincidem.
+
 ## [0.96.1] — 2026-06-05
 
 ### Correções
