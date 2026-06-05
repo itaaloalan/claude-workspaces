@@ -765,8 +765,13 @@ class RunnerArea(QWidget):
                     clone.port = prev.port
                 else:
                     try:
+                        # exclude_id=src.id: a porta do runner de origem não
+                        # é reservada — 1ª cópia usa a própria base quando
+                        # livre; o bind test pula pra base+1 se a origem
+                        # estiver rodando.
                         clone.port = next_free_port(
-                            clone.port, used_ports_in_workspace(self._ws)
+                            clone.port,
+                            used_ports_in_workspace(self._ws, exclude_id=src.id),
                         )
                     except RuntimeError:
                         _logger().warning(

@@ -137,6 +137,35 @@ def test_used_ports_in_workspace():
     assert used_ports_in_workspace(ws) == {8080, 3000}
 
 
+def test_used_ports_exclui_origem():
+    api = RunnerConfig(name="api", port=8080)
+    ws = Workspace(
+        name="w",
+        runners=[api, RunnerConfig(name="web", port=3000)],
+    )
+    assert used_ports_in_workspace(ws, exclude_id=api.id) == {3000}
+
+
+def test_primeira_copia_usa_base_quando_livre(monkeypatch):
+    """Sem cópias de console e porta livre no SO, a 1ª cópia fica com a
+    própria base; com uma cópia já na base, incrementa."""
+    monkeypatch.setattr(
+        "claude_workspaces.services.port_alloc.is_port_free",
+        lambda p, host="127.0.0.1": True,
+    )
+    api = RunnerConfig(name="api", port=8080)
+    ws = Workspace(name="w", runners=[api])
+    # used SEM a porta da origem → base é alocável.
+    used = used_ports_in_workspace(ws, exclude_id=api.id)
+    assert next_free_port(api.port, used) == 8080
+    # Com uma cópia console já na 8080, a próxima vai pra 8081.
+    ws.runners.append(
+        RunnerConfig(name="api", port=8080, console_session_id="sid-1")
+    )
+    used = used_ports_in_workspace(ws, exclude_id=api.id)
+    assert next_free_port(api.port, used) == 8081
+
+
 # ---- modelo -----------------------------------------------------------------
 
 

@@ -48,6 +48,16 @@ def next_free_port(
     )
 
 
-def used_ports_in_workspace(workspace) -> set[int]:
-    """Portas já reservadas pelos runners do workspace (todos os escopos)."""
-    return {r.port for r in workspace.runners if getattr(r, "port", 0) > 0}
+def used_ports_in_workspace(workspace, *, exclude_id: str = "") -> set[int]:
+    """Portas já reservadas pelos runners do workspace (todos os escopos).
+
+    `exclude_id` ignora um runner específico — usado pra NÃO reservar a
+    porta do runner de ORIGEM ao copiar pro console: sem nenhuma cópia
+    existente (e porta livre no SO), a 1ª cópia fica com a própria base;
+    o bind test cuida do caso "origem rodando" (porta ocupada → base+1).
+    """
+    return {
+        r.port
+        for r in workspace.runners
+        if getattr(r, "port", 0) > 0 and r.id != exclude_id
+    }

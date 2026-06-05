@@ -1706,7 +1706,10 @@ class MainWindow(QMainWindow):
             if self._runners_pane_is_minimized():
                 self._toggle_runners_minimized()
         elif panel_id == "runners_console":
-            self._minimize_tray.remove_chip("runners_console")
+            if self._runners_console_pane_is_minimized():
+                self._focus_pane_from_sidebar("runners_console")
+            else:
+                self._minimize_tray.remove_chip("runners_console")
         elif panel_id == "terminal_pane":
             if self._terminal_pane_is_minimized():
                 self._toggle_terminal_pane_minimized()
@@ -1723,7 +1726,14 @@ class MainWindow(QMainWindow):
         return len(sizes) >= 3 and sizes[1] <= 4
 
     def _runners_console_pane_is_minimized(self) -> bool:
-        return True
+        if not self._runners_console_pane.isVisible():
+            return True
+        sizes = (
+            self._bottom_sub_splitter.sizes()
+            if hasattr(self, "_bottom_sub_splitter")
+            else []
+        )
+        return len(sizes) >= 3 and sizes[2] <= 4
 
     def _terminal_pane_is_minimized(self) -> bool:
         sizes = (
@@ -1837,9 +1847,18 @@ class MainWindow(QMainWindow):
         )
 
     def _toggle_runners_console_minimized(self) -> None:
-        if hasattr(self, "_minimize_tray"):
-            self._minimize_tray.remove_chip("runners_console")
-        self._runners_console_pane.hide()
+        self._toggle_pane_at(
+            2,
+            self._runners_console_pane,
+            self._runners_console_minimize_btn,
+            "runners_console",
+            "Runners console",
+            "fa5s.list-alt",
+            "Minimizar runners do console",
+            "Restaurar runners do console",
+            "_runners_console_last_size",
+            320,
+        )
 
     def _open_file_finder_dialog(self, initial_query: str = "") -> None:
         """Abre o modal de localizar arquivo usando as pastas do workspace
@@ -4071,7 +4090,7 @@ class MainWindow(QMainWindow):
         # garantir que estão visíveis antes de redimensionar.
         self._terminal_pane_widget.setVisible(True)
         self._runners_pane.setVisible(True)
-        self._runners_console_pane.setVisible(False)
+        self._runners_console_pane.setVisible(pane == "runners_console")
 
         cur = self._bottom_sub_splitter.sizes()
         total = sum(cur)
@@ -4106,7 +4125,24 @@ class MainWindow(QMainWindow):
             btns_to_max = []
             btns_to_min = [self._terminal_pane_minimize_btn, self._runners_minimize_btn]
         elif pane == "runners_console":
-            return
+            # Pane "Runners console" no lugar do pane de runners do
+            # workspace: terminal continua em cima, runners workspace
+            # zerado (vira chip pra restaurar).
+            if cur[0] > 4:
+                self._terminal_pane_last_size = cur[0]
+            if cur[1] > 4:
+                self._runners_last_size = cur[1]
+            console_target = getattr(self, "_runners_console_last_size", 320) or 320
+            console_target = min(max(console_target, 240), max(total // 2, 240))
+            console_target = min(console_target, max(total - 220, 120))
+            target = [max(total - console_target, 220), 0, console_target]
+            chips_add = [("runners", "Runners", "mdi6.source-branch")]
+            chips_remove = ["terminal_pane"]
+            btns_to_max = [self._runners_minimize_btn]
+            btns_to_min = [
+                self._terminal_pane_minimize_btn,
+                self._runners_console_minimize_btn,
+            ]
         else:
             return
 

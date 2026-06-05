@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.90.0] — 2026-06-05
+
+### Novidades
+- **Pane "Runners console" no centro.** Clicar num runner de console (rodapé
+  da sidebar) ou usar "⬇ Subir stack no console" agora abre o painel
+  "Runners console" no centro (lado do terminal), mostrando os runners do
+  console ativo — o pane existia mas estava permanentemente oculto desde um
+  refactor antigo. Minimizável pelo botão do header (vira chip na faixa
+  Minimizados); o pane de runners do workspace vira chip enquanto o do
+  console está aberto.
+
+### Correções
+- **1ª cópia de console usa a própria porta base.** A alocação não reserva
+  mais a porta do runner de ORIGEM: sem nenhuma cópia de console e com a
+  porta livre no SO, a cópia nasce com a base (ex: 8080); se o runner do
+  workspace estiver rodando (porta ocupada no bind test) ou já houver
+  cópias, incrementa (8081, 8082…) como antes.
+
 ## [0.89.0] — 2026-06-05
 
 ### Novidades
