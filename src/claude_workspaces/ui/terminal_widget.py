@@ -634,7 +634,12 @@ class TerminalWidget(QWidget):
                     self._session_resolved = True
                     self._claim_session(s.id)
                     return
-            return
+            # Resume cujo id NÃO aparece no cwd atual: resumir em outro
+            # diretório (ex: pra dentro de um worktree) cria um JSONL NOVO
+            # aqui, com id novo — o antigo mora no project-dir antigo. Sem
+            # este fallthrough o título ficava preso em "claude (resume)" e
+            # o custom_name (gravado no id antigo) nunca carregava. Cai na
+            # detecção de sessão nova abaixo; o _claim_session migra o nome.
         # Sessão nova — exclui (a) JSONLs que já existiam ANTES do nosso
         # start e (b) IDs já reivindicados por outros TerminalWidgets vivos.
         # Sem esses filtros, duas abas no mesmo cwd disputavam o mesmo
@@ -667,11 +672,23 @@ class TerminalWidget(QWidget):
         self._claimed_session_id = session_id
         TerminalWidget._claimed_session_ids.add(session_id)
         # Carrega o custom_name persistido (se houver) — usuário pode ter
-        # renomeado essa sessão numa execução anterior do app.
+        # renomeado essa sessão numa execução anterior do app. Sessão
+        # RESUMIDA com id novo (resume noutro cwd/worktree) herda o nome
+        # gravado no id antigo, migrando-o pro novo.
         if not self._custom_name:
             try:
-                from ..session_marks import get_custom_name
+                from ..session_marks import get_custom_name, set_custom_name
                 saved = get_custom_name(session_id)
+                if (
+                    not saved
+                    and self._claude_resume_id
+                    and self._claude_resume_id != session_id
+                ):
+                    saved = get_custom_name(self._claude_resume_id)
+                    if saved:
+                        set_custom_name(
+                            session_id, saved, self._claude_cwd or ""
+                        )
                 if saved:
                     self._custom_name = saved
             except Exception:

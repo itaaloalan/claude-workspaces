@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.95.1] — 2026-06-05
+
+### Correções
+- **Nome da sessão não se perde mais ao resumir noutro diretório.** Resumir
+  uma sessão pra dentro de um worktree (cwd diferente do original) cria um
+  JSONL novo com id novo — a resolução procurava o id ANTIGO no diretório
+  novo, nunca achava, e o console ficava preso no título "claude (resume)"
+  sem o nome custom. Agora: (1) quando o id do resume não aparece no cwd
+  atual, cai na detecção de sessão nova (claima o id novo); (2) ao claimar,
+  o `custom_name` gravado no id antigo é migrado pro novo no
+  session_marks.json.
+
 ## [0.95.0] — 2026-06-05
 
 ### Novidades
