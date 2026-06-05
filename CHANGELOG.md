@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.95.0] — 2026-06-05
+
+### Novidades
+- **Porta aplicada automaticamente em dev servers conhecidos.** Runner com
+  porta configurada mas sem `{port}` no comando: o start anexa a flag certa
+  ao final — `ng serve`/`vite` → `--port N` (a última ocorrência vence,
+  sobrepondo porta hardcoded no script do package.json), `next dev` → `-p N`,
+  `npm start`/`npm run X`/`pnpm` → `-- --port N`, `yarn` → `--port N`. O
+  banner mostra `🔌 porta :N aplicada automaticamente ao comando`. Comando
+  com `{port}` explícito não é tocado; padrão não reconhecido segue com as
+  envs PORT/SERVER_PORT + aviso ⚠ de descompasso.
+
 ## [0.94.1] — 2026-06-05
 
 ### Novidades

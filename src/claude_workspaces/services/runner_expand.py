@@ -7,6 +7,8 @@ browser) — o que se persiste é a `port` numérica; os comandos guardam
 
 from __future__ import annotations
 
+import re
+
 
 def expand_port(text: str, port: int) -> str:
     """Substitui `{port}` por `port` em `text`. `port <= 0` → intacto.
@@ -17,6 +19,38 @@ def expand_port(text: str, port: int) -> str:
     if port <= 0:
         return text
     return text.replace("{port}", str(port))
+
+
+def apply_port_arg(cmd: str, port: int) -> str | None:
+    """Aplica a porta automaticamente em dev servers conhecidos quando o
+    comando não usa `{port}` — anexa a flag ao FINAL do comando, onde a
+    ÚLTIMA ocorrência vence (yargs/cac do ng/vite), sobrepondo porta
+    hardcoded em script do package.json.
+
+    Retorna o comando com a flag, ou None quando não reconhece o padrão
+    (aí valem as envs PORT/SERVER_PORT e o aviso ⚠ de descompasso).
+    """
+    if port <= 0 or not cmd.strip():
+        return None
+    # Último segmento do encadeamento shell — é nele que o append atua.
+    last = re.split(r"&&|;", cmd)[-1].strip()
+    if not last:
+        return None
+    if re.match(r"(?:npx\s+)?ng\s+serve\b", last):
+        return f"{cmd} --port {port}"
+    if re.match(r"(?:npx\s+)?vite\b", last):
+        return f"{cmd} --port {port}"
+    if re.match(r"(?:npx\s+)?next\s+(?:dev|start)\b", last):
+        return f"{cmd} -p {port}"
+    if re.match(r"npm\s+(?:start\b|run\s+\S+)", last):
+        sep = "" if re.search(r"\s--(?:\s|$)", last) else " --"
+        return f"{cmd}{sep} --port {port}"
+    if re.match(r"pnpm\s+\S+", last):
+        sep = "" if re.search(r"\s--(?:\s|$)", last) else " --"
+        return f"{cmd}{sep} --port {port}"
+    if re.match(r"yarn\s+\S+", last):
+        return f"{cmd} --port {port}"
+    return None
 
 
 # Bootstrap de dependências node pra diretório recém-criado: worktree novo

@@ -214,3 +214,61 @@ def test_bootstrap_comando_vazio_intacto():
 
     assert wrap_with_node_bootstrap("") == ""
     assert wrap_with_node_bootstrap("   ") == "   "
+
+
+# ---- apply_port_arg ----------------------------------------------------------
+
+
+def test_apply_port_npm_start():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("npm start", 4202) == "npm start -- --port 4202"
+    assert apply_port_arg("npm run dev", 4202) == "npm run dev -- --port 4202"
+
+
+def test_apply_port_npm_ja_com_separador():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("npm start -- --open", 4202) == (
+        "npm start -- --open --port 4202"
+    )
+
+
+def test_apply_port_encadeado_ultimo_segmento():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("node pre.js && npm start", 4202) == (
+        "node pre.js && npm start -- --port 4202"
+    )
+
+
+def test_apply_port_ng_serve_ultima_vence():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("ng serve --port 4201", 4202) == (
+        "ng serve --port 4201 --port 4202"
+    )
+
+
+def test_apply_port_vite_e_next():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("vite", 5174) == "vite --port 5174"
+    assert apply_port_arg("npx vite dev", 5174) == "npx vite dev --port 5174"
+    assert apply_port_arg("next dev", 3001) == "next dev -p 3001"
+
+
+def test_apply_port_yarn_e_pnpm():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("yarn start", 4202) == "yarn start --port 4202"
+    assert apply_port_arg("pnpm dev", 4202) == "pnpm dev -- --port 4202"
+
+
+def test_apply_port_nao_reconhecido():
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    assert apply_port_arg("mvn spring-boot:run", 8092) is None
+    assert apply_port_arg("python coletor.py", 1972) is None
+    assert apply_port_arg("", 4202) is None
+    assert apply_port_arg("npm start", 0) is None

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from ..models import RunnerConfig
 from ..pty_session import PtySession
 from ..services.runner_expand import (
+    apply_port_arg,
     build_env,
     expand_port,
     wrap_with_node_bootstrap,
@@ -558,7 +559,21 @@ class RunnerWidget(QWidget):
         cwd = self.effective_cwd()
         # {port} → porta do runner (start/stop/restart_cmd passam todos por
         # aqui). Persistido fica o literal; a expansão é só na execução.
+        had_placeholder = "{port}" in cmd
         cmd = expand_port(cmd, self._runner.port)
+        # "Inteligência" de porta: comando sem {port} mas com porta
+        # configurada → anexa a flag em dev servers conhecidos (a última
+        # --port vence no ng/vite, sobrepondo hardcoded do package.json).
+        port_auto_applied = False
+        if (
+            intent in ("start", "restart")
+            and self._runner.port > 0
+            and not had_placeholder
+        ):
+            applied = apply_port_arg(cmd, self._runner.port)
+            if applied:
+                cmd = applied
+                port_auto_applied = True
         # Texto exibido no status — sem o prefixo de bootstrap abaixo.
         display_cmd = cmd
         # Worktree recém-criado não tem node_modules — instala deps antes
@@ -577,7 +592,7 @@ class RunnerWidget(QWidget):
             # Banner com o diretório/worktree no INÍCIO de cada execução —
             # com vários consoles/worktrees, deixa explícito onde o runner
             # está rodando sem precisar abrir o chip 📁.
-            self._emit_cwd_banner(cwd)
+            self._emit_cwd_banner(cwd, port_auto_applied=port_auto_applied)
         try:
             # Intents "stop"/"restart" só chegam aqui quando o runner tem
             # stop_cmd/restart_cmd — comandos substitutos que gerenciam o
@@ -615,7 +630,9 @@ class RunnerWidget(QWidget):
             self._pending_cmd = None
             self._spawn(cmd, intent)
 
-    def _emit_cwd_banner(self, cwd: str) -> None:
+    def _emit_cwd_banner(
+        self, cwd: str, port_auto_applied: bool = False
+    ) -> None:
         """Escreve no terminal do runner (e no log) uma linha com o
         diretório em que esta execução vai rodar — e a branch 🌿 quando o
         diretório é um git worktree linkado."""
@@ -629,9 +646,15 @@ class RunnerWidget(QWidget):
             log.debug("detecção de worktree pro banner falhou", exc_info=True)
         if self._runner.port > 0:
             suffix += f" \x1b[38;5;180m:{self._runner.port}\x1b[0m"
+        extra = ""
+        if port_auto_applied:
+            extra = (
+                f"\x1b[38;5;114m🔌 porta :{self._runner.port} aplicada "
+                "automaticamente ao comando\x1b[0m\r\n"
+            )
         banner = (
             f"\r\n\x1b[38;5;110m📁 rodando em: {cwd or '(indefinido)'}"
-            f"\x1b[0m{suffix}\r\n\r\n"
+            f"\x1b[0m{suffix}\r\n{extra}\r\n"
         )
         self._log_buf = (self._log_buf + banner)[-self._log_buf_max:]
         try:
