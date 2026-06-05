@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.93.0] — 2026-06-05
+
+### Novidades
+- **➕ Criar worktree pelo app.** Ação "➕ Criar worktree…" no chip 🌿 do
+  pane e nos menus de contexto do console e do workspace na sidebar. O
+  dialog escolhe o repo (multi-repo), a branch (existente → checkout em
+  worktree novo; nova → criada a partir da base escolhida) e mostra o path
+  (<repo>.claude/<branch>). Quando o console ativo já roda num worktree, a
+  branch dele vem sugerida — 1 clique pra criar o worktree IRMÃO em outro
+  repo (ex: console no map-api fix/x → criar fix/x no map-web, e a stack
+  multi-repo cai inteira nos worktrees correspondentes).
+
 ## [0.92.0] — 2026-06-05
 
 ### Novidades

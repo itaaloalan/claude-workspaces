@@ -2077,6 +2077,12 @@ class MainWindow(QMainWindow):
                 (w for w in self.workspaces if w.id == ws_id), None
             )
             if owner_ws is not None:
+                wt_suggested = ""
+                if term.is_worktree():
+                    wt_suggested = (
+                        term.worktree_label().strip().lstrip("·").strip()
+                    )
+                self._add_create_worktree_action(menu, owner_ws, wt_suggested)
                 self._add_open_in_worktree_menu(menu, owner_ws)
                 if term.is_running():
                     self._add_switch_to_worktree_menu(menu, owner_ws, term)
@@ -2129,6 +2135,7 @@ class MainWindow(QMainWindow):
             min_act.triggered.connect(lambda _c=False, w=ws: self._minimize_workspace(w))
             menu.addAction(min_act)
             menu.addSeparator()
+            self._add_create_worktree_action(menu, ws)
             self._add_remove_worktree_menu(menu, ws)
             if any((r.console_session_id or "") for r in ws.runners):
                 manage_act = QAction("🗂 Runners de consoles…", menu)
@@ -2378,6 +2385,47 @@ class MainWindow(QMainWindow):
             )
         QMessageBox.information(self, "Worktree removido", detalhe)
 
+    def _add_create_worktree_action(
+        self, menu: QMenu, workspace: Workspace, suggested_branch: str = ""
+    ) -> None:
+        """Ação "➕ Criar worktree…" — abre o NewWorktreeDialog."""
+        act = QAction("➕ Criar worktree…", menu)
+        act.setToolTip(
+            "Cria um git worktree num repo do workspace (branch nova ou "
+            "existente) — aparece nos menus de abrir/alternar console."
+        )
+        act.triggered.connect(
+            lambda _c=False, w=workspace, b=suggested_branch:
+                self._open_new_worktree_dialog(w, b)
+        )
+        menu.addAction(act)
+
+    def _open_new_worktree_dialog(
+        self, workspace: Workspace, suggested_branch: str = ""
+    ) -> None:
+        from .new_worktree_dialog import NewWorktreeDialog
+        from .persistent_toast import flash_toast
+        repos = [
+            f for f in workspace.folders if (Path(f) / ".git").exists()
+        ]
+        if not repos:
+            flash_toast("Nenhum repositório git neste workspace.")
+            return
+        prefix = (
+            workspace.branch_prefix or self.settings.branch_prefix or "claude"
+        )
+        dlg = NewWorktreeDialog(
+            repos,
+            suggested_branch=suggested_branch,
+            branch_prefix=prefix,
+            parent=self,
+        )
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        path, branch = dlg.created()
+        if path:
+            flash_toast(f"Worktree criado: 🌿 {branch} — {path}")
+
     def _open_pane_worktree_menu(self) -> None:
         """Menu do chip 🌿 no header do terminal pane: alternar a sessão
         ativa pra outro worktree (EnterWorktree) e/ou abrir um console novo
@@ -2394,15 +2442,17 @@ class MainWindow(QMainWindow):
         if ws is None or not isinstance(term, TerminalWidget):
             return
         menu = QMenu(self)
+        # Sugere a branch do console quando ele já roda num worktree —
+        # 1 clique pra criar o worktree IRMÃO em outro repo (multi-repo).
+        suggested = ""
+        if term.is_worktree():
+            suggested = term.worktree_label().strip().lstrip("·").strip()
+        self._add_create_worktree_action(menu, ws, suggested)
+        menu.addSeparator()
         if term.is_running():
             self._add_switch_to_worktree_menu(menu, ws, term)
         self._add_open_in_worktree_menu(menu, ws)
         self._add_remove_worktree_menu(menu, ws)
-        if menu.isEmpty():
-            act = menu.addAction(
-                "(nenhum worktree neste workspace — use /criar-worktree)"
-            )
-            act.setEnabled(False)
         menu.exec(
             self._worktree_chip_btn.mapToGlobal(
                 self._worktree_chip_btn.rect().bottomLeft()
