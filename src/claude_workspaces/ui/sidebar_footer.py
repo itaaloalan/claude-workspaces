@@ -206,6 +206,10 @@ class SidebarFooter(QWidget):
         self._on_version_clicked = on_version_clicked
         self._runner_workspace_id = ""
         self._runner_collapsed_workspace_id = ""
+        # Colapso por seção do painel de runners ("workspace"/"console") —
+        # em memória: sobrevive aos refreshes de status, não ao restart.
+        self._runner_scope_collapsed: dict[str, bool] = {}
+        self._last_runner_rows: list[tuple] = []
         self._build()
 
     def _build(self) -> None:
@@ -420,13 +424,9 @@ class SidebarFooter(QWidget):
         sob seu próprio sub-header pra cópias de console não se misturarem
         com os runners default do workspace.
         """
-        while self._runner_rows.count():
-            item = self._runner_rows.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
+        self._last_runner_rows = list(runners)
         if not runners:
+            self._clear_runner_rows()
             self._runner_chip.setChecked(False)
             self._runner_panel.setVisible(False)
             self._runner_chip.setVisible(False)
@@ -437,31 +437,61 @@ class SidebarFooter(QWidget):
         self._runner_workspace_id = workspace_id
         self._runner_chip.setText(f"{len(runners)} runner" + ("s" if len(runners) != 1 else ""))
         self._runner_chip.setVisible(True)
+        self._render_runner_rows()
+        if workspace_changed or self._runner_collapsed_workspace_id != self._runner_workspace_id:
+            self._runner_chip.setChecked(True)
+            self._runner_panel.setVisible(True)
 
-        def _add_section(title: str) -> None:
-            lbl = QLabel(title)
+    def _clear_runner_rows(self) -> None:
+        while self._runner_rows.count():
+            item = self._runner_rows.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+
+    def _render_runner_rows(self) -> None:
+        """(Re)renderiza as rows de `_last_runner_rows` agrupadas por scope,
+        com sub-headers clicáveis que colapsam/expandem cada seção."""
+        self._clear_runner_rows()
+        rows = self._last_runner_rows
+
+        def _add_section(scope: str, count: int) -> None:
+            collapsed = bool(self._runner_scope_collapsed.get(scope, False))
+            arrow = "▸" if collapsed else "▾"
+            text = f"{arrow} {scope}" + (f" ({count})" if collapsed else "")
+            lbl = _ClickableLabel(text)
             lbl.setStyleSheet(
                 f"color: {theme.TEXT_DISABLED}; font-size: 9px; "
                 "font-weight: 700; letter-spacing: 0.5px; padding-top: 2px;"
             )
+            lbl.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            lbl.setToolTip("Colapsar/expandir esta seção")
+            lbl.clicked.connect(
+                lambda s=scope: self._toggle_runner_scope(s)
+            )
             self._runner_rows.addWidget(lbl)
 
         last_scope = ""
-        for workspace_id, runner_id, name, state, status, url, cwd, scope in runners:
+        for workspace_id, runner_id, name, state, status, url, cwd, scope in rows:
             if scope != last_scope:
-                _add_section(
-                    "console" if scope == "console" else "workspace"
-                )
+                count = sum(1 for r in rows if r[7] == scope)
+                _add_section(scope, count)
                 last_scope = scope
+            if self._runner_scope_collapsed.get(scope, False):
+                continue
             self._runner_rows.addWidget(
                 self._make_runner_row(
                     workspace_id, runner_id, name, state, status, url, cwd
                 )
             )
         self._runner_rows.addStretch(1)
-        if workspace_changed or self._runner_collapsed_workspace_id != self._runner_workspace_id:
-            self._runner_chip.setChecked(True)
-            self._runner_panel.setVisible(True)
+
+    def _toggle_runner_scope(self, scope: str) -> None:
+        self._runner_scope_collapsed[scope] = not self._runner_scope_collapsed.get(
+            scope, False
+        )
+        self._render_runner_rows()
 
     def _make_runner_row(
         self,

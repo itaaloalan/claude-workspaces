@@ -3802,7 +3802,20 @@ class MainWindow(QMainWindow):
         for area in self._console_runner_areas.get(ws.id, {}).values():
             for runner in area.runners_in_scope():
                 runners_by_id.setdefault(runner.id, runner)
-        runners = list(runners_by_id.values())
+        # Console-scope: só os runners do console ATIVO — abrir/focar outro
+        # console não pode continuar mostrando os runners do anterior.
+        active_sids: set[str] = set()
+        t_area = self.terminals_coord._areas.get(ws.id)
+        term = t_area.tabs.currentWidget() if t_area is not None else None
+        if isinstance(term, TerminalWidget):
+            sid = term.claimed_session_id()
+            if sid:
+                active_sids.add(sid)
+            active_sids.add(self._pending_console_key(term))
+        runners = [
+            r for r in runners_by_id.values()
+            if not r.console_session_id or r.console_session_id in active_sids
+        ]
         if not runners:
             setter([])
             return
@@ -5077,6 +5090,11 @@ class MainWindow(QMainWindow):
         # /api/oauth/usage gasta cota desnecessária do rate limit).
         area.tabs.currentChanged.connect(
             lambda _i: self._sync_console_runner_host()
+        )
+        # Footer de runners filtra a seção "console" pelo console ATIVO —
+        # troca de aba precisa re-renderizar a lista.
+        area.tabs.currentChanged.connect(
+            lambda _i: self._refresh_console_runners_footer()
         )
         # Header do terminal pane mostra workspace+console+branch+model.
         # Atualiza em:

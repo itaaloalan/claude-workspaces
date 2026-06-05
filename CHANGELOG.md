@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.88.1] — 2026-06-05
+
+### Novidades
+- **Seções do rodapé de runners colapsáveis.** Os sub-headers "workspace" e
+  "console" agora são clicáveis: colapsam/expandem o grupo (`▾ workspace` ↔
+  `▸ workspace (5)` com a contagem quando fechado). Estado em memória —
+  sobrevive aos refreshes de status, reseta no restart.
+
+### Correções
+- **Seção "console" do rodapé segue o console ATIVO.** Abrir/focar outro
+  console não mostra mais os runners do console anterior — a lista filtra
+  pelo session_id do console focado (runners de outros consoles continuam
+  visíveis na árvore da sidebar, sob cada console) e re-renderiza na troca
+  de aba.
+
 ## [0.88.0] — 2026-06-05
 
 ### Novidades
