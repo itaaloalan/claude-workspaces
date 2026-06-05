@@ -7,6 +7,7 @@ from claude_workspaces.git_worktree import (
     list_local_branches,
     remove_worktree,
     resolve_git_dirs,
+    translate_dir_for_repo,
     safe_dir_name,
     suggest_branch_name,
     worktree_base,
@@ -168,3 +169,67 @@ def test_delete_branch_so_mergeada(repo):
     ok, msg = delete_branch(str(repo), "nao-mergeada")
     assert not ok
     assert "nao-mergeada" in msg
+
+
+# ---- translate_dir_for_repo (multi-repo) ------------------------------------
+
+
+@pytest.fixture
+def two_repos(tmp_path):
+    """Dois repos independentes (map-api / map-web) no mesmo workspace."""
+    repos = []
+    for name in ("map-api", "map-web"):
+        p = tmp_path / name
+        p.mkdir()
+        _run(["git", "init", "-q", "-b", "main"], p)
+        _run(["git", "config", "user.email", "t@t"], p)
+        _run(["git", "config", "user.name", "t"], p)
+        (p / "f.txt").write_text("hi\n")
+        _run(["git", "add", "f.txt"], p)
+        _run(["git", "commit", "-q", "-m", "init"], p)
+        repos.append(p)
+    return repos
+
+
+def test_translate_mesmo_repo_devolve_o_proprio_target(two_repos):
+    api, _web = two_repos
+    ok, _msg, wt = add_worktree(str(api), "fix/x")
+    assert ok
+    assert translate_dir_for_repo(str(wt), str(api)) == str(wt)
+
+
+def test_translate_outro_repo_com_worktree_de_mesma_branch(two_repos):
+    api, web = two_repos
+    ok, _m, wt_api = add_worktree(str(api), "fix/x")
+    assert ok
+    ok, _m, wt_web = add_worktree(str(web), "fix/x")
+    assert ok
+    from pathlib import Path
+    out = translate_dir_for_repo(str(wt_api), str(web))
+    assert Path(out).resolve() == Path(wt_web).resolve()
+
+
+def test_translate_outro_repo_sem_worktree_da_branch(two_repos):
+    api, web = two_repos
+    ok, _m, wt_api = add_worktree(str(api), "fix/so-na-api")
+    assert ok
+    assert translate_dir_for_repo(str(wt_api), str(web)) == ""
+
+
+def test_translate_mesma_branch_no_checkout_principal(two_repos):
+    """Console no repo principal da api (branch main) → runner do web cai
+    no checkout principal do web (que também está na main)."""
+    api, web = two_repos
+    from pathlib import Path
+    out = translate_dir_for_repo(str(api), str(web))
+    assert Path(out).resolve() == Path(web).resolve()
+
+
+def test_translate_entradas_invalidas(two_repos, tmp_path):
+    api, _web = two_repos
+    nao_git = tmp_path / "nao-git"
+    nao_git.mkdir()
+    assert translate_dir_for_repo("", str(api)) == ""
+    assert translate_dir_for_repo(str(api), "") == ""
+    assert translate_dir_for_repo(str(nao_git), str(api)) == ""
+    assert translate_dir_for_repo(str(api), str(nao_git)) == ""

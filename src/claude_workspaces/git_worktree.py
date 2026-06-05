@@ -205,6 +205,35 @@ def delete_branch(repo_path: str, branch: str) -> tuple[bool, str]:
     return rc == 0, out
 
 
+def translate_dir_for_repo(target_dir: str, repo_folder: str) -> str:
+    """Equivalente de `target_dir` (dir/worktree de ALGUM repo) no repo
+    `repo_folder` — pra workspaces multi-repo: apontar runners pro worktree
+    de um console não pode jogar um runner do map-web dentro do map-api.
+
+    - target pertence ao próprio repo (mesmo common-dir) → o próprio target;
+    - senão, worktree de MESMA BRANCH em `repo_folder` → path dele;
+    - senão → "" (sem equivalente; quem chama mantém o dir base do repo).
+    """
+    if not target_dir or not repo_folder:
+        return ""
+    t_dirs = resolve_git_dirs(target_dir)
+    r_dirs = resolve_git_dirs(repo_folder)
+    if t_dirs is None or r_dirs is None:
+        return ""
+    if t_dirs[1].resolve() == r_dirs[1].resolve():
+        return target_dir
+    branch = current_branch(target_dir)
+    if not branch:
+        return ""
+    for wt in list_worktrees(repo_folder):
+        wt_branch = wt.get("branch", "")
+        if wt_branch.startswith("refs/heads/"):
+            wt_branch = wt_branch[len("refs/heads/"):]
+        if wt_branch == branch and wt.get("worktree"):
+            return wt["worktree"]
+    return ""
+
+
 def list_worktrees(repo_path: str) -> list[dict]:
     rc, out = _run(["git", "worktree", "list", "--porcelain"], repo_path)
     if rc != 0:

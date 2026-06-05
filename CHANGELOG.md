@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.91.0] — 2026-06-05
+
+### Correções
+- **Workspace multi-repo: runner nunca roda no repo errado.** No map
+  (map-api + map-web + …), o "⬇ Subir stack aqui" rodava o `npm` do web
+  dentro do map-api (ENOENT package.json). Agora o cwd é resolvido POR REPO
+  via `translate_dir_for_repo()`: o dir/worktree do console é traduzido pro
+  repo de CADA runner — worktree de mesma branch quando existir, senão o
+  diretório do próprio repo. Vale pra cópia ("Subir stack"), pro default do
+  painel do console e pro "📁 Apontar todos" (runner sem equivalente não é
+  mexido). A cópia também deixou de herdar o `last_cwd` (apontamento manual)
+  do runner de origem.
+
+### Novidades
+- **⬇ Subir stack pela sidebar.** O header da seção "console" do rodapé de
+  runners ganhou o botão ⬇ (subir a stack do workspace no console ativo) —
+  e a seção aparece mesmo sem cópias quando há um console aberto, dando
+  acesso ao ⬇ direto da sidebar. O 🗑 continua aparecendo só quando há
+  runners no console.
+
 ## [0.90.0] — 2026-06-05
 
 ### Novidades

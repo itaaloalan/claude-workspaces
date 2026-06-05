@@ -199,6 +199,9 @@ class SidebarFooter(QWidget):
     # 🗑 do header da seção "console": remover todos os runners do console
     # ativo do workspace exibido.
     console_runners_remove_requested = Signal(str)  # workspace_id
+    # ⬇ do header da seção "console": subir a stack do workspace no
+    # console ativo (copia runners com remap de porta e inicia).
+    console_stack_raise_requested = Signal(str)  # workspace_id
 
     def __init__(
         self,
@@ -213,6 +216,9 @@ class SidebarFooter(QWidget):
         # em memória: sobrevive aos refreshes de status, não ao restart.
         self._runner_scope_collapsed: dict[str, bool] = {}
         self._last_runner_rows: list[tuple] = []
+        # Há console aberto/focado no workspace exibido (mostra a seção
+        # console com o ⬇ mesmo sem cópias).
+        self._console_active = False
         self._build()
 
     def _build(self) -> None:
@@ -419,15 +425,19 @@ class SidebarFooter(QWidget):
     def set_console_runners(
         self,
         runners: list[tuple[str, str, str, str, str, str, str, str]],
+        console_active: bool = False,
     ) -> None:
         """Atualiza a lista contextual de runners do workspace selecionado.
 
         Tupla: (workspace_id, runner_id, name, state, status, url, cwd,
         scope) — scope ∈ {"workspace", "console"}; cada grupo é renderizado
         sob seu próprio sub-header pra cópias de console não se misturarem
-        com os runners default do workspace.
+        com os runners default do workspace. `console_active` indica que há
+        um console aberto/focado — mostra a seção "console" (com o botão ⬇
+        de subir a stack) mesmo sem cópias ainda.
         """
         self._last_runner_rows = list(runners)
+        self._console_active = bool(console_active)
         if not runners:
             self._clear_runner_rows()
             self._runner_chip.setChecked(False)
@@ -476,28 +486,48 @@ class SidebarFooter(QWidget):
             if scope != "console":
                 self._runner_rows.addWidget(lbl)
                 return
-            # Seção console: label + 🗑 (remover todos os runners do
-            # console ativo) na mesma linha.
+            # Seção console: label + ⬇ (subir a stack do workspace no
+            # console ativo) + 🗑 (remover todos — só quando há cópias).
             row = QWidget()
             rl = QHBoxLayout(row)
             rl.setContentsMargins(0, 0, 0, 0)
             rl.setSpacing(4)
             rl.addWidget(lbl, stretch=1)
-            trash = QPushButton("🗑")
-            trash.setFixedSize(18, 16)
-            trash.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-            trash.setToolTip("Remover todos os runners deste console")
-            trash.setStyleSheet(
-                "QPushButton { background: transparent; border: 0; "
-                f"color: {theme.TEXT_DISABLED}; font-size: 10px; }}"
-                "QPushButton:hover { color: #e06c75; }"
+
+            def _mini_btn(text: str, tooltip: str, hover: str) -> QPushButton:
+                b = QPushButton(text)
+                b.setFixedSize(18, 16)
+                b.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                b.setToolTip(tooltip)
+                b.setStyleSheet(
+                    "QPushButton { background: transparent; border: 0; "
+                    f"color: {theme.TEXT_DISABLED}; font-size: 10px; }}"
+                    f"QPushButton:hover {{ color: {hover}; }}"
+                )
+                return b
+
+            raise_btn = _mini_btn(
+                "⬇",
+                "Subir a stack do workspace neste console (copia os "
+                "runners com a próxima porta livre e inicia todos)",
+                "#5ac38a",
             )
-            trash.clicked.connect(
-                lambda _c=False: self.console_runners_remove_requested.emit(
+            raise_btn.clicked.connect(
+                lambda _c=False: self.console_stack_raise_requested.emit(
                     self._runner_workspace_id
                 )
             )
-            rl.addWidget(trash)
+            rl.addWidget(raise_btn)
+            if count > 0:
+                trash = _mini_btn(
+                    "🗑", "Remover todos os runners deste console", "#e06c75"
+                )
+                trash.clicked.connect(
+                    lambda _c=False: self.console_runners_remove_requested.emit(
+                        self._runner_workspace_id
+                    )
+                )
+                rl.addWidget(trash)
             self._runner_rows.addWidget(row)
 
         last_scope = ""
@@ -513,6 +543,10 @@ class SidebarFooter(QWidget):
                     workspace_id, runner_id, name, state, status, url, cwd
                 )
             )
+        # Console aberto mas ainda sem cópias → header da seção mesmo
+        # assim, pra dar acesso ao ⬇ (subir a stack) direto da sidebar.
+        if self._console_active and not any(r[7] == "console" for r in rows):
+            _add_section("console", 0)
         self._runner_rows.addStretch(1)
 
     def _toggle_runner_scope(self, scope: str) -> None:

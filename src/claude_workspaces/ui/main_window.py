@@ -1916,6 +1916,9 @@ class MainWindow(QMainWindow):
         builder.console_runners_remove_requested.connect(
             self._remove_active_console_runners
         )
+        builder.console_stack_raise_requested.connect(
+            self._raise_stack_on_active_console_by_id
+        )
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -3901,7 +3904,7 @@ class MainWindow(QMainWindow):
                 (ws.id, runner.id, runner.name or "(runner)", state,
                  status_label, url, cwd, scope)
             )
-        setter(rows)
+        setter(rows, isinstance(term, TerminalWidget))
 
     def _console_branch_for(self, console_session_id: str) -> str:
         """Branch/worktree do console dono de um runner. Usa o branch ao vivo
@@ -4633,6 +4636,12 @@ class MainWindow(QMainWindow):
             return
         console_area = self._ensure_terminal_runner_panel(workspace, term)
         console_area.raise_stack_here()
+
+    def _raise_stack_on_active_console_by_id(self, workspace_id: str) -> None:
+        """⬇ da seção "console" do rodapé — resolve o workspace pelo id."""
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is not None:
+            self._raise_stack_on_active_console(ws)
 
     def _console_runner_sids(self, terminal) -> set[str]:
         """Session ids que identificam os runners de um console (o sid real

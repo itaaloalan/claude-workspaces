@@ -96,6 +96,9 @@ class RunnerArea(QWidget):
         # RunnerWidgets) — injetado pela main_window via
         # set_console_dirs_provider.
         self._console_dirs_provider: Callable | None = None
+        # Cache de translate_dir_for_repo por (target, repo) — limpo quando
+        # o default do painel muda. Evita git subprocess a cada refresh.
+        self._translate_cache: dict[tuple[str, str], str] = {}
 
         # RunnerWidget (filha) tem toolbar com muitos botões; propagaria
         # mínimo de largura >600px pra cima até a janela, causando scroll
@@ -280,15 +283,57 @@ class RunnerArea(QWidget):
 
     def set_default_cwd(self, cwd: str) -> None:
         """Atualiza o cwd padrão dos runners deste painel (worktree do
-        console) e propaga aos widgets vivos."""
+        console) e propaga aos widgets vivos — traduzido por-repo."""
         if cwd == self._default_cwd_override:
             return
         self._default_cwd_override = cwd
-        primary = self._default_cwd_override or self._ws.primary_folder or ""
+        self._translate_cache.clear()
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             if isinstance(w, RunnerWidget):
-                w.set_default_cwd(primary)
+                w.set_default_cwd(self._default_cwd_for(w.config()))
+
+    def _repo_folder_for(self, runner: RunnerConfig) -> str:
+        """Pasta do workspace a que o runner pertence: a que contém o cwd
+        da config; sem cwd → pasta primária. Workspaces multi-repo (map-api
+        + map-web + …) têm runners de repos diferentes no mesmo painel."""
+        from pathlib import Path
+        base = (runner.cwd or "").strip()
+        if not base:
+            return self._ws.primary_folder or ""
+        try:
+            bp = Path(base).resolve()
+        except OSError:
+            return self._ws.primary_folder or ""
+        for f in self._ws.folders:
+            if not f:
+                continue
+            try:
+                fp = Path(f).resolve()
+            except OSError:
+                continue
+            if bp == fp or bp.is_relative_to(fp):
+                return f
+        return self._ws.primary_folder or ""
+
+    def _default_cwd_for(self, runner: RunnerConfig) -> str:
+        """Cwd padrão POR runner: traduz o default do painel (worktree do
+        console, que pertence a UM repo) pro repo do runner — worktree de
+        mesma branch quando existir; sem equivalente, o runner fica no
+        diretório do próprio repo (nunca no repo errado). Cacheado por
+        (target, repo) — translate chama git por subprocess."""
+        repo = self._repo_folder_for(runner)
+        target = self._default_cwd_override
+        if target and repo:
+            key = (target, repo)
+            translated = self._translate_cache.get(key)
+            if translated is None:
+                from ..git_worktree import translate_dir_for_repo
+                translated = translate_dir_for_repo(target, repo)
+                self._translate_cache[key] = translated
+            if translated:
+                return translated
+        return repo or (self._ws.primary_folder or "")
 
     def runners_in_scope(self) -> list[RunnerConfig]:
         return [r for r in self._ws.runners if self._matches_scope(r)]
@@ -342,19 +387,21 @@ class RunnerArea(QWidget):
         while self.tabs.count():
             self.tabs.removeTab(0)
 
-        primary = self._default_cwd_override or self._ws.primary_folder or ""
         seen_ids: set[str] = set()
         for runner in self._ws.runners:
             if not self._matches_scope(runner):
                 continue
             seen_ids.add(runner.id)
+            # Default por-repo: o worktree do console pertence a UM repo;
+            # cada runner cai no equivalente do SEU repo (multi-repo).
+            default_cwd = self._default_cwd_for(runner)
             widget = existing.get(runner.id)
             if widget is None:
-                widget = RunnerWidget(runner, primary, settings=self._settings)
+                widget = RunnerWidget(runner, default_cwd, settings=self._settings)
                 widget.set_console_dirs_provider(self._console_dirs_provider)
                 self._wire(widget)
             else:
-                widget.set_default_cwd(primary)
+                widget.set_default_cwd(default_cwd)
                 widget.update_config(runner)
             self.tabs.addTab(widget, runner.name or "(runner)")
             self._update_tab_color(widget)
@@ -536,12 +583,24 @@ class RunnerArea(QWidget):
         """Aponta o cwd de todos os runners deste escopo pra `path`
         ("" volta ao padrão). Resync defensivo antes de iterar — mesmo
         racional do restart_all: o painel pode estar fora de fase com
-        `ws.runners`."""
+        `ws.runners`.
+
+        Multi-repo: `path` pertence a UM repo — cada runner é apontado
+        pro equivalente no SEU repo (worktree de mesma branch); runner
+        sem equivalente não é mexido (nunca apontar pro repo errado)."""
         self._refresh_from_workspace()
+        from ..git_worktree import translate_dir_for_repo
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
-            if isinstance(w, RunnerWidget):
-                w.set_cwd_override(path)
+            if not isinstance(w, RunnerWidget):
+                continue
+            if not path:
+                w.set_cwd_override("")
+                continue
+            repo = self._repo_folder_for(w.config())
+            translated = translate_dir_for_repo(path, repo) if repo else ""
+            if translated:
+                w.set_cwd_override(translated)
 
     def _remove_all(self) -> None:
         self.remove_all_in_scope()
@@ -736,11 +795,28 @@ class RunnerArea(QWidget):
         replaced = 0
         from ..services.port_alloc import next_free_port, used_ports_in_workspace
 
+        from ..git_worktree import translate_dir_for_repo
+
         for src in sources:
             data = src.to_dict()
             data.pop("id", None)
+            # Apontamento manual (chip 📁) da ORIGEM não contamina a cópia
+            # — igual ao export. O cwd da cópia é resolvido abaixo pro
+            # repo do próprio runner.
+            data.pop("last_cwd", None)
             data["console_session_id"] = self._console_session_id
             clone = RunnerConfig.from_dict(data)
+            # Multi-repo: aponta a cópia pro equivalente do dir do console
+            # no repo DESTE runner (worktree de mesma branch); sem
+            # equivalente, fica no diretório do próprio repo.
+            target = self._default_cwd_override
+            if target:
+                repo = self._repo_folder_for(clone)
+                translated = (
+                    translate_dir_for_repo(target, repo) if repo else ""
+                )
+                if translated and translated != (clone.cwd or repo):
+                    clone.last_cwd = translated
             # Substitui por nome dentro do mesmo escopo (consistente com
             # o merge do import_runners).
             existing_idx = next(
