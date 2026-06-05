@@ -202,6 +202,9 @@ class SidebarFooter(QWidget):
     # ⬇ do header da seção "console": subir a stack do workspace no
     # console ativo (copia runners com remap de porta e inicia).
     console_stack_raise_requested = Signal(str)  # workspace_id
+    # Seção do rodapé colapsada/expandida — main_window persiste em
+    # settings (sobrevive ao restart).
+    runner_scope_collapsed_changed = Signal(str, bool)  # scope, collapsed
 
     def __init__(
         self,
@@ -550,10 +553,19 @@ class SidebarFooter(QWidget):
         self._runner_rows.addStretch(1)
 
     def _toggle_runner_scope(self, scope: str) -> None:
-        self._runner_scope_collapsed[scope] = not self._runner_scope_collapsed.get(
-            scope, False
-        )
+        collapsed = not self._runner_scope_collapsed.get(scope, False)
+        self._runner_scope_collapsed[scope] = collapsed
         self._render_runner_rows()
+        self.runner_scope_collapsed_changed.emit(scope, collapsed)
+
+    def set_runner_scope_collapsed(self, state: dict) -> None:
+        """Seeda o colapso das seções a partir do persistido em settings
+        (chamado no boot, antes/depois do primeiro render)."""
+        self._runner_scope_collapsed = {
+            str(k): bool(v) for k, v in (state or {}).items()
+        }
+        if self._last_runner_rows:
+            self._render_runner_rows()
 
     def _make_runner_row(
         self,

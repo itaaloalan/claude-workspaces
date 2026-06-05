@@ -92,6 +92,8 @@ class Settings:
     workspace_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado do submenu "Runners workspace" por workspace.
     runner_group_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
+    # Estado colapsado das seções do rodapé de runners da sidebar.
+    runner_footer_collapsed: dict = field(default_factory=dict)  # {"workspace"|"console": bool}
     # Estado colapsado do bucket "Sessões Claude" por workspace.
     sessoes_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado das seções "FIXADOS" / "WORKSPACES" na sidebar.

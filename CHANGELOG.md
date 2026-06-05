@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.96.1] — 2026-06-05
+
+### Correções
+- **Nome da sessão não "some" mais nos rebuilds da sidebar.** O re-anexo dos
+  consoles (`_add_terminal_child`) usava o nome real só no TOOLTIP e deixava
+  o label com o base_title ("claude (resume)") — qualquer rebuild (mudança
+  em runner, pin, etc.) regredia o nome resolvido até a sessão emitir
+  atividade de novo (console ocioso = nunca). O label agora usa o título
+  efetivo (custom_name > preview > base). Afetava map, ogpms e qualquer
+  workspace com console restaurado.
+- **Colapso das seções do rodapé de runners persiste entre restarts.**
+  `runner_footer_collapsed` em settings.json — colapsou "console", reinicia
+  colapsado.
+
 ## [0.96.0] — 2026-06-05
 
 ### Novidades

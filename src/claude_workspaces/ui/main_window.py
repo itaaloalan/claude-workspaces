@@ -1919,6 +1919,13 @@ class MainWindow(QMainWindow):
         builder.console_stack_raise_requested.connect(
             self._raise_stack_on_active_console_by_id
         )
+        # Colapso das seções do rodapé de runners persiste em settings.
+        builder.set_runner_scope_collapsed(
+            dict(self.settings.runner_footer_collapsed)
+        )
+        builder.runner_scope_collapsed_changed.connect(
+            self._on_runner_footer_collapsed
+        )
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -4825,6 +4832,14 @@ class MainWindow(QMainWindow):
         )
         dlg.exec()
 
+    def _on_runner_footer_collapsed(self, scope: str, collapsed: bool) -> None:
+        """Persiste o colapso das seções do rodapé de runners."""
+        self.settings.runner_footer_collapsed[scope] = bool(collapsed)
+        try:
+            self.settings.save()
+        except OSError:
+            log.warning("falha ao salvar settings", exc_info=True)
+
     def _raise_stack_on_active_console_by_id(self, workspace_id: str) -> None:
         """⬇ da seção "console" do rodapé — resolve o workspace pelo id."""
         ws = self.workspaces_coord.find_by_id(workspace_id)
@@ -6232,13 +6247,18 @@ class MainWindow(QMainWindow):
         child = QTreeWidgetItem()
         child.setData(0, Qt.ItemDataRole.UserRole, tab_id)
         child.setSizeHint(0, QSize(0, self._CHILD_HEIGHT))
-        widget = TerminalChildWidget(title)
+        # Display usa o título EFETIVO (custom_name > preview > base) — o
+        # rebuild da sidebar passava só o base_title ("claude (resume)") e
+        # o nome resolvido "sumia" até a sessão emitir atividade de novo.
         full_title = title
+        display_title = title
         term = self._terminal_widget_for(tab_id)
         if term is not None:
             full_title = term.full_title() or title
+            display_title = term.effective_title() or title
+        widget = TerminalChildWidget(display_title)
         self._tab_base_titles[tab_id] = title
-        widget.set_title(title, full_title)
+        widget.set_title(display_title, full_title)
         is_plan_mode = term.is_plan_mode if term is not None else False
         state = self._resolve_state(is_working, is_running, needs_decision, is_plan_mode)
         widget.update_state(

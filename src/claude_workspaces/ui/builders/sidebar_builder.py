@@ -502,6 +502,12 @@ class SidebarBuilder:
         self.console_stack_raise_requested = (
             self._footer.console_stack_raise_requested
         )
+        self.runner_scope_collapsed_changed = (
+            self._footer.runner_scope_collapsed_changed
+        )
+        self.set_runner_scope_collapsed = (
+            self._footer.set_runner_scope_collapsed
+        )
         self.set_console_runners = self._footer.set_console_runners
         self.version_label = self._footer.version_label
         self.minimized_tray = self._footer.minimized_tray
