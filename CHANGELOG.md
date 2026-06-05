@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.94.1] — 2026-06-05
+
+### Novidades
+- **Chip 🌐 URL clicável na toolbar do runner.** Mostra `host:port` da URL
+  (da config ou detectada na stdout) e abre no navegador ao clicar. A
+  detecção de URL agora roda mesmo com "abrir browser" desligado.
+- **`SERVER_PORT` injetada junto do `PORT`.** Spring Boot/Quarkus leem
+  `SERVER_PORT` por relaxed binding — a API sobe na porta alocada SEM
+  precisar de `{port}` no comando. Não sobrescreve SERVER_PORT explícita.
+- **Aviso de porta não aplicada.** Quando a URL real detectada tem porta
+  diferente da configurada (ex: `ng serve --port 4201` hardcoded ignorando
+  a :4202 alocada), o runner loga `⚠ rodando na :4201 — porta configurada
+  :4202 não foi aplicada` com a correção sugerida (usar `{port}` no comando
+  ou env PORT/SERVER_PORT), e o status/tooltip refletem o descompasso.
+
 ## [0.94.0] — 2026-06-05
 
 ### Novidades

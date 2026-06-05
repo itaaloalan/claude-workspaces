@@ -44,12 +44,17 @@ def wrap_with_node_bootstrap(cmd: str) -> str:
 
 def build_env(env: dict[str, str], port: int) -> dict[str, str]:
     """Env final do processo do runner: expande `{port}` nos VALORES (não
-    nas chaves) e injeta `PORT=<port>` quando `port > 0` e o usuário não
-    definiu PORT explicitamente. Retorna um novo dict (não muta o original).
+    nas chaves) e injeta as envs de porta quando `port > 0` e o usuário
+    não as definiu explicitamente:
+    - `PORT` — Node/Express/CRA/Next e afins;
+    - `SERVER_PORT` — Spring Boot/Quarkus (relaxed binding lê direto,
+      sem precisar de {port} no comando).
+    Retorna um novo dict (não muta o original).
     """
     if port <= 0:
         return dict(env)
     out = {k: expand_port(v, port) for k, v in env.items()}
-    if "PORT" not in out:
-        out["PORT"] = str(port)
+    for var in ("PORT", "SERVER_PORT"):
+        if var not in out:
+            out[var] = str(port)
     return out

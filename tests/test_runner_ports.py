@@ -47,11 +47,20 @@ def test_build_env_expande_valores_e_injeta_port():
     env = build_env({"API_URL": "http://localhost:{port}/api"}, 8081)
     assert env["API_URL"] == "http://localhost:8081/api"
     assert env["PORT"] == "8081"
+    # Spring Boot lê SERVER_PORT direto (relaxed binding).
+    assert env["SERVER_PORT"] == "8081"
 
 
 def test_build_env_preserva_port_do_usuario():
     env = build_env({"PORT": "9999"}, 8081)
     assert env["PORT"] == "9999"
+    assert env["SERVER_PORT"] == "8081"
+
+
+def test_build_env_preserva_server_port_do_usuario():
+    env = build_env({"SERVER_PORT": "7777"}, 8081)
+    assert env["SERVER_PORT"] == "7777"
+    assert env["PORT"] == "8081"
 
 
 def test_build_env_port_do_usuario_com_placeholder():

@@ -86,6 +86,8 @@ class RunnerWidget(QWidget):
         self._browser_opened_this_start: bool = False
         self._ready_pattern_matched: bool = False
         self._rodando_emitted: bool = False
+        # Aviso "porta configurada não aplicada" — uma vez por execução.
+        self._port_mismatch_warned: bool = False
         # URL atual conhecida pelo widget (config ou detectada). Mantida pra
         # sincronizar a sidebar (host:port). Inicializa a partir da config
         # (com {port} já expandido pra porta do runner).
@@ -170,6 +172,23 @@ class RunnerWidget(QWidget):
         self._port_btn.clicked.connect(self._open_port_dialog)
         toolbar.addWidget(self._port_btn)
         self._refresh_port_chip()
+
+        # Chip 🌐 — URL do runner (config ou detectada na stdout), clicável
+        # pra abrir no navegador. Oculto enquanto não há URL.
+        self._url_btn = QPushButton()
+        self._url_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+        )
+        self._url_btn.clicked.connect(
+            lambda _c=False: self._current_url
+            and self._open_browser(self._current_url)
+        )
+        self._url_btn.setVisible(False)
+        toolbar.addWidget(self._url_btn)
+        self._refresh_url_chip()
         toolbar.addStretch()
 
         # Filtro de log — substring case-insensitive aplicada linha a linha.
@@ -419,7 +438,53 @@ class RunnerWidget(QWidget):
         if url == self._current_url:
             return
         self._current_url = url
+        self._refresh_url_chip()
         self.url_changed.emit(url)
+
+    def _refresh_url_chip(self) -> None:
+        url = self._current_url
+        if not url:
+            self._url_btn.setVisible(False)
+            return
+        from .runner_child_widget import _host_port
+        addr = _host_port(url) or url
+        self._url_btn.setText(f"🌐 {addr}")
+        self._url_btn.setToolTip(f"Abrir {url} no navegador")
+        self._url_btn.setVisible(True)
+
+    def _warn_port_mismatch(self, url: str) -> None:
+        """URL real detectada com porta ≠ da configurada → o comando não
+        aplicou a porta alocada (ex: ng serve com --port hardcoded; servidor
+        que não lê PORT/SERVER_PORT). Avisa uma vez por execução no log do
+        runner + status, com a correção sugerida."""
+        if self._port_mismatch_warned or self._runner.port <= 0:
+            return
+        m = re.search(r":(\d{2,5})(?:[/\s]|$)", url)
+        if not m:
+            return
+        real = int(m.group(1))
+        if real == self._runner.port:
+            return
+        self._port_mismatch_warned = True
+        cfg = self._runner.port
+        msg = (
+            f"\r\n\x1b[38;5;214m⚠ rodando na :{real} — a porta configurada "
+            f":{cfg} não foi aplicada pelo comando.\r\n"
+            "  Use {port} no start_cmd (ex: npm start -- --port {port} / "
+            "--server.port={port}) ou deixe o servidor ler a env "
+            "PORT/SERVER_PORT.\x1b[0m\r\n"
+        )
+        self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
+        try:
+            self.bridge.output_to_terminal.emit(msg.encode("utf-8"))
+        except Exception:
+            log.debug("emit do aviso de porta falhou", exc_info=True)
+        self._status.setText(f"● rodando na :{real} (≠ :{cfg} configurada)")
+        self._port_btn.setToolTip(
+            f"⚠ Configurada :{cfg}, mas o processo subiu na :{real} — o "
+            "comando não usa {port} e o servidor não leu PORT/SERVER_PORT. "
+            "Clique pra alterar a porta base."
+        )
 
     def is_running(self) -> bool:
         return self._state == "running"
@@ -508,6 +573,7 @@ class RunnerWidget(QWidget):
             self._browser_opened_this_start = False
             self._ready_pattern_matched = False
             self._rodando_emitted = False
+            self._port_mismatch_warned = False
             # Banner com o diretório/worktree no INÍCIO de cada execução —
             # com vários consoles/worktrees, deixa explícito onde o runner
             # está rodando sem precisar abrir o chip 📁.
@@ -582,20 +648,28 @@ class RunnerWidget(QWidget):
         self._log_buf = (self._log_buf + chunk)[-self._log_buf_max:]
 
         if not self._runner.open_browser_on_ready:
-            if not self._rodando_emitted and self._intent in ("start", "restart"):
-                ready_pat = (self._runner.ready_pattern or "").strip()
-                if ready_pat:
-                    self._output_buf = (self._output_buf + chunk)[-16384:]
-                    try:
-                        matched = bool(re.search(ready_pat, self._output_buf, re.IGNORECASE))
-                    except re.error:
-                        matched = True
-                    if matched:
+            if self._intent in ("start", "restart"):
+                self._output_buf = (self._output_buf + chunk)[-16384:]
+                if not self._rodando_emitted:
+                    ready_pat = (self._runner.ready_pattern or "").strip()
+                    if ready_pat:
+                        try:
+                            matched = bool(re.search(ready_pat, self._output_buf, re.IGNORECASE))
+                        except re.error:
+                            matched = True
+                        if matched:
+                            self._rodando_emitted = True
+                            self._emit_status_label("rodando")
+                    else:
                         self._rodando_emitted = True
                         self._emit_status_label("rodando")
-                else:
-                    self._rodando_emitted = True
-                    self._emit_status_label("rodando")
+                # Detecção de URL mesmo sem abrir browser — alimenta o
+                # chip 🌐, a sidebar e o aviso de porta não aplicada.
+                if not self._current_url:
+                    url = detect_url(self._output_buf)
+                    if url:
+                        self._set_current_url(url)
+                        self._warn_port_mismatch(url)
             return
         if self._browser_opened_this_start:
             return
@@ -624,6 +698,7 @@ class RunnerWidget(QWidget):
             return
         self._browser_opened_this_start = True
         self._set_current_url(url)
+        self._warn_port_mismatch(url)
         # Sai do label "startando" → "rodando" agora que detectamos o
         # ready/URL e vamos abrir o browser. State continua "running".
         self._emit_status_label("rodando")
