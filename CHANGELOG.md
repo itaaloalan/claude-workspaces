@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.86.1] — 2026-06-05
+
+### Correções
+- **"📁 Apontar todos" não perde mais o foco do console nem pula pro primeiro
+  workspace.** Dois fixes:
+  - Mudança de cwd de runner agora persiste **sem rebuild** da sidebar
+    (`_persist_workspace(refresh=False)` / `replace(emit=False)`) — a UI
+    (chip, linha da sidebar, footer) já era atualizada na mão; o rebuild
+    completo era só efeito colateral. "Apontar todos" disparava N rebuilds,
+    um por runner.
+  - O rebuild da sidebar (outros fluxos: editar runner, pin, etc.) agora roda
+    com `blockSignals` — o `clear()` emitia `currentItemChanged(None)`, que
+    zerava `_last_shown_ws_id` e fazia a restauração da seleção parecer troca
+    de workspace (overlay + re-sync, console perdido). A seleção também volta
+    pro **console exato** que estava selecionado (via `tree_items`), não só
+    pro header do workspace, e o estado visual é reaplicado manualmente uma
+    única vez ao final.
+
 ## [0.86.0] — 2026-06-05
 
 ### Novidades

@@ -41,8 +41,12 @@ class WorkspaceCoordinator(QObject):
         save_workspaces(self.workspaces)
         self.workspaces_changed.emit()
 
-    def replace(self, workspace: Workspace) -> bool:
-        """Substitui um workspace pelo id. Retorna True se encontrou."""
+    def replace(self, workspace: Workspace, emit: bool = True) -> bool:
+        """Substitui um workspace pelo id. Retorna True se encontrou.
+
+        `emit=False` salva sem emitir `workspaces_changed` — pra mudanças
+        que já atualizaram a UI na mão (ex.: cwd de runner) e não precisam
+        do rebuild completo da sidebar que o signal dispara."""
         idx = next(
             (i for i, w in enumerate(self.workspaces) if w.id == workspace.id),
             None,
@@ -52,7 +56,8 @@ class WorkspaceCoordinator(QObject):
         self.workspaces[idx] = workspace
         save_workspaces(self.workspaces)
         self._session_text_cache.pop(workspace.id, None)
-        self.workspaces_changed.emit()
+        if emit:
+            self.workspaces_changed.emit()
         return True
 
     def delete(self, workspace_id: str) -> bool:

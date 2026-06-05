@@ -2295,23 +2295,47 @@ class MainWindow(QMainWindow):
         # runner/console estava selecionado, e o rebuild caía no fallback
         # que seleciona o primeiro workspace da lista.
         current_id = None
+        current_tab_id = None
         current_item = self.list_widget.currentItem()
         if current_item:
             ws = self._workspace_of_item(current_item)
             if ws is not None:
                 current_id = ws.id
+            # Console selecionado (UserRole = tab_id int): guarda pra
+            # restaurar a seleção no MESMO console após o rebuild, não
+            # só no header do workspace.
+            data = current_item.data(0, Qt.ItemDataRole.UserRole)
+            if isinstance(data, int):
+                current_tab_id = data
 
         # Batch de paint: desabilita repaints durante a reconstrução inteira
         # da árvore (clear + re-add de N workspaces × M filhos). Sem isso o
         # Qt repinta a cada addTopLevelItem/setItemWidget, causando flicker e
         # travadas perceptíveis quando há muitos workspaces e sessões.
+        #
+        # blockSignals: o clear() emitia currentItemChanged(None) →
+        # _on_selection_changed zerava _last_shown_ws_id e trocava o pane
+        # pro placeholder; a restauração no fim do rebuild então parecia
+        # "troca de workspace" (ws_changed=True) e disparava a troca
+        # completa com overlay — perdendo o console ativo. Com os signals
+        # bloqueados, nada disso dispara; o estado visual é reaplicado
+        # manualmente abaixo.
         self.list_widget.setUpdatesEnabled(False)
+        self.list_widget.blockSignals(True)
         try:
-            self._rebuild_list(current_id)
+            self._rebuild_list(current_id, current_tab_id)
         finally:
+            self.list_widget.blockSignals(False)
             self.list_widget.setUpdatesEnabled(True)
+        # Reaplica highlight/sync da seleção restaurada. Mesmo workspace →
+        # _last_shown_ws_id intacto → caminho barato (sem overlay/troca);
+        # se a seleção realmente mudou (workspace sumiu → fallback), o
+        # caminho de troca roda normalmente.
+        self._on_selection_changed(self.list_widget.currentItem(), None)
 
-    def _rebuild_list(self, current_id: str | None) -> None:
+    def _rebuild_list(
+        self, current_id: str | None, current_tab_id: int | None = None
+    ) -> None:
         self.list_widget.clear()
         self.terminals_coord.state.tree_items.clear()
         self._runner_tree_items.clear()
@@ -2408,6 +2432,14 @@ class MainWindow(QMainWindow):
                 self._refresh_sessoes_count(it)
                 self._refresh_empty_placeholder(it)
 
+        # Restaura preferindo o item exato do console que estava selecionado
+        # (tree_items foi repopulado pelo _add_terminal_child acima) — cair
+        # no header do workspace mudava o foco visível na sidebar.
+        if current_tab_id is not None:
+            term_item = self.terminals_coord.state.tree_items.get(current_tab_id)
+            if term_item is not None and not term_item.isHidden():
+                self.list_widget.setCurrentItem(term_item)
+                return
         if current_id:
             ws_item = self._find_workspace_item(current_id)
             if ws_item is not None and not ws_item.isHidden():
@@ -3296,7 +3328,11 @@ class MainWindow(QMainWindow):
         self._refresh_console_runners_footer()
         ws = self.workspaces_coord.find_by_id(workspace_id)
         if ws is not None:
-            self._persist_workspace(ws)
+            # refresh=False: tudo que muda na UI (chip do painel, linha da
+            # sidebar, footer) já foi atualizado acima — o rebuild completo
+            # da sidebar só perdia a seleção/console ativo ("Apontar todos"
+            # disparava N rebuilds, um por runner).
+            self._persist_workspace(ws, refresh=False)
 
     def _refresh_runner_children(self, workspace_id: str) -> None:
         ws_item = self._find_workspace_item(workspace_id)
@@ -4853,8 +4889,11 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.setCurrentWidget(self.terminal_host)
         self.terminal_host.setCurrentWidget(area)
 
-    def _persist_workspace(self, workspace) -> None:
-        self.workspaces_coord.replace(workspace)
+    def _persist_workspace(self, workspace, refresh: bool = True) -> None:
+        """Salva o workspace no JSON. `refresh=False` persiste sem emitir
+        `workspaces_changed` (sem rebuild da sidebar) — pra mudanças cuja
+        UI já foi atualizada na mão, como cwd de runner."""
+        self.workspaces_coord.replace(workspace, emit=refresh)
 
     def _on_runner_running(self, workspace_id: str, count: int) -> None:
         if not hasattr(self, "_runner_running_counts"):
