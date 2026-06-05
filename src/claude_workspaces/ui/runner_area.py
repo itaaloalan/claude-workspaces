@@ -161,8 +161,24 @@ class RunnerArea(QWidget):
                 "Porta base + {port} no comando) — e inicia todos. Cópias "
                 "já existentes são recriadas e re-iniciadas."
             )
-            self._raise_stack_btn.clicked.connect(self._raise_stack_here)
+            self._raise_stack_btn.clicked.connect(self.raise_stack_here)
             h.addWidget(self._raise_stack_btn)
+        else:
+            # Painel workspace-scope: mesma ação, mas mirando o CONSOLE
+            # ATIVO — handler injetado pela main_window (que sabe qual
+            # console está focado e cria o painel dele sob demanda).
+            self._raise_on_console_btn = QPushButton("⬇ Subir stack no console")
+            self._raise_on_console_btn.setStyleSheet(_RUNNER_BTN_QSS)
+            self._raise_on_console_btn.setToolTip(
+                "Copia estes runners pro console Claude ativo (cada um ganha "
+                "a próxima porta livre a partir da Porta base, apontado pro "
+                "worktree/diretório do console) e inicia todos lá."
+            )
+            self._raise_on_console_btn.clicked.connect(
+                lambda: self._raise_stack_on_console_handler
+                and self._raise_stack_on_console_handler()
+            )
+            h.addWidget(self._raise_on_console_btn)
 
         self._more_btn = QPushButton("⋯")
         self._more_btn.setStyleSheet(_RUNNER_BTN_QSS)
@@ -202,6 +218,10 @@ class RunnerArea(QWidget):
         # da MainWindow.
         self._edit_handler: Callable[[RunnerConfig | None], None] | None = None
         self._generate_handler: Callable[[], None] | None = None
+        # Callback do botão "⬇ Subir stack no console" (painel workspace-
+        # scope) — main_window resolve o console ativo e dispara o
+        # _raise_stack_here do painel dele.
+        self._raise_stack_on_console_handler: Callable[[], None] | None = None
 
         self._refresh_from_workspace()
 
@@ -214,6 +234,11 @@ class RunnerArea(QWidget):
 
     def set_generate_handler(self, handler: Callable[[], None]) -> None:
         self._generate_handler = handler
+
+    def set_raise_stack_on_console_handler(
+        self, handler: Callable[[], None]
+    ) -> None:
+        self._raise_stack_on_console_handler = handler
 
     def workspace(self) -> Workspace:
         return self._ws
@@ -362,6 +387,9 @@ class RunnerArea(QWidget):
         widget.cwd_changed.connect(
             lambda cwd, w=widget: self.runner_cwd_changed.emit(w.runner_id(), cwd)
         )
+        # Porta mudou pelo chip :porta → persiste via runners_changed
+        # (main_window grava o workspace no JSON).
+        widget.port_changed.connect(lambda _p: self.runners_changed.emit())
 
     def _on_runner_state(self, widget: RunnerWidget) -> None:
         self._recompute_running_count()
@@ -679,10 +707,12 @@ class RunnerArea(QWidget):
             self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft())
         )
 
-    def _raise_stack_here(self) -> None:
-        """Botão "⬇ Subir stack aqui": copia os runners workspace-scoped
-        pro escopo deste console (com remap de porta no
-        _copy_runners_to_console) e inicia todos os habilitados."""
+    def raise_stack_here(self) -> None:
+        """Copia os runners workspace-scoped pro escopo deste console (com
+        remap de porta no _copy_runners_to_console) e inicia todos os
+        habilitados. Disparado pelo botão "⬇ Subir stack aqui" deste painel
+        ou pelo "⬇ Subir stack no console" do painel do workspace (via
+        main_window)."""
         ws_runners = [
             r for r in self._ws.runners if not (r.console_session_id or "")
         ]

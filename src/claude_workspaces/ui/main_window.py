@@ -4385,6 +4385,9 @@ class MainWindow(QMainWindow):
         area.set_generate_handler(
             lambda w=ws: self._generate_runner_with_claude(w)
         )
+        area.set_raise_stack_on_console_handler(
+            lambda w=ws: self._raise_stack_on_active_console(w)
+        )
         area.runners_changed.connect(lambda w=ws: self._persist_workspace(w))
         area.runners_changed.connect(
             lambda wid=ws.id: self._refresh_runner_children(wid)
@@ -4406,6 +4409,24 @@ class MainWindow(QMainWindow):
             lambda rid, cwd, wid=ws.id: self._on_runner_cwd_changed(wid, rid, cwd)
         )
         return area
+
+    def _raise_stack_on_active_console(self, workspace: Workspace) -> None:
+        """Botão "⬇ Subir stack no console" do painel de runners do
+        workspace: resolve o console Claude ativo do workspace, garante o
+        painel de runners dele (cria sob demanda) e dispara o
+        raise_stack_here lá — copia a stack com remap de porta, aponta pro
+        worktree do console e inicia tudo."""
+        from .persistent_toast import flash_toast
+        t_area = self.terminals_coord._areas.get(workspace.id)
+        term = t_area.tabs.currentWidget() if t_area is not None else None
+        if not isinstance(term, TerminalWidget):
+            flash_toast(
+                "Nenhum console aberto neste workspace — abra um console "
+                "Claude primeiro."
+            )
+            return
+        console_area = self._ensure_terminal_runner_panel(workspace, term)
+        console_area.raise_stack_here()
 
     # ---- bulk actions disparadas pelo header da sidebar ------------------
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.87.1] — 2026-06-05
+
+### Novidades
+- **Chip `:porta` na toolbar do runner.** A porta base agora é visível e
+  editável direto no painel do runner (ao lado do chip 📁) — clique abre o
+  editor rápido. Antes só existia escondida em ⋯ → ⚙ Editar. Mudança com o
+  runner rodando avisa "reinicie pra aplicar"; persiste no JSON na hora.
+- **Botão "⬇ Subir stack no console" no painel de runners do workspace.** O
+  "⬇ Subir stack aqui" só aparecia no painel Runners do console (que precisa
+  ser aberto manualmente) — agora o painel do workspace tem o equivalente,
+  mirando o console Claude ativo: cria o painel do console sob demanda,
+  copia a stack com remap de porta e inicia tudo lá.
+
 ## [0.87.0] — 2026-06-05
 
 ### Novidades

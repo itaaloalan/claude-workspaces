@@ -20,6 +20,7 @@ from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -58,6 +59,9 @@ class RunnerWidget(QWidget):
     # Cwd efetivo mudou (override do chip 📁, default do painel ou config).
     # Consumido pela sidebar pra refletir o 📁 sem abrir o painel.
     cwd_changed = Signal(str)
+    # Porta base mudou via chip :porta — RunnerArea re-emite runners_changed
+    # pro main_window persistir.
+    port_changed = Signal(int)
 
     def __init__(
         self,
@@ -141,6 +145,27 @@ class RunnerWidget(QWidget):
         self._cwd_btn.clicked.connect(self._open_cwd_menu)
         toolbar.addWidget(self._cwd_btn)
         self._refresh_cwd_chip()
+
+        # Chip :porta — porta base do runner, sempre visível (mesmo sem
+        # porta) pra ser descoberto. Clique abre o editor rápido; o campo
+        # também existe no dialog ⚙ Editar.
+        self._port_btn = QPushButton()
+        self._port_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+        )
+        self._port_btn.setToolTip(
+            "Porta base do runner — clique pra alterar. {port} no "
+            "Start/Stop/Restart, na URL do browser e nos valores do env é "
+            "substituído por ela ao rodar, e PORT=<porta> é injetada no "
+            "ambiente (a menos que você defina PORT no env). Cópias pra "
+            "consoles/worktrees ganham a próxima porta livre. 0 = sem porta."
+        )
+        self._port_btn.clicked.connect(self._open_port_dialog)
+        toolbar.addWidget(self._port_btn)
+        self._refresh_port_chip()
         toolbar.addStretch()
 
         # Filtro de log — substring case-insensitive aplicada linha a linha.
@@ -273,6 +298,35 @@ class RunnerWidget(QWidget):
             "(aplica no próximo start/restart)."
         )
 
+    def _refresh_port_chip(self) -> None:
+        port = self._runner.port
+        if port > 0:
+            self._port_btn.setText(f":{port}")
+        else:
+            self._port_btn.setText(":porta")
+
+    def _open_port_dialog(self) -> None:
+        value, ok = QInputDialog.getInt(
+            self,
+            "Porta base",
+            "Porta base do runner (0 = sem porta).\n"
+            "Use {port} nos comandos/URL/env; PORT=<porta> é injetada "
+            "no ambiente.",
+            value=self._runner.port,
+            minValue=0,
+            maxValue=65535,
+        )
+        if not ok or value == self._runner.port:
+            return
+        self._runner.port = value
+        self._refresh_port_chip()
+        # browser_url com {port} → re-sincroniza a URL da sidebar.
+        if self._runner.browser_url.strip():
+            self._set_current_url(self._effective_browser_url())
+        if self._state == "running":
+            self._status.setText("● porta alterada — reinicie o runner pra aplicar")
+        self.port_changed.emit(value)
+
     def _open_cwd_menu(self) -> None:
         from pathlib import Path
 
@@ -339,6 +393,7 @@ class RunnerWidget(QWidget):
         if self._cwd_override:
             self._runner.last_cwd = self._cwd_override
         self._refresh_cwd_chip()
+        self._refresh_port_chip()
         if self.effective_cwd() != before_cwd:
             self.cwd_changed.emit(self.effective_cwd())
         if runner.name != old_name:
