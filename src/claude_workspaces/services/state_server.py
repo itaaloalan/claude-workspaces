@@ -32,6 +32,10 @@ class StateServer:
         # cwd → (expira_em, {"branch": ..., "worktree": ...})
         self._branch_cache: dict[str, tuple[float, dict]] = {}
         self._httpd: ThreadingHTTPServer | None = None
+        # Callback de "Ir para a sessão" (entry do snapshot) — injetado
+        # pela main_window via um Signal.emit (thread-safe: a emissão de
+        # outra thread vira queued connection na UI thread).
+        self._focus_cb = None
 
     # ---- ciclo de vida -----------------------------------------------------
 
@@ -59,6 +63,12 @@ class StateServer:
                     return
                 if path == "/open":
                     ok = outer._open_folder(self.path)
+                    self.send_response(204 if ok else 404)
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    return
+                if path == "/focus":
+                    ok = outer._request_focus(self.path)
                     self.send_response(204 if ok else 404)
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
@@ -115,6 +125,32 @@ class StateServer:
                 entry.update(self._branch_info(cwd))
         snap["ts"] = time.time()
         return snap
+
+    def set_focus_callback(self, fn) -> None:
+        """`fn(entry: dict)` — chamado na thread do handler; passe um
+        Signal.emit pra despachar pra UI thread com segurança."""
+        self._focus_cb = fn
+
+    def _request_focus(self, raw_path: str) -> bool:
+        """`/focus?port=NNNN` — pede pro app focar a sessão/console dono
+        do runner daquela porta."""
+        from urllib.parse import parse_qs, urlparse
+
+        port = (
+            parse_qs(urlparse(raw_path).query).get("port", [""])[0].strip()
+        )
+        if not port or self._focus_cb is None:
+            return False
+        with self._lock:
+            entry = dict(self._snapshot.get("ports", {}).get(port) or {})
+        if not entry:
+            return False
+        try:
+            self._focus_cb(entry)
+            return True
+        except Exception:
+            log.warning("focus callback falhou", exc_info=True)
+            return False
 
     def _open_folder(self, raw_path: str) -> bool:
         """`/open?port=NNNN` — abre o cwd do runner daquela porta no

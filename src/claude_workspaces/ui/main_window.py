@@ -2,7 +2,7 @@ import logging
 from datetime import UTC
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QObject, QSize, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -109,6 +109,14 @@ from .workspace_details import WorkspaceDetailsPanel
 from .workspace_dialog import WorkspaceDialog
 
 log = logging.getLogger(__name__)
+
+
+class _BrowserFocusBridge(QObject):
+    """Ponte thread-safe pro "Ir para a sessão" da extensão de browser:
+    o handler HTTP do StateServer roda em outra thread — emitir o signal
+    de lá vira queued connection e o slot roda na UI thread."""
+
+    requested = Signal(dict)
 
 
 class MainWindow(QMainWindow):
@@ -315,6 +323,15 @@ class MainWindow(QMainWindow):
                 )
             )
             if self._state_server.start():
+                # "Ir para a sessão" vindo da extensão: o handler roda em
+                # outra thread — Signal.emit despacha pra UI thread.
+                self._browser_focus_bridge = _BrowserFocusBridge(self)
+                self._browser_focus_bridge.requested.connect(
+                    self._on_browser_focus_request
+                )
+                self._state_server.set_focus_callback(
+                    self._browser_focus_bridge.requested.emit
+                )
                 self._state_server_timer = QTimer(self)
                 self._state_server_timer.setInterval(3_000)
                 self._state_server_timer.timeout.connect(
@@ -4856,6 +4873,20 @@ class MainWindow(QMainWindow):
         )
         dlg.exec()
 
+    def _on_browser_focus_request(self, entry: dict) -> None:
+        """"Ir para a sessão do Claude" vindo da extensão: foca o console
+        dono do runner (sid) ou, sem console, o workspace."""
+        sid = (entry or {}).get("console_session_id") or ""
+        if sid and self._focus_terminal_by_session_id(sid):
+            return
+        ws_id = (entry or {}).get("workspace_id") or ""
+        ws_item = self._find_workspace_item(ws_id) if ws_id else None
+        if ws_item is not None:
+            self.list_widget.setCurrentItem(ws_item)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
     def _push_browser_state(self) -> None:
         """Empurra o mapa porta → runner pro StateServer (plugin de
         browser). Roda na UI thread; nada de git aqui — branch/worktree
@@ -4870,12 +4901,14 @@ class MainWindow(QMainWindow):
                 return
             entry = {
                 "workspace": ws.name,
+                "workspace_id": ws.id,
                 "runner": runner.name or "(runner)",
                 "scope": "console" if runner.console_session_id else "workspace",
                 "cwd": cwd,
                 "state": state,
             }
             if runner.console_session_id:
+                entry["console_session_id"] = runner.console_session_id
                 entry["console_branch"] = self._console_branch_for(
                     runner.console_session_id
                 )

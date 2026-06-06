@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.99.2] — 2026-06-05
+
+### Novidades
+- **Extensão: menu no pill + mover entre cantos.** Clicar no pill abre um
+  menu com **🎯 Ir para a sessão do Claude** (novo endpoint `/focus?port=N`
+  — o app traz a janela e seleciona o console dono do runner, ou o
+  workspace) e **📂 Abrir pasta do worktree**, além de uma linha "Mover"
+  com os 4 cantos (↖ ↗ ↙ ↘). O **canto escolhido persiste**
+  (chrome.storage) — refresh volta na última posição; o ✕ continua
+  escondendo só na aba atual até o próximo load. O dispatch do foco usa
+  ponte thread-safe (Signal queued da thread do HTTP pra UI).
+
 ## [0.99.1] — 2026-06-05
 
 ### Novidades

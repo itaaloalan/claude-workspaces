@@ -144,3 +144,42 @@ def test_open_endpoint(tmp_path, monkeypatch):
         assert len(opened) == 1
     finally:
         srv.stop()
+
+
+def test_focus_endpoint():
+    import urllib.error
+
+    focused: list[dict] = []
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    try:
+        srv.update({"ports": {"4202": {
+            "workspace_id": "abc", "console_session_id": "sid-1",
+        }}})
+        # Sem callback → 404.
+        try:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/focus?port=4202", timeout=5
+            )
+            raise AssertionError("esperava 404 sem callback")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+        srv.set_focus_callback(focused.append)
+        req = urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/focus?port=4202", timeout=5
+        )
+        assert req.status == 204
+        assert focused == [{
+            "workspace_id": "abc", "console_session_id": "sid-1",
+        }]
+        # Porta desconhecida → 404.
+        try:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/focus?port=9999", timeout=5
+            )
+            raise AssertionError("esperava 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        srv.stop()
