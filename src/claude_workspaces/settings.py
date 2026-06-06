@@ -94,6 +94,10 @@ class Settings:
     runner_group_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado das seções do rodapé de runners da sidebar.
     runner_footer_collapsed: dict = field(default_factory=dict)  # {"workspace"|"console": bool}
+    # Endpoint local pro plugin de browser (badge/faixa de worktree):
+    # http://127.0.0.1:<porta>/state.json com o mapa porta → runner.
+    browser_state_server_enabled: bool = True
+    browser_state_server_port: int = 43210
     # Estado colapsado do bucket "Sessões Claude" por workspace.
     sessoes_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado das seções "FIXADOS" / "WORKSPACES" na sidebar.

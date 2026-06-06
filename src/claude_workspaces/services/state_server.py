@@ -1,0 +1,125 @@
+"""StateServer — endpoint HTTP local pro plugin de browser.
+
+Serve em 127.0.0.1 (`/state.json`) o mapa porta → runner/workspace/worktree
+que a extensão Chrome usa pra mostrar badge + faixa quando uma aba
+localhost:<porta> pertence a um runner do app (e se ele roda num
+worktree). Read-only, localhost-only, ligável nas Settings.
+
+A UI empurra snapshots baratos (sem git) via `update()`; o
+enriquecimento de branch/worktree roda na thread do handler com cache
+TTL — `is_worktree_path`/`current_branch` não tocam em Qt.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+log = logging.getLogger(__name__)
+
+DEFAULT_PORT = 43210
+
+
+class StateServer:
+    def __init__(self, port: int = DEFAULT_PORT, host: str = "127.0.0.1") -> None:
+        self._host = host
+        self._port = port
+        self._lock = threading.Lock()
+        self._snapshot: dict = {"ports": {}}
+        # cwd → (expira_em, {"branch": ..., "worktree": ...})
+        self._branch_cache: dict[str, tuple[float, dict]] = {}
+        self._httpd: ThreadingHTTPServer | None = None
+
+    # ---- ciclo de vida -----------------------------------------------------
+
+    def start(self) -> bool:
+        outer = self
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 (API do http.server)
+                if self.path.split("?")[0] != "/state.json":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                body = json.dumps(
+                    outer._payload(), ensure_ascii=False
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                # Extensão/content scripts buscam de origens localhost
+                # variadas — CORS liberado (conteúdo é read-only e local).
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args) -> None:  # silencia stderr
+                pass
+
+        try:
+            self._httpd = ThreadingHTTPServer((self._host, self._port), _Handler)
+        except OSError as e:
+            log.warning(
+                "StateServer não subiu em %s:%d (%s) — plugin de browser "
+                "fica sem dados", self._host, self._port, e,
+            )
+            self._httpd = None
+            return False
+        thread = threading.Thread(
+            target=self._httpd.serve_forever, name="state-server", daemon=True
+        )
+        thread.start()
+        log.info("StateServer em http://%s:%d/state.json", self._host, self._port)
+        return True
+
+    def stop(self) -> None:
+        if self._httpd is not None:
+            try:
+                self._httpd.shutdown()
+                self._httpd.server_close()
+            except Exception:
+                log.debug("shutdown do StateServer falhou", exc_info=True)
+            self._httpd = None
+
+    @property
+    def running(self) -> bool:
+        return self._httpd is not None
+
+    # ---- dados ---------------------------------------------------------------
+
+    def update(self, snapshot: dict) -> None:
+        """Snapshot {"ports": {"4202": {workspace, runner, scope, cwd,
+        status...}}} — empurrado pela UI thread (sem git aqui)."""
+        with self._lock:
+            self._snapshot = snapshot
+
+    def _payload(self) -> dict:
+        with self._lock:
+            snap = json.loads(json.dumps(self._snapshot))  # deep copy barato
+        for entry in snap.get("ports", {}).values():
+            cwd = entry.get("cwd") or ""
+            if cwd:
+                entry.update(self._branch_info(cwd))
+        snap["ts"] = time.time()
+        return snap
+
+    def _branch_info(self, cwd: str) -> dict:
+        now = time.monotonic()
+        with self._lock:
+            hit = self._branch_cache.get(cwd)
+            if hit and hit[0] > now:
+                return hit[1]
+        info = {"branch": "", "worktree": False}
+        try:
+            from ..git_worktree import current_branch, is_worktree_path
+            info["worktree"] = bool(is_worktree_path(cwd))
+            info["branch"] = current_branch(cwd) or ""
+        except Exception:
+            log.debug("branch_info falhou pra %s", cwd, exc_info=True)
+        with self._lock:
+            self._branch_cache[cwd] = (now + 5.0, info)
+        return info

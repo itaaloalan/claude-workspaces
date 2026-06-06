@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Workspaces — Indicador de Worktree",
+  "description": "Mostra badge e faixa quando a aba localhost pertence a um runner do claude-workspaces (e se roda num worktree).",
+  "version": "1.0.0",
+  "permissions": ["tabs"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_title": "Claude Workspaces" }
+}

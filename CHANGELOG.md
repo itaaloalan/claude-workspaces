@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.99.0] — 2026-06-05
+
+### Novidades
+- **Extensão Chrome: indicador de worktree no browser.** Nova pasta
+  `chrome-extension/` (MV3, load unpacked): quando a aba `localhost:<porta>`
+  pertence a um runner do app, o ícone ganha badge com a branch e a página
+  ganha uma faixa no topo — 🟧 laranja pra worktree (`🌿 branch — worktree ·
+  map / web`), 🟩 verde pro repo principal, com ✕ pra esconder na aba.
+  Os dados vêm do novo **StateServer** local (`http://127.0.0.1:43210/
+  state.json`, ligável nas Settings via `browser_state_server_enabled`/
+  `_port`): o app empurra a cada 3s o mapa porta → runner/workspace
+  (incluindo a porta REAL detectada na URL), e branch/worktree são
+  resolvidos por cwd na thread do server com cache. Read-only e
+  localhost-only.
+
 ## [0.98.2] — 2026-06-05
 
 ### Novidades

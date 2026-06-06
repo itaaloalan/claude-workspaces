@@ -301,6 +301,30 @@ class MainWindow(QMainWindow):
         )
         self._plan_usage_updated_timer.start()
 
+        # Endpoint local pro plugin de browser (badge/faixa de worktree):
+        # serve porta → runner/workspace; a extensão Chrome consulta ao
+        # ativar abas localhost. Snapshot empurrado a cada 3s (barato,
+        # sem git — branch/worktree resolve na thread do server).
+        self._state_server = None
+        if getattr(self.settings, "browser_state_server_enabled", True):
+            from ..services.state_server import StateServer
+            self._state_server = StateServer(
+                port=int(
+                    getattr(self.settings, "browser_state_server_port", 43210)
+                    or 43210
+                )
+            )
+            if self._state_server.start():
+                self._state_server_timer = QTimer(self)
+                self._state_server_timer.setInterval(3_000)
+                self._state_server_timer.timeout.connect(
+                    self._push_browser_state
+                )
+                self._state_server_timer.start()
+                QTimer.singleShot(1_000, self._push_browser_state)
+            else:
+                self._state_server = None
+
         self._restore_geometry()
         self.refresh_list()
         # Plugin host depende do PluginsView e do GitPanel (ambos só existem
@@ -4831,6 +4855,58 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         dlg.exec()
+
+    def _push_browser_state(self) -> None:
+        """Empurra o mapa porta → runner pro StateServer (plugin de
+        browser). Roda na UI thread; nada de git aqui — branch/worktree
+        são resolvidos pelo server na thread do handler com cache."""
+        if self._state_server is None or not self._state_server.running:
+            return
+        from ..services.runner_url_detect import url_port
+        ports: dict[str, dict] = {}
+
+        def _add(port: int, ws: Workspace, runner, cwd: str, state: str) -> None:
+            if port <= 0:
+                return
+            entry = {
+                "workspace": ws.name,
+                "runner": runner.name or "(runner)",
+                "scope": "console" if runner.console_session_id else "workspace",
+                "cwd": cwd,
+                "state": state,
+            }
+            if runner.console_session_id:
+                entry["console_branch"] = self._console_branch_for(
+                    runner.console_session_id
+                )
+            ports[str(port)] = entry
+
+        for ws in self.workspaces:
+            for runner in ws.runners:
+                cwd = self._runner_display_cwd(runner, ws)
+                state = "idle"
+                # Widget vivo refina cwd/estado e mapeia também a porta
+                # REAL detectada na URL (pode diferir da configurada).
+                rw = None
+                area = self._runner_areas.get(ws.id)
+                if area is not None:
+                    rw = area.widget_for(runner.id)
+                if rw is None:
+                    for carea in self._console_runner_areas.get(ws.id, {}).values():
+                        rw = carea.widget_for(runner.id)
+                        if rw is not None:
+                            break
+                if rw is not None:
+                    cwd = rw.effective_cwd()
+                    state = rw.current_state()
+                    real = url_port(rw.current_url() or "")
+                    if real and real != runner.port:
+                        _add(real, ws, runner, cwd, state)
+                _add(runner.port, ws, runner, cwd, state)
+        try:
+            self._state_server.update({"ports": ports})
+        except Exception:
+            log.debug("push do browser state falhou", exc_info=True)
 
     def _on_runner_footer_collapsed(self, scope: str, collapsed: bool) -> None:
         """Persiste o colapso das seções do rodapé de runners."""
