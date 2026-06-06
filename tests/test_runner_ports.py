@@ -304,3 +304,13 @@ def test_port_ref_sem_placeholder_eh_noop():
 
     assert expand_port_refs("npm start", {"api": 8080}) == "npm start"
     assert expand_port_refs("", {"api": 8080}) == ""
+
+
+# ---- include_in_stack ----------------------------------------------------------
+
+
+def test_include_in_stack_default_true_e_roundtrip():
+    assert RunnerConfig().include_in_stack is True
+    assert RunnerConfig.from_dict({"name": "x"}).include_in_stack is True
+    r = RunnerConfig(name="coletor", include_in_stack=False)
+    assert RunnerConfig.from_dict(r.to_dict()).include_in_stack is False

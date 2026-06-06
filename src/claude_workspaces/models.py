@@ -39,6 +39,11 @@ class RunnerConfig:
     # sobrescrever um PORT explícito). Cópias console-scoped ganham a
     # próxima porta livre a partir da base (ver services/port_alloc.py).
     port: int = 0
+    # Participa do "⬇ Subir stack" (cópia automática pro console)?
+    # Workspaces com muitos runners sobem só os marcados (ex: map copia
+    # web + api; jdk8/history/coletor ficam de fora). Cópia manual via
+    # "↗ Copiar do workspace" ignora a flag.
+    include_in_stack: bool = True
     # Escopo do runner. Vazio = pertence ao workspace (comportamento
     # antigo, aparece no painel inferior do workspace). Quando preenchido
     # com o session_id de um console Claude, o runner pertence àquele
@@ -81,6 +86,7 @@ class RunnerConfig:
             browser_url=str(data.get("browser_url", "")),
             ready_pattern=str(data.get("ready_pattern", "")),
             port=port,
+            include_in_stack=bool(data.get("include_in_stack", True)),
             console_session_id=str(data.get("console_session_id", "")),
             gen_session_id=str(data.get("gen_session_id", "")),
             gen_cwd=str(data.get("gen_cwd", "")),

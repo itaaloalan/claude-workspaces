@@ -139,6 +139,17 @@ class RunnerEditDialog(QDialog):
         self._enabled.setChecked(base.enabled)
         form.addRow("", self._enabled)
 
+        self._include_stack = QCheckBox("Incluir no '⬇ Subir stack' (cópia pro console)")
+        self._include_stack.setChecked(base.include_in_stack)
+        self._include_stack.setToolTip(
+            "Quando marcado, o '⬇ Subir stack' copia este runner pro "
+            "console (com porta remapeada e cwd do worktree). Desmarque "
+            "runners que não fazem parte da stack paralela (ex: no map, "
+            "só web + api sobem; jdk8/history/coletor ficam de fora). "
+            "A cópia manual via '↗ Copiar do workspace' ignora esta flag."
+        )
+        form.addRow("", self._include_stack)
+
         self._open_browser = QCheckBox("Abrir browser ao carregar")
         self._open_browser.setToolTip(
             "Detecta a URL/porta na saída do start_cmd e abre no browser "
@@ -271,6 +282,7 @@ class RunnerEditDialog(QDialog):
             stop_cmd=self._stop.toPlainText().strip(),
             restart_cmd=self._restart.toPlainText().strip(),
             enabled=self._enabled.isChecked(),
+            include_in_stack=self._include_stack.isChecked(),
             open_browser_on_ready=self._open_browser.isChecked(),
             browser_url=self._browser_url.text().strip(),
             ready_pattern=self._ready_pattern.text().strip(),

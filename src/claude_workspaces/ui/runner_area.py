@@ -803,11 +803,15 @@ class RunnerArea(QWidget):
         ou pelo "⬇ Subir stack no console" do painel do workspace (via
         main_window)."""
         ws_runners = [
-            r for r in self._ws.runners if not (r.console_session_id or "")
+            r for r in self._ws.runners
+            if not (r.console_session_id or "") and r.include_in_stack
         ]
         if not ws_runners:
             from .persistent_toast import flash_toast
-            flash_toast("Nenhum runner no workspace para subir aqui.")
+            flash_toast(
+                "Nenhum runner marcado pra subir no console — veja "
+                "⚙ Editar → 'Incluir no ⬇ Subir stack'."
+            )
             return
         self._copy_runners_to_console(ws_runners)
         self.run_all()

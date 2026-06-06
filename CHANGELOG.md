@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.98.0] — 2026-06-05
+
+### Novidades
+- **Flag por runner: "Incluir no ⬇ Subir stack".** Checkbox no ⚙ Editar —
+  o Subir stack copia só os runners marcados (ex: no map, web + api sobem;
+  jdk8/history/coletor ficam de fora). Default marcado (comportamento
+  atual); a cópia manual "↗ Copiar do workspace" ignora a flag. Sem nenhum
+  marcado, o botão avisa em vez de copiar tudo.
+
 ## [0.97.2] — 2026-06-05
 
 ### Correções
