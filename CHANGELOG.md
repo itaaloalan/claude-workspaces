@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.98.2] — 2026-06-05
+
+### Novidades
+- **Spec de geração de runners ensina portas e stack paralela.** O
+  `docs/runners-spec.md` (lido pelo "Gerar com IA") agora documenta os
+  campos `port` e `include_in_stack`, os placeholders `{port}`/`{port:<nome>}`
+  e a receita pra frontend com API compilada (Angular `environment.ts`
+  `apiPort` → sed com `{port:api}` no start_cmd; Vite/CRA → env com
+  `{port:api}`). Runners gerados pela IA já nascem prontos pra subir a
+  stack em consoles/worktrees paralelos.
+
 ## [0.98.1] — 2026-06-05
 
 ### Correções

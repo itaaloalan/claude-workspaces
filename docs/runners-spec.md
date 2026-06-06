@@ -17,7 +17,9 @@ Esta spec é o contrato que o Claude deve seguir ao gerar um
   "stop_cmd": "",
   "restart_cmd": "",
   "cwd": "",
-  "enabled": true
+  "enabled": true,
+  "port": 5173,
+  "include_in_stack": true
 }
 ```
 
@@ -32,6 +34,14 @@ Esta spec é o contrato que o Claude deve seguir ao gerar um
   restart). Vazio → app executa stop seguido de start.
 - `cwd` — opcional. Caminho absoluto. Vazio → primeira pasta do workspace.
 - `enabled` — se `true`, é incluído quando o usuário clica "Rodar todos".
+- `port` — porta base do servidor (0 = sem porta). **Preencha sempre que o
+  runner sobe um servidor com porta conhecida** (a mesma que vai no nome
+  entre parênteses). Habilita a alocação automática de portas quando o
+  usuário sobe a stack num console/worktree paralelo.
+- `include_in_stack` — se `true` (default), o runner participa do
+  "⬇ Subir stack" (cópia automática pro console com porta remapeada).
+  Marque `false` em workers, simuladores e variantes alternativas (ex:
+  uma segunda api com outro JDK) que não compõem a stack paralela.
 
 ## Convenções
 
@@ -210,6 +220,54 @@ Descubra a porta nesta ordem:
 
 Quando não houver porta (CLI, worker, processo sem socket), omita os
 parênteses.
+
+## Portas e stack paralela por console (`port`, `{port}`, `{port:<nome>}`)
+
+O app sobe a mesma stack em vários consoles/worktrees em paralelo. Pra
+isso funcionar sem colisão, gere os runners pensando em portas:
+
+- **Sempre preencha `port`** quando o runner é um servidor (a mesma
+  porta dos parênteses do nome). Cópias pro console ganham a próxima
+  porta livre automaticamente.
+- O app **injeta `PORT` e `SERVER_PORT`** no ambiente do processo
+  (Node/Express e Spring Boot pegam a porta sem mudar o comando) e
+  **anexa `--port`/`-p` automaticamente** em dev servers conhecidos
+  (`ng serve`, `vite`, `next`, `npm start`/`npm run X`, `yarn`, `pnpm`).
+  → Na maioria dos casos NÃO precisa escrever `{port}` à mão.
+- Placeholders disponíveis no `start_cmd`/`stop_cmd`/`restart_cmd`,
+  valores do `env` e `browser_url` (expandidos na execução):
+  - `{port}` → porta do próprio runner;
+  - `{port:<nome>}` → porta de OUTRO runner do MESMO escopo/console
+    (ex: o web referenciando a api da mesma stack). Use o `name` exato.
+
+### Frontend (Angular e afins) que aponta pra API via config compilada
+
+Frameworks como Angular compilam o endereço da API a partir de um
+arquivo do projeto (ex: `src/environments/environment.ts` com
+`apiPort: 8091`, ou `app.settings.ts` / `.env` com a URL da api). Numa
+stack paralela, o frontend do console A precisa falar com a API do
+console A — **detecte e resolva isso ao gerar o runner do frontend**:
+
+1. Procure o arquivo/campo (Grep por `apiPort`, `apiUrl`, `API_URL`,
+   `baseUrl`, `environment.ts`, `app.settings`).
+2. Prefixe o `start_cmd` do frontend com um `sed` que troca SÓ a porta
+   pelo placeholder do runner da api (mesmo `name` gerado neste JSON):
+
+   ```json
+   {
+     "name": "web",
+     "start_cmd": "sed -i -E \"s/(apiPort:[[:space:]]*)[0-9]+/\\1{port:api}/\" src/environments/environment.ts && npm start",
+     "port": 4201,
+     "include_in_stack": true
+   }
+   ```
+
+3. No runner do workspace o placeholder resolve pra porta base da api
+   (sed vira no-op); na cópia de console resolve pra porta da api
+   DAQUELE console — frontend e api sempre pareados.
+4. Se o frontend lê a API de variável de ambiente (Vite
+   `VITE_API_URL`, CRA `REACT_APP_API_URL`), prefira `env`:
+   `"env": {"VITE_API_URL": "http://localhost:{port:api}"}` — sem sed.
 
 ## Configuração do browser (Settings global)
 
