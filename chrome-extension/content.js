@@ -190,6 +190,8 @@ function consoleUrl() {
   );
 }
 
+const CONSOLE_SIZE_KEY = `cw_console_size:${location.host}`;
+
 function openConsoleOverlay() {
   const old = document.getElementById(OVERLAY_ID);
   if (old) {
@@ -206,6 +208,16 @@ function openConsoleOverlay() {
     "border:1px solid #3a3a3a", "box-shadow:0 8px 30px rgba(0,0,0,.6)",
     "background:#0e0e0e",
   ].join(";");
+  // Tamanho lembrado POR SISTEMA (host:porta) — mesmo padrão do canto.
+  try {
+    chrome.storage.local.get({ [CONSOLE_SIZE_KEY]: null }, (v) => {
+      const s = v[CONSOLE_SIZE_KEY];
+      if (s && s.w && s.h) {
+        wrap.style.width = `${s.w}px`;
+        wrap.style.height = `${s.h}px`;
+      }
+    });
+  } catch (_e) {}
 
   const head = document.createElement("div");
   head.style.cssText =
@@ -237,6 +249,55 @@ function openConsoleOverlay() {
   frame.src = consoleUrl();
   frame.style.cssText = "flex:1;border:0;width:100%;background:#0e0e0e";
   wrap.appendChild(frame);
+
+  // Handle de resize no canto SUPERIOR ESQUERDO (o overlay é ancorado
+  // embaixo-direita: arrastar pra cima/esquerda = crescer). Durante o
+  // drag o iframe perde pointer-events (senão engole o mousemove).
+  const grip = document.createElement("div");
+  grip.title = "Arrastar pra redimensionar";
+  grip.style.cssText = [
+    "position:absolute", "top:0", "left:0", "width:16px", "height:16px",
+    "cursor:nwse-resize", "z-index:2",
+    "background:linear-gradient(135deg,#777 0 2px,transparent 2px 5px," +
+      "#777 5px 7px,transparent 7px)",
+    "border-top-left-radius:10px", "opacity:.7",
+  ].join(";");
+  wrap.style.position = "fixed"; // garante o contexto do absolute
+  wrap.appendChild(grip);
+
+  grip.addEventListener("mousedown", (down) => {
+    down.preventDefault();
+    down.stopPropagation();
+    const rect = wrap.getBoundingClientRect();
+    const right = rect.right;
+    const bottom = rect.bottom;
+    frame.style.pointerEvents = "none";
+    const onMove = (mv) => {
+      const w = Math.min(
+        Math.max(right - mv.clientX, 380), window.innerWidth * 0.95
+      );
+      const h = Math.min(
+        Math.max(bottom - mv.clientY, 260), window.innerHeight * 0.9
+      );
+      wrap.style.width = `${Math.round(w)}px`;
+      wrap.style.height = `${Math.round(h)}px`;
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("mouseup", onUp, true);
+      frame.style.pointerEvents = "";
+      try {
+        chrome.storage.local.set({
+          [CONSOLE_SIZE_KEY]: {
+            w: Math.round(wrap.getBoundingClientRect().width),
+            h: Math.round(wrap.getBoundingClientRect().height),
+          },
+        });
+      } catch (_e) {}
+    };
+    document.addEventListener("mousemove", onMove, true);
+    document.addEventListener("mouseup", onUp, true);
+  });
 
   document.documentElement.appendChild(wrap);
 }

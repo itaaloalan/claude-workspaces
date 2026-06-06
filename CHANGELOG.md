@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1] — 2026-06-05
+
+### Novidades
+- **Console flutuante redimensionável.** Handle ◤ no canto superior
+  esquerdo do overlay (ancorado embaixo-direita, arrastar pra cima/
+  esquerda = crescer), clampado entre 380×260 e 95vw×90vh. O tamanho é
+  lembrado POR SISTEMA (host:porta), como o canto do pill; o xterm
+  interno re-ajusta sozinho (fit no resize). Requer ↻ da extensão.
+
 ## [1.0.0] — 2026-06-05
 
 ### Novidades
