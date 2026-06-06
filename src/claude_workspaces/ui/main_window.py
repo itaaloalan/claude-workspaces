@@ -112,11 +112,12 @@ log = logging.getLogger(__name__)
 
 
 class _BrowserFocusBridge(QObject):
-    """Ponte thread-safe pro "Ir para a sessão" da extensão de browser:
-    o handler HTTP do StateServer roda em outra thread — emitir o signal
-    de lá vira queued connection e o slot roda na UI thread."""
+    """Ponte thread-safe pras ações da extensão de browser: os handlers
+    HTTP do StateServer rodam em outra thread — emitir os signals de lá
+    vira queued connection e os slots rodam na UI thread."""
 
-    requested = Signal(dict)
+    requested = Signal(dict)          # "Ir para a sessão"
+    restart_requested = Signal(dict)  # "↻ Reiniciar runner" (aba do espelho)
 
 
 class MainWindow(QMainWindow):
@@ -323,6 +324,11 @@ class MainWindow(QMainWindow):
                 )
             )
             if self._state_server.start():
+                # Espelho de console no browser: hub que faz tee do PTY
+                # de cada console (mesmo PTY = sincronizado por construção).
+                from ..services.console_hub import ConsoleHub
+                self._console_hub = ConsoleHub()
+                self._state_server.set_hub(self._console_hub)
                 # "Ir para a sessão" vindo da extensão: o handler roda em
                 # outra thread — Signal.emit despacha pra UI thread.
                 self._browser_focus_bridge = _BrowserFocusBridge(self)
@@ -331,6 +337,12 @@ class MainWindow(QMainWindow):
                 )
                 self._state_server.set_focus_callback(
                     self._browser_focus_bridge.requested.emit
+                )
+                self._browser_focus_bridge.restart_requested.connect(
+                    self._on_browser_restart_request
+                )
+                self._state_server.set_restart_callback(
+                    self._browser_focus_bridge.restart_requested.emit
                 )
                 self._state_server_timer = QTimer(self)
                 self._state_server_timer.setInterval(3_000)
@@ -4738,6 +4750,11 @@ class MainWindow(QMainWindow):
         area.set_manage_console_runners_handler(
             lambda w=ws: self._open_console_runners_manager(w)
         )
+        hub = getattr(self, "_console_hub", None)
+        if hub is not None:
+            area.set_pty_tee(
+                lambda rid, data: hub.publish(f"runner:{rid}", data)
+            )
         area.runners_changed.connect(lambda w=ws: self._persist_workspace(w))
         area.runners_changed.connect(
             lambda wid=ws.id: self._refresh_runner_children(wid)
@@ -4873,6 +4890,14 @@ class MainWindow(QMainWindow):
         )
         dlg.exec()
 
+    def _on_browser_restart_request(self, entry: dict) -> None:
+        """"↻ Reiniciar" vindo do espelho no browser — reusa o restart da
+        sidebar (cria a RunnerArea sob demanda se preciso)."""
+        ws_id = (entry or {}).get("workspace_id") or ""
+        rid = (entry or {}).get("runner_id") or ""
+        if ws_id and rid:
+            self._restart_runner_from_sidebar(ws_id, rid)
+
     def _on_browser_focus_request(self, entry: dict) -> None:
         """"Ir para a sessão do Claude" vindo da extensão: foca o console
         dono do runner (sid) ou, sem console, o workspace."""
@@ -4902,6 +4927,7 @@ class MainWindow(QMainWindow):
             entry = {
                 "workspace": ws.name,
                 "workspace_id": ws.id,
+                "runner_id": runner.id,
                 "runner": runner.name or "(runner)",
                 "scope": "console" if runner.console_session_id else "workspace",
                 "cwd": cwd,
@@ -5075,6 +5101,23 @@ class MainWindow(QMainWindow):
             lambda w=workspace, t=terminal:
                 self._ensure_terminal_runner_panel(w, t)
         )
+        # Tee do PTY pro espelho de console no browser (extensão). O key
+        # é o sid efetivo resolvido NA HORA do publish — sobrevive ao
+        # re-claim (pending → real, resume com id novo).
+        hub = getattr(self, "_console_hub", None)
+        if hub is not None and isinstance(terminal, TerminalWidget):
+            def _key(t=terminal) -> str:
+                return t.claimed_session_id() or self._pending_console_key(t)
+            hub.attach(_key(), terminal)
+            terminal.session.output_received.connect(
+                lambda data, t=terminal: hub.publish(_key(t), data)
+            )
+            terminal.claimed_session_id_changed.connect(
+                lambda sid, t=terminal: (
+                    hub.rekey(self._pending_console_key(t), sid),
+                    hub.attach(sid, t),
+                )
+            )
         terminal.claimed_session_id_changed.connect(
             lambda sid, w=workspace, t=terminal:
                 self._on_terminal_session_id_changed(w, t, sid)
@@ -5116,6 +5159,11 @@ class MainWindow(QMainWindow):
         area.set_manage_console_runners_handler(
             lambda w=workspace: self._open_console_runners_manager(w)
         )
+        hub = getattr(self, "_console_hub", None)
+        if hub is not None:
+            area.set_pty_tee(
+                lambda rid, data: hub.publish(f"runner:{rid}", data)
+            )
         area.runners_changed.connect(lambda w=workspace: self._persist_workspace(w))
         area.runners_changed.connect(
             lambda wid=workspace.id: self._refresh_runner_children(wid)

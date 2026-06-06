@@ -53,6 +53,8 @@ async function refreshTab(tabId, url) {
     return;
   }
   const isWt = Boolean(entry.worktree);
+  // Token do app vai junto — os endpoints /console/* exigem.
+  entry._token = (state && state.token) || "";
   chrome.action.setBadgeText({ tabId, text: shortBranch(entry.branch) || "•" });
   chrome.action.setBadgeBackgroundColor({
     tabId,

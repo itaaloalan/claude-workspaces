@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.0.0] — 2026-06-05
+
+### Novidades
+- **🎉 Console do Claude no browser — espelho do MESMO PTY.** Menu do pill
+  ganha "💻 Abrir console do Claude aqui": overlay (ou janela separada via
+  "↗") com xterm.js espelhando o PTY da sessão daquele worktree — digitou
+  em qualquer lado, é a mesma sessão (sincronizado por construção via
+  ConsoleHub: tee do output + input no mesmo fd). Inclui **abas com os
+  LOGS ao vivo dos runners do console** e botão **↻ Reiniciar** por runner
+  (despachado pra UI thread via bridge). Output via SSE com replay de
+  backlog (~200KB); página servida pelo próprio StateServer com o xterm.js
+  vendorizado do app.
+- **Canto do pill lembrado POR SISTEMA** (host:porta) — mover num app não
+  mexe nos outros; fallback pro global.
+
+### Segurança
+- **CORS do StateServer restrito a origens locais/extensão** (antes era
+  `*`: qualquer site da internet aberto no browser conseguiria ler
+  /state.json — paths, branches e o token). Checagem de Host contra DNS
+  rebinding; `/console/*` e `/runner/restart` exigem token rotacionado a
+  cada execução; /static com whitelist (sem path traversal); input limitado
+  a 64KB por POST.
+
 ## [0.99.2] — 2026-06-05
 
 ### Novidades

@@ -33,7 +33,8 @@ def test_state_server_serve_snapshot(tmp_path):
             f"http://127.0.0.1:{port}/state.json", timeout=5
         ) as resp:
             assert resp.status == 200
-            assert resp.headers["Access-Control-Allow-Origin"] == "*"
+            # Sem Origin → sem ACAO (CORS só pra origens locais/extensão).
+            assert resp.headers.get("Access-Control-Allow-Origin") is None
             data = json.loads(resp.read().decode("utf-8"))
         entry = data["ports"]["4202"]
         assert entry["workspace"] == "map"
@@ -183,3 +184,189 @@ def test_focus_endpoint():
             assert e.code == 404
     finally:
         srv.stop()
+
+
+def _get(url, headers=None):
+    import urllib.request
+    req = urllib.request.Request(url, headers=headers or {})
+    return urllib.request.urlopen(req, timeout=5)
+
+
+def test_payload_inclui_token_e_origin_guard():
+    import urllib.error
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    try:
+        with _get(f"http://127.0.0.1:{port}/state.json") as resp:
+            data = json.loads(resp.read().decode())
+            assert data["token"] == srv.token
+            # Sem Origin (curl local) → sem header ACAO.
+            assert resp.headers.get("Access-Control-Allow-Origin") is None
+        # Origin local → ecoado.
+        with _get(
+            f"http://127.0.0.1:{port}/state.json",
+            headers={"Origin": "http://localhost:4202"},
+        ) as resp:
+            assert resp.headers["Access-Control-Allow-Origin"] == (
+                "http://localhost:4202"
+            )
+        # Origin da internet → 403 (evil.com não lê paths/branches/token).
+        try:
+            _get(
+                f"http://127.0.0.1:{port}/state.json",
+                headers={"Origin": "https://evil.com"},
+            )
+            raise AssertionError("esperava 403")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+        # Host estranho (DNS rebinding) → 403.
+        try:
+            _get(
+                f"http://127.0.0.1:{port}/state.json",
+                headers={"Host": "evil.com"},
+            )
+            raise AssertionError("esperava 403")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+    finally:
+        srv.stop()
+
+
+class _FakeHub:
+    def __init__(self):
+        import queue
+        self.writes = []
+        self._q = queue.Queue()
+        self._ring = b"backlog!"
+
+    def replay(self, sid):
+        return self._ring
+
+    def subscribe(self, sid):
+        return self._q
+
+    def unsubscribe(self, sid, q):
+        pass
+
+    def write(self, sid, data):
+        self.writes.append((sid, data))
+        return True
+
+
+def test_console_endpoints_token_e_input():
+    import urllib.error
+    import urllib.request
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    hub = _FakeHub()
+    srv.set_hub(hub)
+    try:
+        srv.update({"ports": {"4202": {
+            "workspace": "map", "runner": "web", "runner_id": "r1",
+            "console_session_id": "sid-1", "cwd": "",
+        }}})
+        # Token errado → 403.
+        try:
+            _get(f"http://127.0.0.1:{port}/console?port=4202&token=x")
+            raise AssertionError("esperava 403")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+        # Página ok com token certo (contém xterm + tabs).
+        with _get(
+            f"http://127.0.0.1:{port}/console?port=4202&token={srv.token}"
+        ) as resp:
+            html = resp.read().decode()
+            assert "xterm.js" in html and "Claude" in html
+        # Input → hub.write com o sid.
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/console/input?port=4202&token={srv.token}",
+            data=b"ls\r",
+            method="POST",
+        )
+        assert urllib.request.urlopen(req, timeout=5).status == 204
+        assert hub.writes == [("sid-1", b"ls\r")]
+        # Porta sem console (workspace-scope) → 404.
+        srv.update({"ports": {"3000": {"runner": "web", "runner_id": "r2"}}})
+        try:
+            _get(f"http://127.0.0.1:{port}/console?port=3000&token={srv.token}")
+            raise AssertionError("esperava 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        srv.stop()
+
+
+def test_static_whitelist_e_traversal():
+    import urllib.error
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    try:
+        with _get(f"http://127.0.0.1:{port}/static/xterm.js") as resp:
+            assert resp.status == 200
+            assert "javascript" in resp.headers["Content-Type"]
+        for bad in ("/static/../models.py", "/static/nao-existe.js"):
+            try:
+                _get(f"http://127.0.0.1:{port}{bad}")
+                raise AssertionError("esperava 404")
+            except urllib.error.HTTPError as e:
+                assert e.code == 404
+    finally:
+        srv.stop()
+
+
+def test_runner_restart_endpoint():
+    import urllib.error
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    restarted: list[dict] = []
+    srv.set_restart_callback(restarted.append)
+    try:
+        srv.update({"ports": {"4202": {
+            "workspace_id": "w1", "runner_id": "r1",
+        }}})
+        assert _get(
+            f"http://127.0.0.1:{port}/runner/restart?port=4202&token={srv.token}"
+        ).status == 204
+        assert restarted[0]["runner_id"] == "r1"
+        try:
+            _get(f"http://127.0.0.1:{port}/runner/restart?port=4202&token=x")
+            raise AssertionError("esperava 403")
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+    finally:
+        srv.stop()
+
+
+def test_console_hub_pubsub():
+    from claude_workspaces.services.console_hub import ConsoleHub
+
+    class _FakeSession:
+        def __init__(self):
+            self.written = []
+
+        def write(self, data):
+            self.written.append(data)
+
+    class _FakeTerm:
+        def __init__(self):
+            self.session = _FakeSession()
+
+    hub = ConsoleHub()
+    term = _FakeTerm()
+    hub.attach("sid-1", term)
+    q = hub.subscribe("sid-1")
+    hub.publish("sid-1", b"hello ")
+    hub.publish("sid-1", b"world")
+    assert q.get_nowait() == b"hello "
+    assert q.get_nowait() == b"world"
+    assert hub.replay("sid-1") == b"hello world"
+    assert hub.write("sid-1", b"ls\r") is True
+    assert term.session.written == [b"ls\r"]
+    hub.rekey("sid-1", "sid-2")
+    assert hub.replay("sid-2") == b"hello world"
+    assert hub.write("sid-2", b"x") is True
+    hub.unsubscribe("sid-2", q)

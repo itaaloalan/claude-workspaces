@@ -99,6 +99,8 @@ class RunnerArea(QWidget):
         # Cache de translate_dir_for_repo por (target, repo) — limpo quando
         # o default do painel muda. Evita git subprocess a cada refresh.
         self._translate_cache: dict[tuple[str, str], str] = {}
+        # Tee dos PTYs dos runners (logs no espelho do browser).
+        self._pty_tee: Callable | None = None
 
         # RunnerWidget (filha) tem toolbar com muitos botões; propagaria
         # mínimo de largura >600px pra cima até a janela, causando scroll
@@ -279,6 +281,22 @@ class RunnerArea(QWidget):
         self._console_session_id = sid
         self._refresh_from_workspace()
 
+    def set_pty_tee(self, fn: Callable | None) -> None:
+        """`fn(runner_id, data: bytes)` — tee do output dos PTYs dos
+        runners (espelho de logs no browser). Retro-conecta os widgets
+        já vivos e vale pros futuros via _wire."""
+        self._pty_tee = fn
+        if fn is None:
+            return
+        for i in range(self.tabs.count()):
+            w = self.tabs.widget(i)
+            if isinstance(w, RunnerWidget) and not getattr(w, "_tee_wired", False):
+                w._tee_wired = True
+                w.session.output_received.connect(
+                    lambda data, rw=w: self._pty_tee
+                    and self._pty_tee(rw.runner_id(), data)
+                )
+
     def set_console_dirs_provider(self, fn: Callable | None) -> None:
         """Callable() -> list[(label, path)] com os diretórios dos consoles
         abertos do workspace. Propagado aos RunnerWidgets pro menu do chip
@@ -456,6 +474,12 @@ class RunnerArea(QWidget):
         # Porta mudou pelo chip :porta → persiste via runners_changed
         # (main_window grava o workspace no JSON).
         widget.port_changed.connect(lambda _p: self.runners_changed.emit())
+        if self._pty_tee is not None and not getattr(widget, "_tee_wired", False):
+            widget._tee_wired = True
+            widget.session.output_received.connect(
+                lambda data, rw=widget: self._pty_tee
+                and self._pty_tee(rw.runner_id(), data)
+            )
 
     def _on_runner_state(self, widget: RunnerWidget) -> None:
         self._recompute_running_count()

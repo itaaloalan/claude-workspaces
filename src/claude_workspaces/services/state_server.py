@@ -12,15 +12,37 @@ TTL — `is_worktree_path`/`current_branch` não tocam em Qt.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import re
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+# Origens autorizadas a LER as respostas (CORS): páginas locais (os apps
+# em localhost:<porta>) e a extensão. Sites da internet (evil.com) não
+# recebem ACAO → o browser bloqueia a leitura — sem isso o /state.json
+# (paths, branches e o token dos /console/*) vazaria pra qualquer site.
+_LOCAL_ORIGIN_RE = re.compile(
+    r"^(chrome-extension://[a-p]{32}"
+    r"|https?://(localhost|127\.0\.0\.1)(:\d+)?)$"
+)
 
 log = logging.getLogger(__name__)
 
 DEFAULT_PORT = 43210
+
+# Assets servidos em /static/<nome> — whitelist explícita (sem traversal).
+_STATIC_DIR = Path(__file__).resolve().parents[1] / "ui" / "static" / "vendor"
+_STATIC_WHITELIST = {
+    "xterm.js": "application/javascript",
+    "addon-fit.js": "application/javascript",
+    "xterm.css": "text/css",
+}
 
 
 class StateServer:
@@ -36,6 +58,12 @@ class StateServer:
         # pela main_window via um Signal.emit (thread-safe: a emissão de
         # outra thread vira queued connection na UI thread).
         self._focus_cb = None
+        # Espelho de console no browser: hub injetado pela main_window.
+        # Endpoints /console/* exigem este token (input remoto numa sessão
+        # Claude não fica aberto a qualquer página local) — distribuído
+        # via /state.json pra extensão.
+        self._hub = None
+        self.token = uuid.uuid4().hex
 
     # ---- ciclo de vida -----------------------------------------------------
 
@@ -43,7 +71,30 @@ class StateServer:
         outer = self
 
         class _Handler(BaseHTTPRequestHandler):
+            def _acao(self) -> str | None:
+                """Anti DNS-rebinding + CORS: Host precisa ser local;
+                Origin (quando presente) precisa ser local/extensão.
+                Retorna o valor do header ACAO ("" = sem header, ex:
+                curl local) ou None pra rejeitar com 403."""
+                host = (self.headers.get("Host") or "").split(":")[0]
+                if host not in ("localhost", "127.0.0.1"):
+                    return None
+                origin = self.headers.get("Origin") or ""
+                if not origin:
+                    return ""
+                if _LOCAL_ORIGIN_RE.match(origin):
+                    return origin
+                return None
+
+            def _deny(self) -> None:
+                self.send_response(403)
+                self.end_headers()
+
             def do_GET(self) -> None:  # noqa: N802 (API do http.server)
+                acao = self._acao()
+                if acao is None:
+                    self._deny()
+                    return
                 path = self.path.split("?")[0]
                 if path == "/state.json":
                     body = json.dumps(
@@ -53,9 +104,8 @@ class StateServer:
                     self.send_header(
                         "Content-Type", "application/json; charset=utf-8"
                     )
-                    # Extensão/content scripts buscam de origens localhost
-                    # variadas — CORS liberado (read-only e local).
-                    self.send_header("Access-Control-Allow-Origin", "*")
+                    if acao:
+                        self.send_header("Access-Control-Allow-Origin", acao)
                     self.send_header("Cache-Control", "no-store")
                     self.send_header("Content-Length", str(len(body)))
                     self.end_headers()
@@ -64,14 +114,39 @@ class StateServer:
                 if path == "/open":
                     ok = outer._open_folder(self.path)
                     self.send_response(204 if ok else 404)
-                    self.send_header("Access-Control-Allow-Origin", "*")
+                    if acao:
+                        self.send_header("Access-Control-Allow-Origin", acao)
                     self.end_headers()
                     return
                 if path == "/focus":
                     ok = outer._request_focus(self.path)
                     self.send_response(204 if ok else 404)
-                    self.send_header("Access-Control-Allow-Origin", "*")
+                    if acao:
+                        self.send_header("Access-Control-Allow-Origin", acao)
                     self.end_headers()
+                    return
+                if path.startswith("/static/"):
+                    outer._serve_static(self, path)
+                    return
+                if path == "/runner/restart":
+                    outer._handle_runner_restart(self, acao)
+                    return
+                if path == "/console":
+                    outer._serve_console_page(self)
+                    return
+                if path == "/console/stream":
+                    outer._serve_console_stream(self, acao)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def do_POST(self) -> None:  # noqa: N802 (API do http.server)
+                acao = self._acao()
+                if acao is None:
+                    self._deny()
+                    return
+                if self.path.split("?")[0] == "/console/input":
+                    outer._handle_console_input(self, acao)
                     return
                 self.send_response(404)
                 self.end_headers()
@@ -116,6 +191,36 @@ class StateServer:
         with self._lock:
             self._snapshot = snapshot
 
+    def set_hub(self, hub) -> None:
+        """ConsoleHub (espelho do PTY) — injetado pela main_window."""
+        self._hub = hub
+
+    def set_restart_callback(self, fn) -> None:
+        """`fn(entry)` — "↻ Reiniciar runner" do espelho; passe Signal.emit."""
+        self._restart_cb = fn
+
+    def _handle_runner_restart(self, handler, acao: str = "") -> None:
+        q = self._query(handler.path)
+        if q.get("token", "") != self.token:
+            handler.send_response(403)
+            handler.end_headers()
+            return
+        port = q.get("port", "").strip()
+        with self._lock:
+            entry = dict(self._snapshot.get("ports", {}).get(port) or {})
+        cb = getattr(self, "_restart_cb", None)
+        ok = bool(entry.get("runner_id")) and cb is not None
+        if ok:
+            try:
+                cb(entry)
+            except Exception:
+                log.warning("restart callback falhou", exc_info=True)
+                ok = False
+        handler.send_response(204 if ok else 404)
+        if acao:
+            handler.send_header("Access-Control-Allow-Origin", acao)
+        handler.end_headers()
+
     def _payload(self) -> dict:
         with self._lock:
             snap = json.loads(json.dumps(self._snapshot))  # deep copy barato
@@ -124,7 +229,147 @@ class StateServer:
             if cwd:
                 entry.update(self._branch_info(cwd))
         snap["ts"] = time.time()
+        snap["token"] = self.token
         return snap
+
+    # ---- console no browser ----------------------------------------------------
+
+    def _query(self, raw_path: str) -> dict[str, str]:
+        return {
+            k: v[0]
+            for k, v in parse_qs(urlparse(raw_path).query).items()
+            if v
+        }
+
+    def _console_ctx(self, handler) -> dict | None:
+        """Valida token e resolve a entry/sid da porta. Responde o erro
+        (403/404) e retorna None quando inválido."""
+        q = self._query(handler.path)
+        if q.get("token", "") != self.token:
+            handler.send_response(403)
+            handler.end_headers()
+            return None
+        port = q.get("port", "").strip()
+        with self._lock:
+            entry = dict(self._snapshot.get("ports", {}).get(port) or {})
+        sid = entry.get("console_session_id") or ""
+        if not entry or not sid or self._hub is None:
+            handler.send_response(404)
+            handler.end_headers()
+            return None
+        entry["_sid"] = sid
+        entry["_port"] = port
+        return entry
+
+    def _serve_static(self, handler, path: str) -> None:
+        name = path[len("/static/"):]
+        ctype = _STATIC_WHITELIST.get(name)
+        fpath = _STATIC_DIR / name
+        if ctype is None or not fpath.is_file():
+            handler.send_response(404)
+            handler.end_headers()
+            return
+        body = fpath.read_bytes()
+        handler.send_response(200)
+        handler.send_header("Content-Type", ctype)
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    def _serve_console_page(self, handler) -> None:
+        entry = self._console_ctx(handler)
+        if entry is None:
+            return
+        title = f"{entry.get('workspace', '')}"
+        branch = entry.get("console_branch") or ""
+        # Abas: Claude + cada runner DESTE console (com porta no snapshot).
+        sid = entry["_sid"]
+        with self._lock:
+            all_ports = dict(self._snapshot.get("ports", {}))
+        tabs = [{"label": "🤖 Claude", "target": "claude",
+                 "port": entry["_port"]}]
+        for p, e in sorted(all_ports.items()):
+            if e.get("console_session_id") == sid and e.get("runner_id"):
+                tabs.append({
+                    "label": f"⚙ {e.get('runner', p)}",
+                    "target": "runner",
+                    "port": p,
+                })
+        body = (
+            _CONSOLE_HTML
+            .replace("__TITLE__", title)
+            .replace("__BRANCH__", branch)
+            .replace("__PORT__", entry["_port"])
+            .replace("__TOKEN__", self.token)
+            .replace("__TABS__", json.dumps(tabs, ensure_ascii=False))
+        ).encode("utf-8")
+        handler.send_response(200)
+        handler.send_header("Content-Type", "text/html; charset=utf-8")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    def _serve_console_stream(self, handler, acao: str = "") -> None:
+        entry = self._console_ctx(handler)
+        if entry is None:
+            return
+        # target=claude (default) → PTY da sessão; target=runner → PTY do
+        # runner DESTA porta (aba de logs no espelho).
+        target = self._query(handler.path).get("target", "claude")
+        if target == "runner":
+            rid = entry.get("runner_id") or ""
+            if not rid:
+                handler.send_response(404)
+                handler.end_headers()
+                return
+            sid = f"runner:{rid}"
+        else:
+            sid = entry["_sid"]
+        handler.send_response(200)
+        handler.send_header("Content-Type", "text/event-stream")
+        handler.send_header("Cache-Control", "no-store")
+        if acao:
+            handler.send_header("Access-Control-Allow-Origin", acao)
+        handler.end_headers()
+
+        def _send(data: bytes) -> None:
+            payload = base64.b64encode(data).decode("ascii")
+            handler.wfile.write(f"data: {payload}\n\n".encode("ascii"))
+            handler.wfile.flush()
+
+        q = self._hub.subscribe(sid)
+        try:
+            backlog = self._hub.replay(sid)
+            if backlog:
+                _send(backlog)
+            import queue as _queue
+            while True:
+                try:
+                    chunk = q.get(timeout=15.0)
+                    _send(chunk)
+                except _queue.Empty:
+                    # keep-alive (comentário SSE) — detecta cliente morto.
+                    handler.wfile.write(b": ping\n\n")
+                    handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass  # aba fechou — fim normal do stream
+        finally:
+            self._hub.unsubscribe(sid, q)
+
+    def _handle_console_input(self, handler, acao: str = "") -> None:
+        entry = self._console_ctx(handler)
+        if entry is None:
+            return
+        try:
+            length = int(handler.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            length = 0
+        data = handler.rfile.read(min(length, 65536)) if length else b""
+        ok = bool(data) and self._hub.write(entry["_sid"], data)
+        handler.send_response(204 if ok else 404)
+        if acao:
+            handler.send_header("Access-Control-Allow-Origin", acao)
+        handler.end_headers()
 
     def set_focus_callback(self, fn) -> None:
         """`fn(entry: dict)` — chamado na thread do handler; passe um
@@ -197,3 +442,140 @@ class StateServer:
         with self._lock:
             self._branch_cache[cwd] = (now + 5.0, info)
         return info
+
+
+# Página do console espelhado — placeholders __TITLE__/__BRANCH__/__PORT__/
+# __TOKEN__ substituídos via str.replace (CSS/JS têm chaves demais pro
+# str.format). Mesmo xterm.js vendorizado do app; output via SSE (base64),
+# input via POST. O PTY é o MESMO do console embutido — o resize canônico
+# é o do app (fit daqui é só visual).
+_CONSOLE_HTML = """<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__ — console</title>
+<link rel="stylesheet" href="/static/xterm.css">
+<style>
+  html, body { height: 100%; margin: 0; background: #0e0e0e; }
+  body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+  #hdr {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: #161616; border-bottom: 1px solid #2a2a2a;
+    color: #c8c8c8; font-size: 12px; font-weight: 600;
+  }
+  #hdr .branch { color: #5ac38a; }
+  #hdr .hint { color: #777; font-weight: 400; margin-left: auto; }
+  #tabs { display: flex; gap: 4px; margin-left: 10px; }
+  #tabs .tab {
+    padding: 2px 9px; border-radius: 6px; cursor: pointer;
+    background: #222; color: #9aa0a6; border: 1px solid #2c2c2c;
+  }
+  #tabs .tab.active { background: #2e3b4e; color: #e6e6e6; }
+  #restart {
+    background: #222; color: #c8c8c8; border: 1px solid #3a3a3a;
+    border-radius: 6px; padding: 2px 9px; cursor: pointer; font-size: 12px;
+  }
+  #restart:hover { border-color: #e5953b; color: #e5953b; }
+  #term { flex: 1; min-height: 0; padding: 4px; }
+  #off {
+    display: none; position: absolute; inset: 0; align-items: center;
+    justify-content: center; background: rgba(14,14,14,.85); color: #e5953b;
+    font-size: 14px; z-index: 9;
+  }
+</style>
+</head>
+<body>
+<div id="hdr">
+  <span>__TITLE__</span>
+  <span class="branch">🌿 __BRANCH__</span>
+  <span id="tabs"></span>
+  <button id="restart" style="display:none">↻ Reiniciar</button>
+  <span class="hint">espelho do app — mesmo PTY</span>
+</div>
+<div id="term"></div>
+<div id="off">⚠ desconectado do claude-workspaces — reabra quando o app voltar</div>
+<script src="/static/xterm.js"></script>
+<script src="/static/addon-fit.js"></script>
+<script>
+  const PORT = "__PORT__";
+  const TOKEN = "__TOKEN__";
+  const TABS = __TABS__;
+  const term = new Terminal({
+    convertEol: false,
+    fontSize: 13,
+    fontFamily: "monospace",
+    theme: { background: "#0e0e0e", foreground: "#d8d8d8" },
+    scrollback: 8000,
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById("term"));
+  try { fit.fit(); } catch (e) {}
+  window.addEventListener("resize", () => { try { fit.fit(); } catch (e) {} });
+
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  let active = TABS[0];
+  let es = null;
+
+  function openStream() {
+    if (es) { es.close(); es = null; }
+    term.reset();
+    es = new EventSource(
+      `/console/stream?port=${active.port}&target=${active.target}&token=${TOKEN}`
+    );
+    es.onmessage = (ev) => term.write(b64ToBytes(ev.data));
+    es.onerror = () => {
+      document.getElementById("off").style.display = "flex";
+    };
+    es.onopen = () => {
+      document.getElementById("off").style.display = "none";
+    };
+  }
+
+  const tabsEl = document.getElementById("tabs");
+  const restartBtn = document.getElementById("restart");
+  function renderTabs() {
+    tabsEl.innerHTML = "";
+    for (const t of TABS) {
+      const el = document.createElement("span");
+      el.className = "tab" + (t === active ? " active" : "");
+      el.textContent = t.label;
+      el.addEventListener("click", () => {
+        active = t;
+        renderTabs();
+        openStream();
+        term.focus();
+      });
+      tabsEl.appendChild(el);
+    }
+    // Reiniciar só faz sentido em aba de runner.
+    restartBtn.style.display = active.target === "runner" ? "" : "none";
+  }
+  restartBtn.addEventListener("click", () => {
+    fetch(`/runner/restart?port=${active.port}&token=${TOKEN}`).catch(() => {});
+  });
+
+  // Input só na aba do Claude — logs de runner são read-only aqui
+  // (start/stop/restart ficam no app ou no botão ↻).
+  term.onData((data) => {
+    if (active.target !== "claude") return;
+    fetch(`/console/input?port=${active.port}&token=${TOKEN}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: data,
+    }).catch(() => {});
+  });
+
+  renderTabs();
+  openStream();
+  term.focus();
+</script>
+</body>
+</html>
+"""

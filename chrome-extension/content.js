@@ -21,9 +21,13 @@ let dismissed = false; // por aba/load — refresh volta a mostrar
 let corner = "br";
 let lastEntry = null;
 
+// Canto por SISTEMA (host:porta): mover o pill aqui não mexe nos outros
+// apps. Fallback pro global "cw_corner" e por fim "br".
+const CORNER_KEY = `cw_corner:${location.host}`;
 try {
-  chrome.storage.local.get({ cw_corner: "br" }, (v) => {
-    corner = CORNERS[v.cw_corner] ? v.cw_corner : "br";
+  chrome.storage.local.get({ [CORNER_KEY]: "", cw_corner: "br" }, (v) => {
+    const chosen = v[CORNER_KEY] || v.cw_corner || "br";
+    corner = CORNERS[chosen] ? chosen : "br";
     if (lastEntry) renderBar(lastEntry);
   });
 } catch (_e) {}
@@ -61,7 +65,7 @@ function cornerCss(extraGap) {
 function setCorner(next) {
   corner = CORNERS[next] ? next : "br";
   try {
-    chrome.storage.local.set({ cw_corner: corner });
+    chrome.storage.local.set({ [CORNER_KEY]: corner });
   } catch (_e) {}
   if (lastEntry) renderBar(lastEntry);
 }
@@ -108,6 +112,31 @@ function buildMenu(accent) {
   });
   menu.appendChild(openFolder);
 
+  // Console espelhado — só quando o runner pertence a um console Claude.
+  if (lastEntry && lastEntry.console_session_id && lastEntry._token) {
+    const openConsole = document.createElement("div");
+    openConsole.textContent = "💻 Abrir console do Claude aqui";
+    openConsole.style.cssText = itemCss;
+    hover(openConsole);
+    openConsole.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openConsoleOverlay();
+      removeMenu();
+    });
+    menu.appendChild(openConsole);
+
+    const openWin = document.createElement("div");
+    openWin.textContent = "↗ Console em janela separada";
+    openWin.style.cssText = itemCss;
+    hover(openWin);
+    openWin.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      window.open(consoleUrl(), "_blank", "width=980,height=640");
+      removeMenu();
+    });
+    menu.appendChild(openWin);
+  }
+
   const sep = document.createElement("div");
   sep.style.cssText = "height:1px;background:#333;margin:4px 6px";
   menu.appendChild(sep);
@@ -150,6 +179,66 @@ function buildMenu(accent) {
     };
     document.addEventListener("click", closeOnOutside, true);
   }, 0);
+}
+
+const OVERLAY_ID = "__cw_console_overlay__";
+
+function consoleUrl() {
+  return (
+    `${SERVER}/console?port=${tabPort()}` +
+    `&token=${encodeURIComponent((lastEntry && lastEntry._token) || "")}`
+  );
+}
+
+function openConsoleOverlay() {
+  const old = document.getElementById(OVERLAY_ID);
+  if (old) {
+    old.remove();
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.id = OVERLAY_ID;
+  wrap.style.cssText = [
+    "position:fixed", "z-index:2147483646",
+    "right:14px", "bottom:48px", "width:min(900px,72vw)",
+    "height:min(560px,70vh)", "display:flex", "flex-direction:column",
+    "border-radius:10px", "overflow:hidden",
+    "border:1px solid #3a3a3a", "box-shadow:0 8px 30px rgba(0,0,0,.6)",
+    "background:#0e0e0e",
+  ].join(";");
+
+  const head = document.createElement("div");
+  head.style.cssText =
+    "flex:none;display:flex;align-items:center;gap:8px;padding:4px 10px;" +
+    "background:#1b1b1b;color:#c8c8c8;font:600 12px system-ui,sans-serif";
+  const t = document.createElement("span");
+  t.textContent = "💻 Console do Claude (espelho)";
+  head.appendChild(t);
+  const spacer = document.createElement("span");
+  spacer.style.cssText = "flex:1";
+  head.appendChild(spacer);
+  const pop = document.createElement("span");
+  pop.textContent = "↗";
+  pop.title = "Abrir em janela separada";
+  pop.style.cssText = "cursor:pointer;opacity:.7;padding:0 6px";
+  pop.addEventListener("click", () => {
+    window.open(consoleUrl(), "_blank", "width=980,height=640");
+    wrap.remove();
+  });
+  head.appendChild(pop);
+  const x = document.createElement("span");
+  x.textContent = "✕";
+  x.style.cssText = "cursor:pointer;opacity:.7;padding:0 4px";
+  x.addEventListener("click", () => wrap.remove());
+  head.appendChild(x);
+  wrap.appendChild(head);
+
+  const frame = document.createElement("iframe");
+  frame.src = consoleUrl();
+  frame.style.cssText = "flex:1;border:0;width:100%;background:#0e0e0e";
+  wrap.appendChild(frame);
+
+  document.documentElement.appendChild(wrap);
 }
 
 function renderBar(entry) {
