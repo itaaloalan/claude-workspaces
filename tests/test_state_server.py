@@ -108,3 +108,39 @@ def test_branch_info_em_worktree_real(tmp_path):
         assert entry["branch"] == "feat/x"
     finally:
         srv.stop()
+
+
+def test_open_endpoint(tmp_path, monkeypatch):
+    import urllib.error
+
+    opened: list[list[str]] = []
+
+    class _FakePopen:
+        def __init__(self, args, **kw):
+            opened.append(list(args))
+
+    import claude_workspaces.services.state_server as ss
+    monkeypatch.setattr("subprocess.Popen", _FakePopen)
+
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    try:
+        srv.update({"ports": {"4202": {"cwd": str(tmp_path)}}})
+        # Porta conhecida → 204 + xdg-open no cwd do snapshot.
+        req = urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/open?port=4202", timeout=5
+        )
+        assert req.status == 204
+        assert opened == [["xdg-open", str(tmp_path)]]
+        # Porta desconhecida → 404, sem abrir nada.
+        try:
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/open?port=9999", timeout=5
+            )
+            raise AssertionError("esperava 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+        assert len(opened) == 1
+    finally:
+        srv.stop()

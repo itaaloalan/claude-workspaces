@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.99.1] — 2026-06-05
+
+### Novidades
+- **Extensão: pill flutuante + clique abre a pasta.** A faixa full-width
+  cobria navbars fixas dos apps — virou um pill flutuante no canto inferior
+  direito (estilo widget de FPS): bolinha + 🌿 branch + selo
+  WORKTREE/PRINCIPAL nas cores laranja/verde, ✕ pra esconder na aba.
+  **Clicar no pill abre a pasta do worktree no gerenciador de arquivos**
+  (novo endpoint `/open?port=N` no StateServer — só abre cwds presentes no
+  snapshot, nunca path arbitrário).
+- **Instruções da extensão nas Configurações.** Nova seção "Extensão do
+  browser — indicador de worktree" no painel de Configurações: passo a
+  passo do load unpacked, caminho da pasta com botões 📋 Copiar / 📂 Abrir,
+  e toggles do endpoint local (ligar/desligar + porta).
+
 ## [0.99.0] — 2026-06-05
 
 ### Novidades

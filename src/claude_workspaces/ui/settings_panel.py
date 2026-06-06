@@ -151,6 +151,7 @@ class SettingsPanel(QWidget):
 
         outer.addWidget(self._build_claude_section())
         outer.addWidget(self._build_worktree_section())
+        outer.addWidget(self._build_browser_extension_section())
         outer.addWidget(self._build_notifications_section())
         outer.addWidget(self._build_status_detection_section())
         outer.addWidget(self._build_inspectors_section())
@@ -234,6 +235,12 @@ class SettingsPanel(QWidget):
         self._rider_cmd.setText(self.settings.rider_command)
         self._browser_cmd.setText(self.settings.browser_command)
         self._browser_delay_ms.setValue(int(self.settings.browser_open_delay_ms))
+        self._ext_server_chk.setChecked(
+            bool(getattr(self.settings, "browser_state_server_enabled", True))
+        )
+        self._ext_server_port.setValue(
+            int(getattr(self.settings, "browser_state_server_port", 43210) or 43210)
+        )
         self._default_isolate_chk.setChecked(self.settings.default_isolate_worktree)
         self._default_new_branch_chk.setChecked(self.settings.default_create_new_branch)
         self._branch_prefix.setText(self.settings.branch_prefix)
@@ -315,6 +322,8 @@ class SettingsPanel(QWidget):
         self.settings.rider_command = self._rider_cmd.text().strip() or "rider"
         self.settings.browser_command = self._browser_cmd.text().strip()
         self.settings.browser_open_delay_ms = int(self._browser_delay_ms.value())
+        self.settings.browser_state_server_enabled = self._ext_server_chk.isChecked()
+        self.settings.browser_state_server_port = int(self._ext_server_port.value())
         self.settings.default_isolate_worktree = self._default_isolate_chk.isChecked()
         self.settings.default_create_new_branch = self._default_new_branch_chk.isChecked()
         self.settings.branch_prefix = (
@@ -513,6 +522,88 @@ class SettingsPanel(QWidget):
             "<prefixo>/<timestamp> (ex: italo/20260515-180000)."
         )
         form.addRow("Prefixo da branch:", self._branch_prefix)
+        layout.addLayout(form)
+
+        return box
+
+    def _build_browser_extension_section(self) -> QWidget:
+        """Instruções + toggles da extensão Chrome (badge/faixa de
+        worktree por porta). Fica aqui pra não se perder: o passo a passo
+        de instalação mora nas Configurações."""
+        from pathlib import Path
+
+        box = QGroupBox("Extensão do browser — indicador de worktree")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "A extensão Chrome mostra badge no ícone e uma faixa no topo da "
+            "página quando a aba localhost:<porta> pertence a um runner do "
+            "app — 🟧 laranja = worktree (🌿 branch), 🟩 verde = repo "
+            "principal.\n\n"
+            "Como instalar (uma vez):\n"
+            "  1. Abra chrome://extensions\n"
+            "  2. Ative o “Modo do desenvolvedor” (canto superior direito)\n"
+            "  3. “Carregar sem compactação” → selecione a pasta abaixo\n\n"
+            "Funciona em Chrome/Chromium/Brave/Edge. Os dados vêm do "
+            "endpoint local abaixo (read-only, somente 127.0.0.1)."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(intro)
+
+        import claude_workspaces as _pkg
+        ext_dir = (
+            Path(_pkg.__file__).resolve().parents[2] / "chrome-extension"
+        )
+        path_row = QHBoxLayout()
+        path_label = QLineEdit(str(ext_dir))
+        path_label.setReadOnly(True)
+        path_row.addWidget(path_label, stretch=1)
+        copy_btn = QPushButton("📋 Copiar")
+        copy_btn.setToolTip("Copia o caminho da pasta da extensão")
+
+        def _copy() -> None:
+            from PySide6.QtGui import QGuiApplication
+            QGuiApplication.clipboard().setText(str(ext_dir))
+
+        copy_btn.clicked.connect(_copy)
+        path_row.addWidget(copy_btn)
+        open_btn = QPushButton("📂 Abrir pasta")
+
+        def _open() -> None:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(ext_dir)))
+
+        open_btn.clicked.connect(_open)
+        path_row.addWidget(open_btn)
+        layout.addLayout(path_row)
+        if not ext_dir.is_dir():
+            warn = QLabel(
+                "⚠ Pasta não encontrada — a extensão vive no clone do "
+                "repositório claude-workspaces (chrome-extension/)."
+            )
+            warn.setStyleSheet("color: #e5953b;")
+            warn.setWordWrap(True)
+            layout.addWidget(warn)
+
+        self._ext_server_chk = QCheckBox(
+            "Servir estado pro plugin (endpoint local /state.json)"
+        )
+        self._ext_server_chk.setToolTip(
+            "Liga o servidor local que alimenta a extensão. Mudança "
+            "requer reiniciar o app."
+        )
+        layout.addWidget(self._ext_server_chk)
+
+        form = QFormLayout()
+        self._ext_server_port = QSpinBox()
+        self._ext_server_port.setRange(1024, 65535)
+        self._ext_server_port.setToolTip(
+            "Porta do endpoint (default 43210). Se mudar, ajuste também "
+            "o STATE_URL no background.js da extensão."
+        )
+        form.addRow("Porta do endpoint:", self._ext_server_port)
         layout.addLayout(form)
 
         return box

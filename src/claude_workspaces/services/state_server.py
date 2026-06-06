@@ -40,22 +40,31 @@ class StateServer:
 
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 (API do http.server)
-                if self.path.split("?")[0] != "/state.json":
-                    self.send_response(404)
+                path = self.path.split("?")[0]
+                if path == "/state.json":
+                    body = json.dumps(
+                        outer._payload(), ensure_ascii=False
+                    ).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header(
+                        "Content-Type", "application/json; charset=utf-8"
+                    )
+                    # Extensão/content scripts buscam de origens localhost
+                    # variadas — CORS liberado (read-only e local).
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if path == "/open":
+                    ok = outer._open_folder(self.path)
+                    self.send_response(204 if ok else 404)
+                    self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
                     return
-                body = json.dumps(
-                    outer._payload(), ensure_ascii=False
-                ).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                # Extensão/content scripts buscam de origens localhost
-                # variadas — CORS liberado (conteúdo é read-only e local).
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(body)))
+                self.send_response(404)
                 self.end_headers()
-                self.wfile.write(body)
 
             def log_message(self, *args) -> None:  # silencia stderr
                 pass
@@ -106,6 +115,35 @@ class StateServer:
                 entry.update(self._branch_info(cwd))
         snap["ts"] = time.time()
         return snap
+
+    def _open_folder(self, raw_path: str) -> bool:
+        """`/open?port=NNNN` — abre o cwd do runner daquela porta no
+        gerenciador de arquivos (xdg-open). Só abre paths que ESTÃO no
+        snapshot (nunca path arbitrário do request)."""
+        import subprocess
+        from pathlib import Path
+        from urllib.parse import parse_qs, urlparse
+
+        port = (
+            parse_qs(urlparse(raw_path).query).get("port", [""])[0].strip()
+        )
+        if not port:
+            return False
+        with self._lock:
+            entry = dict(self._snapshot.get("ports", {}).get(port) or {})
+        cwd = entry.get("cwd") or ""
+        if not cwd or not Path(cwd).is_dir():
+            return False
+        try:
+            subprocess.Popen(  # noqa: S603 — path validado do snapshot
+                ["xdg-open", cwd],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except OSError:
+            log.warning("xdg-open falhou pra %s", cwd, exc_info=True)
+            return False
 
     def _branch_info(self, cwd: str) -> dict:
         now = time.monotonic()
