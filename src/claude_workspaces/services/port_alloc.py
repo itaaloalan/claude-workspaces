@@ -48,6 +48,22 @@ def next_free_port(
     )
 
 
+def reserved_console_ports(workspace) -> set[int]:
+    """Portas reservadas pelas cópias CONSOLE-scoped do workspace.
+
+    Runners workspace-scoped NÃO reservam porta na alocação de cópias —
+    eles são alternativas (ex: api jdk25 e jdk8 na mesma base) e, se um
+    estiver rodando, o bind test já detecta a porta ocupada. Sem isso,
+    dois runners workspace com a mesma base faziam a 1ª cópia sempre
+    incrementar, violando a regra "sem cópia de console → mesma porta".
+    """
+    return {
+        r.port
+        for r in workspace.runners
+        if getattr(r, "port", 0) > 0 and (r.console_session_id or "")
+    }
+
+
 def used_ports_in_workspace(workspace, *, exclude_id: str = "") -> set[int]:
     """Portas já reservadas pelos runners do workspace (todos os escopos).
 

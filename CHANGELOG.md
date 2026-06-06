@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.98.1] — 2026-06-05
+
+### Correções
+- **Regra "sem cópia de console → mesma porta" valia errado com irmãos na
+  mesma base.** No map, `api jdk 25` e `api jdk8` compartilham a base 8091 —
+  a alocação excluía só o runner de ORIGEM e a base do irmão seguia
+  "reservada", então a 1ª cópia sempre incrementava (8092). Agora só as
+  **cópias console-scoped** reservam porta (`reserved_console_ports`);
+  runners workspace não contam — se algum estiver rodando, o bind test
+  detecta a porta ocupada e incrementa do mesmo jeito.
+
 ## [0.98.0] — 2026-06-05
 
 ### Novidades

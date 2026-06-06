@@ -314,3 +314,46 @@ def test_include_in_stack_default_true_e_roundtrip():
     assert RunnerConfig.from_dict({"name": "x"}).include_in_stack is True
     r = RunnerConfig(name="coletor", include_in_stack=False)
     assert RunnerConfig.from_dict(r.to_dict()).include_in_stack is False
+
+
+# ---- reserved_console_ports ----------------------------------------------------
+
+
+def test_reserved_console_ports_so_copias_de_console():
+    from claude_workspaces.services.port_alloc import reserved_console_ports
+
+    ws = Workspace(
+        name="w",
+        runners=[
+            RunnerConfig(name="api jdk 25", port=8091),
+            RunnerConfig(name="api jdk8", port=8091),
+            RunnerConfig(name="api jdk 25", port=8092, console_session_id="s1"),
+            RunnerConfig(name="semporta", port=0, console_session_id="s1"),
+        ],
+    )
+    assert reserved_console_ports(ws) == {8092}
+
+
+def test_irmaos_workspace_na_mesma_base_nao_reservam(monkeypatch):
+    """Map: api jdk25 e jdk8 ambos base 8091 — sem nenhuma cópia de
+    console (e porta livre), a 1ª cópia usa a base; só cópias de console
+    fazem incrementar."""
+    from claude_workspaces.services.port_alloc import reserved_console_ports
+
+    monkeypatch.setattr(
+        "claude_workspaces.services.port_alloc.is_port_free",
+        lambda p, host="127.0.0.1": True,
+    )
+    ws = Workspace(
+        name="map",
+        runners=[
+            RunnerConfig(name="api jdk 25", port=8091),
+            RunnerConfig(name="api jdk8", port=8091),
+        ],
+    )
+    assert next_free_port(8091, reserved_console_ports(ws)) == 8091
+    # Cópia de console na 8091 → próxima vai pra 8092.
+    ws.runners.append(
+        RunnerConfig(name="api jdk 25", port=8091, console_session_id="s1")
+    )
+    assert next_free_port(8091, reserved_console_ports(ws)) == 8092
