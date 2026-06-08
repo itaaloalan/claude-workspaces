@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.4] — 2026-06-08
+
+### Correções
+- **Filtro de "Sessões recentes" ignorava sessões renomeadas.** O filtro
+  casava só contra o `preview` do prompt, mas o card mostra o **nome
+  custom** (rename do usuário ou skill) com prioridade — então digitar um
+  termo do título visível (ex.: "merge" para `/merge-branch-ogpms`) não
+  filtrava. Agora o haystack inclui `custom_name + preview`, casando com o
+  mesmo texto exibido no card.
+
 ## [1.0.3] — 2026-06-08
 
 ### Performance

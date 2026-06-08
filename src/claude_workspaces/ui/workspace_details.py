@@ -22,7 +22,7 @@ from ..claude_sessions import ClaudeSession, list_sessions_for_paths_backend
 from ..launchers import IDE_LABEL, LauncherError, launch_ide
 from ..mcp_manager import delete_mcp, get_postgres_url, is_postgres_mcp, mask_password, mcp_exists
 from ..models import Workspace
-from ..session_marks import is_starred
+from ..session_marks import get_custom_name, is_starred
 from ..settings import OPENCODE_ENABLED, Settings
 from ..stacks import STACK_LABEL, STACK_TO_IDE, detect_stacks_cached
 from .file_finder import FileFinder
@@ -592,7 +592,15 @@ class WorkspaceDetailsPanel(QStackedWidget):
             item = self._sessions_list.item(i)
             session = item.data(Qt.ItemDataRole.UserRole)
             if hasattr(session, "preview"):
-                hay = (session.preview or "").lower()
+                # Casa com o MESMO texto que o card exibe: o título prioriza
+                # o nome custom (rename do usuário/skill) sobre o preview do
+                # prompt — filtrar só por preview ignorava sessões renomeadas
+                # (ex.: "/merge-branch-ogpms" não aparecia ao digitar "merge").
+                try:
+                    custom = get_custom_name(session.id) or ""
+                except Exception:
+                    custom = ""
+                hay = f"{custom} {session.preview or ''}".lower()
                 hide = (bool(needle) and needle not in hay) or (
                     only_starred and not is_starred(session.id)
                 )
