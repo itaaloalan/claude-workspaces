@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QStackedLayout, QTabBar, QVBoxLayout, QWidget
 
@@ -134,6 +134,16 @@ class TerminalArea(QWidget):
         # Shim de compatibilidade pra `area.tabs.*`.
         self.tabs = _TabsCompat(self)
 
+        # Lazy-load dos consoles: o WebView de cada console só é criado
+        # quando a aba fica ativa. Timer coalescente (0ms) — no startup
+        # várias sessões são restauradas em sequência, cada uma virando
+        # "atual" por um instante; o timer dispara uma vez só no fim e
+        # materializa apenas a aba que ficou realmente ativa.
+        self._materialize_timer = QTimer(self)
+        self._materialize_timer.setSingleShot(True)
+        self._materialize_timer.setInterval(0)
+        self._materialize_timer.timeout.connect(self._materialize_current_view)
+
     # ---------- sincronização bar <-> stack ----------
 
     def _set_current_index(self, i: int) -> None:
@@ -146,8 +156,20 @@ class TerminalArea(QWidget):
         if 0 <= idx < self._stack.count():
             self._stack.setCurrentIndex(idx)  # StackAll: marca o atual
             self.focus_active_console()
+            # Lazy-load: agenda a criação do WebView do console que ficou
+            # ativo (coalescido p/ não materializar tudo durante o restore).
+            self._materialize_timer.start()
         self._refresh_tab_bar_visibility()
         self.tabs.currentChanged.emit(idx)
+
+    def _materialize_current_view(self) -> None:
+        """Cria o WebView do console ativo sob demanda (lazy-load) e devolve
+        o foco a ele. Disparado pelo timer coalescente de
+        _on_bar_current_changed."""
+        w = self._stack.currentWidget()
+        if isinstance(w, TerminalWidget):
+            w.ensure_view_loaded()
+            self.focus_active_console()
 
     def focus_active_console(self) -> None:
         """Traz o console ativo pro topo do z-order (StackAll) e manda o foco

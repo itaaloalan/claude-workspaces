@@ -93,8 +93,29 @@ class TerminalBridge(QObject):
         # pra filtrar logs sem perder o buffer completo (replay).
         self._filter_text: str = ""
         self._line_buf: bytearray = bytearray()
+        # Repasse ao vivo desligado até o xterm.js do console carregar. Lazy-
+        # load: o console pode ainda nem ter sido aberto — enquanto isso o
+        # output do PTY é acumulado pelo TerminalWidget (_replay_buffer) e
+        # despejado de uma vez via go_live() quando o frontend fica pronto.
+        # Sem este gate, emits antes do JS conectar se perderiam e os que
+        # vazassem entre a conexão do channel e o replay duplicariam o tail.
+        self._live = False
+
+    def go_live(self, history: bytes) -> None:
+        """Chamado quando o xterm.js do console acabou de carregar: limpa o
+        terminal, despeja todo o histórico acumulado (replay) e passa a
+        repassar o output ao vivo daí em diante."""
+        self.clear_requested.emit()
+        self._line_buf.clear()
+        if history:
+            self.output_to_terminal.emit(bytes(history))
+        self._live = True
 
     def _on_pty_output(self, data: bytes) -> None:
+        if not self._live:
+            # Console ainda não aberto/carregado — o TerminalWidget captura
+            # este output no _replay_buffer; o replay acontece em go_live().
+            return
         if not self._filter_text:
             # Sem filtro: pass-through. Se havia parcial bufferizado por
             # um filtro anterior, devolve antes pra não perder bytes.
@@ -407,27 +428,34 @@ class TerminalWidget(QWidget):
         self.bridge = TerminalBridge(self.session)
         self.bridge.ready.connect(self._on_bridge_ready)
 
-        self.view = QWebEngineView(self)
-        self.view.setMinimumWidth(0)
-        settings = self.view.settings()
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
-        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        # Lazy-load do console: o QWebEngineView (um processo Chromium
+        # inteiro) só é criado quando a aba é ABERTA pela 1ª vez, via
+        # ensure_view_loaded(). Até lá o PTY já roda e o output é acumulado
+        # em _replay_buffer; ao abrir o console e o xterm carregar,
+        # bridge.go_live() despeja todo o histórico de uma vez. Evita subir
+        # N renderers Chromium no startup com sessões restauradas.
+        self.view: QWebEngineView | None = None
+        self.channel: QWebChannel | None = None
+        self._view_built = False
+        # Histórico bruto do PTY pra reconstruir o xterm no 1º open. Capado
+        # (o scrollback do xterm também é limitado); só cresce enquanto o
+        # console não foi aberto — depois do replay (go_live) é liberado.
+        self._replay_buffer = bytearray()
+        self._replay_cap = 2_000_000
+        self._primed = False
 
-        self.channel = QWebChannel(self)
-        self.channel.registerObject("bridge", self.bridge)
-        self.view.page().setWebChannel(self.channel)
-
-        html_path = STATIC_DIR / "terminal.html"
-        self.view.setUrl(QUrl.fromLocalFile(str(html_path)))
-
-        # Splitter vertical: topo = xterm; rodapé (opcional) = painel de
-        # runners do console. O painel é criado sob demanda (lazy) na
-        # primeira vez que o botão "▤ Runners" é clicado — assim consoles
-        # que nunca usam runners não pagam o custo de instanciar a área.
+        # Splitter vertical: topo = xterm (inserido sob demanda); rodapé
+        # (opcional) = painel de runners do console. O painel é criado sob
+        # demanda (lazy) na primeira vez que o botão "▤ Runners" é clicado —
+        # assim consoles que nunca usam runners não pagam o custo da área.
+        # Enquanto o view não existe, um placeholder escuro ocupa o topo
+        # (sem custo de GPU/Chromium).
         self._main_splitter = QSplitter(Qt.Orientation.Vertical, self)
         self._main_splitter.setMinimumWidth(0)
-        self._main_splitter.addWidget(self.view)
+        self._view_placeholder: QWidget | None = QWidget()
+        self._view_placeholder.setStyleSheet("background: #0e0e0e;")
+        self._view_placeholder.setMinimumWidth(0)
+        self._main_splitter.addWidget(self._view_placeholder)
         self._runner_panel_host = QWidget()
         self._runner_panel_host_layout = QVBoxLayout(self._runner_panel_host)
         self._runner_panel_host_layout.setContentsMargins(0, 0, 0, 0)
@@ -451,10 +479,45 @@ class TerminalWidget(QWidget):
     def _on_bridge_ready(self) -> None:
         log.info("Terminal bridge pronto")
         self._bridge_ready = True
-        if self._pending is not None:
-            argv, cwd, label = self._pending
-            self._pending = None
-            self._start_now(argv, cwd, label)
+        # xterm.js carregou: despeja o histórico acumulado e libera o
+        # repasse ao vivo. Console aberto na hora → buffer mínimo; console
+        # aberto sob demanda (lazy) → reconstrói a sessão inteira. O PTY já
+        # foi iniciado por start_command (decoupled do WebView), então não
+        # há mais comando pendente esperando o bridge.
+        self.bridge.go_live(bytes(self._replay_buffer))
+        self._primed = True
+        self._replay_buffer.clear()
+
+    def ensure_view_loaded(self) -> None:
+        """Cria o QWebEngineView e carrega o terminal.html sob demanda — na
+        primeira vez que o console fica ativo. É o coração do lazy-load:
+        mantém só 1 renderer Chromium por console ABERTO, em vez de subir
+        todos no startup. Idempotente."""
+        if self._view_built:
+            return
+        self._view_built = True
+        self.view = QWebEngineView(self)
+        self.view.setMinimumWidth(0)
+        settings = self.view.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+
+        self.channel = QWebChannel(self)
+        self.channel.registerObject("bridge", self.bridge)
+        self.view.page().setWebChannel(self.channel)
+
+        # Troca o placeholder pelo view real no topo do splitter.
+        self._main_splitter.insertWidget(0, self.view)
+        if self._view_placeholder is not None:
+            self._view_placeholder.setParent(None)
+            self._view_placeholder.deleteLater()
+            self._view_placeholder = None
+        self._main_splitter.setStretchFactor(0, 1)
+        self._main_splitter.setStretchFactor(1, 0)
+
+        html_path = STATIC_DIR / "terminal.html"
+        self.view.setUrl(QUrl.fromLocalFile(str(html_path)))
 
     def _set_running(self, running: bool) -> None:
         if self._is_running != running:
@@ -849,6 +912,13 @@ class TerminalWidget(QWidget):
         self._output_buffer.extend(data)
         if len(self._output_buffer) > 8192:
             del self._output_buffer[:-8192]
+        # Enquanto o console não foi aberto/carregado, guarda o output bruto
+        # pra replay no 1º open (go_live). Depois do replay (_primed) o xterm
+        # vira a fonte do scrollback e paramos de acumular.
+        if not self._primed:
+            self._replay_buffer.extend(data)
+            if len(self._replay_buffer) > self._replay_cap:
+                del self._replay_buffer[: -self._replay_cap]
         self._last_output_time = time.monotonic()
         self._activity_dirty = True
 
@@ -1123,11 +1193,11 @@ class TerminalWidget(QWidget):
         menu.exec(pos)
 
     def start_command(self, argv: list[str], cwd: str, label: str | None = None) -> None:
-        if not self._bridge_ready:
-            log.info("Bridge ainda não pronto, agendando comando")
-            self._pending = (argv, cwd, label)
-            self._status.setText(f"(carregando) {label or argv[0]}")
-            return
+        # Decoupled do WebView: o PTY sobe já, mesmo que o console ainda não
+        # tenha sido aberto (lazy-load). O output é acumulado em
+        # _replay_buffer e despejado no xterm quando o console abre
+        # (ensure_view_loaded → bridge ready → go_live). Assim sessões
+        # restauradas rodam e atualizam os badges sem subir o Chromium.
         self._start_now(argv, cwd, label)
 
     def _start_now(self, argv: list[str], cwd: str, label: str | None = None) -> None:

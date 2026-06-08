@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.3] — 2026-06-08
+
+### Performance
+- **Lazy-load dos consoles — 1 renderer Chromium por console ABERTO.**
+  Antes, cada sessão criava seu `QWebEngineView` (um processo Chromium
+  inteiro) no `__init__` e o `TerminalArea` mantinha todos vivos
+  (StackAll). Com 6 sessões restauradas no startup, eram 6 renderers de
+  uma vez (~150–200 MB ociosos, medido). Agora o WebView só é criado
+  quando a aba é aberta pela 1ª vez (`ensure_view_loaded`, disparado por
+  timer coalescente no `TerminalArea` — no restore, só a aba ativa
+  materializa). Depois de aberto fica vivo (mantém o StackAll, sem jank de
+  GPU ao trocar).
+- **Sem regressão de UX.** O PTY e a detecção de atividade rodam sempre,
+  independentes do WebView: sessões fechadas continuam progredindo e os
+  badges da sidebar (●, "needs_decision", "Trabalhando", título) seguem
+  atualizando. O `TerminalBridge` ganhou um gate `_live` + `go_live()`: o
+  output do PTY é acumulado num `_replay_buffer` (capado em ~2 MB) enquanto
+  o console está fechado e despejado de uma vez no xterm.js quando ele
+  carrega — a sessão aparece reconstruída. Único custo: pequeno spin-up no
+  1º clique de cada aba.
+
 ## [1.0.2] — 2026-06-08
 
 ### Correções
