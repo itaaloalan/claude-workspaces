@@ -2,6 +2,7 @@ import logging
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 # Sob KDE Plasma 6 Wayland, cada subprocesso do QtWebEngineProcess
 # registra surface wayland própria com `--application-name=Claude
@@ -12,7 +13,7 @@ import sys
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform-hint=x11")
 
 from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtGui import QColor, QPalette  # noqa: E402
+from PySide6.QtGui import QColor, QIcon, QPalette  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from .logging_setup import setup_logging  # noqa: E402
@@ -231,6 +232,12 @@ def main() -> int:
     # QSS global pra widgets que o Fusion + palette não cobrem direito
     # (QMenu vinha branco em algumas distros, QToolTip idem).
     app.setStyleSheet(_GLOBAL_DARK_QSS)
+    # Ícone padrão de TODAS as janelas/diálogos (QDialog, QInputDialog,
+    # QMessageBox). Sem isto o Qt renderiza um ícone preto na barra de
+    # título — invisível no tema escuro. O SVG é o mesmo do taskbar/menu.
+    icon_path = Path(__file__).resolve().parent / "ui" / "static" / "app-icon.svg"
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     window = MainWindow()
     window.show()

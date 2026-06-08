@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.2] — 2026-06-08
+
+### Correções
+- **Ícone preto na barra de título dos diálogos.** O app nunca definia um
+  window icon, então o Qt (estilo Fusion + palette dark) renderizava o
+  ícone padrão em preto na barra de título — invisível no tema escuro, em
+  TODAS as janelas e diálogos (renomear sessão, confirmações de remover
+  worktree/workspace/runner, e todos os QDialog customizados). Agora o
+  `app.py` bundla o ícone do app (`ui/static/app-icon.svg`, o mesmo do
+  taskbar/menu) e chama `app.setWindowIcon()` uma vez, fazendo toda janela
+  herdar o ícone colorido.
+
 ## [1.0.1] — 2026-06-05
 
 ### Novidades
