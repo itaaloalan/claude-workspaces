@@ -235,6 +235,36 @@ def test_translate_entradas_invalidas(two_repos, tmp_path):
     assert translate_dir_for_repo(str(api), str(nao_git)) == ""
 
 
+def test_translate_repo_folder_em_subdir(repo):
+    """Pasta do workspace é um SUBDIR do repo (ex.: sipepro .../sipe/sipe/src,
+    sem .git ali). Antes resolve_git_dirs(subdir)=None → "" → o runner ficava na
+    main; agora resolve a raiz via repo_root e devolve o worktree."""
+    src = repo / "src"
+    src.mkdir()
+    (src / "f.txt").write_text("x\n")
+    _run(["git", "add", "."], repo)
+    _run(["git", "commit", "-q", "-m", "src"], repo)
+    ok, msg, wt = add_worktree(str(repo), "feat/x")
+    assert ok, msg
+    assert translate_dir_for_repo(str(wt), str(src)) == str(wt)
+
+
+def test_translate_target_em_subdir_do_worktree(repo):
+    """target = subdir DENTRO do worktree (caso 'abrir console em worktree' com
+    offset). Mesmo repo → devolve o próprio target (com offset); o
+    remap_into_worktree recompõe o subdir depois."""
+    src = repo / "src"
+    src.mkdir()
+    (src / "f.txt").write_text("x\n")
+    _run(["git", "add", "."], repo)
+    _run(["git", "commit", "-q", "-m", "src"], repo)
+    ok, msg, wt = add_worktree(str(repo), "feat/y")
+    assert ok, msg
+    from pathlib import Path
+    wt_src = Path(wt) / "src"
+    assert translate_dir_for_repo(str(wt_src), str(src)) == str(wt_src)
+
+
 # ---------- remap_into_worktree (runner de console segue o worktree) ----------
 
 def test_remap_into_worktree_preserva_subdir(repo):

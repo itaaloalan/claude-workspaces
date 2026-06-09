@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.3] — 2026-06-09
+
+### Correções
+- **Runners de console ficavam na main (ou na raiz do worktree) em workspace com
+  pasta em subdir.** Dois problemas no SIPEPRO (pasta do workspace
+  `.../sipe/sipe/src`, subdir do repo):
+  1. `translate_dir_for_repo` chamava `resolve_git_dirs` direto na pasta-subdir
+     (sem `.git` ali) → `None` → caía no checkout principal. Agora resolve a
+     raiz via `repo_root()` antes (no-op pra pastas que já são raiz — não afeta
+     MAP/OGPMS/etc.).
+  2. O `last_cwd` dos runners de console fora gravado como a **raiz do worktree**
+     (de um "Apontar todos"), e como `_cwd_override` tinha prioridade máxima, o
+     `api`/`web` rodavam na raiz do worktree (sem `.sln`/`package.json` →
+     MSBUILD/pnpm falhavam). Agora o `effective_cwd` remapeia o `runner.cwd`
+     fixo pro subdir equivalente DENTRO do worktree apontado (via
+     `_cwd_override` ou `_default_cwd`), com prioridade sobre o override cru.
+  Resultado: `api`→`<worktree>/src/api/...`, `web`→`<worktree>/src/web`, etc.;
+  `manager` (repo `sipe/manager`, sem worktree) segue no main.
+
 ## [1.1.2] — 2026-06-09
 
 ### Correções

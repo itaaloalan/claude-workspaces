@@ -307,19 +307,21 @@ class RunnerWidget(QWidget):
             self.cwd_changed.emit(self.effective_cwd())
 
     def _recompute_worktree_cwd(self) -> None:
-        """Quando o painel aponta pra um worktree (console adotou um) e o runner
-        tem cwd FIXO no checkout principal do MESMO repo, remapeia o cwd pro
-        caminho equivalente dentro do worktree (preserva o subdir). Assim os
-        runners do console seguem o worktree em vez de ficar no main. Runner de
-        outro repo (sem worktree) → "" → segue o cwd fixo normal."""
+        """Quando o console aponta o runner pra um worktree — seja pelo
+        apontamento do usuário (`_cwd_override`, que pode ter sido gravado como
+        a RAIZ do worktree) ou pelo default do painel (`_default_cwd`) — e o
+        runner tem cwd FIXO no checkout principal do MESMO repo, remapeia o cwd
+        pro caminho equivalente DENTRO do worktree (preserva o subdir). Assim o
+        api/web/app rodam em `<worktree>/src/...` e não na raiz do worktree (onde
+        não há .sln/package.json). Runner de outro repo sem worktree → "" → cai
+        no cwd fixo normal (main)."""
         self._worktree_cwd = ""
-        if not (self._runner.cwd and self._default_cwd):
+        base = self._cwd_override or self._default_cwd
+        if not (self._runner.cwd and base):
             return
         try:
             from ..git_worktree import remap_into_worktree
-            self._worktree_cwd = remap_into_worktree(
-                self._runner.cwd, self._default_cwd
-            )
+            self._worktree_cwd = remap_into_worktree(self._runner.cwd, base)
         except Exception:
             log.debug("remap pro worktree falhou", exc_info=True)
             self._worktree_cwd = ""
@@ -345,12 +347,16 @@ class RunnerWidget(QWidget):
         self._console_dirs_provider = fn
 
     def effective_cwd(self) -> str:
-        """Cwd em que o próximo start vai rodar: override do usuário (chip 📁) >
-        cwd fixo remapeado pro worktree do console (quando aplica) > cwd da
-        config do runner > default do painel."""
+        """Cwd em que o próximo start vai rodar: cwd fixo remapeado pro worktree
+        do console (quando aplica — preserva o subdir do projeto) > apontamento
+        do usuário (chip 📁) > cwd da config do runner > default do painel.
+
+        O remap vem ANTES do `_cwd_override` de propósito: o apontamento "pro
+        worktree do console" grava a RAIZ do worktree em last_cwd; sem o remap
+        ter prioridade, o api/web rodaria na raiz (sem .sln/package.json)."""
         return (
-            self._cwd_override
-            or self._worktree_cwd
+            self._worktree_cwd
+            or self._cwd_override
             or self._runner.cwd
             or self._default_cwd
         )
@@ -445,6 +451,7 @@ class RunnerWidget(QWidget):
             return
         self._cwd_override = path
         self._runner.last_cwd = path
+        self._recompute_worktree_cwd()
         self._refresh_cwd_chip()
         if self._state == "running":
             self._status.setText(

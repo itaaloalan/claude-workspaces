@@ -48,3 +48,69 @@ def test_live_pty_output_passes_after_ready(qapp):
     finally:
         w.terminate()
         w.deleteLater()
+
+
+# ---------- effective_cwd: runner de console segue o worktree (com subdir) ----
+
+def test_console_runner_remaps_pinned_cwd_into_worktree(qapp, tmp_path):
+    """runner.cwd fixo num subdir do checkout principal + apontamento (last_cwd)
+    pra RAIZ do worktree → effective_cwd remapeia pro MESMO subdir dentro do
+    worktree (não a raiz, onde não há .sln/package.json)."""
+    import subprocess
+    from pathlib import Path
+
+    from claude_workspaces.git_worktree import add_worktree
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (
+        ["git", "init", "-q", "-b", "main"],
+        ["git", "config", "user.email", "t@t"],
+        ["git", "config", "user.name", "t"],
+    ):
+        subprocess.run(args, cwd=repo, check=True)
+    (repo / "src" / "web").mkdir(parents=True)
+    (repo / "src" / "web" / "package.json").write_text("{}\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "i"], cwd=repo, check=True)
+    ok, msg, wt = add_worktree(str(repo), "feat/x")
+    assert ok, msg
+
+    rc = RunnerConfig(
+        name="web", start_cmd="pnpm dev",
+        cwd=str(repo / "src" / "web"),
+        last_cwd=str(wt),  # apontado pra RAIZ do worktree (caso do bug)
+    )
+    w = RunnerWidget(rc, default_cwd=str(repo))
+    try:
+        assert w.effective_cwd() == str(Path(wt) / "src" / "web")
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+def test_runner_without_worktree_keeps_pinned_cwd(qapp, tmp_path):
+    """Sem worktree apontado, effective_cwd fica no cwd fixo (sem remap)."""
+    import subprocess
+    from pathlib import Path
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (
+        ["git", "init", "-q", "-b", "main"],
+        ["git", "config", "user.email", "t@t"],
+        ["git", "config", "user.name", "t"],
+    ):
+        subprocess.run(args, cwd=repo, check=True)
+    (repo / "src" / "web").mkdir(parents=True)
+    (repo / "src" / "web" / "package.json").write_text("{}\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "i"], cwd=repo, check=True)
+
+    rc = RunnerConfig(name="web", start_cmd="pnpm dev", cwd=str(repo / "src" / "web"))
+    w = RunnerWidget(rc, default_cwd=str(repo))
+    try:
+        assert w.effective_cwd() == str(Path(repo) / "src" / "web")
+    finally:
+        w.terminate()
+        w.deleteLater()

@@ -260,8 +260,16 @@ def translate_dir_for_repo(target_dir: str, repo_folder: str) -> str:
     """
     if not target_dir or not repo_folder:
         return ""
-    t_dirs = resolve_git_dirs(target_dir)
-    r_dirs = resolve_git_dirs(repo_folder)
+    # Resolve as RAÍZES antes do resolve_git_dirs: a pasta do workspace pode ser
+    # um SUBDIR do repo (ex.: sipepro → .../sipe/sipe/src, sem .git ali), e
+    # resolve_git_dirs só olha `folder/.git` (não sobe). repo_root sobe via git.
+    # Pra pasta que já é raiz, repo_root devolve ela mesma → no-op.
+    t_root = repo_root(target_dir)
+    r_root = repo_root(repo_folder)
+    if not t_root or not r_root:
+        return ""
+    t_dirs = resolve_git_dirs(t_root)
+    r_dirs = resolve_git_dirs(r_root)
     if t_dirs is None or r_dirs is None:
         return ""
     if t_dirs[1].resolve() == r_dirs[1].resolve():
