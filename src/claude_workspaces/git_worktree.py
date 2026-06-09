@@ -54,6 +54,15 @@ def worktree_path_for(repo_path: str, branch: str) -> Path:
     return worktree_base(repo_path) / safe_dir_name(branch)
 
 
+def repo_root(folder: str) -> str:
+    """Raiz do worktree que contém `folder` (`git rev-parse --show-toplevel`).
+    Resolve o caso de a pasta do workspace ser um SUBDIR do repo: o workspace
+    sipepro aponta pra .../sipe/sipe/src, mas o .git e os worktrees vivem em
+    .../sipe/sipe. "" se `folder` não está num repo git."""
+    rc, out = _run(["git", "rev-parse", "--show-toplevel"], folder)
+    return out.strip() if rc == 0 else ""
+
+
 def add_worktree(
     repo_path: str,
     branch: str,
@@ -203,6 +212,41 @@ def delete_branch(repo_path: str, branch: str) -> tuple[bool, str]:
     """`git branch -d` (sem -D): falha se a branch não estiver mergeada."""
     rc, out = _run(["git", "branch", "-d", branch], repo_path)
     return rc == 0, out
+
+
+def remap_into_worktree(path: str, worktree_dir: str) -> str:
+    """Caminho equivalente a `path` dentro de `worktree_dir`, quando ambos são
+    do MESMO repo mas em checkouts diferentes — preservando o subdir relativo à
+    raiz do checkout de `path`. Pra runners de console com cwd FIXO no checkout
+    principal seguirem o worktree adotado pelo console.
+
+    "" quando: repos diferentes (ex.: módulo num repo sem worktree — fica no
+    main), `path` já está nesse checkout, ou o subdir não existe no worktree.
+    Ex.: path=.../sipe/sipe/src/api, worktree=.../sipe/sipe.claude/feat
+         → .../sipe/sipe.claude/feat/src/api
+    """
+    if not path or not worktree_dir:
+        return ""
+    root = repo_root(path)
+    wt_root = repo_root(worktree_dir)
+    if not root or not wt_root:
+        return ""
+    root_p = Path(root).resolve()
+    wt_p = Path(wt_root).resolve()
+    if root_p == wt_p:
+        return ""  # mesmo checkout — nada a remapear
+    r_dirs = resolve_git_dirs(root)
+    w_dirs = resolve_git_dirs(wt_root)
+    if r_dirs is None or w_dirs is None:
+        return ""
+    if r_dirs[1].resolve() != w_dirs[1].resolve():
+        return ""  # repos diferentes (common-dir distinto) → sem remap
+    try:
+        sub = Path(path).resolve().relative_to(root_p)
+    except ValueError:
+        return ""
+    candidate = wt_p / sub
+    return str(candidate) if candidate.is_dir() else ""
 
 
 def translate_dir_for_repo(target_dir: str, repo_folder: str) -> str:

@@ -233,3 +233,40 @@ def test_translate_entradas_invalidas(two_repos, tmp_path):
     assert translate_dir_for_repo(str(api), "") == ""
     assert translate_dir_for_repo(str(nao_git), str(api)) == ""
     assert translate_dir_for_repo(str(api), str(nao_git)) == ""
+
+
+# ---------- remap_into_worktree (runner de console segue o worktree) ----------
+
+def test_remap_into_worktree_preserva_subdir(repo):
+    from claude_workspaces.git_worktree import remap_into_worktree
+    sub = repo / "src" / "api"
+    sub.mkdir(parents=True)
+    (sub / "main.py").write_text("x\n")
+    _run(["git", "add", "."], repo)
+    _run(["git", "commit", "-q", "-m", "api"], repo)
+    ok, msg, wt = add_worktree(str(repo), "feat/x")
+    assert ok, msg
+    out = remap_into_worktree(str(sub), str(wt))
+    assert out == str((wt / "src" / "api").resolve())
+
+
+def test_remap_mesmo_checkout_vazio(repo):
+    from claude_workspaces.git_worktree import remap_into_worktree
+    # worktree_dir == o próprio checkout → nada a remapear
+    assert remap_into_worktree(str(repo), str(repo)) == ""
+
+
+def test_remap_repo_diferente_vazio(repo, tmp_path):
+    from claude_workspaces.git_worktree import remap_into_worktree
+    other = tmp_path / "other"
+    other.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], other)
+    _run(["git", "config", "user.email", "t@t"], other)
+    _run(["git", "config", "user.name", "t"], other)
+    (other / "f.txt").write_text("y\n")
+    _run(["git", "add", "."], other)
+    _run(["git", "commit", "-q", "-m", "i"], other)
+    ok, msg, wt = add_worktree(str(repo), "feat/y")
+    assert ok, msg
+    # path de OUTRO repo + worktree do `repo` → repos diferentes → "" (fica no main)
+    assert remap_into_worktree(str(other), str(wt)) == ""

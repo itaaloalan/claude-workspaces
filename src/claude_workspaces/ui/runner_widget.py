@@ -114,6 +114,11 @@ class RunnerWidget(QWidget):
         self._cwd_override: str = ""
         if runner.last_cwd and Path(runner.last_cwd).is_dir():
             self._cwd_override = runner.last_cwd
+        # cwd FIXO (runner.cwd) remapeado pro worktree do console, quando o
+        # console adotou um (mesmo repo). "" = sem remap (runner segue o
+        # runner.cwd/default normal). Recalculado em set_default_cwd.
+        self._worktree_cwd: str = ""
+        self._recompute_worktree_cwd()
         # Provider de diretórios dos consoles abertos do workspace —
         # lista de (label, path) injetada pela RunnerArea/main_window.
         self._console_dirs_provider = None
@@ -296,9 +301,28 @@ class RunnerWidget(QWidget):
         Usado pelo painel de console pra apontar ao worktree do console."""
         before = self.effective_cwd()
         self._default_cwd = cwd
+        self._recompute_worktree_cwd()
         self._refresh_cwd_chip()
         if self.effective_cwd() != before:
             self.cwd_changed.emit(self.effective_cwd())
+
+    def _recompute_worktree_cwd(self) -> None:
+        """Quando o painel aponta pra um worktree (console adotou um) e o runner
+        tem cwd FIXO no checkout principal do MESMO repo, remapeia o cwd pro
+        caminho equivalente dentro do worktree (preserva o subdir). Assim os
+        runners do console seguem o worktree em vez de ficar no main. Runner de
+        outro repo (sem worktree) → "" → segue o cwd fixo normal."""
+        self._worktree_cwd = ""
+        if not (self._runner.cwd and self._default_cwd):
+            return
+        try:
+            from ..git_worktree import remap_into_worktree
+            self._worktree_cwd = remap_into_worktree(
+                self._runner.cwd, self._default_cwd
+            )
+        except Exception:
+            log.debug("remap pro worktree falhou", exc_info=True)
+            self._worktree_cwd = ""
 
     def set_scope_ports_provider(self, fn) -> None:
         """Callable() -> dict[nome, porta] dos runners do mesmo escopo —
@@ -321,9 +345,15 @@ class RunnerWidget(QWidget):
         self._console_dirs_provider = fn
 
     def effective_cwd(self) -> str:
-        """Cwd em que o próximo start vai rodar: override do usuário (chip
-        📁) > cwd da config do runner > default do painel."""
-        return self._cwd_override or self._runner.cwd or self._default_cwd
+        """Cwd em que o próximo start vai rodar: override do usuário (chip 📁) >
+        cwd fixo remapeado pro worktree do console (quando aplica) > cwd da
+        config do runner > default do painel."""
+        return (
+            self._cwd_override
+            or self._worktree_cwd
+            or self._runner.cwd
+            or self._default_cwd
+        )
 
     def _refresh_cwd_chip(self) -> None:
         from pathlib import Path

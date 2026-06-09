@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1] — 2026-06-09
+
+### Correções
+- **Runners de console com cwd fixo não seguiam o worktree do console.** Quando
+  o runner tem `cwd` fixo apontando pro checkout principal (ex.: SIPEPRO —
+  `…/sipe/sipe/src/api/src/Sipe.Api`), o `effective_cwd` priorizava esse cwd
+  sobre o `default_cwd` (worktree do console), então o runner rodava no `main`
+  mesmo num console em worktree — e o plugin mostrava "main" (corretamente, mas
+  contra a expectativa). Agora, quando o console adotou um worktree do MESMO
+  repo, o cwd fixo é remapeado pro caminho equivalente dentro do worktree
+  (preservando o subdir) via `git_worktree.remap_into_worktree`. Runner de outro
+  repo sem worktree (ex.: `manager` em `sipe/manager`) continua no `main`, sem
+  remap pro repo errado.
+
 ## [1.1.0] — 2026-06-09
 
 ### Novidades
