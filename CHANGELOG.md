@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.2] — 2026-06-09
+
+### Correções
+- **Menus de worktree não funcionavam quando a pasta do workspace é um subdir
+  do repo.** "Abrir console em worktree", "Alternar sessão para worktree",
+  "Remover worktree" e "Novo worktree" checavam `Path(folder)/.git`, mas
+  workspaces como o SIPEPRO apontam pra `.../sipe/sipe/src` (sem `.git` ali).
+  Agora resolvem a raiz via `repo_root()` e preservam o offset do subdir ao
+  abrir/alternar (ex.: o console abre em `<worktree>/src`, não na raiz).
+
 ## [1.1.1] — 2026-06-09
 
 ### Correções

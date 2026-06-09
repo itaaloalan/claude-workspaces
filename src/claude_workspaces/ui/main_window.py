@@ -2230,22 +2230,30 @@ class MainWindow(QMainWindow):
         menu.exec_(self.list_widget.viewport().mapToGlobal(pos))
 
     def _add_open_in_worktree_menu(self, menu: QMenu, workspace: Workspace) -> None:
-        from ..git_worktree import list_worktrees
+        from ..git_worktree import list_worktrees, repo_root
 
         entries: list[tuple[str, str, str]] = []
         for folder in workspace.folders:
-            repo = Path(folder)
-            if not (repo / ".git").exists():
+            root = repo_root(folder)
+            if not root:
                 continue
-            for wt in list_worktrees(str(repo)):
+            root_res = Path(root).resolve()
+            # A pasta do workspace pode ser um SUBDIR do repo (ex.: .../src);
+            # preserva esse offset ao abrir o console no worktree de destino.
+            try:
+                offset = Path(folder).resolve().relative_to(root_res)
+            except ValueError:
+                offset = Path(".")
+            for wt in list_worktrees(root):
                 path = wt.get("worktree", "")
-                if not path or Path(path).resolve() == repo.resolve():
+                if not path or Path(path).resolve() == root_res:
                     continue
                 branch = wt.get("branch", "")
                 if branch.startswith("refs/heads/"):
                     branch = branch[len("refs/heads/"):]
                 label = branch or Path(path).name
-                entries.append((repo.name, label, path))
+                dest = str(Path(path) / offset)
+                entries.append((Path(root).name, label, dest))
         if not entries:
             return
         sub = menu.addMenu("🌿 Abrir console em worktree")
@@ -2270,14 +2278,25 @@ class MainWindow(QMainWindow):
     def _add_switch_to_worktree_menu(
         self, menu: QMenu, workspace: Workspace, term: "TerminalWidget"
     ) -> None:
-        from ..git_worktree import list_worktrees
+        from ..git_worktree import list_worktrees, repo_root
 
         cwd = getattr(term, "_claude_cwd", "") or ""
         if not cwd:
             return
         cwd_res = Path(cwd).resolve()
+        # A pasta do workspace (e o cwd do console) pode ser um SUBDIR do repo
+        # (ex.: sipepro → .../sipe/sipe/src). Os paths do `git worktree list`
+        # são sempre raízes de worktree, então casa pela RAIZ que contém o cwd
+        # e preserva o offset (ex.: "src") ao alternar de worktree.
+        cwd_root = repo_root(cwd)
+        if not cwd_root:
+            return
+        cwd_root_res = Path(cwd_root).resolve()
+        try:
+            offset = cwd_res.relative_to(cwd_root_res)
+        except ValueError:
+            offset = Path(".")
         repo_wts: list[dict] = []
-        main_path: Path | None = None
         for folder in workspace.folders:
             wts = list_worktrees(folder)
             paths = [
@@ -2285,9 +2304,8 @@ class MainWindow(QMainWindow):
                 for w in wts
                 if w.get("worktree")
             ]
-            if cwd_res in paths:
+            if cwd_root_res in paths:
                 repo_wts = wts
-                main_path = Path(folder).resolve()
                 break
         entries: list[tuple[str, str]] = []
         for wt in repo_wts:
@@ -2295,12 +2313,12 @@ class MainWindow(QMainWindow):
             if not path:
                 continue
             p_res = Path(path).resolve()
-            if p_res == cwd_res or p_res == main_path:
+            if p_res == cwd_root_res:
                 continue
             branch = wt.get("branch", "")
             if branch.startswith("refs/heads/"):
                 branch = branch[len("refs/heads/"):]
-            entries.append((branch or Path(path).name, path))
+            entries.append((branch or Path(path).name, str(p_res / offset)))
         if not entries:
             return
         sub = menu.addMenu("🌿 Alternar esta sessão para worktree")
@@ -2322,7 +2340,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
 
     def _add_remove_worktree_menu(self, menu: QMenu, workspace: Workspace) -> None:
-        from ..git_worktree import list_worktrees
+        from ..git_worktree import list_worktrees, repo_root
 
         in_use: set[str] = set()
         area = self.terminals_coord._areas.get(workspace.id)
@@ -2334,20 +2352,30 @@ class MainWindow(QMainWindow):
                         if p:
                             in_use.add(str(Path(p).resolve()))
         entries: list[tuple[str, str, str, str, bool]] = []
+        seen_roots: set[str] = set()
         for folder in workspace.folders:
-            repo = Path(folder)
-            if not (repo / ".git").exists():
+            root = repo_root(folder)
+            if not root or root in seen_roots:
                 continue
-            for wt in list_worktrees(str(repo)):
+            seen_roots.add(root)
+            root_res = Path(root).resolve()
+            for wt in list_worktrees(root):
                 path = wt.get("worktree", "")
-                if not path or Path(path).resolve() == repo.resolve():
+                if not path:
+                    continue
+                p_res = Path(path).resolve()
+                if p_res == root_res:
                     continue
                 branch = wt.get("branch", "")
                 if branch.startswith("refs/heads/"):
                     branch = branch[len("refs/heads/"):]
-                used = str(Path(path).resolve()) in in_use
+                # cwd do console pode ser um SUBDIR do worktree (ex.: .../src):
+                # considera "em uso" se algum cwd aberto estiver dentro dele.
+                used = any(
+                    Path(u) == p_res or p_res in Path(u).parents for u in in_use
+                )
                 entries.append(
-                    (repo.name, folder, branch or Path(path).name, path, used)
+                    (Path(root).name, root, branch or Path(path).name, path, used)
                 )
         if not entries:
             return
@@ -2465,11 +2493,16 @@ class MainWindow(QMainWindow):
     def _open_new_worktree_dialog(
         self, workspace: Workspace, suggested_branch: str = ""
     ) -> None:
+        from ..git_worktree import repo_root
         from .new_worktree_dialog import NewWorktreeDialog
         from .persistent_toast import flash_toast
-        repos = [
-            f for f in workspace.folders if (Path(f) / ".git").exists()
-        ]
+        # Resolve a raiz do repo de cada folder — a pasta do workspace pode ser
+        # um SUBDIR do repo (ex.: sipepro → .../sipe/sipe/src), onde não há .git.
+        repos: list[str] = []
+        for f in workspace.folders:
+            root = repo_root(f)
+            if root and root not in repos:
+                repos.append(root)
         if not repos:
             flash_toast("Nenhum repositório git neste workspace.")
             return
