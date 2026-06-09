@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.4] — 2026-06-09
+
+### Correções
+- **Runner de outro repo rodava na raiz do worktree errado.** Depois da 1.1.3, o
+  `manager` (repo `sipe/manager`, sem worktree) ainda rodava na raiz do worktree
+  do SIPE — o `last_cwd` ("Apontar todos") apontava pro worktree do SIPE e, como
+  era de outro repo, o remap não casava mas o `_cwd_override` cru era usado.
+  Agora o `effective_cwd` descarta um override que pertence a um repo diferente
+  do `runner.cwd` (novo `git_worktree.same_repo`), caindo no main do próprio
+  repo do runner. `api`/`web`/`app` (mesmo repo) seguem no subdir do worktree.
+
+### Melhorias
+- **Scrollbar do console no browser.** O viewport do xterm no console espelhado
+  ganhou um scrollbar minimalista (8px, track transparente, thumb sutil, hover
+  amarelo), igual aos scrollbars Qt do app. Recarregue a página do console.
+
 ## [1.1.3] — 2026-06-09
 
 ### Correções

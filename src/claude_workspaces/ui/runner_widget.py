@@ -118,6 +118,7 @@ class RunnerWidget(QWidget):
         # console adotou um (mesmo repo). "" = sem remap (runner segue o
         # runner.cwd/default normal). Recalculado em set_default_cwd.
         self._worktree_cwd: str = ""
+        self._override_same_repo: bool = True
         self._recompute_worktree_cwd()
         # Provider de diretórios dos consoles abertos do workspace —
         # lista de (label, path) injetada pela RunnerArea/main_window.
@@ -316,15 +317,25 @@ class RunnerWidget(QWidget):
         não há .sln/package.json). Runner de outro repo sem worktree → "" → cai
         no cwd fixo normal (main)."""
         self._worktree_cwd = ""
+        # Override de OUTRO repo que não o do runner.cwd não se aplica a este
+        # runner — ex.: "Apontar todos pro worktree do SIPE" também grava o
+        # override no `manager` (repo sipe/manager), que então rodaria na raiz
+        # do worktree errado. True quando não há override/cwd (nada a descartar).
+        self._override_same_repo = True
         base = self._cwd_override or self._default_cwd
         if not (self._runner.cwd and base):
             return
         try:
-            from ..git_worktree import remap_into_worktree
+            from ..git_worktree import remap_into_worktree, same_repo
             self._worktree_cwd = remap_into_worktree(self._runner.cwd, base)
+            if self._cwd_override:
+                self._override_same_repo = same_repo(
+                    self._cwd_override, self._runner.cwd
+                )
         except Exception:
             log.debug("remap pro worktree falhou", exc_info=True)
             self._worktree_cwd = ""
+            self._override_same_repo = True
 
     def set_scope_ports_provider(self, fn) -> None:
         """Callable() -> dict[nome, porta] dos runners do mesmo escopo —
@@ -353,10 +364,17 @@ class RunnerWidget(QWidget):
 
         O remap vem ANTES do `_cwd_override` de propósito: o apontamento "pro
         worktree do console" grava a RAIZ do worktree em last_cwd; sem o remap
-        ter prioridade, o api/web rodaria na raiz (sem .sln/package.json)."""
+        ter prioridade, o api/web rodaria na raiz (sem .sln/package.json).
+
+        E um `_cwd_override` que aponta pro worktree de OUTRO repo (o mesmo
+        "apontar todos" atinge o `manager`, que é de sipe/manager) é descartado
+        — senão ele rodaria na raiz do worktree errado em vez do próprio main."""
+        override = self._cwd_override
+        if override and self._runner.cwd and not self._override_same_repo:
+            override = ""
         return (
             self._worktree_cwd
-            or self._cwd_override
+            or override
             or self._runner.cwd
             or self._default_cwd
         )

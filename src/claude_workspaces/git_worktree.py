@@ -214,6 +214,22 @@ def delete_branch(repo_path: str, branch: str) -> tuple[bool, str]:
     return rc == 0, out
 
 
+def same_repo(a: str, b: str) -> bool:
+    """True se `a` e `b` pertencem ao MESMO repo git (mesmo common-dir), mesmo
+    estando em worktrees ou subpastas diferentes. Resolve as raízes via
+    repo_root (sobe de subpastas) antes de comparar. False se algum não for
+    repo git."""
+    if not a or not b:
+        return False
+    ra, rb = repo_root(a), repo_root(b)
+    if not ra or not rb:
+        return False
+    da, db = resolve_git_dirs(ra), resolve_git_dirs(rb)
+    if da is None or db is None:
+        return False
+    return da[1].resolve() == db[1].resolve()
+
+
 def remap_into_worktree(path: str, worktree_dir: str) -> str:
     """Caminho equivalente a `path` dentro de `worktree_dir`, quando ambos são
     do MESMO repo mas em checkouts diferentes — preservando o subdir relativo à

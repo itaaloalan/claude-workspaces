@@ -573,6 +573,15 @@ _CONSOLE_HTML = """<!doctype html>
   }
   #restart:hover { border-color: #e5953b; color: #e5953b; }
   #term { flex: 1; min-height: 0; padding: 4px; }
+  /* Scrollbar minimalista no viewport do xterm — espelha o visual dos
+   * scrollbars Qt do app (8px, track transparente, thumb sutil, hover amarelo). */
+  .xterm-viewport { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.16) transparent; }
+  .xterm-viewport::-webkit-scrollbar { width: 8px; height: 8px; }
+  .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+  .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,.16); border-radius: 4px; min-height: 24px;
+  }
+  .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(229,181,59,.55); }
   #off {
     display: none; position: absolute; inset: 0; align-items: center;
     justify-content: center; background: rgba(14,14,14,.85); color: #e5953b;

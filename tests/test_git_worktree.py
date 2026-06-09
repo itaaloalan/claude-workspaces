@@ -300,3 +300,30 @@ def test_remap_repo_diferente_vazio(repo, tmp_path):
     assert ok, msg
     # path de OUTRO repo + worktree do `repo` → repos diferentes → "" (fica no main)
     assert remap_into_worktree(str(other), str(wt)) == ""
+
+
+# ---------- same_repo ----------
+
+def test_same_repo_raiz_subdir_worktree(repo):
+    from claude_workspaces.git_worktree import same_repo
+    sub = repo / "src" / "x"
+    sub.mkdir(parents=True)
+    (sub / "f.txt").write_text("x\n")
+    _run(["git", "add", "."], repo)
+    _run(["git", "commit", "-q", "-m", "x"], repo)
+    ok, msg, wt = add_worktree(str(repo), "feat/sr")
+    assert ok, msg
+    # raiz vs subdir vs worktree → mesmo repo
+    assert same_repo(str(repo), str(sub)) is True
+    assert same_repo(str(sub), str(wt)) is True
+    assert same_repo(str(repo), str(wt)) is True
+
+
+def test_same_repo_repos_diferentes_e_nao_git(two_repos, tmp_path):
+    from claude_workspaces.git_worktree import same_repo
+    api, web = two_repos
+    assert same_repo(str(api), str(web)) is False
+    nao_git = tmp_path / "plain"
+    nao_git.mkdir()
+    assert same_repo(str(api), str(nao_git)) is False
+    assert same_repo("", str(api)) is False

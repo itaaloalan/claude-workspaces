@@ -114,3 +114,45 @@ def test_runner_without_worktree_keeps_pinned_cwd(qapp, tmp_path):
     finally:
         w.terminate()
         w.deleteLater()
+
+
+def test_cross_repo_override_is_ignored(qapp, tmp_path):
+    """runner.cwd no repo A (ex.: manager) + last_cwd apontando pro worktree do
+    repo B (ex.: 'apontar todos pro worktree do sipe') → o override de outro
+    repo é descartado e o runner fica no próprio cwd (main do repo A), não na
+    raiz do worktree errado."""
+    import subprocess
+    from pathlib import Path
+
+    from claude_workspaces.git_worktree import add_worktree
+
+    def _mkrepo(name):
+        p = tmp_path / name
+        (p / "src").mkdir(parents=True)
+        for args in (
+            ["git", "init", "-q", "-b", "main"],
+            ["git", "config", "user.email", "t@t"],
+            ["git", "config", "user.name", "t"],
+        ):
+            subprocess.run(args, cwd=p, check=True)
+        (p / "src" / "proj.txt").write_text("x\n")
+        subprocess.run(["git", "add", "."], cwd=p, check=True)
+        subprocess.run(["git", "commit", "-qm", "i"], cwd=p, check=True)
+        return p
+
+    repo_a = _mkrepo("manager")   # repo do runner
+    repo_b = _mkrepo("sipe")      # repo do console (com worktree)
+    ok, msg, wt_b = add_worktree(str(repo_b), "feat/x")
+    assert ok, msg
+
+    rc = RunnerConfig(
+        name="manager", start_cmd="dotnet run",
+        cwd=str(repo_a / "src"),
+        last_cwd=str(wt_b),  # worktree de OUTRO repo (apontar-todos)
+    )
+    w = RunnerWidget(rc, default_cwd=str(repo_a))
+    try:
+        assert w.effective_cwd() == str(repo_a / "src")
+    finally:
+        w.terminate()
+        w.deleteLater()
