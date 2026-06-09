@@ -141,6 +141,23 @@ def test_service_dedup_within_cooldown_does_not_double(tmp_path: Path):
     assert len(svc.list()) == 1
 
 
+def test_distinct_tabs_without_session_id_do_not_collide(tmp_path: Path):
+    """Duas sessões esperando no MESMO workspace, sem session_id, mas com
+    tab_id distintos → entradas separadas (cada console notifica). Antes o
+    dedup_key ignorava o tab_id e a 2ª virava só um update da 1ª, perdendo
+    o popup."""
+    svc = NotificationService(tmp_path / "notif.json")
+    svc.set_preferences(cooldown_seconds=60)
+    added = []
+    svc.notification_added.connect(lambda n: added.append(n))
+    a = svc.notify(NotificationKind.AGENT_WAITING, "ses A", workspace_id="w", tab_id=111)
+    b = svc.notify(NotificationKind.AGENT_WAITING, "ses B", workspace_id="w", tab_id=222)
+    assert a is not None and b is not None
+    assert a.id != b.id, "tabs distintos não podem compartilhar a entrada"
+    assert len(svc.list()) == 2
+    assert len(added) == 2, "ambas devem disparar notification_added (popup)"
+
+
 def test_service_cooldown_expired_emits_added_again(tmp_path: Path, monkeypatch):
     svc = NotificationService(tmp_path / "notif.json")
     svc.set_preferences(cooldown_seconds=1)

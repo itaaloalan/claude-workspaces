@@ -129,7 +129,13 @@ class Notification:
     ) -> Notification:
         prio = priority or DEFAULT_PRIORITY.get(kind, NotificationPriority.NORMAL)
         if dedup_key is None:
-            dedup_key = f"{kind}:{workspace_id or ''}:{session_id or ''}"
+            # Identidade da origem: session_id quando há, senão tab_id (volátil
+            # mas único por console na sessão atual). Sem esse fallback, sessões
+            # diferentes do MESMO workspace compartilhavam o dedup_key — duas
+            # esperando dentro do cooldown colidiam e a 2ª virava só um
+            # `notification_changed` (popup não reaparecia), perdendo o alerta.
+            ident = session_id or (str(tab_id) if tab_id is not None else "")
+            dedup_key = f"{kind}:{workspace_id or ''}:{ident}"
         return Notification(
             id=uuid.uuid4().hex,
             kind=kind,

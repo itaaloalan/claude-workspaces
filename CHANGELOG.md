@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.8] — 2026-06-09
+
+### Correções
+- **Notificações de sessões "aguardando" inconsistentes com várias sessões.**
+  O `dedup_key` das notificações era `kind:workspace:session_id`, mas o
+  `session_id` chegava sempre vazio (não era propagado pelo inbox) — então
+  **todas as sessões do mesmo workspace compartilhavam o mesmo `dedup_key`**.
+  Com duas sessões esperando dentro do cooldown (60s), a 2ª só virava um
+  `notification_changed` (o popup não reaparecia) e o alerta se perdia. Agora
+  o `dedup_key` usa o `tab_id` (único por console) como identidade quando não
+  há `session_id`, então cada console em espera notifica de forma independente.
+
 ## [1.0.7] — 2026-06-09
 
 ### Correções
