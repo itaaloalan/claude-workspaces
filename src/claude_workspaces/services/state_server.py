@@ -209,8 +209,8 @@ class StateServer:
                 }
             computed: dict[str, dict] = {}
             for port, cwd in ports.items():
-                if not cwd:
-                    continue
+                if not cwd or not port.isdigit():
+                    continue  # chaves sintéticas (r:<id>) não têm porta TCP
                 try:
                     computed[port] = served_mismatch(cwd, int(port))
                 except Exception:

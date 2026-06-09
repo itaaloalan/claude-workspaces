@@ -4957,9 +4957,7 @@ class MainWindow(QMainWindow):
         # worktree" (Detecção A) computado pela thread do StateServer.
         rw_by_port: dict[str, object] = {}
 
-        def _add(port: int, ws: Workspace, runner, cwd: str, state: str) -> None:
-            if port <= 0:
-                return
+        def _entry(ws: Workspace, runner, cwd: str, state: str) -> dict:
             entry = {
                 "workspace": ws.name,
                 "workspace_id": ws.id,
@@ -4974,7 +4972,13 @@ class MainWindow(QMainWindow):
                 entry["console_branch"] = self._console_branch_for(
                     runner.console_session_id
                 )
-            ports[str(port)] = entry
+            return entry
+
+        def _add(port: int, ws: Workspace, runner, cwd: str, state: str) -> bool:
+            if port <= 0:
+                return False
+            ports[str(port)] = _entry(ws, runner, cwd, state)
+            return True
 
         for ws in self.workspaces:
             for runner in ws.runners:
@@ -4991,16 +4995,26 @@ class MainWindow(QMainWindow):
                         rw = carea.widget_for(runner.id)
                         if rw is not None:
                             break
+                added = False
                 if rw is not None:
                     cwd = rw.effective_cwd()
                     state = rw.current_state()
                     real = url_port(rw.current_url() or "")
                     if real and real != runner.port:
-                        _add(real, ws, runner, cwd, state)
+                        added = _add(real, ws, runner, cwd, state) or added
                         rw_by_port[str(real)] = rw
                     if runner.port > 0:
                         rw_by_port[str(runner.port)] = rw
-                _add(runner.port, ws, runner, cwd, state)
+                added = _add(runner.port, ws, runner, cwd, state) or added
+                # Runner de console SEM porta (porta no nome, não detectada na
+                # URL) não entrava no snapshot → sumia das abas do espelho.
+                # Entra com chave sintética; o stream/abas usam runner_id, não a
+                # porta, então funciona sem porta real.
+                if not added and runner.console_session_id:
+                    key = f"r:{runner.id}"
+                    ports[key] = _entry(ws, runner, cwd, state)
+                    if rw is not None:
+                        rw_by_port[key] = rw
         try:
             self._state_server.update({"ports": ports})
         except Exception:

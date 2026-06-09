@@ -324,6 +324,33 @@ def test_console_endpoints_token_e_input():
         srv.stop()
 
 
+def test_console_tabs_incluem_runner_sem_porta():
+    """Runner de console SEM porta (chave sintética r:<id>) deve virar aba no
+    espelho — antes só runners com porta no snapshot apareciam."""
+    port = _free_port()
+    srv = StateServer(port=port)
+    assert srv.start()
+    srv.set_hub(_FakeHub())
+    try:
+        srv.update({"ports": {
+            # aba do Claude (porta detectada do vite, p.ex.)
+            "3000": {"workspace": "sipepro", "runner": "web", "runner_id": "rw",
+                     "console_session_id": "sid-1", "cwd": ""},
+            # runner sem porta → chave sintética
+            "r:ra": {"workspace": "sipepro", "runner": "api (5000)",
+                     "runner_id": "ra", "console_session_id": "sid-1", "cwd": ""},
+        }})
+        with _get(
+            f"http://127.0.0.1:{port}/console?port=3000&token={srv.token}"
+        ) as resp:
+            html = resp.read().decode()
+        assert "api (5000)" in html        # a aba do runner sem porta aparece
+        assert '"port": "r:ra"' in html     # endereçada pela chave sintética
+        assert '"target": "runner"' in html
+    finally:
+        srv.stop()
+
+
 def test_static_whitelist_e_traversal():
     import urllib.error
     port = _free_port()

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.5] — 2026-06-09
+
+### Correções
+- **Console no browser mostrava só um runner.** As abas de runner do console
+  espelhado eram montadas por porta, e no `_push_browser_state` um runner só
+  entrava no snapshot com `port > 0`. Runners cuja porta está só no nome
+  (sipepro: `api (5000)`, `manager (5001)`, `app (8081)` — `runner.port=0`) e
+  sem URL detectada ficavam de fora; só o `web` (porta 3000 detectada do Vite)
+  aparecia. Agora runners de console sem porta entram no snapshot com uma chave
+  sintética `r:<id>` e viram abas — o stream/abas endereçam por `runner_id` (a
+  saída de cada runner já é publicada no hub em `runner:<id>`), então funciona
+  sem porta TCP. O loop de detecção de deploy ignora essas chaves sintéticas.
+
 ## [1.1.4] — 2026-06-09
 
 ### Correções
