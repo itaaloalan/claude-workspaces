@@ -171,6 +171,7 @@ class NotificationService(QObject):
             within_cooldown = (now - existing.updated_at) < cooldown
             self._store.update(
                 existing.id,
+                kind=candidate.kind,
                 title=candidate.title,
                 body=candidate.body,
                 priority=candidate.priority,
@@ -255,6 +256,9 @@ class NotificationService(QObject):
 
     def get(self, notif_id: str) -> Notification | None:
         return self._store.get(notif_id)
+
+    def find_by_dedup_key(self, key: str) -> Notification | None:
+        return self._store.find_by_dedup_key(key)
 
     def unread_count(self, *, workspace_id: str | None = None) -> int:
         return self._store.unread_count(workspace_id=workspace_id)

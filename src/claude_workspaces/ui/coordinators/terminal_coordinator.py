@@ -48,6 +48,14 @@ class TerminalCoordinator(QObject):
     tab_removed = Signal("qint64")
     inbox_changed = Signal(int)
     inbox_alert = Signal("qint64", dict, bool)  # tab_id, info, is_reminder
+    # Tab ENTROU em is_working (idle/awaiting → working). MainWindow usa pra
+    # mostrar/atualizar a notificação fixa "Trabalhando" (que depois vira
+    # Aguardando/Pronto na mesma entrada via dedup compartilhado).
+    agent_working = Signal("qint64", dict)  # tab_id, info
+    # Tab SAIU de is_working. MainWindow fecha a notif "Trabalhando" se nada
+    # (Aguardando/Decisão) a substituiu — ex.: trabalho-relâmpago < 1.5s, ou o
+    # alerta de "Pronto" foi suprimido porque o console estava em foco.
+    agent_working_ended = Signal("qint64", dict)  # tab_id, info
     # Emitido sempre que um tab deixa o inbox (por qualquer motivo: voltou
     # a trabalhar, terminou, foi removido, foco do usuário, dismiss). O
     # MainWindow usa pra fechar a notificação D-Bus correspondente antes
@@ -177,11 +185,22 @@ class TerminalCoordinator(QObject):
         # que apareciam saindo de idle ficavam mudos.
         entered_decision = needs_decision and not prev_needs_decision
         ended_working = prev_working and not is_working
+        if ended_working:
+            self.agent_working_ended.emit(tab_id, {"workspace_id": workspace_id})
         # Filtra flicker de startup: só conta como working→idle de verdade
         # se o tab ficou em working por pelo menos _MIN_WORKING_DURATION_S.
         import time as _time
         if is_working and not prev_working:
             self._working_started_at[tab_id] = _time.monotonic()
+            if is_running:
+                # Notificação fixa "Trabalhando" — vira Aguardando/Pronto na
+                # mesma entrada quando o trabalho terminar (dedup compartilhado
+                # no MainWindow).
+                self.agent_working.emit(tab_id, {
+                    "workspace_id": workspace_id,
+                    "title": title,
+                    "status": status,
+                })
         ended_working_real = False
         if ended_working:
             started = self._working_started_at.pop(tab_id, None)

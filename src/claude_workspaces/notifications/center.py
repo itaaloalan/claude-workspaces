@@ -50,6 +50,7 @@ from .types import (
 _KIND_VISUAL: dict[str, tuple[str, str]] = {
     NotificationKind.PERMISSION_REQUIRED: ("fa5s.shield-alt", "#e0892f"),
     NotificationKind.AGENT_WAITING: ("fa5s.hourglass-half", "#c9772d"),
+    NotificationKind.AGENT_WORKING: ("fa5s.spinner", "#5a8fc3"),
     NotificationKind.TASK_COMPLETED: ("fa5s.check-circle", "#5ac35a"),
     NotificationKind.TASK_FAILED: ("fa5s.exclamation-triangle", "#d6504c"),
     NotificationKind.AGENT_IDLE: ("fa5s.coffee", "#9aa0a6"),
@@ -61,6 +62,7 @@ _KIND_VISUAL: dict[str, tuple[str, str]] = {
 _KIND_LABEL: dict[str, str] = {
     NotificationKind.PERMISSION_REQUIRED: "Permissão",
     NotificationKind.AGENT_WAITING: "Aguardando",
+    NotificationKind.AGENT_WORKING: "Trabalhando",
     NotificationKind.TASK_COMPLETED: "Concluído",
     NotificationKind.TASK_FAILED: "Falhou",
     NotificationKind.AGENT_IDLE: "Ocioso",

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.0] — 2026-06-09
+
+### Novidades
+- **Notificação fixa "Trabalhando" que muda de estado.** Enquanto o console
+  está trabalhando, aparece uma notificação desktop **fixa** (resident, sem
+  timeout) "⚙ Trabalhando — <workspace>". Quando o agente sai de trabalhando, a
+  **mesma** notificação é atualizada in-place pro estado seguinte ("⏳
+  Aguardando" / "❓ Decisão") em vez de empilhar uma nova — todas as
+  notificações de estado de um console compartilham um `dedup_key`
+  (`agent:<ws>:<tab>`). Nunca fica presa: se o trabalho para sem virar
+  aguardando/decisão (trabalho-relâmpago ou "Pronto" suprimido porque o console
+  estava em foco), a notif "Trabalhando" é fechada; e some quando você olha o
+  próprio console.
+  - Novo `NotificationKind.AGENT_WORKING`; o `DesktopNotifierAdapter` agora
+    re-entrega atualizações no mesmo banner (`replaces_id`) e pula updates sem
+    mudança visual; `service.notify` atualiza o `kind` da entrada existente.
+
 ## [1.1.6] — 2026-06-09
 
 ### Melhorias

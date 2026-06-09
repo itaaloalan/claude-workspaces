@@ -21,7 +21,7 @@ from PySide6.QtCore import QObject, Signal
 
 from ..services.desktop_notifier import DesktopNotifier
 from .service import NotificationService
-from .types import Notification, NotificationPriority
+from .types import Notification, NotificationKind, NotificationPriority
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +57,9 @@ class DesktopNotifierAdapter(QObject):
         self._is_target_visible = is_target_visible
         # dedup_key → note_id D-Bus ativo (pra replaces_id).
         self._active: dict[str, int] = {}
+        # dedup_key → (kind, title, body) já entregue — pula re-entrega quando
+        # nada visual mudou (evita re-popup em occurrence-bump dentro do cooldown).
+        self._last_delivered: dict[str, tuple] = {}
 
         service.notification_added.connect(self._on_added)
         service.notification_changed.connect(self._on_changed)
@@ -66,12 +69,13 @@ class DesktopNotifierAdapter(QObject):
         self._maybe_deliver(notification, allow_when_focused=False)
 
     def _on_changed(self, notification: Notification) -> None:
-        # Só re-emite popup quando uma notif relevante segue não-vista
-        # (ex.: usuário clicou "Adiar"; reminder vai ressuscitar mais tarde).
-        # Se a entrada virou seen/dismissed, fecha o banner ativo.
+        # Entrada virou seen/dismissed → fecha o banner ativo.
         if notification.seen or notification.dismissed:
             self._close_for(notification)
             return
+        # Senão, ATUALIZA o popup in-place (replaces_id) — é o que faz a notif
+        # fixa "Trabalhando" virar "Aguardando"/"Pronto" sem empilhar.
+        self._maybe_deliver(notification, allow_when_focused=False, is_update=True)
 
     def _on_removed_id(self, notif_id: str) -> None:
         # Não conseguimos achar a entrada pelo id (já saiu do store), então
@@ -87,7 +91,7 @@ class DesktopNotifierAdapter(QObject):
                 log.debug("close falhou", exc_info=True)
 
     def _maybe_deliver(
-        self, n: Notification, *, allow_when_focused: bool
+        self, n: Notification, *, allow_when_focused: bool, is_update: bool = False
     ) -> None:
         if not self._desktop.available:
             return
@@ -96,21 +100,34 @@ class DesktopNotifierAdapter(QObject):
             return
         if n.seen or n.dismissed:
             return
+        key = n.dedup_key or f"_id:{n.id}"
+        is_working = n.kind == NotificationKind.AGENT_WORKING
+        # Atualização sem mudança visual (occurrence-bump dentro do cooldown):
+        # não re-emite popup.
+        snapshot = (n.kind, n.title, n.body or "")
+        if is_update and self._last_delivered.get(key) == snapshot:
+            return
         if not allow_when_focused:
             # Preferimos a checagem alvo-específica: só suprime se o tab/console
             # da notif EXATAMENTE for o que o usuário está vendo. Sem alvo
             # específico (ou callable não fornecido) cai pro is_app_focused —
             # comportamento anterior, mais conservador.
             try:
-                if self._is_target_visible is not None:
-                    if self._is_target_visible(n):
-                        log.debug("popup suprimido — alvo já visível (notif=%s)", n.id)
-                        return
-                elif self._is_app_focused():
-                    log.debug("popup suprimido — app em foco (notif=%s)", n.id)
-                    return
+                suppressed = (
+                    self._is_target_visible(n)
+                    if self._is_target_visible is not None
+                    else self._is_app_focused()
+                )
             except Exception:
                 log.debug("checagem de foco falhou", exc_info=True)
+                suppressed = False
+            if suppressed:
+                # O banner fixo "Trabalhando" não deve ficar na tela enquanto o
+                # usuário olha o próprio console — fecha o popup ativo.
+                if is_working:
+                    self._close_for(n)
+                log.debug("popup suprimido — alvo já visível (notif=%s)", n.id)
+                return
 
         # Urgency forçada em NORMAL (1) no popup do S.O. — urgency=2 (critical)
         # faz KDE/GNOME ignorarem timeout e deixarem o banner sticky, e o
@@ -127,22 +144,28 @@ class DesktopNotifierAdapter(QObject):
         _os_sound: str | None = None  # sem som no popup nativo
         _os_suppress_sound = True
 
-        key = n.dedup_key or f"_id:{n.id}"
         prev = self._active.get(key, 0)
-        # Popup do S.O. sempre auto-dismiss (mesmo HIGH/CRITICAL). A central
-        # in-app preserva a notificação enquanto não vista; deixar o banner
-        # nativo "grudado" só polui a área de notificações do Plasma.
-        timeout_ms = 15000
-        if self._timeout_ms_provider is not None:
-            try:
-                timeout_ms = int(self._timeout_ms_provider())
-            except Exception:
-                log.debug("timeout_ms_provider falhou", exc_info=True)
-        # Clamp: timeout_ms<=0 significa "use server default" no protocolo FDO,
-        # e em alguns servidores isso = nunca expira. Forçamos pelo menos 3s
-        # pra garantir o auto-dismiss do banner do S.O.
-        if timeout_ms <= 0:
-            timeout_ms = 10000
+        # "Trabalhando" é FIXO: resident + sem timeout — fica na tela enquanto o
+        # agente trabalha e é substituído (replaces_id) pelo estado seguinte
+        # (Aguardando/Pronto), que aí sim auto-dismiss. Nunca fica preso: sempre
+        # resolve quando o trabalho termina.
+        if is_working:
+            timeout_ms = 0  # 0 = sem expiração (resident)
+            resident = True
+        else:
+            # Popup do S.O. auto-dismiss. A central in-app preserva a notif
+            # enquanto não vista; banner nativo grudado só polui o Plasma.
+            timeout_ms = 15000
+            resident = False
+            if self._timeout_ms_provider is not None:
+                try:
+                    timeout_ms = int(self._timeout_ms_provider())
+                except Exception:
+                    log.debug("timeout_ms_provider falhou", exc_info=True)
+            # Clamp: timeout_ms<=0 = "server default" (pode nunca expirar em
+            # alguns servidores) → força auto-dismiss.
+            if timeout_ms <= 0:
+                timeout_ms = 10000
         try:
             nid = self._desktop.notify(
                 title=n.title,
@@ -154,7 +177,7 @@ class DesktopNotifierAdapter(QObject):
                 urgency=urgency,
                 desktop_entry="claude-workspaces",
                 sound_name=_os_sound,
-                resident=False,
+                resident=resident,
                 transient=False,
                 suppress_sound=_os_suppress_sound,
             )
@@ -164,6 +187,7 @@ class DesktopNotifierAdapter(QObject):
             return
         if nid:
             self._active[key] = nid
+            self._last_delivered[key] = snapshot
         else:
             log.info("DesktopNotifier.notify não retornou id; usando fallback")
             self._fallback(n)
@@ -178,6 +202,7 @@ class DesktopNotifierAdapter(QObject):
 
     def _close_for(self, n: Notification) -> None:
         key = n.dedup_key or f"_id:{n.id}"
+        self._last_delivered.pop(key, None)
         nid = self._active.pop(key, None)
         if nid:
             try:

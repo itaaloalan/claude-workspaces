@@ -180,6 +180,10 @@ class MainWindow(QMainWindow):
         self.terminals_coord.spinner_tick.connect(self._on_spinner_tick)
         self.terminals_coord.terminal_area_created.connect(self._on_area_created)
         self.terminals_coord.inbox_alert.connect(self._on_inbox_alert)
+        self.terminals_coord.agent_working.connect(self._on_agent_working)
+        self.terminals_coord.agent_working_ended.connect(
+            self._on_agent_working_ended
+        )
         self.terminals_coord.inbox_entry_removed.connect(
             self._on_inbox_entry_removed
         )
@@ -5946,6 +5950,48 @@ class MainWindow(QMainWindow):
         except Exception:
             return False
 
+    def _agent_dedup_key(self, workspace_id: str, tab_id: int) -> str:
+        """Chave única por console pras notificações de estado do agente —
+        compartilhada entre Trabalhando/Aguardando/Decisão pra que sejam UMA
+        notificação atualizada in-place, não várias empilhadas."""
+        return f"agent:{workspace_id or ''}:{tab_id}"
+
+    def _on_agent_working(self, tab_id: int, info: dict) -> None:
+        """Console entrou em 'trabalhando' → notificação fixa AGENT_WORKING
+        (desktop resident). Quando o trabalho terminar, o _on_inbox_alert
+        atualiza a MESMA entrada (dedup compartilhado) pra Aguardando/Pronto."""
+        if not self.settings.notify_native_enabled:
+            return
+        workspace_id = info.get("workspace_id", "")
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is not None and ws.minimized:
+            return
+        ws_name = ws.name if ws else "Workspace"
+        title_text = str(info.get("title") or "").strip()
+        self.notif_service.notify(
+            NotificationKind.AGENT_WORKING,
+            title=f"⚙ Trabalhando — {ws_name}",
+            body=title_text or "Console trabalhando…",
+            workspace_id=workspace_id or None,
+            tab_id=tab_id,
+            dedup_key=self._agent_dedup_key(workspace_id, tab_id),
+            data={"source": "agent_working"},
+        )
+
+    def _on_agent_working_ended(self, tab_id: int, info: dict) -> None:
+        """Saiu de 'trabalhando'. Se a notif do console ainda está em
+        AGENT_WORKING (nada a substituiu — trabalho-relâmpago ou 'Pronto'
+        suprimido por foco), fecha-a. Roda no próximo tick pra rodar DEPOIS do
+        _on_inbox_alert que possa estar transicionando pra Aguardando/Decisão."""
+        key = self._agent_dedup_key(info.get("workspace_id", ""), tab_id)
+
+        def _finalize() -> None:
+            n = self.notif_service.find_by_dedup_key(key)
+            if n is not None and n.kind == NotificationKind.AGENT_WORKING:
+                self.notif_service.mark_seen(n.id)  # fecha o popup, vira histórico
+
+        QTimer.singleShot(0, _finalize)
+
     def _on_inbox_alert(
         self, tab_id: int, info: dict, is_reminder: bool
     ) -> None:
@@ -6042,6 +6088,10 @@ class MainWindow(QMainWindow):
             workspace_id=workspace_id or None,
             session_id=session_id or None,
             tab_id=tab_id,
+            # dedup compartilhado por console: a notificação "Trabalhando"
+            # (AGENT_WORKING) e a de Aguardando/Decisão são a MESMA entrada,
+            # atualizada in-place — vira o estado novo em vez de empilhar.
+            dedup_key=self._agent_dedup_key(workspace_id, tab_id),
             data={
                 "source": "inbox_alert",
                 "is_reminder": bool(is_reminder),

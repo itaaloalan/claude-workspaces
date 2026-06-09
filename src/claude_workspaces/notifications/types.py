@@ -25,6 +25,7 @@ from typing import Any
 class NotificationKind:
     PERMISSION_REQUIRED = "permission_required"
     AGENT_WAITING = "agent_waiting"
+    AGENT_WORKING = "agent_working"
     TASK_COMPLETED = "task_completed"
     TASK_FAILED = "task_failed"
     AGENT_IDLE = "agent_idle"
@@ -35,6 +36,7 @@ class NotificationKind:
     ALL = (
         PERMISSION_REQUIRED,
         AGENT_WAITING,
+        AGENT_WORKING,
         TASK_COMPLETED,
         TASK_FAILED,
         AGENT_IDLE,
@@ -77,6 +79,7 @@ ACTIONABLE_KINDS = frozenset({
 DEFAULT_PRIORITY: dict[str, str] = {
     NotificationKind.PERMISSION_REQUIRED: NotificationPriority.CRITICAL,
     NotificationKind.AGENT_WAITING: NotificationPriority.HIGH,
+    NotificationKind.AGENT_WORKING: NotificationPriority.LOW,
     NotificationKind.TASK_COMPLETED: NotificationPriority.NORMAL,
     NotificationKind.TASK_FAILED: NotificationPriority.HIGH,
     NotificationKind.AGENT_IDLE: NotificationPriority.LOW,

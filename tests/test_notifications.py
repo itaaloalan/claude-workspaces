@@ -141,6 +141,19 @@ def test_service_dedup_within_cooldown_does_not_double(tmp_path: Path):
     assert len(svc.list()) == 1
 
 
+def test_same_dedup_updates_kind(tmp_path: Path):
+    """notify com mesmo dedup_key e kind diferente ATUALIZA o kind da entrada —
+    é o que faz a notif 'Trabalhando' virar 'Aguardando' na mesma entrada."""
+    svc = NotificationService(tmp_path / "notif.json")
+    svc.set_preferences(cooldown_seconds=60)
+    a = svc.notify(NotificationKind.AGENT_WORKING, "trab", dedup_key="k1")
+    b = svc.notify(NotificationKind.AGENT_WAITING, "aguard", dedup_key="k1")
+    assert a is not None and b is not None and a.id == b.id
+    assert b.kind == NotificationKind.AGENT_WAITING
+    assert b.title == "aguard"
+    assert len(svc.list()) == 1
+
+
 def test_distinct_tabs_without_session_id_do_not_collide(tmp_path: Path):
     """Duas sessões esperando no MESMO workspace, sem session_id, mas com
     tab_id distintos → entradas separadas (cada console notifica). Antes o
