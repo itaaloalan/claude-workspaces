@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.6] — 2026-06-09
+
+### Correções
+- **Logs do runner não apareciam no console (in-app).** O lazy-load dos consoles
+  (1.0.3) adicionou um gate `_live` ao `TerminalBridge` — o repasse ao vivo do
+  PTY só liga depois de `go_live()`. O `TerminalWidget` chama isso ao abrir, mas
+  o `RunnerWidget` (que tem webview eager) ficou sem destravar: `_on_pty_output`
+  do bridge descartava todo output ao vivo e só os emits diretos (o banner
+  "📁 rodando em…" e avisos) apareciam — daí o console mostrar só os cabeçalhos
+  e nenhum log do processo (visível em runners sem browser, ex.: glassfish /
+  watch). Agora `RunnerWidget._on_bridge_ready` chama `go_live()`, destravando o
+  gate e replayando o `_log_buf` acumulado antes do frontend carregar.
+
 ## [1.0.5] — 2026-06-09
 
 ### Correções

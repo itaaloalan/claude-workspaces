@@ -655,6 +655,17 @@ class RunnerWidget(QWidget):
 
     def _on_bridge_ready(self) -> None:
         self._bridge_ready = True
+        # Destrava o repasse ao vivo do PTY pro xterm. O gate `_live` do
+        # TerminalBridge nasce desligado (lazy-load do console, 1.0.3) e quem
+        # o liga é o go_live() — mas só o TerminalWidget chamava. O runner
+        # tem view eager e precisava destravar aqui; sem isto, `_on_pty_output`
+        # do bridge descartava todo output ao vivo e só os emits diretos
+        # (banner/avisos) apareciam — o log do processo sumia. Replaya o que
+        # já foi bufferizado em `_log_buf` antes do frontend carregar.
+        try:
+            self.bridge.go_live(self._log_buf.encode("utf-8", errors="replace"))
+        except Exception:
+            log.debug("go_live do runner falhou", exc_info=True)
         if self._pending_cmd is not None:
             cmd, intent = self._pending_cmd
             self._pending_cmd = None
