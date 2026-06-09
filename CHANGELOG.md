@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.7] — 2026-06-09
+
+### Correções
+- **Ícones pretos nos botões dos diálogos.** Os botões padrão (OK/Cancelar/
+  Sim/Não/Close/Save…) usavam os `StandardPixmap` do estilo, que com Fusion +
+  palette dark vinham pretos = invisíveis no tema escuro. Só o
+  `launch_claude_dialog` tratava (tingindo de branco botão a botão). Agora um
+  `QProxyStyle` global (`_WhiteDialogIconStyle`) tinge de branco os pixmaps de
+  **botão de diálogo** em todo o app; os ícones **coloridos** de severidade do
+  `QMessageBox` (info/aviso/erro) passam intactos.
+
 ## [1.0.6] — 2026-06-09
 
 ### Correções

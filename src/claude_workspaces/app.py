@@ -12,9 +12,20 @@ from pathlib import Path
 # renderers. Precisa ser setado ANTES de qualquer import do QtWebEngine.
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform-hint=x11")
 
-from PySide6.QtCore import QTimer  # noqa: E402
-from PySide6.QtGui import QColor, QIcon, QPalette  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import Qt, QTimer  # noqa: E402
+from PySide6.QtGui import (  # noqa: E402
+    QColor,
+    QIcon,
+    QPainter,
+    QPalette,
+    QPixmap,
+)
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QProxyStyle,
+    QStyle,
+    QStyleFactory,
+)
 
 from .logging_setup import setup_logging  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
@@ -103,6 +114,56 @@ QScrollBar::corner {
     background: transparent;
 }
 """
+
+
+def _tint_white(icon: QIcon, size: int = 16) -> QIcon:
+    """Recolore um ícone monocromático pra branco (preservando o alfa).
+    Mesmo truque do launch_claude_dialog, agora global via QProxyStyle."""
+    pm = icon.pixmap(size, size)
+    if pm.isNull():
+        return icon
+    tinted = QPixmap(pm.size())
+    tinted.fill(Qt.GlobalColor.transparent)
+    p = QPainter(tinted)
+    p.drawPixmap(0, 0, pm)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    p.fillRect(tinted.rect(), QColor("white"))
+    p.end()
+    return QIcon(tinted)
+
+
+# Pixmaps de BOTÃO de diálogo (não os ícones de severidade do QMessageBox).
+# getattr protege nomes que não existem em todas as versões do Qt.
+_DIALOG_BUTTON_PIXMAPS = frozenset(
+    sp
+    for sp in (
+        getattr(QStyle.StandardPixmap, name, None)
+        for name in (
+            "SP_DialogOkButton", "SP_DialogCancelButton", "SP_DialogCloseButton",
+            "SP_DialogSaveButton", "SP_DialogOpenButton", "SP_DialogApplyButton",
+            "SP_DialogResetButton", "SP_DialogDiscardButton", "SP_DialogYesButton",
+            "SP_DialogNoButton", "SP_DialogHelpButton", "SP_DialogRetryButton",
+            "SP_DialogIgnoreButton", "SP_RestoreDefaultsButton",
+            "SP_DialogYesToAllButton", "SP_DialogNoToAllButton",
+            "SP_DialogSaveAllButton", "SP_DialogAbortButton",
+        )
+    )
+    if sp is not None
+)
+
+
+class _WhiteDialogIconStyle(QProxyStyle):
+    """Tinge de branco os ícones dos BOTÕES de diálogo (OK/Cancelar/Sim/Não/
+    Close/Save...). Com Fusion + palette dark o Qt os renderizava pretos —
+    invisíveis no tema escuro. Só os pixmaps de botão são tingidos; os ícones
+    COLORIDOS de severidade do QMessageBox (info/warning/erro) passam intactos.
+    """
+
+    def standardIcon(self, standardIcon, option=None, widget=None):  # noqa: N802
+        base = super().standardIcon(standardIcon, option, widget)
+        if standardIcon in _DIALOG_BUTTON_PIXMAPS:
+            return _tint_white(base)
+        return base
 
 
 def _build_dark_palette() -> QPalette:
@@ -227,7 +288,7 @@ def main() -> int:
     # forma consistente. O estilo nativo do KDE (Breeze) estava ignorando
     # nossas customizações de cor em alguns widgets, deixando texto
     # cinza-escuro em fundo cinza-escuro.
-    app.setStyle("Fusion")
+    app.setStyle(_WhiteDialogIconStyle(QStyleFactory.create("Fusion")))
     app.setPalette(_build_dark_palette())
     # QSS global pra widgets que o Fusion + palette não cobrem direito
     # (QMenu vinha branco em algumas distros, QToolTip idem).
