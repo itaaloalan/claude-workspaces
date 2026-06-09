@@ -213,7 +213,7 @@ class StateServer:
                     continue
                 try:
                     computed[port] = served_mismatch(cwd, int(port))
-                except (ValueError, Exception):
+                except Exception:
                     log.debug("served_mismatch falhou pra :%s", port, exc_info=True)
             with self._lock:
                 self._served = computed
