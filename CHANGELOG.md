@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.5] — 2026-06-09
+
+### Correções
+- **Console do browser com texto sobreposto.** O espelho do console (extensão
+  Chrome) ajustava o xterm ao tamanho do overlay com `FitAddon.fit()`, mas ele
+  reflete o **mesmo PTY** do app — e o Claude (TUI) redesenha por posição
+  absoluta de cursor calculada pra geometria (cols×rows) do PTY. Grade diferente
+  → cada redesenho caía na célula errada e as linhas empilhavam. Agora o espelho
+  fixa a grade no cols×rows do PTY de origem (novo endpoint `/console/size` +
+  geometria embutida na página) e ajusta só a **fonte** pra caber no overlay; um
+  poll a cada 1,5s reflui quando o app é redimensionado.
+
 ## [1.0.4] — 2026-06-08
 
 ### Correções

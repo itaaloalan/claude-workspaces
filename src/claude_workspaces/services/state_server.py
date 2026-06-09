@@ -137,6 +137,9 @@ class StateServer:
                 if path == "/console/stream":
                     outer._serve_console_stream(self, acao)
                     return
+                if path == "/console/size":
+                    outer._serve_console_size(self, acao)
+                    return
                 self.send_response(404)
                 self.end_headers()
 
@@ -284,6 +287,10 @@ class StateServer:
         branch = entry.get("console_branch") or ""
         # Abas: Claude + cada runner DESTE console (com porta no snapshot).
         sid = entry["_sid"]
+        # Geometria inicial = a do PTY do Claude (aba ativa por padrão); o
+        # poll do /console/size corrige depois se o app redimensionar.
+        init_size = self._hub.size(sid) if self._hub else None
+        init_cols, init_rows = init_size if init_size else (80, 24)
         with self._lock:
             all_ports = dict(self._snapshot.get("ports", {}))
         tabs = [{"label": "🤖 Claude", "target": "claude",
@@ -301,10 +308,44 @@ class StateServer:
             .replace("__BRANCH__", branch)
             .replace("__PORT__", entry["_port"])
             .replace("__TOKEN__", self.token)
+            .replace("__COLS__", str(init_cols))
+            .replace("__ROWS__", str(init_rows))
             .replace("__TABS__", json.dumps(tabs, ensure_ascii=False))
         ).encode("utf-8")
         handler.send_response(200)
         handler.send_header("Content-Type", "text/html; charset=utf-8")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+
+    def _sid_for_target(self, entry: dict) -> str | None:
+        """sid do PTY pedido pela query: target=claude (default) → PTY da
+        sessão; target=runner → PTY do runner DESTA porta. None se runner
+        sem id."""
+        target = self._query(entry["_raw_path"]).get("target", "claude")
+        if target == "runner":
+            rid = entry.get("runner_id") or ""
+            return f"runner:{rid}" if rid else None
+        return entry["_sid"]
+
+    def _serve_console_size(self, handler, acao: str = "") -> None:
+        """`/console/size?port&target&token` → {"cols":C,"rows":R} do PTY
+        de origem, pro espelho do browser casar a grade (senão a TUI do
+        Claude renderiza com cursor absoluto na geometria errada → texto
+        sobreposto)."""
+        entry = self._console_ctx(handler)
+        if entry is None:
+            return
+        entry["_raw_path"] = handler.path
+        sid = self._sid_for_target(entry)
+        size = self._hub.size(sid) if sid else None
+        cols, rows = size if size else (80, 24)
+        body = json.dumps({"cols": cols, "rows": rows}).encode("ascii")
+        handler.send_response(200)
+        handler.send_header("Content-Type", "application/json")
+        handler.send_header("Cache-Control", "no-store")
+        if acao:
+            handler.send_header("Access-Control-Allow-Origin", acao)
         handler.send_header("Content-Length", str(len(body)))
         handler.end_headers()
         handler.wfile.write(body)
@@ -315,16 +356,12 @@ class StateServer:
             return
         # target=claude (default) → PTY da sessão; target=runner → PTY do
         # runner DESTA porta (aba de logs no espelho).
-        target = self._query(handler.path).get("target", "claude")
-        if target == "runner":
-            rid = entry.get("runner_id") or ""
-            if not rid:
-                handler.send_response(404)
-                handler.end_headers()
-                return
-            sid = f"runner:{rid}"
-        else:
-            sid = entry["_sid"]
+        entry["_raw_path"] = handler.path
+        sid = self._sid_for_target(entry)
+        if sid is None:
+            handler.send_response(404)
+            handler.end_headers()
+            return
         handler.send_response(200)
         handler.send_header("Content-Type", "text/event-stream")
         handler.send_header("Cache-Control", "no-store")
@@ -495,7 +532,6 @@ _CONSOLE_HTML = """<!doctype html>
 <div id="term"></div>
 <div id="off">⚠ desconectado do claude-workspaces — reabra quando o app voltar</div>
 <script src="/static/xterm.js"></script>
-<script src="/static/addon-fit.js"></script>
 <script>
   const PORT = "__PORT__";
   const TOKEN = "__TOKEN__";
@@ -504,14 +540,64 @@ _CONSOLE_HTML = """<!doctype html>
     convertEol: false,
     fontSize: 13,
     fontFamily: "monospace",
+    lineHeight: 1,
     theme: { background: "#0e0e0e", foreground: "#d8d8d8" },
     scrollback: 8000,
   });
-  const fit = new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.open(document.getElementById("term"));
-  try { fit.fit(); } catch (e) {}
-  window.addEventListener("resize", () => { try { fit.fit(); } catch (e) {} });
+  const termEl = document.getElementById("term");
+  term.open(termEl);
+
+  // O espelho TEM que usar a MESMA grade (cols×rows) do PTY de origem: o
+  // Claude (TUI) redesenha por posição absoluta de cursor calculada pra
+  // aquela geometria; grade diferente → linhas sobrepostas. Então em vez
+  // de ajustar a GRADE ao overlay (o velho fit.fit()), fixamos a grade no
+  // tamanho do PTY e ajustamos só a FONTE pra caber.
+  let geom = { cols: Number("__COLS__") || 80, rows: Number("__ROWS__") || 24 };
+
+  // Largura/altura de célula por 1px de fonte (monospace), medidas 1x.
+  const _cell = (() => {
+    const s = document.createElement("span");
+    s.style.cssText =
+      "position:absolute;visibility:hidden;white-space:pre;" +
+      "font-family:monospace;line-height:1;font-size:100px";
+    s.textContent = "0".repeat(50);
+    document.body.appendChild(s);
+    const r = s.getBoundingClientRect();
+    s.remove();
+    return { w: r.width / 50 / 100, h: r.height / 100 };
+  })();
+
+  function fitFont() {
+    const availW = termEl.clientWidth - 8;
+    const availH = termEl.clientHeight - 8;
+    if (availW <= 0 || availH <= 0 || !geom.cols || !geom.rows) return;
+    const pxW = availW / (geom.cols * _cell.w);
+    const pxH = availH / (geom.rows * _cell.h);
+    let px = Math.floor(Math.min(pxW, pxH));
+    px = Math.max(6, Math.min(15, px));
+    if (px !== term.options.fontSize) term.options.fontSize = px;
+    // fontSize muda as métricas internas do xterm; re-fixa a grade do PTY.
+    try { term.resize(geom.cols, geom.rows); } catch (e) {}
+  }
+
+  async function syncSize() {
+    try {
+      const r = await fetch(
+        `/console/size?port=${active.port}&target=${active.target}&token=${TOKEN}`,
+        { cache: "no-store" }
+      );
+      if (!r.ok) return;
+      const s = await r.json();
+      if (s.cols && s.rows && (s.cols !== geom.cols || s.rows !== geom.rows)) {
+        geom = { cols: s.cols, rows: s.rows };
+      }
+    } catch (e) {}
+    fitFont();
+  }
+
+  fitFont();
+  window.addEventListener("resize", fitFont);
+  setInterval(syncSize, 1500);
 
   function b64ToBytes(b64) {
     const bin = atob(b64);
@@ -526,6 +612,8 @@ _CONSOLE_HTML = """<!doctype html>
   function openStream() {
     if (es) { es.close(); es = null; }
     term.reset();
+    // Cada aba (Claude / runner) tem seu PTY com geometria própria.
+    syncSize();
     es = new EventSource(
       `/console/stream?port=${active.port}&target=${active.target}&token=${TOKEN}`
     );

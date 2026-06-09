@@ -40,6 +40,16 @@ class PtySession(QObject):
     def is_running(self) -> bool:
         return self.pid is not None
 
+    @property
+    def cols(self) -> int:
+        """Colunas do último resize pedido (80 default, antes do primeiro fit)."""
+        return self._pending_size[0] if self._pending_size else 80
+
+    @property
+    def rows(self) -> int:
+        """Linhas do último resize pedido (24 default, antes do primeiro fit)."""
+        return self._pending_size[1] if self._pending_size else 24
+
     def start(
         self,
         argv: list[str],

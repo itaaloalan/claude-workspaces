@@ -253,6 +253,9 @@ class _FakeHub:
         self.writes.append((sid, data))
         return True
 
+    def size(self, sid):
+        return (132, 43)
+
 
 def test_console_endpoints_token_e_input():
     import urllib.error
@@ -279,6 +282,15 @@ def test_console_endpoints_token_e_input():
         ) as resp:
             html = resp.read().decode()
             assert "xterm.js" in html and "Claude" in html
+            # Geometria do PTY (hub.size) injetada — sem fit-de-janela.
+            assert 'Number("132")' in html and 'Number("43")' in html
+            assert "FitAddon" not in html
+        # /console/size → geometria do PTY de origem.
+        import json as _json
+        with _get(
+            f"http://127.0.0.1:{port}/console/size?port=4202&token={srv.token}"
+        ) as resp:
+            assert _json.loads(resp.read()) == {"cols": 132, "rows": 43}
         # Input → hub.write com o sid.
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/console/input?port=4202&token={srv.token}",

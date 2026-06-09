@@ -107,3 +107,16 @@ class ConsoleHub:
         with self._lock:
             ref = self._terms.get(sid)
         return ref is not None and ref() is not None
+
+    def size(self, sid: str) -> tuple[int, int] | None:
+        """Geometria (cols, rows) do PTY dono do sid — pro espelho do
+        browser casar a grade. None se o terminal já foi coletado."""
+        with self._lock:
+            ref = self._terms.get(sid)
+        term = ref() if ref is not None else None
+        if term is None:
+            return None
+        try:
+            return (term.session.cols, term.session.rows)
+        except Exception:
+            return None
