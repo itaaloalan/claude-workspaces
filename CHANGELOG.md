@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] — 2026-06-09
+
+### Novidades
+- **Detecção "deploy fora do worktree".** A pill da extensão diz "WORKTREE
+  feat/x" com base no cwd que o app registrou — mas quem serve o `localhost`
+  pode ter sido subido de outra pasta ou servir um build velho, e aí o badge
+  mente. Agora dois sinais acendem o ⚠ vermelho:
+  - **A) Processo de outra pasta** — o `served_proc` descobre o PID que escuta
+    a porta (`ss`/`lsof` → `/proc/PID/cwd`) e compara o git-dir absoluto com o
+    worktree esperado. Calculado por uma thread do `StateServer` (fora da UI),
+    funciona mesmo sem aba aberta no browser.
+  - **B) Build desatualizado** — quando a página carimba
+    `<meta name="cw-build-commit">`, a extensão compara com o `HEAD` atual do
+    worktree (novo campo `head_commit` no `/state.json`). Sem a tag, fica
+    desligado (sem falso alarme).
+  - Avisa **nos dois lugares**: pill vermelha + badge ⚠ na extensão, e
+    indicador inline no runner do app (chip 📁 + linha no log, sem popup).
+    Extensão Chrome → `1.1.0` (recarregue em `chrome://extensions`).
+
 ## [1.0.8] — 2026-06-09
 
 ### Correções

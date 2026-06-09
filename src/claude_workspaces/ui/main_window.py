@@ -4920,6 +4920,9 @@ class MainWindow(QMainWindow):
             return
         from ..services.runner_url_detect import url_port
         ports: dict[str, dict] = {}
+        # port(str) → runner widget vivo, pra aplicar o aviso "deploy fora do
+        # worktree" (Detecção A) computado pela thread do StateServer.
+        rw_by_port: dict[str, object] = {}
 
         def _add(port: int, ws: Workspace, runner, cwd: str, state: str) -> None:
             if port <= 0:
@@ -4961,11 +4964,24 @@ class MainWindow(QMainWindow):
                     real = url_port(rw.current_url() or "")
                     if real and real != runner.port:
                         _add(real, ws, runner, cwd, state)
+                        rw_by_port[str(real)] = rw
+                    if runner.port > 0:
+                        rw_by_port[str(runner.port)] = rw
                 _add(runner.port, ws, runner, cwd, state)
         try:
             self._state_server.update({"ports": ports})
         except Exception:
             log.debug("push do browser state falhou", exc_info=True)
+        # Aviso inline "deploy fora do worktree" — lê o served-info calculado
+        # pela thread do StateServer (fora da UI) e aplica em cada runner vivo.
+        try:
+            served = self._state_server.served_info()
+            for port_str, rw in rw_by_port.items():
+                si = served.get(port_str)
+                on = bool(si and si.get("served_mismatch"))
+                rw.set_deploy_warning(on, (si or {}).get("served_cwd") or "")
+        except Exception:
+            log.debug("aplicar served warning falhou", exc_info=True)
 
     def _on_runner_footer_collapsed(self, scope: str, collapsed: bool) -> None:
         """Persiste o colapso das seções do rodapé de runners."""

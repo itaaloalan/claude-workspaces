@@ -64,6 +64,14 @@ class StateServer:
         # via /state.json pra extensão.
         self._hub = None
         self.token = uuid.uuid4().hex
+        # Detecção "deploy fora do worktree" (served_proc): port(str) → info
+        # {served_pid, served_cwd, served_mismatch}. Recalculado por uma thread
+        # de fundo (subprocess ss/lsof/git — fora de qualquer thread Qt) e lido
+        # tanto pelo _payload (pill da extensão) quanto pelo app (indicador no
+        # runner). Funciona mesmo sem aba aberta no browser.
+        self._served: dict[str, dict] = {}
+        self._served_thread: threading.Thread | None = None
+        self._served_stop = threading.Event()
 
     # ---- ciclo de vida -----------------------------------------------------
 
@@ -170,10 +178,16 @@ class StateServer:
             target=self._httpd.serve_forever, name="state-server", daemon=True
         )
         thread.start()
+        self._served_stop.clear()
+        self._served_thread = threading.Thread(
+            target=self._served_loop, name="state-server-served", daemon=True
+        )
+        self._served_thread.start()
         log.info("StateServer em http://%s:%d/state.json", self._host, self._port)
         return True
 
     def stop(self) -> None:
+        self._served_stop.set()
         if self._httpd is not None:
             try:
                 self._httpd.shutdown()
@@ -181,6 +195,33 @@ class StateServer:
             except Exception:
                 log.debug("shutdown do StateServer falhou", exc_info=True)
             self._httpd = None
+
+    def _served_loop(self) -> None:
+        """Recalcula a cada ~3s, fora de qualquer thread Qt, se o processo que
+        escuta cada porta roda do worktree esperado (Detecção A). Resultado em
+        self._served, consumido pelo _payload (pill) e por served_info() (app)."""
+        from .served_proc import served_mismatch
+        while not self._served_stop.wait(3.0):
+            with self._lock:
+                ports = {
+                    p: (e.get("cwd") or "")
+                    for p, e in self._snapshot.get("ports", {}).items()
+                }
+            computed: dict[str, dict] = {}
+            for port, cwd in ports.items():
+                if not cwd:
+                    continue
+                try:
+                    computed[port] = served_mismatch(cwd, int(port))
+                except (ValueError, Exception):
+                    log.debug("served_mismatch falhou pra :%s", port, exc_info=True)
+            with self._lock:
+                self._served = computed
+
+    def served_info(self) -> dict[str, dict]:
+        """Cópia do served-info por porta (lido pelo app na UI thread)."""
+        with self._lock:
+            return {p: dict(v) for p, v in self._served.items()}
 
     @property
     def running(self) -> bool:
@@ -227,10 +268,16 @@ class StateServer:
     def _payload(self) -> dict:
         with self._lock:
             snap = json.loads(json.dumps(self._snapshot))  # deep copy barato
-        for entry in snap.get("ports", {}).values():
+            served = {p: dict(v) for p, v in self._served.items()}
+        for port, entry in snap.get("ports", {}).items():
             cwd = entry.get("cwd") or ""
             if cwd:
                 entry.update(self._branch_info(cwd))
+            # Detecção A: merge do served-info (só o bool importa pra pill).
+            si = served.get(port)
+            if si:
+                entry["served_mismatch"] = bool(si.get("served_mismatch"))
+                entry["served_cwd"] = si.get("served_cwd") or ""
         snap["ts"] = time.time()
         snap["token"] = self.token
         return snap
@@ -469,11 +516,23 @@ class StateServer:
             hit = self._branch_cache.get(cwd)
             if hit and hit[0] > now:
                 return hit[1]
-        info = {"branch": "", "worktree": False}
+        info = {"branch": "", "worktree": False, "head_commit": ""}
         try:
+            import subprocess
+
             from ..git_worktree import current_branch, is_worktree_path
             info["worktree"] = bool(is_worktree_path(cwd))
             info["branch"] = current_branch(cwd) or ""
+            # HEAD curto pra Detecção B (carimbo de build vs commit atual).
+            try:
+                r = subprocess.run(  # noqa: S603
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    cwd=cwd, capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    info["head_commit"] = r.stdout.strip()
+            except (OSError, subprocess.TimeoutExpired):
+                pass
         except Exception:
             log.debug("branch_info falhou pra %s", cwd, exc_info=True)
         with self._lock:

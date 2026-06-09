@@ -5,6 +5,7 @@ Mostra **badge** no ícone e uma **faixa no topo da página** quando a aba
 
 - 🟧 **laranja** — o runner roda num **worktree** isolado (`🌿 branch — worktree · map / web`)
 - 🟩 **verde** — repo principal
+- 🟥 **vermelho ⚠** — **deploy fora do worktree** (veja abaixo)
 
 Os dados vêm do endpoint local do app (`http://127.0.0.1:43210/state.json`,
 ligado por padrão — Settings → "browser_state_server_enabled").
@@ -30,6 +31,31 @@ Clique no pill pra abrir o menu:
 - **↗ Console em janela separada** — mesmo espelho, em janela própria
   (fallback pra páginas com CSP que bloqueia iframe)
 - **Mover ↖↗↙↘** — canto do pill, lembrado POR SISTEMA (host:porta)
+
+## ⚠ Deploy fora do worktree
+
+A pill diz "WORKTREE" com base no cwd que o app registrou pra porta — mas
+quem realmente serve o `localhost:<porta>` pode ter sido subido de **outra
+pasta** (repo principal / worktree antigo) ou servir um **build velho**. Aí o
+badge mente e você testa código stale. A extensão detecta dois casos e fica
+**vermelha ⚠**:
+
+- **A) Processo de outra pasta.** O app descobre o PID que escuta a porta
+  (`ss`/`lsof` → `/proc/PID/cwd`) e compara o git-dir com o worktree esperado.
+  Automático, sem configurar nada.
+- **B) Build desatualizado.** Comparado só quando a página **carimba** o
+  commit do build. Faça o build/deploy injetar no `<head>`:
+
+  ```html
+  <meta name="cw-build-commit" content="abc1234">
+  ```
+
+  (ex.: no Vite, via `define`/plugin com `git rev-parse --short HEAD`). A
+  extensão compara o carimbo com o `HEAD` atual do worktree; diferiram → ⚠.
+  Sem a meta tag, a Detecção B fica desligada (sem falso alarme).
+
+No app, o runner correspondente mostra o aviso inline no chip 📁 + uma linha
+no log (sem popup).
 
 ## Como funciona / segurança
 

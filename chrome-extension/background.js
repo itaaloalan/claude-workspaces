@@ -55,14 +55,24 @@ async function refreshTab(tabId, url) {
   const isWt = Boolean(entry.worktree);
   // Token do app vai junto — os endpoints /console/* exigem.
   entry._token = (state && state.token) || "";
-  chrome.action.setBadgeText({ tabId, text: shortBranch(entry.branch) || "•" });
+  // Detecção A: o app sabe que a porta é servida de outra pasta → badge
+  // vermelho ⚠. (A Detecção B — build desatualizado — fica na pill do
+  // content.js, que tem acesso ao carimbo da página.)
+  const mismatch = Boolean(entry.served_mismatch);
+  chrome.action.setBadgeText({
+    tabId,
+    text: mismatch ? "⚠" : (shortBranch(entry.branch) || "•"),
+  });
   chrome.action.setBadgeBackgroundColor({
     tabId,
-    color: isWt ? "#e5953b" : "#3fa55f",
+    color: mismatch ? "#e05252" : (isWt ? "#e5953b" : "#3fa55f"),
   });
   chrome.action.setTitle({
     tabId,
     title:
+      (mismatch
+        ? `⚠ deploy fora do worktree — servido de ${entry.served_cwd || "outra pasta"}\n`
+        : "") +
       `${entry.workspace} · ${entry.runner}` +
       (entry.branch ? ` · 🌿 ${entry.branch}` : "") +
       (isWt ? " (worktree)" : ""),

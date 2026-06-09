@@ -302,12 +302,37 @@ function openConsoleOverlay() {
   document.documentElement.appendChild(wrap);
 }
 
+// Carimbo de commit do build na página (Detecção B). O build/deploy injeta
+// <meta name="cw-build-commit" content="<sha>"> no <head>; sem a tag, B fica
+// desligado pra esse projeto (sem falso alarme).
+function buildCommitFromPage() {
+  const m = document.querySelector('meta[name="cw-build-commit"]');
+  return m && m.content ? m.content.trim() : "";
+}
+
+// Alerta "deploy fora do worktree": A) o app detectou que a porta é servida
+// de outra pasta (entry.served_mismatch); B) o commit carimbado no build não
+// bate com o HEAD atual do worktree. Retorna {reason} ou null.
+function deployAlert(entry) {
+  if (!entry) return null;
+  if (entry.served_mismatch) {
+    return { reason: `deploy fora do worktree — servido de ${entry.served_cwd || "outra pasta"}` };
+  }
+  const stamp = buildCommitFromPage();
+  const head = (entry.head_commit || "").trim();
+  if (stamp && head && !stamp.startsWith(head) && !head.startsWith(stamp)) {
+    return { reason: `build desatualizado (${stamp} ≠ HEAD ${head})` };
+  }
+  return null;
+}
+
 function renderBar(entry) {
   lastEntry = entry;
   removeBar();
   if (!entry || dismissed) return;
   const isWt = Boolean(entry.worktree);
-  const accent = isWt ? "#e5953b" : "#3fa55f";
+  const alert = deployAlert(entry);
+  const accent = alert ? "#e05252" : (isWt ? "#e5953b" : "#3fa55f");
   const pill = document.createElement("div");
   pill.id = BAR_ID;
   pill.style.cssText = [
@@ -320,6 +345,7 @@ function renderBar(entry) {
     "max-width:46vw", "cursor:pointer", "user-select:none",
   ].join(";");
   pill.title =
+    (alert ? `⚠ ${alert.reason}\n` : "") +
     `${entry.workspace} / ${entry.runner}` +
     (entry.scope === "console" ? " (console)" : "") +
     (entry.branch ? ` · 🌿 ${entry.branch}` : "") +
@@ -348,7 +374,7 @@ function renderBar(entry) {
   kind.style.cssText =
     `flex:none;font-size:10px;font-weight:700;color:${accent};` +
     "text-transform:uppercase;letter-spacing:.4px";
-  kind.textContent = isWt ? "worktree" : "principal";
+  kind.textContent = alert ? "⚠ deploy" : (isWt ? "worktree" : "principal");
   pill.appendChild(kind);
 
   const close = document.createElement("span");

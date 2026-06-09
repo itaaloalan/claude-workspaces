@@ -90,6 +90,9 @@ class RunnerWidget(QWidget):
         self._rodando_emitted: bool = False
         # Aviso "porta configurada não aplicada" — uma vez por execução.
         self._port_mismatch_warned: bool = False
+        # Aviso "deploy fora do worktree" (Detecção A do served_proc): o
+        # processo que escuta a porta roda de outra pasta. Inline, sem popup.
+        self._deploy_warned: bool = False
         # URL atual conhecida pelo widget (config ou detectada). Mantida pra
         # sincronizar a sidebar (host:port). Inicializa a partir da config
         # (com {port} já expandido pra porta do runner).
@@ -505,6 +508,36 @@ class RunnerWidget(QWidget):
             "comando não usa {port} e o servidor não leu PORT/SERVER_PORT. "
             "Clique pra alterar a porta base."
         )
+
+    def set_deploy_warning(self, on: bool, served_cwd: str = "") -> None:
+        """Detecção A: o processo que serve a porta roda de OUTRO worktree que
+        não o `effective_cwd()` deste runner — i.e. o deploy não foi feito no
+        worktree atual. Indica inline (chip 📁 + 1 linha no log), sem popup,
+        respeitando a regra de não exibir toast in-app."""
+        if on == self._deploy_warned:
+            return
+        self._deploy_warned = on
+        if on:
+            from pathlib import Path
+            self._cwd_btn.setText(f"⚠ 📁 {Path(self.effective_cwd()).name or '?'}")
+            self._cwd_btn.setToolTip(
+                "⚠ Deploy fora do worktree: quem serve a porta roda de\n"
+                f"  {served_cwd or '(desconhecido)'}\n"
+                f"mas este runner é do worktree {self.effective_cwd()}.\n"
+                "Reinicie o servidor a partir do worktree pra testar o código certo."
+            )
+            msg = (
+                "\r\n\x1b[38;5;203m⚠ deploy fora do worktree — a porta está sendo "
+                f"servida de {served_cwd or '(desconhecido)'}, não deste worktree."
+                "\x1b[0m\r\n"
+            )
+            self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
+            try:
+                self.bridge.output_to_terminal.emit(msg.encode("utf-8"))
+            except Exception:
+                log.debug("emit do aviso de deploy falhou", exc_info=True)
+        else:
+            self._refresh_cwd_chip()
 
     def is_running(self) -> bool:
         return self._state == "running"

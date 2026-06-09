@@ -45,6 +45,20 @@ def test_state_server_serve_snapshot(tmp_path):
         srv.stop()
 
 
+def test_payload_merges_served_mismatch(tmp_path):
+    """O _payload espelha o served-info (Detecção A) calculado pela thread."""
+    srv = StateServer(port=_free_port())
+    srv.update({"ports": {"8088": {"workspace": "ogpms", "runner": "gf",
+                                   "cwd": str(tmp_path), "state": "running"}}})
+    # Injeta direto o que a thread de fundo produziria.
+    srv._served = {"8088": {"served_pid": 42,
+                            "served_cwd": "/repo/principal",
+                            "served_mismatch": True}}
+    entry = srv._payload()["ports"]["8088"]
+    assert entry["served_mismatch"] is True
+    assert entry["served_cwd"] == "/repo/principal"
+
+
 def test_state_server_404_em_path_desconhecido():
     port = _free_port()
     srv = StateServer(port=port)

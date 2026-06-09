@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Claude Workspaces — Indicador de Worktree",
-  "description": "Mostra badge e faixa quando a aba localhost pertence a um runner do claude-workspaces (e se roda num worktree).",
-  "version": "1.0.0",
+  "description": "Mostra badge e faixa quando a aba localhost pertence a um runner do claude-workspaces (worktree, e se o deploy está fora do worktree).",
+  "version": "1.1.0",
   "permissions": ["tabs", "storage"],
   "host_permissions": [
     "http://localhost/*",
