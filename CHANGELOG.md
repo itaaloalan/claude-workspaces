@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.6] — 2026-06-09
+
+### Melhorias
+- **Botão "🔄 Atualizar lista" no menu de Worktree** (chip 🌿 do header do
+  console). Um worktree recém-criado pela sessão às vezes não aparecia nos
+  submenus (corrida com o `git worktree add`); o refresh re-lê o
+  `git worktree list` e reabre o menu.
+
 ## [1.1.5] — 2026-06-09
 
 ### Correções

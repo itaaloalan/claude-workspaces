@@ -2555,6 +2555,16 @@ class MainWindow(QMainWindow):
             self._add_switch_to_worktree_menu(menu, ws, term)
         self._add_open_in_worktree_menu(menu, ws)
         self._add_remove_worktree_menu(menu, ws)
+        # Refresh: re-consulta `git worktree list` (reabre o menu). Útil quando
+        # um worktree recém-criado pela sessão ainda não aparecia por corrida
+        # com o `git worktree add`.
+        menu.addSeparator()
+        refresh_act = QAction("🔄 Atualizar lista", menu)
+        refresh_act.setToolTip("Re-lê os worktrees do git e reabre este menu.")
+        refresh_act.triggered.connect(
+            lambda _c=False: QTimer.singleShot(0, self._open_pane_worktree_menu)
+        )
+        menu.addAction(refresh_act)
         menu.exec(
             self._worktree_chip_btn.mapToGlobal(
                 self._worktree_chip_btn.rect().bottomLeft()
