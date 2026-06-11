@@ -21,6 +21,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -88,6 +89,16 @@ class _UsageVisibilityProxy(QWidget):
             self._detail.setVisible(False)
 
 
+_STACK_CHK_QSS = (
+    "QCheckBox { spacing: 0; }"
+    "QCheckBox::indicator { width: 13px; height: 13px; border-radius: 3px; "
+    f"border: 1px solid {theme.BORDER_INPUT}; background: transparent; }}"
+    f"QCheckBox::indicator:hover {{ border-color: {theme.TEXT_LINK}; }}"
+    f"QCheckBox::indicator:checked {{ background: {theme.SUCCESS}; "
+    f"border-color: {theme.SUCCESS}; }}"
+)
+
+
 class _RunnerFooterRow(QWidget):
     def __init__(
         self,
@@ -101,6 +112,9 @@ class _RunnerFooterRow(QWidget):
         on_open: Callable[[str, str], None],
         on_toggle: Callable[[str, str], None],
         on_restart: Callable[[str, str], None],
+        scope: str = "workspace",
+        include_in_stack: bool = True,
+        on_stack_toggle: Callable[[str, str, bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -109,6 +123,7 @@ class _RunnerFooterRow(QWidget):
         self._on_open = on_open
         self._on_toggle = on_toggle
         self._on_restart = on_restart
+        self._on_stack_toggle = on_stack_toggle
         tip = "Abrir runner no painel central"
         if cwd:
             tip = f"Diretório: {cwd}\n{tip}"
@@ -143,6 +158,23 @@ class _RunnerFooterRow(QWidget):
         text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         layout.addWidget(text, stretch=1)
 
+        # Checkbox "criar no console": só pros runners do workspace (os de
+        # console já SÃO cópias). Reflete/edita `include_in_stack` — quando
+        # marcado, o runner é copiado pro console ao "⬇ Subir stack".
+        # Sempre visível (não hover-only) pra dar de relance quais runners
+        # sobem pra stack do console.
+        if scope == "workspace":
+            self._stack_chk = QCheckBox()
+            self._stack_chk.setChecked(bool(include_in_stack))
+            self._stack_chk.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            self._stack_chk.setStyleSheet(_STACK_CHK_QSS)
+            self._stack_chk.setToolTip(
+                "Criar este runner no console ao '⬇ Subir stack'.\n"
+                "Desmarque os que não fazem parte da stack paralela."
+            )
+            self._stack_chk.toggled.connect(self._on_stack_chk_toggled)
+            layout.addWidget(self._stack_chk, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self._restart_btn = self._action_btn("↻", "Reiniciar runner")
         self._restart_btn.clicked.connect(
             lambda _=False: self._on_restart(self._workspace_id, self._runner_id)
@@ -167,6 +199,10 @@ class _RunnerFooterRow(QWidget):
             f"QPushButton:hover {{ color: {theme.SUCCESS}; }}"
         )
         return btn
+
+    def _on_stack_chk_toggled(self, checked: bool) -> None:
+        if self._on_stack_toggle is not None:
+            self._on_stack_toggle(self._workspace_id, self._runner_id, checked)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -196,6 +232,9 @@ class SidebarFooter(QWidget):
     console_runner_requested = Signal(str, str)  # workspace_id, runner_id
     runner_toggle_requested = Signal(str, str)  # workspace_id, runner_id
     runner_restart_requested = Signal(str, str)  # workspace_id, runner_id
+    # Checkbox "criar no console" de um runner workspace mudou —
+    # main_window grava em runner.include_in_stack e persiste.
+    runner_stack_toggle_requested = Signal(str, str, bool)  # ws_id, runner_id, on
     # 🗑 do header da seção "console": remover todos os runners do console
     # ativo do workspace exibido.
     console_runners_remove_requested = Signal(str)  # workspace_id
@@ -427,13 +466,15 @@ class SidebarFooter(QWidget):
 
     def set_console_runners(
         self,
-        runners: list[tuple[str, str, str, str, str, str, str, str]],
+        runners: list[tuple[str, str, str, str, str, str, str, str, bool]],
         console_active: bool = False,
     ) -> None:
         """Atualiza a lista contextual de runners do workspace selecionado.
 
         Tupla: (workspace_id, runner_id, name, state, status, url, cwd,
-        scope) — scope ∈ {"workspace", "console"}; cada grupo é renderizado
+        scope, include_in_stack) — scope ∈ {"workspace", "console"};
+        include_in_stack alimenta o checkbox "criar no console" (só nos
+        runners de workspace). Cada grupo é renderizado
         sob seu próprio sub-header pra cópias de console não se misturarem
         com os runners default do workspace. `console_active` indica que há
         um console aberto/focado — mostra a seção "console" (com o botão ⬇
@@ -534,7 +575,7 @@ class SidebarFooter(QWidget):
             self._runner_rows.addWidget(row)
 
         last_scope = ""
-        for workspace_id, runner_id, name, state, status, url, cwd, scope in rows:
+        for workspace_id, runner_id, name, state, status, url, cwd, scope, in_stack in rows:
             if scope != last_scope:
                 count = sum(1 for r in rows if r[7] == scope)
                 _add_section(scope, count)
@@ -543,7 +584,8 @@ class SidebarFooter(QWidget):
                 continue
             self._runner_rows.addWidget(
                 self._make_runner_row(
-                    workspace_id, runner_id, name, state, status, url, cwd
+                    workspace_id, runner_id, name, state, status, url, cwd,
+                    scope, in_stack,
                 )
             )
         # Console aberto mas ainda sem cópias → header da seção mesmo
@@ -576,6 +618,8 @@ class SidebarFooter(QWidget):
         status: str,
         url: str,
         cwd: str,
+        scope: str = "workspace",
+        include_in_stack: bool = True,
     ) -> QWidget:
         return _RunnerFooterRow(
             workspace_id,
@@ -588,6 +632,10 @@ class SidebarFooter(QWidget):
             lambda wid, rid: self.console_runner_requested.emit(wid, rid),
             lambda wid, rid: self.runner_toggle_requested.emit(wid, rid),
             lambda wid, rid: self.runner_restart_requested.emit(wid, rid),
+            scope=scope,
+            include_in_stack=include_in_stack,
+            on_stack_toggle=lambda wid, rid, on:
+                self.runner_stack_toggle_requested.emit(wid, rid, on),
         )
 
 

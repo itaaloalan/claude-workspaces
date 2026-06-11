@@ -3,9 +3,14 @@
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QCheckBox, QPushButton
 
-from claude_workspaces.ui.sidebar_footer import _ClickableLabel, _UsageLabel
+from claude_workspaces.ui.sidebar_footer import (
+    SidebarFooter,
+    _ClickableLabel,
+    _RunnerFooterRow,
+    _UsageLabel,
+)
 
 # ---------- _UsageLabel ----------
 
@@ -106,3 +111,54 @@ def test_clickable_label_right_click_not_emitted(qapp):
     )
     label.mousePressEvent(ev)
     assert emitted == []
+
+
+# ---------- checkbox "criar no console" (include_in_stack) ----------
+
+def _rows(footer: SidebarFooter):
+    return footer.findChildren(_RunnerFooterRow)
+
+
+def test_workspace_runner_has_stack_checkbox_reflecting_state(qapp):
+    footer = SidebarFooter()
+    footer.set_console_runners(
+        [
+            ("ws", "r1", "api", "idle", "parado", "", "/x/api", "workspace", True),
+            ("ws", "r2", "web", "idle", "parado", "", "/x/web", "workspace", False),
+        ],
+        console_active=False,
+    )
+    rows = {r._runner_id: r for r in _rows(footer)}
+    chk1 = rows["r1"].findChild(QCheckBox)
+    chk2 = rows["r2"].findChild(QCheckBox)
+    assert chk1 is not None and chk1.isChecked() is True
+    assert chk2 is not None and chk2.isChecked() is False
+
+
+def test_console_runner_has_no_stack_checkbox(qapp):
+    footer = SidebarFooter()
+    footer.set_console_runners(
+        [
+            ("ws", "rc", "api", "idle", "parado", "", "/x/api", "console", True),
+        ],
+        console_active=True,
+    )
+    rows = {r._runner_id: r for r in _rows(footer)}
+    assert rows["rc"].findChild(QCheckBox) is None
+
+
+def test_toggling_stack_checkbox_emits_signal(qapp):
+    footer = SidebarFooter()
+    got = []
+    footer.runner_stack_toggle_requested.connect(
+        lambda wid, rid, on: got.append((wid, rid, on))
+    )
+    footer.set_console_runners(
+        [
+            ("ws", "r1", "api", "idle", "parado", "", "/x/api", "workspace", True),
+        ],
+        console_active=False,
+    )
+    row = _rows(footer)[0]
+    row.findChild(QCheckBox).setChecked(False)
+    assert got == [("ws", "r1", False)]

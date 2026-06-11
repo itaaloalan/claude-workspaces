@@ -1983,6 +1983,9 @@ class MainWindow(QMainWindow):
         builder.console_runner_requested.connect(self._open_footer_runner)
         builder.runner_toggle_requested.connect(self._toggle_runner_from_sidebar)
         builder.runner_restart_requested.connect(self._restart_runner_from_sidebar)
+        builder.runner_stack_toggle_requested.connect(
+            self._set_runner_include_in_stack
+        )
         builder.console_runners_remove_requested.connect(
             self._remove_active_console_runners
         )
@@ -3778,6 +3781,31 @@ class MainWindow(QMainWindow):
         if rw is not None:
             rw.set_cwd_override(path)
 
+    def _set_runner_include_in_stack(
+        self, workspace_id: str, runner_id: str, included: bool
+    ) -> None:
+        """Checkbox 'criar no console' de um runner workspace mudou: grava em
+        `runner.include_in_stack` e persiste. É essa flag que o '⬇ Subir
+        stack' lê pra decidir quais runners copiar pro console."""
+        ws = self.workspaces_coord.find_by_id(workspace_id)
+        if ws is None:
+            return
+        runner = next((r for r in ws.runners if r.id == runner_id), None)
+        if runner is None or bool(runner.include_in_stack) == bool(included):
+            return
+        runner.include_in_stack = bool(included)
+        # Espelha na config do RunnerWidget vivo (se houver) — mantém o objeto
+        # que o raise_stack_here lê em sincronia.
+        area = self._runner_areas.get(ws.id)
+        if area is not None:
+            rw = area.widget_for(runner_id)
+            if rw is not None:
+                rw.update_config(runner)
+        self._persist_workspace(ws, refresh=False)
+        # Re-render do footer pra o cache (_last_runner_rows) não reverter o
+        # checkbox num colapso/expand de seção posterior.
+        self._refresh_console_runners_footer()
+
     def _runner_display_cwd(self, runner, ws: "Workspace") -> str:
         """Cwd a exibir pra um runner sem RunnerWidget realizado: espelha a
         resolução do widget — last_cwd persistido (se o dir ainda existe) >
@@ -4183,7 +4211,7 @@ class MainWindow(QMainWindow):
 
         # Workspace-scope primeiro, console-scope depois — o footer renderiza
         # cada grupo sob seu próprio sub-header ("workspace"/"console").
-        rows: list[tuple[str, str, str, str, str, str, str, str]] = []
+        rows: list[tuple[str, str, str, str, str, str, str, str, bool]] = []
         for runner in sorted(
             runners, key=lambda r: bool(r.console_session_id)
         ):
@@ -4212,7 +4240,7 @@ class MainWindow(QMainWindow):
                 status_label = f":{runner.port} · {status_label}"
             rows.append(
                 (ws.id, runner.id, runner.name or "(runner)", state,
-                 status_label, url, cwd, scope)
+                 status_label, url, cwd, scope, bool(runner.include_in_stack))
             )
         setter(rows, isinstance(term, TerminalWidget))
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.2] — 2026-06-11
+
+### Novidades
+- **Checkbox "criar no console" por runner no painel Runners.** Cada runner da
+  seção **workspace** (no painel Runners do rodapé da sidebar) ganhou um
+  checkbox que liga/desliga `include_in_stack` — a flag que decide se o runner
+  é copiado pro console no **⬇ Subir stack**. Antes isso só dava pra mudar
+  abrindo o diálogo de editar runner; agora é um toggle rápido e visível, dá
+  pra ver de relance quais runners sobem pra stack do console. Os runners da
+  seção **console** (que já são cópias) não mostram o checkbox.
+  - `_RunnerFooterRow` (sidebar_footer.py) ganhou o checkbox (só no escopo
+    workspace) e o sinal `runner_stack_toggle_requested`; `MainWindow`
+    persiste em `runner.include_in_stack` via `_set_runner_include_in_stack`.
+
 ## [1.3.1] — 2026-06-11
 
 ### Melhorias

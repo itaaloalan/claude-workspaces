@@ -496,6 +496,9 @@ class SidebarBuilder:
         self.console_runner_requested = self._footer.console_runner_requested
         self.runner_toggle_requested = self._footer.runner_toggle_requested
         self.runner_restart_requested = self._footer.runner_restart_requested
+        self.runner_stack_toggle_requested = (
+            self._footer.runner_stack_toggle_requested
+        )
         self.console_runners_remove_requested = (
             self._footer.console_runners_remove_requested
         )
