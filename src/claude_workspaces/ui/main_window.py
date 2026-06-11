@@ -1226,14 +1226,14 @@ class MainWindow(QMainWindow):
             title="Skills",
             icon="✦",
             factory=lambda mw: SkillsPanel(settings=mw.settings),
-            default_open=True,
+            default_open=False,
         ),
         DockPanelSpec(
             panel_id="files",
             title="Arquivos",
             icon="📁",
             factory=lambda mw: mw._build_files_panel(),
-            default_open=True,
+            default_open=False,
         ),
         DockPanelSpec(
             panel_id="memory",

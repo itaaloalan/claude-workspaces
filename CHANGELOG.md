@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.4.0] — 2026-06-11
+
+### Novidades
+- **Feed de atividade ao vivo do worktree no painel Git.** O painel Git ganhou,
+  no topo, um feed cronológico estilo terminal que mostra os arquivos sendo
+  tocados em **tempo real** enquanto o agente trabalha: cada mudança aparece
+  com horário, glyph/cor por tipo (`+` novo · verde, `~` modificado · âmbar,
+  `−` deletado · vermelho, `→` renomeado · azul) e contador `±linhas`. Ao
+  selecionar um workspace/console o feed lista o estado atual uma vez
+  (baseline, esmaecido, sem horário) e a partir daí só registra o que muda —
+  scan idêntico não gera ruído. A árvore de arquivos, o diff e a área de
+  commit continuam logo abaixo, colapsáveis pelos handles do splitter.
+  - Detecção instantânea: o `QFileSystemWatcher` do `GitPanel` passou a
+    observar também os **diretórios do working tree** (antes só os paths de
+    `.git`), com poda de pastas pesadas (`node_modules`, `.venv`, `dist`, …)
+    e teto de 1500 dirs pra não estourar o inotify. Os watches do worktree são
+    estáveis (recriados só quando o conjunto de repos muda); os de `.git`
+    continuam reatados a cada refresh. `git diff --numstat` (working + staged)
+    alimenta o `±linhas`, coletado junto do `git status` no mesmo scan async.
+- **Coluna "Ferramentas" (dock direito) mais enxuta.** Por padrão o dock abre
+  agora **só com o painel Git** — antes abria Git **+** Skills **+** Arquivos
+  empilhados, o que poluía a coluna. Skills e Arquivos seguem a um clique no
+  strip vertical e a preferência aberto/fechado continua sendo persistida.
+
 ## [1.3.2] — 2026-06-11
 
 ### Novidades

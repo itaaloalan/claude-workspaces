@@ -1,4 +1,6 @@
 import logging
+import os
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -64,13 +66,48 @@ from .spinner import Spinner
 log = logging.getLogger(__name__)
 
 
+def _collect_numstat(folder: str) -> dict[str, tuple[int, int]]:
+    """{rel_path: (added, removed)} combinando working-tree e staged. Linhas
+    binárias ('-') viram (0, 0). Alimenta o ±linhas do feed ao vivo; é
+    best-effort (renames simples normalizados pro caminho novo)."""
+    out: dict[str, tuple[int, int]] = {}
+    for extra in ([], ["--cached"]):
+        try:
+            r = subprocess.run(
+                ["git", "diff", "--numstat", *extra],
+                cwd=folder,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+        if r.returncode != 0:
+            continue
+        for line in r.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) != 3:
+                continue
+            a, d, path = parts
+            added = int(a) if a.isdigit() else 0
+            removed = int(d) if d.isdigit() else 0
+            # rename "old => new"; "{a => b}/c" fica cru (raro no feed).
+            if " => " in path and "{" not in path:
+                path = path.split(" => ", 1)[1]
+            out[path] = (added, removed)
+    return out
+
+
 class _StatusScanSignals(QObject):
-    done = Signal(int, dict)  # epoch, {folder: GitStatus}
+    # epoch, {folder: GitStatus}, {folder: {path: (added, removed)}}
+    done = Signal(int, dict, dict)
 
 
 class _StatusScanTask(QRunnable):
     """Roda `get_status` (subprocess `git status`) fora da UI thread pra cada
-    pasta. Só devolve dados (GitStatus); o rebuild da árvore fica na UI thread."""
+    pasta, mais `git diff --numstat` pras ±linhas do feed. Só devolve dados;
+    o rebuild da árvore e o feed ficam na UI thread."""
 
     def __init__(self, epoch: int, folders: list[str], signals: _StatusScanSignals) -> None:
         super().__init__()
@@ -80,13 +117,18 @@ class _StatusScanTask(QRunnable):
 
     def run(self) -> None:
         statuses: dict[str, GitStatus] = {}
+        numstats: dict[str, dict[str, tuple[int, int]]] = {}
         for folder in self.folders:
             try:
                 statuses[folder] = get_status(folder)
             except Exception:
                 log.exception("git_panel: get_status falhou em %s", folder)
                 statuses[folder] = GitStatus(folder=folder, is_repo=False)
-        self.signals.done.emit(self.epoch, statuses)
+            try:
+                numstats[folder] = _collect_numstat(folder)
+            except Exception:
+                numstats[folder] = {}
+        self.signals.done.emit(self.epoch, statuses, numstats)
 
 
 STATUS_COLOR = {
@@ -105,6 +147,42 @@ POLL_INTERVAL_MS = 30_000
 T_GROUP = "group"
 T_FILE = "file"
 T_REPO = "repo"
+
+# Pastas que o watcher do worktree nunca observa (pesadas/irrelevantes pro
+# feed) + teto de diretórios pra não estourar o limite de inotify.
+_WATCH_SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+    "dist", "build", "target", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    ".next", ".nuxt", ".idea", ".gradle", "coverage", ".turbo", "vendor",
+    ".tox", ".cache", "out", "bin", "obj",
+}
+_WATCH_DIR_CAP = 1500
+
+# Glyph + cor por código de status (mesma paleta do STATUS_COLOR/diálogo de
+# push) usados nas linhas do feed ao vivo.
+_FEED_GLYPH = {"A": "+", "M": "~", "D": "−", "R": "→", "C": "→", "T": "~"}
+_FEED_COLOR = {
+    "A": "#5ac35a", "M": "#e0b86a", "D": "#d57272",
+    "R": "#7aa6e6", "C": "#7aa6e6", "T": "#e0b86a",
+}
+
+
+def _worktree_watch_dirs(folder: str) -> list[str]:
+    """Diretórios do working tree a observar. O QFileSystemWatcher não é
+    recursivo, então cada subpasta entra na lista; podamos pastas pesadas
+    (_WATCH_SKIP_DIRS) e limitamos a _WATCH_DIR_CAP. inotify num diretório
+    reporta create/delete/modify dos arquivos contidos — é o que dispara o
+    feed quando um arquivo é salvo."""
+    dirs: list[str] = []
+    try:
+        for root, subdirs, _files in os.walk(folder):
+            subdirs[:] = [d for d in subdirs if d not in _WATCH_SKIP_DIRS]
+            dirs.append(root)
+            if len(dirs) >= _WATCH_DIR_CAP:
+                break
+    except OSError:
+        pass
+    return dirs
 
 
 def _html(text: str) -> str:
@@ -274,6 +352,26 @@ class GitPanel(QWidget):
         # Área de commit
         commit_area = self._build_commit_area()
 
+        # Feed de atividade ao vivo do worktree — fluxo cronológico dos arquivos
+        # tocados (criados/modificados/deletados) com ±linhas, estilo terminal.
+        # É o "hero" do painel: fica no topo do splitter e visível por padrão.
+        self._feed = QPlainTextEdit()
+        self._feed.setReadOnly(True)
+        self._feed.setMaximumBlockCount(200)  # descarta linhas antigas
+        self._feed.setMinimumHeight(80)
+        self._feed.setPlaceholderText(
+            "Mudanças no worktree aparecem aqui em tempo real…"
+        )
+        fmono = QFont("monospace")
+        fmono.setStyleHint(QFont.StyleHint.Monospace)
+        self._feed.setFont(fmono)
+        self._feed.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #0e0e0e; border: 1px solid #2c2c2c;"
+            "  border-radius: 6px; color: #cfcfcf; padding: 4px;"
+            "}"
+        )
+
         # Console de atividade git (commits, merges, checkouts, pulls, fetch)
         # — alimentado pelas ações do app e pelo reflog (captura também o que
         # as skills/terminal fazem). Oculto até ter algo / toggle na toolbar.
@@ -304,13 +402,15 @@ class GitPanel(QWidget):
             "QSplitter::handle { background: #2a2a2a; }"
             "QSplitter::handle:hover { background: #3d6ea8; }"
         )
+        main_split.addWidget(self._feed)
         main_split.addWidget(split)
         main_split.addWidget(commit_area)
         main_split.addWidget(self._activity)
-        main_split.setStretchFactor(0, 1)
-        main_split.setStretchFactor(1, 0)
-        main_split.setStretchFactor(2, 0)
-        main_split.setSizes([400, 110, 0])
+        main_split.setStretchFactor(0, 0)  # feed
+        main_split.setStretchFactor(1, 1)  # tree/diff
+        main_split.setStretchFactor(2, 0)  # commit
+        main_split.setStretchFactor(3, 0)  # atividade git
+        main_split.setSizes([200, 320, 110, 0])
         self._main_split = main_split
         outer.addWidget(main_split, stretch=1)
         # Byte offset já lido de cada reflog (.git/logs/HEAD) por repo.
@@ -340,6 +440,16 @@ class GitPanel(QWidget):
         self._counter_before_scan = ""
         self._status_spinner = Spinner(parent=self)
         self._status_spinner.tick.connect(self._on_status_spinner_tick)
+
+        # Feed ao vivo: estado por pasta {folder: {path: (code, +, -)}} pra
+        # detectar deltas entre scans; chave do conjunto de pastas pra resetar
+        # o baseline ao trocar de workspace/console.
+        self._prev_event_state: dict[str, dict[str, tuple]] = {}
+        self._feed_folders_key: tuple = ()
+        # Diretórios do worktree atualmente observados (caros de montar — só
+        # recomputados quando o conjunto de repos muda).
+        self._wt_dirs: list[str] = []
+        self._wt_dirs_key: tuple = ()
 
     # ---------- construção ----------
 
@@ -550,7 +660,7 @@ class GitPanel(QWidget):
         if not active_folders:
             # Sem pastas → aplica direto, sem thread.
             self._status_spinner.stop()
-            self._apply_statuses(self._status_epoch, {})
+            self._apply_statuses(self._status_epoch, {}, {})
             return
 
         # Coleta `get_status` (subprocess) numa thread — não bloqueia a UI.
@@ -566,13 +676,24 @@ class GitPanel(QWidget):
     def _on_status_spinner_tick(self, frame: str) -> None:
         self._counter.setText(f"{frame} atualizando…")
 
-    def _apply_statuses(self, epoch: int, new_statuses: dict) -> None:
+    def _apply_statuses(self, epoch: int, new_statuses: dict, numstats: dict) -> None:
         # Descarta scan obsoleto (override/seleção mudou no meio do caminho).
         if epoch != self._status_epoch:
             return
         self._status_spinner.stop()
         prev_unchecked = self._prev_unchecked
         active_folders = self._active_folders()
+
+        # Feed ao vivo: roda ANTES do early-return de fingerprint, porque o
+        # fingerprint ignora ±linhas — editar de novo um arquivo já "M" não
+        # mexe na árvore, mas precisa aparecer no feed. Ao trocar o conjunto
+        # de pastas (workspace/console), zera o baseline pra não misturar.
+        folders_key = tuple(active_folders)
+        if folders_key != self._feed_folders_key:
+            self._feed.clear()
+            self._prev_event_state = {}
+            self._feed_folders_key = folders_key
+        self._process_feed_events(active_folders, new_statuses, numstats or {})
 
         # Coleta primeiro, decide depois: se nada mudou desde o último
         # refresh, evita rebuild da árvore (preserva scroll/seleção e zera
@@ -672,6 +793,78 @@ class GitPanel(QWidget):
         self._update_watches(repo_folders)
         self._update_commit_button()
 
+    # ---------- feed ao vivo ----------
+
+    def _process_feed_events(
+        self, active_folders: list[str], statuses: dict, numstats: dict
+    ) -> None:
+        """Compara o estado atual (status + ±linhas) com o do scan anterior
+        e emite uma linha no feed pra cada arquivo novo/alterado. Na primeira
+        vez que vê uma pasta (baseline) lista o estado atual uma vez, sem
+        timbre de 'agora'."""
+        for folder in active_folders:
+            st = statuses.get(folder)
+            if st is None or not st.is_repo:
+                continue
+            counts = numstats.get(folder, {})
+            cur: dict[str, tuple] = {}
+            for f in st.files:
+                code = _status_code(f.status)
+                a, d = counts.get(f.path, (0, 0))
+                cur[f.path] = (code, a, d)
+            prev = self._prev_event_state.get(folder)
+            if prev is None:
+                self._feed_baseline(st, cur)
+            else:
+                for path, tup in cur.items():
+                    if prev.get(path) != tup:
+                        self._feed_event(path, tup)
+            self._prev_event_state[folder] = cur
+
+    def _feed_line(
+        self, path: str, code: str, added: int, removed: int, *, baseline: bool
+    ) -> str:
+        glyph = _FEED_GLYPH.get(code, "~")
+        color = _FEED_COLOR.get(code, "#cfcfcf")
+        counts = ""
+        if added or removed:
+            counts = (
+                f"  <span style='color:#5ac35a'>+{added}</span> "
+                f"<span style='color:#d57272'>-{removed}</span>"
+            )
+        body = (
+            f"<span style='color:{color}'>{glyph}</span> "
+            f"<span style='color:{color}'>{_html(path)}</span>{counts}"
+        )
+        if baseline:
+            return f"<span style='color:#666'>·</span> {body}"
+        from datetime import datetime
+
+        ts = datetime.now().strftime("%H:%M:%S")
+        return f"<span style='color:#666'>{ts}</span>  {body}"
+
+    def _feed_baseline(self, st: GitStatus, cur: dict[str, tuple]) -> None:
+        if not cur:
+            return
+        branch = st.branch or "?"
+        sep = (
+            f"<span style='color:#555'>── {_html(branch)} · "
+            f"{len(cur)} mudança(s) atual(is) ──</span>"
+        )
+        self._feed.appendHtml(sep)
+        for path, (code, a, d) in cur.items():
+            self._feed.appendHtml(self._feed_line(path, code, a, d, baseline=True))
+        self._feed_scroll()
+
+    def _feed_event(self, path: str, tup: tuple) -> None:
+        code, a, d = tup
+        self._feed.appendHtml(self._feed_line(path, code, a, d, baseline=False))
+        self._feed_scroll()
+
+    def _feed_scroll(self) -> None:
+        sb = self._feed.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
     def _collect_unchecked_files(self, parent: QTreeWidgetItem, out: set[str]) -> None:
         for i in range(parent.childCount()):
             child = parent.child(i)
@@ -682,11 +875,9 @@ class GitPanel(QWidget):
             else:
                 self._collect_unchecked_files(child, out)
 
-    def _update_watches(self, repo_folders: list[str]) -> None:
-        if self._watcher.files():
-            self._watcher.removePaths(self._watcher.files())
-        if self._watcher.directories():
-            self._watcher.removePaths(self._watcher.directories())
+    def _git_watch_targets(self, repo_folders: list[str]) -> list[str]:
+        """Paths dentro de .git (index/HEAD/refs/reflog) — baratos, reatados a
+        cada refresh porque saves atômicos do git removem o watch."""
         targets: list[str] = []
         for folder in repo_folders:
             dirs = resolve_git_dirs(folder)
@@ -707,8 +898,35 @@ class GitPanel(QWidget):
             reflog = git_dir / "logs" / "HEAD"
             if reflog.exists():
                 targets.append(str(reflog))
-        if targets:
-            self._watcher.addPaths(targets)
+        return targets
+
+    def _update_watches(self, repo_folders: list[str]) -> None:
+        # 1) Diretórios do working tree — caros de montar (os.walk); só
+        #    reconstrói quando o conjunto de repos muda. Ficam estáveis no Qt
+        #    e são o que faz o feed reagir na hora a um arquivo salvo.
+        key = tuple(repo_folders)
+        if key != self._wt_dirs_key:
+            if self._wt_dirs:
+                old = set(self._wt_dirs)
+                stale = [d for d in self._watcher.directories() if d in old]
+                if stale:
+                    self._watcher.removePaths(stale)
+            self._wt_dirs = []
+            for folder in repo_folders:
+                self._wt_dirs.extend(_worktree_watch_dirs(folder))
+            self._wt_dirs_key = key
+            if self._wt_dirs:
+                self._watcher.addPaths(self._wt_dirs)
+
+        # 2) Paths do .git — reata sempre, preservando os dirs do worktree.
+        wt = set(self._wt_dirs)
+        stale_files = list(self._watcher.files())
+        stale_git_dirs = [d for d in self._watcher.directories() if d not in wt]
+        if stale_files or stale_git_dirs:
+            self._watcher.removePaths(stale_files + stale_git_dirs)
+        git_targets = self._git_watch_targets(repo_folders)
+        if git_targets:
+            self._watcher.addPaths(git_targets)
 
     # ---------- console de atividade ----------
 
@@ -717,15 +935,16 @@ class GitPanel(QWidget):
         self._activity.setVisible(show)
         # Ao mostrar, garante uma altura inicial no splitter (do contrário Qt
         # daria só o minimumHeight); ao esconder, colapsa o painel.
+        # Índices do _main_split: 0=feed, 1=tree/diff, 2=commit, 3=atividade.
         sizes = self._main_split.sizes()
-        if len(sizes) == 3:
-            if show and sizes[2] == 0:
-                take = max(120, sizes[0] // 4)
-                sizes[0] = max(120, sizes[0] - take)
-                sizes[2] = take
+        if len(sizes) == 4:
+            if show and sizes[3] == 0:
+                take = max(120, sizes[1] // 4)
+                sizes[1] = max(120, sizes[1] - take)
+                sizes[3] = take
             elif not show:
-                sizes[0] += sizes[2]
-                sizes[2] = 0
+                sizes[1] += sizes[3]
+                sizes[3] = 0
             self._main_split.setSizes(sizes)
 
     def _log_activity(self, text: str, color: str | None = None) -> None:
