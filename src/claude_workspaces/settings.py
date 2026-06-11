@@ -31,14 +31,11 @@ class Settings:
     #     CLI: "default", "acceptEdits", "plan", "bypassPermissions", "auto",
     #     "dontAsk". Aplica no startup, mas o usuário ainda pode trocar via
     #     Shift+Tab depois (assim como o popup de modos faz).
-    # `claude_model`: --model <id|alias>. Alias ("opus", "sonnet", "haiku") ou
-    #     nome completo ("claude-sonnet-4-6"). Vazio = default do Claude.
     # `claude_effort`: --effort <low|medium|high|xhigh|max>. Vazio = default.
     # `claude_allowed_tools` / `claude_disallowed_tools`: lista CSV ou separada
     #     por espaço de tool specs (ex.: "Bash(git *) Edit"). Passa pra
     #     --allowedTools / --disallowedTools.
     claude_permission_mode: str = ""
-    claude_model: str = ""
     claude_effort: str = ""
     claude_allowed_tools: str = ""
     claude_disallowed_tools: str = ""
@@ -153,7 +150,8 @@ class Settings:
     # (POST JSON) no webhook configurado, respeitando os mesmos mutes por
     # tipo/workspace da central. A URL tem o formato
     # https://discord.com/api/webhooks/<id>/<token>. Vazio = desligado.
-    discord_webhook_enabled: bool = False
+    # Habilitado por padrão; só dispara de fato quando a URL está preenchida.
+    discord_webhook_enabled: bool = True
     discord_webhook_url: str = ""
     # Debounce da transição working→idle no status da sidebar. Why: o parser
     # de status oscila entre is_working True/False enquanto o Claude alterna
@@ -236,8 +234,6 @@ class Settings:
         flags: list[str] = []
         if self.claude_permission_mode:
             flags += ["--permission-mode", self.claude_permission_mode]
-        if self.claude_model:
-            flags += ["--model", self.claude_model]
         if self.claude_effort:
             flags += ["--effort", self.claude_effort]
         if self.claude_allowed_tools.strip():

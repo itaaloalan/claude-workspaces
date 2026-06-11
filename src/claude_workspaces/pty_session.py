@@ -5,7 +5,6 @@ import pty
 import signal
 import struct
 import termios
-import time
 
 from PySide6.QtCore import QObject, QSocketNotifier, Signal
 
@@ -239,31 +238,54 @@ class PtySession(QObject):
                 pass
             self.master_fd = None
         if self.pid is not None:
-            try:
-                # Loop curto pra dar chance do filho ser reaped — sob carga
-                # do KDE/Wayland, o socket EOF chega antes do exit status
-                # estar disponível e WNOHANG devolve (0, 0). Tentamos com
-                # WNOHANG umas poucas vezes e desistimos rapido pra não
-                # bloquear o event loop.
-                wait_pid = 0
-                wait_status = 0
-                for _ in range(5):
-                    wait_pid, wait_status = os.waitpid(self.pid, os.WNOHANG)
-                    if wait_pid != 0:
-                        break
-                    time.sleep(0.01)
-                if wait_pid != 0:
-                    # POSIX status: low byte = sinal/0, alto byte = exit code.
-                    if os.WIFEXITED(wait_status):
-                        self.last_exit_code = os.WEXITSTATUS(wait_status)
-                    elif os.WIFSIGNALED(wait_status):
-                        # Convenção shell: 128 + nº do sinal pra distinguir
-                        # de exit codes "normais".
-                        self.last_exit_code = 128 + os.WTERMSIG(wait_status)
-                    else:
-                        self.last_exit_code = -1
-                else:
-                    self.last_exit_code = -1
-            except OSError:
-                self.last_exit_code = -1
+            pid = self.pid
             self.pid = None
+            # Reap não-bloqueante: uma tentativa WNOHANG já pega o exit code
+            # no caso comum (filho já morto). Sob carga, o EOF do pty chega
+            # ANTES do exit status ficar pronto e o WNOHANG devolve (0, 0) —
+            # nesse caso NÃO abandonamos o filho: agendamos reaping assíncrono
+            # que insiste até recolher. O bug antigo desistia em 50ms (com
+            # time.sleep bloqueando a UI) e zerava o pid, deixando o processo
+            # como zumbi <defunct> pra sempre (ninguém mais dava wait()).
+            if not self._reap(pid):
+                self.last_exit_code = -1
+                self._schedule_reap(pid)
+
+    def _reap(self, pid: int) -> bool:
+        """Tenta recolher `pid` sem bloquear (WNOHANG). Atualiza
+        last_exit_code se conseguir. Retorna True se recolheu (ou se o filho
+        já não é nosso/já foi recolhido), False se ainda está vivo."""
+        try:
+            wait_pid, wait_status = os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            return True  # já recolhido por outro waiter
+        except OSError:
+            return True  # nada que possamos fazer
+        if wait_pid == 0:
+            return False  # ainda rodando / status indisponível
+        # POSIX status: low byte = sinal/0, alto byte = exit code.
+        if os.WIFEXITED(wait_status):
+            self.last_exit_code = os.WEXITSTATUS(wait_status)
+        elif os.WIFSIGNALED(wait_status):
+            # Convenção shell: 128 + nº do sinal pra distinguir de exit
+            # codes "normais".
+            self.last_exit_code = 128 + os.WTERMSIG(wait_status)
+        else:
+            self.last_exit_code = -1
+        return True
+
+    def _schedule_reap(self, pid: int, attempts: int = 0) -> None:
+        """Reaping assíncrono e não-bloqueante: insiste em WNOHANG via QTimer
+        até o filho ser recolhido, evitando zumbis sob carga (o processo já
+        morreu; é só questão de o kernel publicar o exit status). Backoff
+        suave (50ms no 1º segundo, depois 500ms) e teto alto de salvaguarda
+        pra nunca virar timer eterno."""
+        from PySide6.QtCore import QTimer
+
+        if self._reap(pid):
+            return
+        if attempts >= 600:
+            log.warning("desisti de reapear pid %s após %d tentativas", pid, attempts)
+            return
+        delay = 50 if attempts < 20 else 500
+        QTimer.singleShot(delay, lambda: self._schedule_reap(pid, attempts + 1))

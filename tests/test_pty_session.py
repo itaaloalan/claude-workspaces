@@ -178,15 +178,51 @@ def test_finished_with_status_maps_non_zero_exit(session):
 
 
 def test_finished_with_status_unknown_when_waitpid_returns_zero(session):
-    """waitpid devolvendo (0, 0) significa "não foi possível reapear" —
-    last_exit_code vira -1 e o sinal carrega -1."""
+    """waitpid devolvendo (0, 0) = exit status ainda não disponível: o sinal
+    sai com -1 (desconhecido) na hora, mas o filho NÃO é abandonado — agenda
+    reaping assíncrono pra recolher depois e não deixar zumbi <defunct>."""
     session.master_fd = 999
     session.pid = 12345
     statuses = []
     session.finished_with_status.connect(lambda c: statuses.append(c))
     with patch("claude_workspaces.pty_session.os.read", return_value=b""), \
          patch("claude_workspaces.pty_session.os.waitpid", return_value=(0, 0)), \
-         patch("claude_workspaces.pty_session.time.sleep", return_value=None):
+         patch.object(session, "_schedule_reap") as sched:
         session._on_readable()
     assert session.last_exit_code == -1
     assert statuses == [-1]
+    # O fix: em vez de zerar o pid e abandonar, agenda o reaping assíncrono.
+    sched.assert_called_once_with(12345)
+
+
+def test_schedule_reap_retries_until_child_collected(session):
+    """_schedule_reap insiste via QTimer até o filho ser recolhido — nunca
+    deixa zumbi. Aqui o waitpid só 'libera' o status na 3ª tentativa; o
+    QTimer é disparado sincronamente pra simular o loop sem event loop real."""
+    calls = {"n": 0}
+
+    def fake_waitpid(pid, flags):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return (0, 0)  # status ainda indisponível
+        return (pid, 0)  # exit 0 disponível
+
+    def fire_now(_delay, cb):
+        cb()  # simula o disparo do timer
+
+    with patch("claude_workspaces.pty_session.os.waitpid", side_effect=fake_waitpid), \
+         patch("PySide6.QtCore.QTimer.singleShot", side_effect=fire_now):
+        session._schedule_reap(4242)
+
+    assert calls["n"] == 3  # insistiu até conseguir
+    assert session.last_exit_code == 0  # recolheu e capturou o exit code
+
+
+def test_schedule_reap_stops_when_already_collected(session):
+    """Se o filho já foi recolhido (ChildProcessError), para na hora sem
+    reagendar timer."""
+    with patch("claude_workspaces.pty_session.os.waitpid",
+               side_effect=ChildProcessError()), \
+         patch("PySide6.QtCore.QTimer.singleShot") as timer:
+        session._schedule_reap(4242)
+    timer.assert_not_called()

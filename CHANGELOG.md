@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.3.0] — 2026-06-11
+
+### Novidades
+- **Monitor de RAM/CPU no rodapé + gerenciador de recursos.** Novo segmento na
+  status bar mostrando o consumo de RAM e CPU do app **e de tudo que ele
+  forkou** — runners, consoles Claude e o navegador embutido (QtWebEngine). A
+  cor acompanha o RSS total (verde → amber ≥1.5GB → vermelho ≥3GB) e fica
+  vermelha quando há processos moribundos (`<defunct>`). Amostra a cada 3s; o
+  %CPU é delta entre amostras.
+  - **Gerenciador de recursos** (clique no segmento): lista, ordenado por RAM,
+    cada runner/console + o navegador embutido + o app, com barra de uso,
+    %CPU e contagem de processos. Runners pesados têm botão **⏹ Encerrar**
+    (consoles aparecem só pra dar visibilidade — não são mortos daqui pra não
+    derrubar uma sessão Claude em trabalho). Auto-atualiza a cada 2s.
+  - **🧹 Liberar RAM**: faxina não-destrutiva — recolhe processos moribundos
+    (zumbis), roda o GC do Python e devolve heap livre ao sistema via
+    `malloc_trim`. Relata quantos MB saíram, quantos zumbis foram recolhidos e
+    quantos objetos o GC liberou. Não para runners.
+  - Lógica em `process_monitor.py` (psutil, caminha a árvore enraizada no PID
+    do app e agrupa por session leader); UI em `ui/resource_dialog.py`.
+  - Nova dependência: `psutil>=5.9`.
+
 ## [1.2.0] — 2026-06-09
 
 ### Novidades

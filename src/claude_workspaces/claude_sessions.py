@@ -183,18 +183,30 @@ def read_recent_turns(
     return all_turns[-max_total:]
 
 
+_ENTER_WORKTREE_RE = re.compile(
+    r"Entered worktree at (?P<path>.+?) on branch (?P<branch>\S+?)\.(?:\s|$)"
+)
+
+
 def scan_worktree_adds(
     jsonl_path: Path, offset: int
 ) -> tuple[list[tuple[str, str]], int]:
-    """Lê linhas novas do JSONL a partir de `offset` (bytes) procurando
-    comandos Bash `git worktree add ...` executados pela sessão (ex.: skill
-    /criar-worktree). Devolve ([(worktree_path, branch_ou_vazio), ...],
-    novo_offset).
+    """Lê linhas novas do JSONL a partir de `offset` (bytes) procurando o
+    console mudando para um worktree: comandos Bash `git worktree add ...`
+    (ex.: skill /criar-worktree), `git worktree move <old> <new>` (renomeio
+    do worktree adotado — o hit aponta pro destino) ou o resultado da tool
+    nativa EnterWorktree ("Entered worktree at <path> on branch <branch>.").
+    Devolve ([(worktree_path, branch_ou_vazio), ...], novo_offset).
 
-    Detecção barata: substring 'worktree add' na linha crua antes do
-    json.loads. Só consome linhas terminadas em \\n — a última pode estar
-    parcial (sessão ainda escrevendo) e fica pro próximo scan. Quem chama
-    valida o path (is_dir + is_worktree_path) antes de associar."""
+    Detectar EnterWorktree pelo tool_result (e não pelo tool_use) cobre as
+    variantes name/path e garante que a troca foi bem-sucedida. O Bash com
+    path em variável shell ("$WT") gera hit inválido que o caller descarta
+    na validação.
+
+    Detecção barata: substring na linha crua antes do json.loads. Só consome
+    linhas terminadas em \\n — a última pode estar parcial (sessão ainda
+    escrevendo) e fica pro próximo scan. Quem chama valida o path
+    (is_dir + is_worktree_path) antes de associar."""
     import shlex
 
     try:
@@ -211,7 +223,11 @@ def scan_worktree_adds(
     new_offset = offset + end + 1
     hits: list[tuple[str, str]] = []
     for raw in data[: end + 1].splitlines():
-        if b"worktree add" not in raw:
+        if (
+            b"worktree add" not in raw
+            and b"worktree move" not in raw
+            and b"Entered worktree at" not in raw
+        ):
             continue
         try:
             msg = json.loads(raw)
@@ -224,25 +240,39 @@ def scan_worktree_adds(
         if not isinstance(content, list):
             continue
         for block in content:
-            if (
-                not isinstance(block, dict)
-                or block.get("type") != "tool_use"
-                or block.get("name") != "Bash"
-            ):
+            if not isinstance(block, dict):
+                continue
+            # Tool nativa EnterWorktree: o result confirma a troca e traz
+            # path + branch prontos.
+            if block.get("type") == "tool_result":
+                text = block.get("content")
+                if isinstance(text, list):
+                    text = " ".join(
+                        str(b.get("text", ""))
+                        for b in text
+                        if isinstance(b, dict) and b.get("type") == "text"
+                    )
+                m = _ENTER_WORKTREE_RE.search(str(text or ""))
+                if m:
+                    hits.append((m.group("path"), m.group("branch")))
+                continue
+            if block.get("type") != "tool_use" or block.get("name") != "Bash":
                 continue
             cmd = str((block.get("input") or {}).get("command") or "")
-            if "worktree add" not in cmd:
+            if "worktree add" not in cmd and "worktree move" not in cmd:
                 continue
             try:
                 toks = shlex.split(cmd)
             except ValueError:
                 toks = cmd.split()
-            # Acha o par "worktree add" e parseia o resto posicionalmente —
-            # cobre tanto `add <path> -b <branch>` (skill) quanto
-            # `add -b <branch> <path> [base]` (git_worktree.add_worktree).
+            # Acha o par "worktree add|move" e parseia o resto
+            # posicionalmente — cobre `add <path> -b <branch>` (skill),
+            # `add -b <branch> <path> [base]` (git_worktree.add_worktree) e
+            # `move <old> <new>` (hit no destino).
             for i in range(len(toks) - 1):
-                if toks[i] != "worktree" or toks[i + 1] != "add":
+                if toks[i] != "worktree" or toks[i + 1] not in ("add", "move"):
                     continue
+                sub = toks[i + 1]
                 rest = toks[i + 2:]
                 branch = ""
                 positional: list[str] = []
@@ -258,7 +288,10 @@ def scan_worktree_adds(
                         continue
                     positional.append(t)
                     j += 1
-                if positional:
+                if sub == "move":
+                    if len(positional) >= 2:
+                        hits.append((positional[1], ""))
+                elif positional:
                     hits.append((positional[0], branch))
                 break
     return hits, new_offset

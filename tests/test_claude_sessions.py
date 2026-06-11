@@ -265,6 +265,97 @@ def test_scan_worktree_adds_detects_b_before_path(tmp_path: Path):
     assert hits == [("/tmp/wt", "claude/123")]
 
 
+def test_scan_worktree_adds_detects_move(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(
+        _bash_line(
+            'git -C /repo worktree move "/repo.claude/ws_fix_old" "/repo.claude/ws_fix_new"'
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    hits, offset = scan_worktree_adds(f, 0)
+    assert hits == [("/repo.claude/ws_fix_new", "")]
+    assert offset == f.stat().st_size
+
+
+def test_scan_worktree_adds_move_com_um_positional_ignora(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(
+        _bash_line("git worktree move /repo.claude/so_um") + "\n",
+        encoding="utf-8",
+    )
+    hits, _ = scan_worktree_adds(f, 0)
+    assert hits == []
+
+
+def _tool_result_line(text: str) -> str:
+    return json.dumps({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": "toolu_x",
+                "content": text,
+            }],
+        },
+    })
+
+
+def test_scan_worktree_adds_detects_enter_worktree_result(tmp_path: Path):
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(
+        _tool_result_line(
+            "Entered worktree at /repo.claude/ws_feat_x on branch feat/x. "
+            "The session is now working in the worktree."
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    hits, offset = scan_worktree_adds(f, 0)
+    assert hits == [("/repo.claude/ws_feat_x", "feat/x")]
+    assert offset == f.stat().st_size
+
+
+def test_scan_worktree_adds_enter_worktree_result_em_lista(tmp_path: Path):
+    # content do tool_result também pode vir como lista de blocos text.
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    line = json.dumps({
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": "toolu_x",
+                "content": [{
+                    "type": "text",
+                    "text": "Entered worktree at /tmp/wt3 on branch fix/z. Use ExitWorktree to leave.",
+                }],
+            }],
+        },
+    })
+    f.write_text(line + "\n", encoding="utf-8")
+    hits, _ = scan_worktree_adds(f, 0)
+    assert hits == [("/tmp/wt3", "fix/z")]
+
+
+def test_scan_worktree_adds_bash_com_variavel_nao_explode(tmp_path: Path):
+    # Path em variável shell: gera hit "$WT" (caller descarta na validação).
+    from claude_workspaces.claude_sessions import scan_worktree_adds
+    f = tmp_path / "s.jsonl"
+    f.write_text(
+        _bash_line('git worktree add "$WT" "italo/api_dados_xml"') + "\n",
+        encoding="utf-8",
+    )
+    hits, _ = scan_worktree_adds(f, 0)
+    assert hits == [("$WT", "")]
+
+
 def test_scan_worktree_adds_incremental_offset(tmp_path: Path):
     from claude_workspaces.claude_sessions import scan_worktree_adds
     f = tmp_path / "s.jsonl"

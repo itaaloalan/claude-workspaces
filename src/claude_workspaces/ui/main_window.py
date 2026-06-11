@@ -314,6 +314,18 @@ class MainWindow(QMainWindow):
         )
         self._plan_usage_updated_timer.start()
 
+        # Monitor de RAM/CPU do app + tudo que ele forkou (runners, consoles,
+        # QtWebEngine). Amostra a cada 3s e atualiza o segmento da status bar;
+        # o click abre o gerenciador. Tick contínuo porque %CPU é delta entre
+        # amostras — sem o tick periódico a leitura ficaria sempre zerada.
+        from ..process_monitor import ProcessMonitor
+        self._process_monitor = ProcessMonitor()
+        self._resource_timer = QTimer(self)
+        self._resource_timer.setInterval(3_000)
+        self._resource_timer.timeout.connect(self._sample_resources)
+        self._resource_timer.start()
+        QTimer.singleShot(800, self._sample_resources)
+
         # Endpoint local pro plugin de browser (badge/faixa de worktree):
         # serve porta → runner/workspace; a extensão Chrome consulta ao
         # ativar abas localhost. Snapshot empurrado a cada 3s (barato,
@@ -640,6 +652,7 @@ class MainWindow(QMainWindow):
         # workspace ativo; click no console_state foca o console ativo.
         self.status_widgets.workspace.clicked.connect(self._focus_active_workspace_from_status)
         self.status_widgets.console_state.clicked.connect(self._focus_active_console_from_status)
+        self.status_widgets.resources.clicked.connect(self._open_resource_dialog)
 
         # Restaurar tamanhos das colunas internas dos details
         if self.settings.workspace_columns_sizes:
@@ -3098,6 +3111,128 @@ class MainWindow(QMainWindow):
         if not isinstance(ws, Workspace):
             return
         self._focus_terminal_tab(ws, tab_id)
+
+    # ---------- Monitor de recursos (RAM/CPU) ----------
+
+    def _resource_leaders(self) -> dict[int, tuple[str, str]]:
+        """Mapeia pid de session leader → (categoria, rótulo) pra cada runner
+        e console vivo. Best-effort e tolerante a refactor: qualquer pid sem
+        rótulo simplesmente cai no grupo "App" no snapshot."""
+        from ..process_monitor import CAT_CONSOLE, CAT_RUNNER
+        from .runner_widget import RunnerWidget
+        from .terminal_widget import TerminalWidget
+
+        leaders: dict[int, tuple[str, str]] = {}
+        ws_name = {ws.id: ws.name for ws in self.workspaces}
+
+        def add_runner_area(area: object) -> None:
+            tabs = getattr(area, "tabs", None)
+            if tabs is None:
+                return
+            wname = getattr(getattr(area, "_ws", None), "name", "") or ""
+            for i in range(tabs.count()):
+                w = tabs.widget(i)
+                if not isinstance(w, RunnerWidget):
+                    continue
+                pid = getattr(getattr(w, "session", None), "pid", None)
+                if not pid:
+                    continue
+                rc = getattr(w, "_runner", None)
+                rname = getattr(rc, "name", "") or getattr(rc, "id", "") or "runner"
+                label = f"Runner {rname}" + (f" · {wname}" if wname else "")
+                leaders[int(pid)] = (CAT_RUNNER, label)
+
+        for area in self._runner_areas.values():
+            add_runner_area(area)
+        for per_ws in self._console_runner_areas.values():
+            for area in per_ws.values():
+                add_runner_area(area)
+
+        areas = getattr(self.terminals_coord, "_areas", {}) or {}
+        for ws_id, area in areas.items():
+            wname = ws_name.get(ws_id, "")
+            stack = getattr(area, "_stack", None)
+            if stack is None:
+                continue
+            for i in range(stack.count()):
+                w = stack.widget(i)
+                if not isinstance(w, TerminalWidget):
+                    continue
+                pid = getattr(getattr(w, "session", None), "pid", None)
+                if not pid:
+                    continue
+                try:
+                    title = w.effective_title()
+                except Exception:  # noqa: BLE001
+                    title = "console"
+                label = f"Console {title}" + (f" · {wname}" if wname else "")
+                leaders[int(pid)] = (CAT_CONSOLE, label)
+        return leaders
+
+    def _sample_resources(self) -> None:
+        """Tick do monitor: amostra a árvore e atualiza o footer."""
+        try:
+            snap = self._process_monitor.sample(self._resource_leaders())
+        except Exception:  # noqa: BLE001 — monitor nunca pode derrubar a UI
+            log.exception("falha amostrando recursos")
+            return
+        self.status_widgets.set_resources(
+            snap.total_rss, snap.total_cpu, snap.n_zombies
+        )
+
+    def _stop_process_by_pid(self, pid: int) -> None:
+        """Para o runner cujo session leader é `pid` (via PtySession.terminate,
+        que dispara o teardown normal e atualiza a UI). Só runners chegam aqui
+        — consoles não são encerráveis pelo gerenciador."""
+        from .runner_widget import RunnerWidget
+
+        def scan(area: object) -> bool:
+            tabs = getattr(area, "tabs", None)
+            if tabs is None:
+                return False
+            for i in range(tabs.count()):
+                w = tabs.widget(i)
+                if not isinstance(w, RunnerWidget):
+                    continue
+                if getattr(getattr(w, "session", None), "pid", None) != pid:
+                    continue
+                try:
+                    w.session.terminate(kill_group=True)
+                except Exception:  # noqa: BLE001
+                    log.exception("falha encerrando runner pid=%s", pid)
+                return True
+            return False
+
+        for area in self._runner_areas.values():
+            if scan(area):
+                self._sample_resources()
+                return
+        for per_ws in self._console_runner_areas.values():
+            for area in per_ws.values():
+                if scan(area):
+                    self._sample_resources()
+                    return
+
+    def _open_resource_dialog(self) -> None:
+        """Abre (ou reativa) o gerenciador de recursos."""
+        existing = getattr(self, "_resource_dialog", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        from .resource_dialog import ResourceDialog
+
+        dlg = ResourceDialog(
+            snapshot_provider=lambda: self._process_monitor.sample(
+                self._resource_leaders()
+            ),
+            on_free=self._process_monitor.free_memory,
+            on_stop=self._stop_process_by_pid,
+            parent=self,
+        )
+        self._resource_dialog = dlg
+        dlg.finished.connect(lambda *_: setattr(self, "_resource_dialog", None))
+        dlg.show()
 
     def _refresh_status_bar_console(self) -> None:
         """Sincroniza os segmentos de console do footer com o item
@@ -6757,9 +6892,8 @@ class MainWindow(QMainWindow):
                 context_window=ctx_window,
             )
             # NB: a sidebar apenas *exibe* o modelo da sessão (update_session_info
-            # acima). Não persistimos mais em Settings.claude_model: o JSONL inclui
-            # mensagens de subagentes (Task) que rodam em sonnet, o que clobava o
-            # padrão global. O ajuste do padrão é feito só pelo painel de Settings.
+            # acima). O app não força modelo via --model; o padrão global é o do
+            # próprio Claude CLI, ajustado pelo /model.
         # Status do uso do plano (janela de 5h) — label acima do "Novo
         # Workspace". Replica o `Plan usage limits → Current session` do
         # claude.ai.

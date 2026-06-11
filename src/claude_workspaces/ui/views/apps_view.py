@@ -245,6 +245,26 @@ class _AppPage(QWidget):
         except Exception:
             log.exception("Falha salvando state.json do app %s", self._cfg.get("slug"))
 
+    def set_lifecycle(self, state: QWebEnginePage.LifecycleState) -> None:
+        """Move o renderer Chromium da webview pra um estado de ciclo de vida.
+
+        `Discarded` libera o processo renderer inteiro (o app web some da RAM)
+        e o Qt recarrega sozinho da URL atual quando a página volta a `Active`
+        — como o tab-discarding do Chrome. Cookies/login persistem no profile
+        em disco, então é transparente. SPAs pesados embutidos (ClickUp,
+        Taskis) seguravam GBs vivos mesmo fora de vista; descartar quando o
+        usuário não está olhando a aba Apps devolve essa memória.
+
+        `Discarded`/`Frozen` só são aceitos pelo Qt quando a página NÃO está
+        visível — o chamador garante isso (só descarta páginas não-ativas /
+        no hideEvent). `Active` é sempre permitido."""
+        try:
+            page = self._view.page()
+            if page is not None and page.lifecycleState() != state:
+                page.setLifecycleState(state)
+        except Exception:
+            log.debug("setLifecycleState falhou", exc_info=True)
+
 
 class AppsView(QWidget):
     """View top-level pra apps auxiliares (PWAs embutidos)."""
@@ -396,6 +416,44 @@ class AppsView(QWidget):
             self._pages[slug] = page
             self._stack.addWidget(page)
         self._stack.setCurrentWidget(page)
+        self._apply_lifecycle(active=page)
+
+    def _apply_lifecycle(self, active: _AppPage | None) -> None:
+        """Mantém só a página `active` com renderer vivo; descarta as demais.
+
+        Chamado ao trocar de app e no showEvent. Sem isso, todo app já
+        visitado seguia rodando um Chromium completo pra sempre — a causa
+        de RAM cheia / travadas com ClickUp e Taskis embutidos."""
+        active_state = QWebEnginePage.LifecycleState.Active
+        discarded = QWebEnginePage.LifecycleState.Discarded
+        for p in self._pages.values():
+            p.set_lifecycle(active_state if p is active else discarded)
+
+    def hideEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        """Usuário saiu da aba Apps (foi pros terminais / outra view): descarta
+        TODOS os renderers dos apps pra devolver a RAM. Voltam sozinhos da URL
+        persistida quando a aba Apps reaparece (showEvent).
+
+        O discard é adiado um tick do event loop: a troca de visibilidade do
+        QtWebEngine é assíncrona e `Discarded` só é aceito quando a página já
+        não está visível — descartar no mesmo instante do hide deixaria o app
+        ativo preso em Active."""
+        super().hideEvent(event)
+        QTimer.singleShot(0, self._discard_all_if_hidden)
+
+    def _discard_all_if_hidden(self) -> None:
+        if self.isVisible():
+            return  # voltou a aparecer antes do tick — mantém vivo
+        discarded = QWebEnginePage.LifecycleState.Discarded
+        for p in self._pages.values():
+            p.set_lifecycle(discarded)
+
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt override)
+        """Aba Apps voltou a aparecer: reativa só o app atualmente selecionado
+        (recarrega se tinha sido descartado); os outros seguem descartados."""
+        super().showEvent(event)
+        cur = self._stack.currentWidget()
+        self._apply_lifecycle(active=cur if isinstance(cur, _AppPage) else None)
 
     def _reload_current(self) -> None:
         widget = self._stack.currentWidget()

@@ -218,9 +218,6 @@ class SettingsPanel(QWidget):
             self.settings.claude_permission_mode,
         )
         self._set_combo_value(
-            self._claude_model, self._model_choices, self.settings.claude_model
-        )
-        self._set_combo_value(
             self._claude_effort, self._effort_choices, self.settings.claude_effort
         )
         self._claude_allowed_tools.setText(self.settings.claude_allowed_tools)
@@ -303,9 +300,6 @@ class SettingsPanel(QWidget):
             self.settings.claude_extra_args = extra_args
         self.settings.claude_permission_mode = self._get_combo_value(
             self._claude_permission_mode, self._permission_mode_choices
-        )
-        self.settings.claude_model = self._get_combo_value(
-            self._claude_model, self._model_choices
         )
         self.settings.claude_effort = self._get_combo_value(
             self._claude_effort, self._effort_choices
@@ -410,23 +404,6 @@ class SettingsPanel(QWidget):
             "não passa a flag (Claude usa seu default global)."
         )
         form.addRow("Modo inicial:", self._claude_permission_mode)
-
-        self._claude_model = QComboBox()
-        self._claude_model.setEditable(True)
-        self._model_choices: list[tuple[str, str]] = [
-            ("", "(default do Claude)"),
-            ("opus", "opus — mais capaz"),
-            ("sonnet", "sonnet — equilibrado"),
-            ("haiku", "haiku — mais rápido/barato"),
-        ]
-        for _val, label in self._model_choices:
-            self._claude_model.addItem(label)
-        self._claude_model.setToolTip(
-            "Equivalente a --model <id> no claude CLI. Aceita alias "
-            "(opus/sonnet/haiku) ou nome completo (ex.: claude-sonnet-4-6). "
-            "Edite o campo pra digitar um ID específico."
-        )
-        form.addRow("Modelo padrão:", self._claude_model)
 
         self._claude_effort = QComboBox()
         self._claude_effort.setEditable(False)

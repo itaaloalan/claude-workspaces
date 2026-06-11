@@ -113,6 +113,12 @@ class StatusBarWidgets(QWidget):
         self.python = _IconSegment("fa5b.python", py_ver, f"Python interpretando o app — {sys.executable}")
         self.mcp = _IconSegment("fa5s.plug", "MCP: —", "MCPs configurados pra este workspace")
         self.runners = _IconSegment("mdi6.source-branch", "Runners: —", "Runners ativos no workspace")
+        # RAM/CPU do app + tudo que ele forkou. Clicável → abre o
+        # gerenciador de recursos.
+        self.resources = _IconSegment(
+            "fa5s.memory", "RAM —",
+            "Consumo de RAM/CPU do app e seus processos — clique pra gerenciar"
+        )
 
         # Segmentos do console selecionado — espelham as infos dinâmicas
         # do card da sidebar: estado (com cor) · modelo · branch git.
@@ -141,6 +147,7 @@ class StatusBarWidgets(QWidget):
         for w in (self.workspace, _separator(), self.stack, _separator(),
                   self.python, _separator(),
                   self.mcp, _separator(), self.runners,
+                  _separator(), self.resources,
                   self._console_sep, self.console_state,
                   self.console_model, self.console_branch, self.console_pr):
             h.addWidget(w)
@@ -209,6 +216,33 @@ class StatusBarWidgets(QWidget):
         self.runners._text.setStyleSheet(
             f"QLabel {{ color: {color}; font-size: 11px; background: transparent; }}"
         )
+
+    def set_resources(self, rss_bytes: int, cpu_percent: float, zombies: int = 0) -> None:
+        """Atualiza o segmento de recursos: RAM em GB/MB + dot de %CPU.
+
+        Cor segue o RSS total: verde até ~1.5GB, amber até ~3GB, vermelho
+        acima. Zumbis pintam vermelho independente do tamanho — sinal de
+        que vale clicar e liberar.
+        """
+        gb = rss_bytes / (1024 ** 3)
+        ram = f"{gb:.1f} GB" if gb >= 1 else f"{rss_bytes / (1024 ** 2):.0f} MB"
+        self.resources.setText(f"{ram} · {cpu_percent:.0f}%")
+        if zombies > 0:
+            color = "#d57272"
+        elif rss_bytes >= 3 * 1024 * 1024 * 1024:
+            color = "#d57272"
+        elif rss_bytes >= 1536 * 1024 * 1024:
+            color = "#e0b86a"
+        else:
+            color = "#9aa0a6"
+        self.resources._text.setStyleSheet(
+            f"QLabel {{ color: {color}; font-size: 11px; background: transparent; }}"
+        )
+        tip = f"RAM {ram} · CPU {cpu_percent:.0f}%"
+        if zombies:
+            tip += f" · {zombies} processo(s) moribundo(s)"
+        tip += "\nClique pra abrir o gerenciador de recursos"
+        self.resources.setToolTip(tip)
 
     def _set_console_visible(self, visible: bool) -> None:
         self._console_sep.setVisible(visible)
