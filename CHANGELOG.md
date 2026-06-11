@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.1] — 2026-06-11
+
+### Melhorias
+- **Notificações de atenção agora ficam fixas (sem timeout).** Quando um console
+  para de trabalhar (vai pra **Ocioso/Aguardando**) ou pede uma **Decisão**
+  (permissão), o banner desktop fica na tela até você **voltar ao console**
+  (fecha sozinho) ou **fechar o banner na mão** — antes sumia sozinho em ~15s e
+  era fácil perder o aviso. Espelha o que já valia pra notificação "Trabalhando".
+  - Implementado por um conjunto de kinds "fixos" (`AGENT_WORKING`,
+    `AGENT_WAITING`, `AGENT_IDLE`, `PERMISSION_REQUIRED`) entregues como
+    `resident` + `timeout_ms=0` no `DesktopNotifierAdapter`. O fechamento ao
+    voltar reusa o caminho existente (`_on_inbox_entry_removed` → `mark_seen` →
+    `_close_for`), então o banner nunca fica preso.
+  - Avisos **não-atenção** (tarefa concluída, erro, custo) continuam
+    auto-dismiss — não viram banners grudados.
+
 ## [1.3.0] — 2026-06-11
 
 ### Novidades

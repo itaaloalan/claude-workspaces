@@ -1,9 +1,10 @@
-"""Notificação fixa 'Trabalhando' → atualiza in-place pro estado seguinte.
+"""Notificações de atenção fixas → atualizam in-place pro estado seguinte.
 
 Testa o DesktopNotifierAdapter com um DesktopNotifier fake (grava as chamadas
-notify/close), cobrindo: AGENT_WORKING entregue como resident/sem-timeout; a
-transição working→aguardando re-entrega no MESMO banner (replaces_id) e auto-
-dismiss; update sem mudança visual é pulado; e mark_seen fecha o popup.
+notify/close), cobrindo: estados de atenção (Trabalhando/Aguardando/Decisão)
+entregues como resident/sem-timeout; a transição working→aguardando re-entrega
+no MESMO banner (replaces_id) mantendo-o fixo; avisos não-atenção seguem
+auto-dismiss; update sem mudança visual é pulado; e mark_seen fecha o popup.
 """
 from __future__ import annotations
 
@@ -59,19 +60,42 @@ def test_working_is_resident_no_timeout(setup):
     assert call["timeout_ms"] == 0
 
 
-def test_transition_updates_same_banner_and_autodismiss(setup):
+def test_transition_keeps_banner_sticky(setup):
     svc, fake, _ = setup
     svc.notify(NotificationKind.AGENT_WORKING, "⚙ Trabalhando — w",
                dedup_key=KEY, tab_id=1)
-    first_id = fake.notify_calls[0]  # nid 1
-    # working → aguardando (mesmo dedup, dentro do cooldown → changed)
+    # working → aguardando/ocioso (mesmo dedup, dentro do cooldown → changed)
     svc.notify(NotificationKind.AGENT_WAITING, "⏳ Aguardando — w",
                dedup_key=KEY, tab_id=1)
     assert len(fake.notify_calls) == 2
     upd = fake.notify_calls[1]
-    assert upd["replaces_id"] == 1          # mesmo banner
-    assert upd["resident"] is False          # agora auto-dismiss
+    assert upd["replaces_id"] == 1          # mesmo banner, in-place
+    # Aguardando/Ocioso agora é FIXO: precisa ficar na tela pra o usuário
+    # lembrar de voltar — não some sozinho.
+    assert upd["resident"] is True
+    assert upd["timeout_ms"] == 0
     assert "Aguardando" in upd["title"]
+
+
+def test_decision_is_resident_no_timeout(setup):
+    svc, fake, _ = setup
+    svc.notify(NotificationKind.PERMISSION_REQUIRED, "❓ Decisão — w",
+               dedup_key=KEY, tab_id=1)
+    assert len(fake.notify_calls) == 1
+    call = fake.notify_calls[0]
+    assert call["resident"] is True
+    assert call["timeout_ms"] == 0
+
+
+def test_non_attention_kind_still_autodismiss(setup):
+    svc, fake, _ = setup
+    # Aviso não-atenção (tarefa concluída) NÃO deve virar fixo — some sozinho.
+    svc.notify(NotificationKind.TASK_COMPLETED, "✅ Tarefa concluída — w",
+               dedup_key="task:w:1", tab_id=1)
+    assert len(fake.notify_calls) == 1
+    call = fake.notify_calls[0]
+    assert call["resident"] is False
+    assert call["timeout_ms"] > 0
 
 
 def test_noop_update_is_skipped(setup):

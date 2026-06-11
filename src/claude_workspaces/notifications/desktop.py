@@ -25,6 +25,19 @@ from .types import Notification, NotificationKind, NotificationPriority
 
 log = logging.getLogger(__name__)
 
+# Kinds "fixos": entregues como resident + sem timeout — ficam na tela até o
+# usuário voltar ao console (fecha automático via _on_inbox_entry_removed →
+# mark_seen) ou fechar o banner na mão. São os estados que exigem ATENÇÃO:
+# Trabalhando (em curso), Aguardando/Ocioso (parou) e Decisão (pediu
+# permissão). Demais avisos (tarefa concluída/erro/custo) seguem auto-dismiss
+# pra não poluir o Plasma com banners grudados.
+_STICKY_KINDS = frozenset({
+    NotificationKind.AGENT_WORKING,
+    NotificationKind.AGENT_WAITING,
+    NotificationKind.AGENT_IDLE,
+    NotificationKind.PERMISSION_REQUIRED,
+})
+
 
 class DesktopNotifierAdapter(QObject):
     """Plugá-vel: instancie com o service e o desktop notifier; pronto."""
@@ -101,7 +114,7 @@ class DesktopNotifierAdapter(QObject):
         if n.seen or n.dismissed:
             return
         key = n.dedup_key or f"_id:{n.id}"
-        is_working = n.kind == NotificationKind.AGENT_WORKING
+        is_sticky = n.kind in _STICKY_KINDS
         # Atualização sem mudança visual (occurrence-bump dentro do cooldown):
         # não re-emite popup.
         snapshot = (n.kind, n.title, n.body or "")
@@ -122,9 +135,10 @@ class DesktopNotifierAdapter(QObject):
                 log.debug("checagem de foco falhou", exc_info=True)
                 suppressed = False
             if suppressed:
-                # O banner fixo "Trabalhando" não deve ficar na tela enquanto o
-                # usuário olha o próprio console — fecha o popup ativo.
-                if is_working:
+                # Banner fixo (Trabalhando/Aguardando/Decisão) não deve ficar na
+                # tela enquanto o usuário olha o próprio console — fecha o popup
+                # ativo.
+                if is_sticky:
                     self._close_for(n)
                 log.debug("popup suprimido — alvo já visível (notif=%s)", n.id)
                 return
@@ -145,11 +159,12 @@ class DesktopNotifierAdapter(QObject):
         _os_suppress_sound = True
 
         prev = self._active.get(key, 0)
-        # "Trabalhando" é FIXO: resident + sem timeout — fica na tela enquanto o
-        # agente trabalha e é substituído (replaces_id) pelo estado seguinte
-        # (Aguardando/Pronto), que aí sim auto-dismiss. Nunca fica preso: sempre
-        # resolve quando o trabalho termina.
-        if is_working:
+        # Estados de atenção (Trabalhando/Aguardando/Ocioso/Decisão) são FIXOS:
+        # resident + sem timeout. Ficam na tela até o usuário voltar ao console
+        # (fechados via _on_inbox_entry_removed → mark_seen → _close_for) ou
+        # fechar o banner na mão. Nunca ficam presos: a transição seguinte
+        # atualiza in-place (replaces_id) e o retorno ao console fecha.
+        if is_sticky:
             timeout_ms = 0  # 0 = sem expiração (resident)
             resident = True
         else:
