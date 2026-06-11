@@ -367,3 +367,154 @@ def test_tick_awaiting_resets_when_not_awaiting(widget_and_calls):
     w.update_state(STATE_IDLE, "")
     w.tick_awaiting()  # fora do estado → reseta
     assert w._awaiting_blink_on is False
+
+
+# ---------- update_git_info: ahead/behind + arquivos + worktree ----------
+
+def _gitfile(status, path):
+    from claude_workspaces.git_status import GitFile
+    return GitFile(status=status, path=path)
+
+
+def test_update_git_info_ahead_behind_no_chip(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_git_info("main", 0, ahead=2, behind=1)
+    text = w._git_label.text()
+    assert "↑2" in text
+    assert "↓1" in text
+
+
+def test_update_git_info_ahead_behind_zero_omitidos(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_git_info("main", 0)
+    text = w._git_label.text()
+    assert "↑" not in text
+    assert "↓" not in text
+
+
+def test_update_git_info_modified_e_link(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_git_info("main", 3)
+    assert "●3" in w._git_label.text()
+    assert "href='git'" in w._git_label.text()
+
+
+def test_update_git_info_tooltip_lista_arquivos(widget_and_calls):
+    w, _ = widget_and_calls
+    files = [_gitfile(" M", "src/app.py"), _gitfile("??", "novo.txt")]
+    w.update_git_info("main", 2, files=files)
+    tip = w._git_label.toolTip()
+    assert "modificado — src/app.py" in tip
+    assert "novo — novo.txt" in tip
+
+
+def test_update_git_info_tooltip_trunca_em_10(widget_and_calls):
+    w, _ = widget_and_calls
+    files = [_gitfile(" M", f"f{i}.py") for i in range(14)]
+    w.update_git_info("main", 14, files=files)
+    tip = w._git_label.toolTip()
+    assert "… e mais 4 arquivo(s)" in tip
+
+
+def test_update_git_info_worktree_badge_wt(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_git_info("feat/x", 0, is_worktree=True, worktree_dir="/tmp/wt")
+    assert "wt" in w._git_label.text()
+    assert "🌿" in w._git_label.text()
+    assert "/tmp/wt" in w._git_label.toolTip()
+
+
+def test_update_git_info_compat_3_args(widget_and_calls):
+    # Chamada antiga com 3 args posicionais continua funcionando.
+    w, _ = widget_and_calls
+    w.update_git_info("main", 2, True)
+    assert w._git_label.isVisible() or w._git_label.text() != ""
+
+
+def test_open_git_requested_emitido_no_link(widget_and_calls):
+    w, _ = widget_and_calls
+    got = []
+    w.open_git_requested.connect(lambda: got.append(True))
+    w._git_label.linkActivated.emit("git")
+    assert got == [True]
+
+
+def test_status_info_expoe_ahead_behind(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_git_info("main", 1, ahead=3, behind=2)
+    info = w.status_info()
+    assert info["ahead"] == 3
+    assert info["behind"] == 2
+
+
+# ---------- set_pr_info: estado/cor + update in-place ----------
+
+def test_set_pr_info_open_verde(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_pr_info("https://github.com/o/r/pull/7", "OPEN", 7)
+    chip = w._pr_chips["https://github.com/o/r/pull/7"]
+    assert theme.PR_OPEN in chip.text()
+    assert "Aberto" in chip.toolTip()
+
+
+def test_set_pr_info_merged_atualiza_in_place(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    url = "https://github.com/o/r/pull/7"
+    w.set_pr_info(url, "OPEN", 7)
+    w.set_pr_info(url, "MERGED", 7)
+    assert len(w._pr_chips) == 1
+    chip = w._pr_chips[url]
+    assert theme.PR_MERGED in chip.text()
+    assert "✓" in chip.text()
+    assert "Merged" in chip.toolTip()
+
+
+def test_set_pr_info_draft_cinza(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_pr_info("https://github.com/o/r/pull/8", "OPEN", 8, draft=True)
+    chip = w._pr_chips["https://github.com/o/r/pull/8"]
+    assert theme.PR_DRAFT in chip.text()
+    assert "draft" in chip.text()
+
+
+def test_set_pr_url_compat_rosa(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_pr_url("https://github.com/o/r/pull/9")
+    chip = w._pr_chips["https://github.com/o/r/pull/9"]
+    assert theme.PR_PINK in chip.text()
+    assert "https://github.com/o/r/pull/9" in w._pr_urls
+
+
+# ---------- retenção da última ação ----------
+
+def test_last_action_retida_ao_aguardar(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_state(STATE_WORKING, "Editando foo.py")
+    w.update_state(STATE_AWAITING, "")
+    assert "Editando foo.py" in w._state_label.text()
+
+
+def test_last_action_retida_ao_ficar_ocioso(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_state(STATE_WORKING, "Rodando testes")
+    w.update_state(STATE_IDLE, "")
+    assert "Rodando testes" in w._state_label.text()
+
+
+def test_last_action_limpa_em_done(widget_and_calls):
+    w, _ = widget_and_calls
+    w.update_state(STATE_WORKING, "Editando foo.py")
+    w.update_state(STATE_DONE, "")
+    assert "Editando foo.py" not in w._state_label.text()
+
+
+def test_state_tooltip_tem_acao_completa(widget_and_calls):
+    w, _ = widget_and_calls
+    long_action = "Uma ação muito longa que certamente passa dos cinquenta e cinco caracteres do label"
+    w.update_state(STATE_WORKING, long_action)
+    assert long_action in w._state_label.toolTip()
+    assert "Estado: Trabalhando" in w._state_label.toolTip()

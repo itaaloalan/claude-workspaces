@@ -39,8 +39,14 @@ WAITING = "#e09060"         # laranja (aguardando atenção, inbox)
 WAITING_HOVER = "#e0892f"
 WAITING_BG = "#c9772d"      # bg do bell quando há inbox
 PLANNING = "#5BBCB8"        # teal — planejando (plan mode)
-PR_PINK = "#f472b6"         # rosa — link de PR criado
+PR_PINK = "#f472b6"         # rosa — PR detectado, estado desconhecido
 PR_PINK_BG = "rgba(244, 114, 182, 0.12)"  # fundo do banner de PR
+
+# Estados de PR/MR (paleta GitHub adaptada ao dark do app)
+PR_OPEN = "#5ac35a"         # verde — PR/MR aberto
+PR_DRAFT = "#9aa0a6"        # cinza — draft
+PR_MERGED = "#a371f7"       # roxo — merged
+PR_CLOSED = "#d57272"       # vermelho — fechado sem merge
 
 
 # ---------- Tempos (ms) ----------
@@ -206,6 +212,22 @@ def state_badge_qss(state_color: str) -> str:
         f"  font-weight: 700;"
         f"  padding: 1px 7px;"
         f"  border-radius: 8px;"
+        f"}}"
+    )
+
+
+def pr_chip_qss(color: str) -> str:
+    """Chip compacto de PR/MR — cor sólida no texto, mesma cor a ~12%
+    de alpha no fundo. Generaliza o chip rosa original pra qualquer
+    estado (aberto/draft/merged/fechado)."""
+    r, g, b = (int(color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
+    return (
+        f"QLabel {{"
+        f" background: rgba({r}, {g}, {b}, 0.12);"
+        f" color: {color};"
+        f" font-size: 9px; font-weight: 700;"
+        f" padding: 1px 5px; border-radius: 6px;"
+        f" border: 0;"
         f"}}"
     )
 

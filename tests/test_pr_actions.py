@@ -89,3 +89,33 @@ def test_find_existing_pr_gh_nao_encontrado():
     with patch("claude_workspaces.pr_actions.gh_available", return_value=True), \
          patch("subprocess.run", side_effect=FileNotFoundError("gh")):
         assert find_existing_pr("/folder", "feat/x") is None
+
+
+# ---------- draft + find_existing_pr_or_mr com estado ----------
+
+def test_find_existing_pr_is_draft():
+    payload = '{"url":"https://github.com/o/r/pull/5","state":"OPEN","number":5,"isDraft":true}'
+    with patch("claude_workspaces.pr_actions.gh_available", return_value=True), \
+         patch("subprocess.run", return_value=_fake_completed(0, stdout=payload)):
+        result = find_existing_pr("/folder", "feat/x")
+    assert result is not None
+    assert result.draft is True
+
+
+def test_find_existing_pr_sem_is_draft_default_false():
+    payload = '{"url":"https://github.com/o/r/pull/6","state":"OPEN","number":6}'
+    with patch("claude_workspaces.pr_actions.gh_available", return_value=True), \
+         patch("subprocess.run", return_value=_fake_completed(0, stdout=payload)):
+        result = find_existing_pr("/folder", "feat/x")
+    assert result is not None
+    assert result.draft is False
+
+
+def test_find_existing_pr_or_mr_devolve_merged_do_github():
+    from claude_workspaces.pr_actions import find_existing_pr_or_mr
+    payload = '{"url":"https://github.com/o/r/pull/10","state":"MERGED","number":10}'
+    with patch("claude_workspaces.pr_actions.gh_available", return_value=True), \
+         patch("subprocess.run", return_value=_fake_completed(0, stdout=payload)):
+        result = find_existing_pr_or_mr("/folder", "feat/x")
+    assert result is not None
+    assert result.state == "MERGED"

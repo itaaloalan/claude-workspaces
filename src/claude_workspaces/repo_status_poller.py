@@ -3,7 +3,8 @@ modificados na sidebar (junto de cada console).
 
 Usa QThreadPool pra rodar `get_status` fora da UI thread, com cache TTL
 por pasta pra evitar respawn em sucessão. Emite `status_ready(folder,
-branch, modified_count)` quando há resultado novo (ou cache fresco).
+GitStatus)` quando há resultado novo (ou cache fresco) — o objeto
+completo (ahead/behind/files) pra UI mostrar mais que branch+count.
 """
 from __future__ import annotations
 
@@ -37,10 +38,10 @@ class _StatusRunner(QRunnable):
 
 
 class RepoStatusPoller(QObject):
-    """Coleta branch + count por pasta com cache TTL e execução em pool."""
+    """Coleta git status por pasta com cache TTL e execução em pool."""
 
-    # (folder, branch, modified_count). branch="" quando não é repo git.
-    status_ready = Signal(str, str, int)
+    # (folder, GitStatus). status.is_repo=False quando não é repo git.
+    status_ready = Signal(str, object)
 
     def __init__(self, ttl_seconds: float = 4.0, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -52,8 +53,8 @@ class RepoStatusPoller(QObject):
         self._signals = _RunnerSignals()
         self._signals.done.connect(self._on_done)
         self._inflight: set[str] = set()
-        # folder -> (timestamp, branch, count)
-        self._cache: dict[str, tuple[float, str, int]] = {}
+        # folder -> (timestamp, GitStatus)
+        self._cache: dict[str, tuple[float, GitStatus]] = {}
 
     def request(self, folder: str) -> None:
         """Pede status pra `folder`. Se houver entry fresca no cache,
@@ -65,12 +66,12 @@ class RepoStatusPoller(QObject):
         now = time.monotonic()
         cached = self._cache.get(folder)
         if cached and (now - cached[0]) < self._ttl:
-            self.status_ready.emit(folder, cached[1], cached[2])
+            self.status_ready.emit(folder, cached[1])
             return
         # Mesmo com cache stale, emite o valor antigo enquanto a fetch
         # roda — evita flicker do label sumindo e reaparecendo.
         if cached:
-            self.status_ready.emit(folder, cached[1], cached[2])
+            self.status_ready.emit(folder, cached[1])
         if folder in self._inflight:
             return
         self._inflight.add(folder)
@@ -83,10 +84,8 @@ class RepoStatusPoller(QObject):
         self._inflight.discard(folder)
         now = time.monotonic()
         if status is None or not status.is_repo:
-            self._cache[folder] = (now, "", 0)
-            self.status_ready.emit(folder, "", 0)
-            return
-        branch = status.branch or ""
-        count = len(status.files)
-        self._cache[folder] = (now, branch, count)
-        self.status_ready.emit(folder, branch, count)
+            # GitStatus sintético mantém o contrato "branch vazia esconde
+            # o chip" sem caller precisar tratar None.
+            status = GitStatus(folder=folder, is_repo=False)
+        self._cache[folder] = (now, status)
+        self.status_ready.emit(folder, status)

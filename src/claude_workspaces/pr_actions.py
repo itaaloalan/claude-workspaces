@@ -36,6 +36,7 @@ class ExistingPR:
     url: str
     state: str
     number: int
+    draft: bool = False
 
 
 def gh_available() -> bool:
@@ -178,17 +179,26 @@ def find_existing_mr_gitlab(folder: str, branch: str) -> ExistingPR | None:
     mr = data[0]
     web_url = (mr.get("web_url") or "").strip()
     state = (mr.get("state") or "").strip().upper()
+    # GitLab usa OPENED; normaliza pro vocabulário do GitHub (OPEN) pra
+    # UI tratar um único conjunto de estados.
+    if state == "OPENED":
+        state = "OPEN"
     number = int(mr.get("iid") or 0)
     if not web_url:
         return None
-    return ExistingPR(url=web_url, state=state, number=number)
+    return ExistingPR(
+        url=web_url, state=state, number=number, draft=bool(mr.get("draft"))
+    )
 
 
 def find_existing_pr_or_mr(folder: str, branch: str) -> ExistingPR | None:
-    """Tenta GitHub (gh pr view) primeiro, depois GitLab REST API."""
+    """Tenta GitHub (gh pr view) primeiro, depois GitLab REST API.
+    Devolve o PR GitHub em qualquer estado (gh prioriza OPEN) — a UI
+    mostra merged/fechado com cor própria; só cai pro GitLab quando o
+    GitHub não devolve nada."""
     if gh_available():
         pr = find_existing_pr(folder, branch)
-        if pr and pr.state == "OPEN":
+        if pr:
             return pr
     return find_existing_mr_gitlab(folder, branch)
 
@@ -197,7 +207,7 @@ def find_existing_pr(folder: str, branch: str) -> ExistingPR | None:
     """Procura PR existente associado à `branch`. Devolve o mais relevante
     (gh prioriza OPEN). None se não há nenhum ou se gh não tá disponível.
 
-    `gh pr view <branch> --json url,state,number` sai com:
+    `gh pr view <branch> --json url,state,number,isDraft` sai com:
     - rc=0 + JSON quando existe
     - rc!=0 com mensagem "no pull requests found" quando não existe
     Não diferenciamos erro de "sem PR" — caller decide se quer reportar.
@@ -206,7 +216,7 @@ def find_existing_pr(folder: str, branch: str) -> ExistingPR | None:
         return None
     try:
         r = subprocess.run(
-            ["gh", "pr", "view", branch, "--json", "url,state,number"],
+            ["gh", "pr", "view", branch, "--json", "url,state,number,isDraft"],
             cwd=folder,
             capture_output=True,
             text=True,
@@ -229,4 +239,6 @@ def find_existing_pr(folder: str, branch: str) -> ExistingPR | None:
     number = data.get("number") or 0
     if not url:
         return None
-    return ExistingPR(url=url, state=state, number=int(number))
+    return ExistingPR(
+        url=url, state=state, number=int(number), draft=bool(data.get("isDraft"))
+    )

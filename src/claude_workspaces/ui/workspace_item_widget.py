@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -44,14 +44,36 @@ _BTN_QSS = (
     f"}}"
 )
 
-# Bolinha verde: QLabel vazia com border-radius (mais limpa que o
+# Bolinha de estado: QLabel vazia com border-radius (mais limpa que o
 # caractere "●", que herda cor/tamanho da fonte e renderiza desalinhado).
-_DOT_QSS = (
-    f"QLabel {{"
-    f"  background-color: {theme.SUCCESS};"
-    f"  border-radius: 4px;"
-    f"}}"
-)
+# A cor reflete o estado agregado dos consoles (set_state_summary):
+# laranja=aguardando > vermelho=erro > âmbar=trabalhando > teal=planejando
+# > verde=rodando sem pendência.
+def _dot_qss(color: str) -> str:
+    return (
+        f"QLabel {{"
+        f"  background-color: {color};"
+        f"  border-radius: 4px;"
+        f"}}"
+    )
+
+
+# Ordem de prioridade do estado agregado + labels pt-BR do tooltip.
+_STATE_PRIORITY = ("awaiting", "error", "working", "planning")
+_STATE_DOT_COLOR = {
+    "awaiting": theme.WAITING,
+    "error": theme.DANGER,
+    "working": theme.WARNING,
+    "planning": theme.PLANNING,
+}
+_STATE_SUMMARY_LABEL = {
+    "working": "trabalhando",
+    "planning": "planejando",
+    "awaiting": "aguardando decisão",
+    "idle": "ocioso(s)",
+    "done": "concluído(s)",
+    "error": "com erro",
+}
 
 # Pill com count quando há >1 terminal rodando — agora via token de estado
 # (state_badge_qss) pra ficar consistente com o resto da sidebar.
@@ -124,10 +146,18 @@ class WorkspaceItemWidget(QWidget):
 
         self._dot = QLabel("")
         self._dot.setFixedSize(8, 8)
-        self._dot.setStyleSheet(_DOT_QSS)
+        self._dot_color = theme.SUCCESS
+        self._dot.setStyleSheet(_dot_qss(self._dot_color))
         self._dot.setToolTip("Há agente rodando neste workspace")
         self._dot.hide()
         row.addWidget(self._dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        # Blink do dot quando algum console aguarda decisão — alterna a
+        # cor entre laranja e apagado pra chamar atenção mesmo com o
+        # workspace colapsado/fora de foco.
+        self._dot_blink_on = False
+        self._dot_blink_timer = QTimer(self)
+        self._dot_blink_timer.setInterval(600)
+        self._dot_blink_timer.timeout.connect(self._tick_dot_blink)
 
         self._badge = QLabel("")
         self._badge.setStyleSheet(_BADGE_QSS)
@@ -243,6 +273,42 @@ class WorkspaceItemWidget(QWidget):
             self._badge.show()
         else:
             self._badge.hide()
+
+    def set_state_summary(self, counts: dict[str, int]) -> None:
+        """Colore o dot pelo estado agregado dos consoles do workspace.
+        `counts`: {"working": N, "planning": N, "awaiting": N, "idle": N,
+        "done": N, "error": N}. Prioridade: aguardando > erro >
+        trabalhando > planejando > verde (rodando sem pendência). O
+        tooltip vira o resumo ("2 trabalhando · 1 aguardando decisão").
+        Visibilidade do dot continua com set_running_count."""
+        counts = {k: v for k, v in (counts or {}).items() if v > 0}
+        color = theme.SUCCESS
+        for key in _STATE_PRIORITY:
+            if counts.get(key):
+                color = _STATE_DOT_COLOR[key]
+                break
+        self._dot_color = color
+        self._dot.setStyleSheet(_dot_qss(color))
+        parts = [
+            f"{counts[k]} {_STATE_SUMMARY_LABEL[k]}"
+            for k in ("working", "planning", "awaiting", "error", "done", "idle")
+            if counts.get(k)
+        ]
+        self._dot.setToolTip(
+            " · ".join(parts) or "Há agente rodando neste workspace"
+        )
+        if counts.get("awaiting"):
+            if not self._dot_blink_timer.isActive():
+                self._dot_blink_timer.start()
+        else:
+            self._dot_blink_timer.stop()
+            self._dot_blink_on = False
+            self._dot.setStyleSheet(_dot_qss(color))
+
+    def _tick_dot_blink(self) -> None:
+        self._dot_blink_on = not self._dot_blink_on
+        color = "#5a3a28" if self._dot_blink_on else self._dot_color
+        self._dot.setStyleSheet(_dot_qss(color))
 
     def set_pinned(self, pinned: bool) -> None:
         """Mostra/esconde o indicador 📌 ao lado do nome."""

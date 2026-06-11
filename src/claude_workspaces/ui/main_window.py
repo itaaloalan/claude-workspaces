@@ -2899,6 +2899,7 @@ class MainWindow(QMainWindow):
         if isinstance(widget, WorkspaceItemWidget):
             widget.set_label(ws.name)
             widget.set_running_count(count)
+            self._refresh_workspace_state_summary(item)
         else:
             item.setText(0, self._item_label(ws))
         # Atualiza o status dot no header do painel de detalhes se
@@ -2906,6 +2907,27 @@ class MainWindow(QMainWindow):
         if self.details.workspace and self.details.workspace.id == ws.id:
             self.details.set_active_status(count > 0)
             self._update_status_bar(ws)
+
+    def _refresh_workspace_state_summary(self, ws_item) -> None:
+        """Agrega o estado dos consoles do workspace (status_info() de cada
+        TerminalChildWidget) e pinta o dot do WorkspaceItemWidget — laranja
+        piscando se algum aguarda decisão, âmbar se trabalhando, etc.
+        Só dados em memória, sem git."""
+        from .workspace_item_widget import WorkspaceItemWidget
+        widget = self.list_widget.itemWidget(ws_item, 0)
+        if not isinstance(widget, WorkspaceItemWidget):
+            return
+        counts: dict[str, int] = {}
+        for child in self._iter_terminal_items(ws_item):
+            if child.isHidden():
+                continue
+            cw = self.list_widget.itemWidget(child, 0)
+            if not isinstance(cw, TerminalChildWidget):
+                continue
+            state = cw.status_info().get("state", "")
+            if state:
+                counts[state] = counts.get(state, 0) + 1
+        widget.set_state_summary(counts)
 
     def _maybe_emit_cost_warning(self, snap) -> None:
         """Olha o snapshot do plan_usage_api e emite cost_warning quando
@@ -4759,6 +4781,13 @@ class MainWindow(QMainWindow):
                     model = (info.get("model") or "").strip()
                     if branch:
                         short = branch if len(branch) <= 35 else branch[:34] + "…"
+                        ahead = int(info.get("ahead") or 0)
+                        behind = int(info.get("behind") or 0)
+                        sync_html = ""
+                        if ahead > 0:
+                            sync_html += f" <span style='color:#5ac35a'>↑{ahead}</span>"
+                        if behind > 0:
+                            sync_html += f" <span style='color:#e09060'>↓{behind}</span>"
                         mod_html = (
                             f" <span style='color:#ff9d3b'>●{modified}</span>"
                             if modified > 0 else ""
@@ -4767,7 +4796,7 @@ class MainWindow(QMainWindow):
                             f" <span style='color:#555'>·</span> "
                             f"<span style='color:#9aa0a6'>branch</span> "
                             f"<span style='color:#e5b53b;font-weight:600'>"
-                            f"⎇ {short}</span>{mod_html}"
+                            f"⎇ {short}</span>{sync_html}{mod_html}"
                         )
                     if model:
                         model_html = (
@@ -5872,6 +5901,9 @@ class MainWindow(QMainWindow):
             self._add_terminal_child(
                 ws_item, tab_id, title, status, is_working, is_running, needs_decision
             )
+        # Estado mudou → reagrega o dot do workspace (laranja se algum
+        # console aguarda decisão, âmbar se trabalhando, …).
+        self._refresh_workspace_state_summary(ws_item)
 
     def _handle_tab_removed(self, tab_id: int) -> None:
         """Slot do TerminalCoordinator.tab_removed.
@@ -5908,6 +5940,7 @@ class MainWindow(QMainWindow):
                 ws_real = parent_item.parent() or parent_item
                 # Atualiza badge de contagem do bucket
                 self._refresh_sessoes_count(ws_real)
+            self._refresh_workspace_state_summary(ws_real)
             # Se o workspace ficou sem nenhum console, restaura o placeholder
             # com botão "Nova sessão do claude…" pra dar uma ação visível.
             self._refresh_empty_placeholder(ws_real)
@@ -6567,6 +6600,22 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def _open_git_panel_for_tab(self, tab_id: int) -> None:
+        """Clique no ●N do chip git da sidebar: foca a aba do console e
+        abre o painel Git do dock direito — o painel já segue o console
+        ativo (worktree/extra dirs) via _sync_git_panel_to_active_console."""
+        ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id, "")
+        area = self.terminals_coord.area_for(ws_id) if ws_id else None
+        if area is not None:
+            for i in range(area.tabs.count()):
+                if id(area.tabs.widget(i)) == tab_id:
+                    area.tabs.setCurrentIndex(i)
+                    self.terminal_host.setCurrentWidget(area)
+                    self._bottom_tabs.setCurrentWidget(self.terminal_host)
+                    break
+        self.right_dock.set_panel_open("git", True)
+        self._sync_git_panel_to_active_console()
+
     def _resolve_state(
         self,
         is_working: bool,
@@ -6662,6 +6711,12 @@ class MainWindow(QMainWindow):
 
         widget.set_action_callbacks(
             on_continue, on_close, on_rename
+        )
+
+        # Clique no ●N de modificados do chip git → foca o console e abre
+        # o painel Git do dock direito já sincronizado com ele.
+        widget.open_git_requested.connect(
+            lambda tid=tab_id: self._open_git_panel_for_tab(tid)
         )
 
         # Conecta detecção de PR: quando o TerminalWidget encontra uma URL de
@@ -7258,13 +7313,13 @@ class MainWindow(QMainWindow):
         self._refresh_plan_usage_updated_label()
         _set_container_visible(True)
 
-    def _on_repo_status_ready(
-        self, folder: str, branch: str, modified: int
-    ) -> None:
-        """Aplica branch+contagem em todos os children cujo alvo git bate
+    def _on_repo_status_ready(self, folder: str, status) -> None:
+        """Aplica o GitStatus em todos os children cujo alvo git bate
         com `folder`. O alvo é o worktree adotado em runtime (quando a
         sessão criou um via /criar-worktree) ou, sem worktree, o claude_cwd.
         Um mesmo folder pode aparecer em vários consoles."""
+        branch = status.branch if status.is_repo else ""
+        modified = len(status.files) if status.is_repo else 0
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
             if item is None:
                 continue
@@ -7277,7 +7332,15 @@ class MainWindow(QMainWindow):
             target = term.worktree_dir() or term.claude_cwd()
             if target != folder:
                 continue
-            widget.update_git_info(branch, modified, term.is_worktree())
+            widget.update_git_info(
+                branch,
+                modified,
+                term.is_worktree(),
+                ahead=status.ahead,
+                behind=status.behind,
+                files=status.files,
+                worktree_dir=term.worktree_dir() or "",
+            )
         # Aciona busca de PR/MR em paralelo sempre que a branch é conhecida.
         if branch:
             self._pr_poller.request(folder, branch)
@@ -7292,11 +7355,11 @@ class MainWindow(QMainWindow):
                 for extra in term.extra_dirs():
                     self._repo_poller.request(extra)
 
-    def _on_pr_status_ready(self, folder: str, pr_url: str) -> None:
-        """Recebe resultado do PrStatusPoller e propaga pra sidebar+banner.
-        Aceita tanto consoles cujo cwd == folder quanto os que têm folder
-        nos seus extra dirs (--add-dir)."""
-        if not pr_url:
+    def _on_pr_status_ready(self, folder: str, pr) -> None:
+        """Recebe resultado do PrStatusPoller (ExistingPR | None) e propaga
+        pra sidebar+banner com estado/cor. Aceita tanto consoles cujo
+        cwd == folder quanto os que têm folder nos extra dirs (--add-dir)."""
+        if pr is None or not pr.url:
             return
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
             if item is None:
@@ -7309,8 +7372,8 @@ class MainWindow(QMainWindow):
                 continue
             if term.claude_cwd() != folder and folder not in term.extra_dirs():
                 continue
-            widget.set_pr_url(pr_url)
-            term.set_detected_pr_url(pr_url)
+            widget.set_pr_info(pr.url, pr.state, pr.number, pr.draft)
+            term.set_detected_pr_url(pr.url)
         self._refresh_status_bar_console()
 
     def _launch_claude_for(

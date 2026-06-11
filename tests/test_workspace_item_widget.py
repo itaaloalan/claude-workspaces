@@ -222,3 +222,63 @@ def test_add_btn_triggers_callback(qapp):
     )
     w._add_btn.click()
     assert calls == [1]
+
+
+# ---------- set_state_summary ----------
+
+def _dot_color_of(w) -> str:
+    return w._dot_color
+
+
+def test_state_summary_awaiting_tem_prioridade(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_state_summary({"working": 2, "awaiting": 1, "idle": 1})
+    assert _dot_color_of(w) == theme.WAITING
+    assert w._dot_blink_timer.isActive()
+
+
+def test_state_summary_error_acima_de_working(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_state_summary({"working": 2, "error": 1})
+    assert _dot_color_of(w) == theme.DANGER
+
+
+def test_state_summary_working_amber(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_state_summary({"working": 1, "idle": 2})
+    assert _dot_color_of(w) == theme.WARNING
+    assert not w._dot_blink_timer.isActive()
+
+
+def test_state_summary_planning_teal(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_state_summary({"planning": 1, "idle": 1})
+    assert _dot_color_of(w) == theme.PLANNING
+
+
+def test_state_summary_so_idle_verde(widget_and_calls):
+    from claude_workspaces.ui import theme
+    w, _ = widget_and_calls
+    w.set_state_summary({"idle": 3})
+    assert _dot_color_of(w) == theme.SUCCESS
+
+
+def test_state_summary_tooltip_resumo(widget_and_calls):
+    w, _ = widget_and_calls
+    w.set_state_summary({"working": 2, "awaiting": 1, "idle": 1})
+    tip = w._dot.toolTip()
+    assert "2 trabalhando" in tip
+    assert "1 aguardando decisão" in tip
+    assert "1 ocioso(s)" in tip
+
+
+def test_state_summary_para_blink_quando_resolve(widget_and_calls):
+    w, _ = widget_and_calls
+    w.set_state_summary({"awaiting": 1})
+    assert w._dot_blink_timer.isActive()
+    w.set_state_summary({"working": 1})
+    assert not w._dot_blink_timer.isActive()

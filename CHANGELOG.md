@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.5.0] — 2026-06-11
+
+### Novidades
+- **Chip git da sidebar com ↑ahead ↓behind, lista de arquivos e clique pro
+  painel Git.** O chip de branch de cada console agora mostra quantos commits
+  a branch está à frente (`↑N` verde) e atrás (`↓M` laranja) do upstream,
+  além do `●K` de modificados. O tooltip lista os arquivos alterados (top 10,
+  com o tipo em pt-BR: modificado/novo/deletado/…) sem rodar nenhum git extra
+  — os dados vêm do mesmo poller de status. Clicar no `●K` foca a aba do
+  console e abre o painel Git do dock direito já sincronizado com ele.
+- **Chip de PR/MR colorido pelo estado.** O chip rosa de PR virou um chip de
+  estado: verde quando aberto, cinza pra draft, roxo `✓` quando merged e
+  vermelho `✗` quando fechado (rosa fica só pro intervalo entre detectar a
+  URL no output e o poller responder). O estado é atualizado in-place (um PR
+  que faz merge durante a sessão muda de cor sozinho) e o chip agora é
+  clicável — abre o PR/MR no browser. O lookup no GitHub passou a trazer
+  `isDraft` e a devolver PRs em qualquer estado (antes só OPEN); no GitLab o
+  campo `draft` do MR também é considerado.
+- **Worktree mais explícito.** Console rodando numa git worktree isolada
+  ganha um mini-badge `wt` verde antes do `🌿 branch`, e o tooltip mostra o
+  path da worktree. O header do pane do terminal também exibe `↑/↓` da
+  branch, alinhado com a sidebar.
+- **Dot do workspace reflete o estado agregado dos consoles.** A bolinha ao
+  lado do nome do workspace deixa de ser sempre verde: fica laranja piscando
+  se algum console aguarda decisão, vermelha com erro, âmbar trabalhando,
+  teal planejando — e verde quando está tudo rodando sem pendência. O tooltip
+  vira um resumo ("2 trabalhando · 1 aguardando decisão · 1 ocioso"). Dá pra
+  ver de longe qual workspace precisa de atenção mesmo colapsado.
+- **Última ação preservada no card do console.** Ao sair de "Trabalhando"
+  pra "Aguardando decisão" ou "Ocioso", o card mantém o contexto do que o
+  Claude estava fazendo ("Aguardando decisão · Editando foo.py") — antes o
+  texto era apagado na transição. O label de estado ganhou tooltip com o
+  estado, a última ação completa (sem truncar) e há quanto tempo está ocioso.
+
+### Mudanças internas
+- `RepoStatusPoller.status_ready` agora emite o `GitStatus` completo
+  (ahead/behind/files) em vez de só branch+contagem; `PrStatusPoller.pr_ready`
+  emite o `ExistingPR` (url/state/number/draft) em vez de só a URL. Único
+  consumidor de cada (MainWindow) adaptado; zero chamadas git adicionais.
+- `theme.py`: novas cores `PR_OPEN`/`PR_DRAFT`/`PR_MERGED`/`PR_CLOSED` e
+  helper `pr_chip_qss(color)`; `status_info()` do card expõe `ahead`/`behind`.
+- 30 testes novos (chip git, PR com estado, dot agregado, retenção de ação,
+  `tests/test_repo_status_poller.py` criado).
+
 ## [1.4.0] — 2026-06-11
 
 ### Novidades

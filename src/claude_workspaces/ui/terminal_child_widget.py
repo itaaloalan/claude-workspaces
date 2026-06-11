@@ -9,7 +9,8 @@ console do Claude rodando num workspace, no estilo card moderno:
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -92,16 +93,6 @@ _CHIP_BRANCH_QSS = (
     f"}}"
 )
 
-_CHIP_PR_QSS = (
-    "QLabel {"
-    " background: rgba(244, 114, 182, 0.12);"
-    " color: #f472b6;"
-    " font-size: 9px; font-weight: 700;"
-    " padding: 1px 5px; border-radius: 6px;"
-    " border: 0;"
-    "}"
-)
-
 _INLINE_BTN_QSS = (
     f"QPushButton {{"
     f"  background: transparent;"
@@ -122,6 +113,10 @@ _INLINE_BTN_QSS = (
 
 
 class TerminalChildWidget(QWidget):
+    # Clique no chip de modificados (●N) — MainWindow foca o console e
+    # abre o painel Git do dock direito.
+    open_git_requested = Signal()
+
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._title = title
@@ -272,8 +267,10 @@ class TerminalChildWidget(QWidget):
         self._awaiting_blink_on: bool = False
         # Última ação reportada (statusline do Claude). Concatenada
         # no _state_label como "Trabalhando · …" pra economizar
-        # uma linha do card na sidebar.
+        # uma linha do card na sidebar. `_full` guarda o texto inteiro
+        # (sem truncar) pro tooltip do label de estado.
         self._last_action: str = ""
+        self._last_action_full: str = ""
         # Snapshot duplicado dos dados que o footer global também
         # consome — guardados em campos próprios pra `status_info()`
         # poder devolver sem reparsear o QLabel.
@@ -281,7 +278,11 @@ class TerminalChildWidget(QWidget):
         self._branch: str = ""
         self._modified: int = 0
         self._is_worktree: bool = False
+        self._ahead: int = 0
+        self._behind: int = 0
+        self._git_files: list = []
         self._pr_urls: list[str] = []
+        self._pr_chips: dict[str, QLabel] = {}
 
         # Bloco de ações fica na própria title row, à direita do título —
         # mantém o título com peso visual (bold) e libera a linha do estado
@@ -384,6 +385,14 @@ class TerminalChildWidget(QWidget):
         )
         self._git_label.setMaximumHeight(16)
         self._git_label.setVisible(False)
+        # O ●N de modificados é um <a href="git"> — clique abre o painel
+        # Git já focado neste console (signal open_git_requested).
+        self._git_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._git_label.linkActivated.connect(
+            lambda _href: self.open_git_requested.emit()
+        )
         state_row.addWidget(self._git_label, 0, Qt.AlignmentFlag.AlignRight)
 
         self._pr_chips_container = QWidget()
@@ -473,9 +482,16 @@ class TerminalChildWidget(QWidget):
         )
         if last_action:
             self._last_action = last_action if len(last_action) <= 55 else last_action[:54] + "…"
-        else:
+            self._last_action_full = last_action
+        elif state not in (STATE_AWAITING, STATE_IDLE):
+            # Mantém a última ação ao parar pra pedir decisão / ficar
+            # ocioso — o card preserva o contexto do que estava fazendo
+            # ("Aguardando decisão · Editando foo.py"). Nos demais
+            # estados, ação vazia limpa mesmo.
             self._last_action = ""
+            self._last_action_full = ""
         self._state_label.setText(self._compose_state_text(state))
+        self._refresh_state_tooltip(state)
         # Tinta o título com a cor do estado pra dar leitura rápida da
         # lista — sessões trabalhando ficam âmbar, aguardando laranja,
         # ociosas em cinza desbotado.
@@ -492,6 +508,19 @@ class TerminalChildWidget(QWidget):
         self._refresh_continue_visibility()
         # Atualiza a borda lateral colorida (state-driven).
         self._apply_card_qss()
+
+    def _refresh_state_tooltip(self, state: str) -> None:
+        """Tooltip do label de estado — estado + última ação completa
+        (o label visível trunca em 55 chars)."""
+        lines = [f"Estado: {STATE_LABEL[state]}"]
+        full = _strip_noise(self._last_action_full) if self._last_action_full else ""
+        if full:
+            lines.append(f"Última ação: {full}")
+        if state == STATE_IDLE and self._idle_since is not None:
+            elapsed = int(time.monotonic() - self._idle_since)
+            if elapsed >= 1:
+                lines.append(f"Ocioso há {_fmt_elapsed(elapsed)}")
+        self._state_label.setToolTip("\n".join(lines))
 
     def _compose_state_text(self, state: str) -> str:
         base = STATE_LABEL[state]
@@ -511,6 +540,7 @@ class TerminalChildWidget(QWidget):
         if self._current_state != STATE_IDLE or self._idle_since is None:
             return
         self._state_label.setText(self._compose_state_text(STATE_IDLE))
+        self._refresh_state_tooltip(STATE_IDLE)
 
     def tick_awaiting(self) -> None:
         """Pisca o label 'Aguardando' alternando entre laranja (WAITING)
@@ -650,56 +680,141 @@ class TerminalChildWidget(QWidget):
         self._continue_btn.setVisible(should_show)
 
     def set_pr_url(self, url: str) -> None:
-        """Marca esta sessão com o PR/MR criado. Acumula chips na sidebar."""
+        """Compat: PR detectado sem estado conhecido (chip rosa). O
+        poller de PR atualiza depois via set_pr_info com estado/cor."""
+        self.set_pr_info(url)
+
+    def set_pr_info(
+        self, url: str, state: str = "", number: int = 0, draft: bool = False
+    ) -> None:
+        """Marca esta sessão com o PR/MR da branch — chip colorido pelo
+        estado (aberto verde, draft cinza, merged roxo, fechado
+        vermelho; rosa = estado desconhecido). Chips são indexados por
+        URL: estado novo atualiza o chip existente in-place (OPEN→MERGED
+        durante a sessão), sem duplicar. Clique abre o PR no browser."""
         url = (url or "").rstrip("/")
-        if not url or url in self._pr_urls:
+        if not url:
             return
-        self._pr_urls.append(url)
+        color, state_pt = _pr_state_style(state, draft)
         from ..services.runner_url_detect import pr_label_from_url
-        chip = QLabel(pr_label_from_url(url))
-        chip.setTextFormat(Qt.TextFormat.RichText)
-        chip.setStyleSheet(_CHIP_PR_QSS)
-        chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        chip.setMaximumHeight(16)
-        chip.setToolTip(url)
-        self._pr_chips_layout.addWidget(chip)
+        label = pr_label_from_url(url)
+        if state == "MERGED":
+            label += " ✓"
+        elif state == "CLOSED":
+            label += " ✗"
+        elif draft:
+            label += " draft"
+        chip = self._pr_chips.get(url)
+        if chip is None:
+            chip = QLabel()
+            chip.setTextFormat(Qt.TextFormat.RichText)
+            chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+            chip.setMaximumHeight(16)
+            chip.setTextInteractionFlags(
+                Qt.TextInteractionFlag.LinksAccessibleByMouse
+            )
+            chip.linkActivated.connect(
+                lambda href: QDesktopServices.openUrl(QUrl(href))
+            )
+            self._pr_chips[url] = chip
+            self._pr_urls.append(url)
+            self._pr_chips_layout.addWidget(chip)
+        chip.setText(
+            f"<a href='{url}' style='color: {color};"
+            f" text-decoration: none;'>{label}</a>"
+        )
+        chip.setStyleSheet(theme.pr_chip_qss(color))
+        tip = url if not state_pt else f"PR #{number} — {state_pt}\n{url}" if number else f"{state_pt}\n{url}"
+        chip.setToolTip(tip)
         self._pr_chips_container.setVisible(True)
 
     def update_git_info(
-        self, branch: str, modified: int, is_worktree: bool = False
+        self,
+        branch: str,
+        modified: int,
+        is_worktree: bool = False,
+        ahead: int = 0,
+        behind: int = 0,
+        files: list | None = None,
+        worktree_dir: str = "",
     ) -> None:
-        """Atualiza o label do lado direito com branch e contagem de
-        arquivos modificados (working tree + staged + untracked).
-        `branch` vazio = pasta não é repo git → esconde o label.
-        `is_worktree` troca o glifo por 🌿 verde — console rodando numa
-        git worktree isolada (mesmo badge do header do terminal pane).
+        """Atualiza o label do lado direito com branch, ↑ahead ↓behind e
+        contagem de arquivos modificados (working tree + staged +
+        untracked). `branch` vazio = pasta não é repo git → esconde o
+        label. `is_worktree` ganha badge `wt` + glifo 🌿 verde — console
+        rodando numa git worktree isolada. `files` (list[GitFile] do
+        poller) alimenta o tooltip com a lista de arquivos — sem git
+        extra. O ●N é clicável e emite `open_git_requested`.
         """
         self._branch = branch
         self._modified = modified
         self._is_worktree = is_worktree
+        self._ahead = ahead
+        self._behind = behind
+        self._git_files = list(files) if files else []
         if not branch:
             self._git_label.setVisible(False)
             self._git_label.setText("")
             return
         # Encurta nomes longos pra não dominar a row do chip
         b = branch if len(branch) <= 18 else branch[:17] + "…"
-        glyph = (
-            f"<span style='color: #5ac38a;'>🌿 {b}</span>"
-            if is_worktree
-            else f"⎇ {b}"
-        )
-        if modified > 0:
-            self._git_label.setText(
-                f"{glyph}  <span style='color: {theme.WARNING};'>●{modified}</span>"
-            )
-            tip = f"Branch: {branch} — {modified} arquivo(s) modificado(s)"
-        else:
-            self._git_label.setText(glyph)
-            tip = f"Branch: {branch} — working tree limpo"
         if is_worktree:
-            tip = f"Worktree isolada 🌿\n{tip}"
-        self._git_label.setToolTip(tip)
+            glyph = (
+                f"<span style='background: rgba(90, 195, 138, 0.18);"
+                f" color: #5ac38a; font-weight: 700;'>&nbsp;wt&nbsp;</span>"
+                f" <span style='color: #5ac38a;'>🌿 {b}</span>"
+            )
+        else:
+            glyph = f"⎇ {b}"
+        parts = [glyph]
+        # ↑ahead ↓behind — omitidos quando 0 pra não poluir o chip.
+        if ahead > 0:
+            parts.append(f"<span style='color: {theme.SUCCESS};'>↑{ahead}</span>")
+        if behind > 0:
+            parts.append(f"<span style='color: {theme.WAITING};'>↓{behind}</span>")
+        if modified > 0:
+            parts.append(
+                f"<a href='git' style='color: {theme.WARNING};"
+                f" text-decoration: none;'>●{modified}</a>"
+            )
+        self._git_label.setText(" ".join(parts))
+        self._git_label.setToolTip(
+            self._compose_git_tooltip(branch, modified, worktree_dir)
+        )
         self._git_label.setVisible(True)
+
+    def _compose_git_tooltip(
+        self, branch: str, modified: int, worktree_dir: str
+    ) -> str:
+        """Monta o tooltip do chip git só com dados já recebidos do
+        poller — nenhum subprocess no hover."""
+        head = f"Branch: {branch}"
+        sync = []
+        if self._ahead > 0:
+            sync.append(f"↑{self._ahead} à frente")
+        if self._behind > 0:
+            sync.append(f"↓{self._behind} atrás")
+        if sync:
+            head += " · " + " ".join(sync)
+        lines = [head]
+        if self._is_worktree:
+            lines.insert(0, "Worktree isolada 🌿")
+            if worktree_dir:
+                lines.insert(1, f"Path: {worktree_dir}")
+        if modified > 0:
+            lines.append(f"{modified} arquivo(s) modificado(s):")
+            max_files = 10
+            for gf in self._git_files[:max_files]:
+                label = gf.label() if hasattr(gf, "label") else "?"
+                path = getattr(gf, "path", str(gf))
+                lines.append(f"  {label} — {path}")
+            rest = len(self._git_files) - max_files
+            if rest > 0:
+                lines.append(f"  … e mais {rest} arquivo(s)")
+            lines.append("Clique no ●N pra abrir o painel Git")
+        else:
+            lines.append("working tree limpo")
+        return "\n".join(lines)
 
     def update_session_info(
         self,
@@ -737,12 +852,28 @@ class TerminalChildWidget(QWidget):
             "branch": self._branch,
             "modified": self._modified,
             "is_worktree": self._is_worktree,
+            "ahead": self._ahead,
+            "behind": self._behind,
             "title": self._title,
             # `pr_url`: último MR/PR (compat). `pr_urls`: todos, pro footer
             # renderizar um link por MR quando a sessão tem várias pastas.
             "pr_url": self._pr_urls[-1] if self._pr_urls else None,
             "pr_urls": list(self._pr_urls),
         }
+
+
+def _pr_state_style(state: str, draft: bool) -> tuple[str, str]:
+    """(cor, label pt-BR) pro estado do PR/MR. Estado vazio = detectado
+    sem consulta ainda → rosa clássico, sem label."""
+    if draft and state == "OPEN":
+        return theme.PR_DRAFT, "Draft"
+    if state == "OPEN":
+        return theme.PR_OPEN, "Aberto"
+    if state == "MERGED":
+        return theme.PR_MERGED, "Merged"
+    if state == "CLOSED":
+        return theme.PR_CLOSED, "Fechado"
+    return theme.PR_PINK, ""
 
 
 def _shorten_model(model: str) -> str:
