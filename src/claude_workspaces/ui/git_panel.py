@@ -104,6 +104,34 @@ class _StatusScanSignals(QObject):
     done = Signal(int, dict, dict)
 
 
+class _WatchDirsSignals(QObject):
+    done = Signal(tuple, list)  # key (tuple de repo_folders), dirs
+
+
+class _WatchDirsTask(QRunnable):
+    """Roda o os.walk dos working trees fora da UI thread — em monorepos
+    grandes montar a lista de watch dirs (até _WATCH_DIR_CAP) leva segundos
+    e travava a troca de seleção de workspace. Só devolve a lista; quem
+    mexe no QFileSystemWatcher é a UI thread (dona do watcher)."""
+
+    def __init__(
+        self, key: tuple, folders: list[str], signals: _WatchDirsSignals
+    ) -> None:
+        super().__init__()
+        self._key = key
+        self._folders = folders
+        self._signals = signals
+
+    def run(self) -> None:
+        dirs: list[str] = []
+        try:
+            for folder in self._folders:
+                dirs.extend(_worktree_watch_dirs(folder))
+        except Exception:
+            log.exception("git_panel: walk de watch dirs falhou")
+        self._signals.done.emit(self._key, dirs)
+
+
 class _StatusScanTask(QRunnable):
     """Roda `get_status` (subprocess `git status`) fora da UI thread pra cada
     pasta, mais `git diff --numstat` pras ±linhas do feed. Só devolve dados;
@@ -447,9 +475,11 @@ class GitPanel(QWidget):
         self._prev_event_state: dict[str, dict[str, tuple]] = {}
         self._feed_folders_key: tuple = ()
         # Diretórios do worktree atualmente observados (caros de montar — só
-        # recomputados quando o conjunto de repos muda).
+        # recomputados quando o conjunto de repos muda, e em thread do pool).
         self._wt_dirs: list[str] = []
         self._wt_dirs_key: tuple = ()
+        self._watch_dirs_signals = _WatchDirsSignals()
+        self._watch_dirs_signals.done.connect(self._on_watch_dirs_ready)
 
     # ---------- construção ----------
 
@@ -901,9 +931,10 @@ class GitPanel(QWidget):
         return targets
 
     def _update_watches(self, repo_folders: list[str]) -> None:
-        # 1) Diretórios do working tree — caros de montar (os.walk); só
-        #    reconstrói quando o conjunto de repos muda. Ficam estáveis no Qt
-        #    e são o que faz o feed reagir na hora a um arquivo salvo.
+        # 1) Diretórios do working tree — caros de montar (os.walk roda no
+        #    pool, não na UI thread); só reconstrói quando o conjunto de
+        #    repos muda. Até o resultado voltar só os watches de .git ficam
+        #    ativos — o _poll_timer de 30s cobre eventos perdidos na janela.
         key = tuple(repo_folders)
         if key != self._wt_dirs_key:
             if self._wt_dirs:
@@ -912,11 +943,11 @@ class GitPanel(QWidget):
                 if stale:
                     self._watcher.removePaths(stale)
             self._wt_dirs = []
-            for folder in repo_folders:
-                self._wt_dirs.extend(_worktree_watch_dirs(folder))
             self._wt_dirs_key = key
-            if self._wt_dirs:
-                self._watcher.addPaths(self._wt_dirs)
+            if repo_folders:
+                self._status_pool.start(
+                    _WatchDirsTask(key, list(repo_folders), self._watch_dirs_signals)
+                )
 
         # 2) Paths do .git — reata sempre, preservando os dirs do worktree.
         wt = set(self._wt_dirs)
@@ -927,6 +958,16 @@ class GitPanel(QWidget):
         git_targets = self._git_watch_targets(repo_folders)
         if git_targets:
             self._watcher.addPaths(git_targets)
+
+    def _on_watch_dirs_ready(self, key: tuple, dirs: list) -> None:
+        """Resultado do _WatchDirsTask. Epoch-guard: se a seleção mudou
+        enquanto o walk rodava, a key não bate mais e o resultado é
+        descartado (mesmo idiom do _apply_statuses)."""
+        if key != self._wt_dirs_key:
+            return
+        self._wt_dirs = list(dirs)
+        if self._wt_dirs:
+            self._watcher.addPaths(self._wt_dirs)
 
     # ---------- console de atividade ----------
 

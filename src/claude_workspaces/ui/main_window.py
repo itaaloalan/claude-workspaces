@@ -254,16 +254,6 @@ class MainWindow(QMainWindow):
         # Notificador D-Bus com botões de ação (Abrir/Adiar/Já vi).
         # Se indisponível, _on_inbox_alert cai pro tray.showMessage.
         self._desktop_notifier: DesktopNotifier | None = None
-        # tab_id → note_id D-Bus ativo. Permite fechar a notificação
-        # proativamente quando o tab sai do inbox (voltou a trabalhar /
-        # terminou / usuário clicou na aba), evitando banner stale.
-        self._active_notifications: dict[int, int] = {}
-        # tab_id → QTimer que re-emite a notif com replaces_id pra
-        # ressuscitar o banner no KDE Plasma 6 (que transient-iza
-        # notifs com action ignorando urgency/resident/timeout). Sem
-        # isso o usuário perde o popup em ~6s. Cancelado quando a
-        # entry sai do inbox ou o usuário clica na action.
-        self._notification_keepalive: dict[int, QTimer] = {}
         # tab_id → timestamp monotônico da última notif "Pronto" emitida.
         # Debounce: se um console oscila working↔idle rapidamente (ex:
         # Claude rodando hooks/sub-passos entre estados), suprime as
@@ -290,6 +280,12 @@ class MainWindow(QMainWindow):
         from ..pr_status_poller import PrStatusPoller
         self._pr_poller = PrStatusPoller(ttl_seconds=60.0, parent=self)
         self._pr_poller.pr_ready.connect(self._on_pr_status_ready)
+        # Poller assíncrono do uso do plano: tira o urlopen (8s de timeout)
+        # e a varredura dos JSONLs do main thread — antes ambos rodavam
+        # inline no tick de 5s e congelavam a UI.
+        from ..plan_usage_poller import PlanUsagePoller
+        self._plan_usage_poller = PlanUsagePoller(parent=self)
+        self._plan_usage_poller.done.connect(self._on_plan_usage_ready)
         self._repo_poll_timer = QTimer(self)
         self._repo_poll_timer.setInterval(5_000)
         self._repo_poll_timer.timeout.connect(self._refresh_terminal_git_info)
@@ -2599,7 +2595,8 @@ class MainWindow(QMainWindow):
         from ..usage_telemetry import format_tokens, usage_for_session
 
         path = term.claimed_session_path()
-        if path is None:
+        # opencode devolve o path do SQLite — não há JSONL pra agregar.
+        if path is None or path.suffix != ".jsonl":
             placeholder = QAction("(sessão ainda não resolvida)", menu)
             placeholder.setEnabled(False)
             menu.addAction(placeholder)
@@ -5929,6 +5926,13 @@ class MainWindow(QMainWindow):
                 self._console_runner_group_items.pop(gk, None)
             parent_item.removeChild(item)
         self._tab_base_titles.pop(tab_id, None)
+        # Estado de notificação/atividade do tab: sem esses pops, fechar uma
+        # aba trabalhando deixa entradas órfãs — e como tab_id == id(widget)
+        # (CPython reusa ids), um console novo podia herdar o debounce de
+        # "Pronto" ou disparar "Execução longa" de uma aba já fechada.
+        self._working_since.pop(tab_id, None)
+        self._long_running_notified.discard(tab_id)
+        self._ready_alert_last.pop(tab_id, None)
         # Aba que saiu pode ter sido a única causa de colisão — re-disambigua.
         # parent_item agora é o bucket Sessões Claude (não o workspace);
         # _refresh_workspace_child_titles tolera, e _refresh_empty_placeholder
@@ -6309,59 +6313,10 @@ class MainWindow(QMainWindow):
         except Exception:
             log.debug("showMessage falhou", exc_info=True)
 
-    def _close_persistent_toast(self, tab_id: int) -> None:
-        pass  # toast in-app removido
-
-    def _arm_notification_keepalive(self, tab_id: int, is_reminder: bool) -> None:
-        """Inicia (ou reinicia) o timer que re-emite a notif a cada 5s.
-
-        Solução pro KDE Plasma 6 transient-izar popups com action: re-emitir
-        com `replaces_id` faz o banner reaparecer no canto. Para quando o
-        tab sai do inbox ou o usuário clica na action. 5s é menos que o
-        timeout que o Plasma aplica (~6s), então o popup não chega a sumir
-        entre re-emissões — o banner fica visualmente sticky.
-        """
-        existing = self._notification_keepalive.get(tab_id)
-        if existing is not None:
-            existing.stop()
-            existing.deleteLater()
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.setInterval(5000)
-        timer.timeout.connect(
-            lambda _tid=tab_id: self._resurrect_notification(_tid)
-        )
-        self._notification_keepalive[tab_id] = timer
-        timer.start()
-
-    def _cancel_notification_keepalive(self, tab_id: int) -> None:
-        timer = self._notification_keepalive.pop(tab_id, None)
-        if timer is not None:
-            timer.stop()
-            timer.deleteLater()
-
-    def _resurrect_notification(self, tab_id: int) -> None:
-        """Re-emite a notif do tab se ele ainda estiver no inbox.
-
-        Se o tab saiu do inbox no meio (ficou idle, foi clicado, terminou),
-        a entry sumiu de `inbox_entries()` e simplesmente paramos. Senão,
-        re-chamamos `_on_inbox_alert` como re-lembrete — ele já usa
-        `replaces_id` automaticamente via `_active_notifications`.
-        """
-        self._notification_keepalive.pop(tab_id, None)
-        info = self.terminals_coord.inbox_entries().get(tab_id)
-        if info is None:
-            return
-        self._on_inbox_alert(tab_id, info, is_reminder=True)
-
     def _handle_notification_action(
         self, tab_id: int, workspace_id: str, key: str
     ) -> None:
         """Disparado pelo botão clicado na notificação D-Bus."""
-        # O servidor fecha o banner ao invocar action, então o note_id já
-        # não é mais válido — descarta pra não tentar close() depois.
-        self._active_notifications.pop(tab_id, None)
-        self._cancel_notification_keepalive(tab_id)
         if key in ("open", "default"):
             self.show()
             self.raise_()
@@ -6419,11 +6374,8 @@ class MainWindow(QMainWindow):
 
     def _on_inbox_entry_removed(self, tab_id: int) -> None:
         """Tab saiu do inbox (voltou a trabalhar, terminou, foi focado).
-        Fecha a notificação D-Bus correspondente se ainda estiver visível —
-        senão o banner "✅ Pronto" continua na tela enquanto o console
-        já está em outro estado."""
-        self._cancel_notification_keepalive(tab_id)
-        self._close_persistent_toast(tab_id)
+        O fechamento do banner D-Bus é responsabilidade do
+        DesktopNotifierAdapter; aqui só sincronizamos o estado local."""
         # Limpa o debounce — tab saiu do inbox, próxima transição
         # working→idle é genuína e deve disparar notif sem suprimir.
         self._ready_alert_last.pop(tab_id, None)
@@ -6437,10 +6389,6 @@ class MainWindow(QMainWindow):
                 NotificationKind.PERMISSION_REQUIRED,
             ):
                 self.notif_service.mark_seen(n.id)
-        nid = self._active_notifications.pop(tab_id, None)
-        if nid is None or self._desktop_notifier is None:
-            return
-        self._desktop_notifier.close(nid)
 
     def _on_plugin_notification(
         self, plugin_id: str, kind: str, payload: dict
@@ -6952,10 +6900,13 @@ class MainWindow(QMainWindow):
             # cada pasta tenha branch detectada → seu próprio chip na sidebar.
             for extra in term.extra_dirs():
                 self._repo_poller.request(extra)
-            # Modelo + tokens da sessão claimed. usage_for_session é leve
-            # (lê apenas a usage de cada linha do JSONL).
+            # Modelo + tokens da sessão claimed. usage_for_session tem cache
+            # incremental (só parseia os bytes novos do JSONL desde o último
+            # tick), então a leitura síncrona aqui é barata mesmo em sessões
+            # grandes. Backend opencode guarda sessões em SQLite — não é
+            # JSONL, então pula (parsear o .db binário aqui era lixo + I/O).
             session_path = term.claimed_session_path()
-            if session_path is None:
+            if session_path is None or session_path.suffix != ".jsonl":
                 widget.update_session_info("", 0, 0, 0)
                 continue
             try:
@@ -6986,18 +6937,28 @@ class MainWindow(QMainWindow):
         """Click no botão ⟳ ao lado do status do plano: força chamada
         nova ignorando o cache TTL. Em cooldown (rate-limit), o force
         é ignorado dentro do fetch (forçar só renova o 429), e a UI
-        apenas re-renderiza com o estado atual. Feedback visual:
-        desabilita o botão durante a request pra evitar double-click."""
+        apenas re-renderiza com o estado atual. O recálculo é assíncrono:
+        o botão reabilita quando o poller emite done (fallback de 10s
+        pra nunca ficar preso se o worker morrer)."""
         btn = getattr(self, "_context_status_refresh_btn", None)
         if btn is not None:
             btn.setEnabled(False)
             btn.setText("…")
-        try:
-            self._refresh_plan_usage_status(force=True)
-        finally:
-            if btn is not None:
-                btn.setText("⟳")
-                btn.setEnabled(True)
+        self._refresh_plan_usage_status(force=True)
+
+        def _restore() -> None:
+            b = getattr(self, "_context_status_refresh_btn", None)
+            if b is not None and not b.isEnabled():
+                b.setText("⟳")
+                b.setEnabled(True)
+
+        QTimer.singleShot(10_000, _restore)
+
+    def _restore_context_status_refresh_btn(self) -> None:
+        btn = getattr(self, "_context_status_refresh_btn", None)
+        if btn is not None and not btn.isEnabled():
+            btn.setText("⟳")
+            btn.setEnabled(True)
 
     def _refresh_plan_usage_updated_label(self) -> None:
         """Re-renderiza o subtítulo 'atualizado há Xmin atrás' a partir
@@ -7019,7 +6980,15 @@ class MainWindow(QMainWindow):
         label.setVisible(True)
 
     def _refresh_plan_usage_status(self, force: bool = False) -> None:
-        """Atualiza o label de uso do plano na sidebar numa única linha
+        """Agenda o recálculo do uso do plano no PlanUsagePoller (worker
+        thread). O render acontece em `_on_plan_usage_ready` quando o
+        resultado fica pronto — nada de I/O nem HTTP no main thread."""
+        if getattr(self, "_context_status_label", None) is None:
+            return
+        self._plan_usage_poller.request(self.settings.ai_backend, force=force)
+
+    def _on_plan_usage_ready(self, result) -> None:
+        """Renderiza o label de uso do plano na sidebar numa única linha
         compacta tipo `5h 34% · sem 41% · son 12%` (cores no número,
         rótulos em cinza claro). Detalhes completos (reset, fonte,
         timestamp de sync) ficam no tooltip pra não consumir altura.
@@ -7030,11 +6999,11 @@ class MainWindow(QMainWindow):
         Estratégia: tenta `/api/oauth/usage` (mesmo endpoint que o
         `/status` do Claude Code consome — números idênticos ao
         claude.ai). Se token ausente, expirado ou request falha, cai
-        pro cálculo USD-baseado a partir dos JSONLs locais."""
+        pro cálculo USD-baseado a partir dos JSONLs locais. Tudo já
+        chegou computado no `result` (PlanUsageResult) — aqui é só UI."""
         from datetime import datetime, timedelta
 
-        from ..plan_usage_api import cooldown_remaining_seconds, fetch_plan_usage
-        from ..usage_telemetry import recent_plan_usage, weekly_plan_usage
+        self._restore_context_status_refresh_btn()
 
         label = getattr(self, "_context_status_label", None)
         container = getattr(self, "_context_status_container", None)
@@ -7082,20 +7051,11 @@ class MainWindow(QMainWindow):
             _set_container_visible(True)
             return True
 
-        if self.settings.ai_backend == "opencode":
-            from ..usage_telemetry import aggregate_usage_opencode, format_tokens
+        if result.backend == "opencode":
+            from ..usage_telemetry import format_tokens
 
-            try:
-                now = datetime.now(UTC)
-                recent = aggregate_usage_opencode(now - timedelta(hours=5))
-                weekly = aggregate_usage_opencode(now - timedelta(days=7))
-            except Exception:  # noqa: BLE001
-                log.debug("falha ao agregar uso do OpenCode", exc_info=True)
-                recent = {}
-                weekly = {}
-
-            tokens_5h, cost_5h, model_5h = sum_opencode_usage(recent)
-            tokens_7d, cost_7d, model_7d = sum_opencode_usage(weekly)
+            tokens_5h, cost_5h, model_5h = sum_opencode_usage(result.opencode_recent)
+            tokens_7d, cost_7d, model_7d = sum_opencode_usage(result.opencode_weekly)
             if tokens_5h > 0 or tokens_7d > 0:
                 model = model_5h or model_7d or "modelo"
                 sep = f" <span style='color: {theme.TEXT_DISABLED};'>·</span> "
@@ -7126,12 +7086,8 @@ class MainWindow(QMainWindow):
                     f"7d: {format_tokens(tokens_7d)} tokens · ${cost_7d:.2f}"
                 )
 
-        # --- 1. Caminho preferido: API oficial ---
-        snap = None
-        try:
-            snap = fetch_plan_usage(force=force)
-        except Exception:  # noqa: BLE001
-            log.debug("fetch_plan_usage falhou", exc_info=True)
+        # --- 1. Caminho preferido: API oficial (já buscada no worker) ---
+        snap = result.snap
 
         if snap is not None and (
             snap.five_hour is not None
@@ -7210,7 +7166,7 @@ class MainWindow(QMainWindow):
         # claude.ai 34%, fallback 100%) — melhor mostrar só o aviso de
         # cooldown e deixar o usuário aguardar/clicar no refresh
         # depois do retry-after, em vez de mentir com % estimado.
-        cooldown_now = cooldown_remaining_seconds()
+        cooldown_now = result.cooldown_seconds
         if cooldown_now > 0:
             mins = max(1, cooldown_now // 60)
             label.setText(_usage_text(
@@ -7229,12 +7185,10 @@ class MainWindow(QMainWindow):
             _set_container_visible(True)
             return
 
-        # --- 2. Fallback: cálculo USD-baseado a partir dos JSONLs ---
-        try:
-            usage = recent_plan_usage(5 * 3600)
-            weekly = weekly_plan_usage(7)
-        except Exception:  # noqa: BLE001
-            log.debug("falha ao agregar uso do plano", exc_info=True)
+        # --- 2. Fallback: cálculo USD-baseado (já computado no worker) ---
+        usage = result.fallback_window
+        weekly = result.fallback_weekly
+        if usage is None or weekly is None:
             if _show_opencode_only():
                 return
             _set_container_visible(False)
@@ -7270,7 +7224,7 @@ class MainWindow(QMainWindow):
         sonnet_pct = clamp_pct(weekly.sonnet_cost_usd, limit_sonnet)
         chips.append(pct_chip("Sonnet", sonnet_pct))
 
-        cooldown = cooldown_remaining_seconds()
+        cooldown = result.cooldown_seconds
         cooldown_note = ""
         if cooldown > 0:
             mins = cooldown // 60

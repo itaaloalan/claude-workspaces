@@ -231,6 +231,7 @@ class NotificationService(QObject):
 
     def remove(self, notif_id: str) -> None:
         if self._store.remove(notif_id):
+            self._last_reminder.pop(notif_id, None)
             self.notification_removed.emit(notif_id)
             self._announce_unread()
             self._flush()
@@ -284,6 +285,13 @@ class NotificationService(QObject):
     def _tick_reminders(self) -> None:
         secs = max(15, int(self._preferences.get("reminder_seconds", 120)))
         now = time.time()
+        # _last_reminder acumula um key por notif que já lembrou — poda os
+        # que não existem mais no store (removidos por history_limit,
+        # clear_all, etc.) pra não crescer pela vida inteira da sessão.
+        if len(self._last_reminder) > 64:
+            alive = {n.id for n in self._store.snapshot()}
+            for nid in [k for k in self._last_reminder if k not in alive]:
+                self._last_reminder.pop(nid, None)
         for n in self._store.actionable_pending():
             # Workspace silenciado (minimizado) não recebe nem reminders de
             # pendências criadas antes de minimizar.

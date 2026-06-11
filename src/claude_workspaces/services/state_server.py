@@ -536,6 +536,11 @@ class StateServer:
         except Exception:
             log.debug("branch_info falhou pra %s", cwd, exc_info=True)
         with self._lock:
+            # Poda expiradas no insert — sem isso o dict acumula um key por
+            # cwd já visitado pra sempre (sessões longas com muitos worktrees).
+            self._branch_cache = {
+                k: v for k, v in self._branch_cache.items() if v[0] > now
+            }
             self._branch_cache[cwd] = (now + 5.0, info)
         return info
 

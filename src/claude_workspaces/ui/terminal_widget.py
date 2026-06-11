@@ -49,6 +49,10 @@ def branch_to_session_name(branch: str) -> str:
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Máximo de URLs de PR/MR retidas por console — o banner rebuilda da lista
+# inteira, e sessões muito longas iam acumulando URLs antigas sem limite.
+_PR_URLS_CAP = 20
+
 
 def _build_pr_banner_html(urls: list[str]) -> str:
     """Monta o HTML do banner rosa de PR/MR a partir de TODAS as URLs
@@ -1025,6 +1029,7 @@ class TerminalWidget(QWidget):
         pr = detect_pr_url(buf_text)
         if pr and pr not in self._pr_urls:
             self._pr_urls.append(pr)
+            del self._pr_urls[:-_PR_URLS_CAP]
             self._show_pr_banner(pr)
             self.pr_detected.emit(pr)
 
@@ -1034,6 +1039,7 @@ class TerminalWidget(QWidget):
         if not url or url in self._pr_urls:
             return
         self._pr_urls.append(url)
+        del self._pr_urls[:-_PR_URLS_CAP]
         self._show_pr_banner(url)
         self.pr_detected.emit(url)
 

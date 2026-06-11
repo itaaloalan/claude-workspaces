@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -53,14 +54,19 @@ class PlanUsageSnapshot:
 
 _cache: PlanUsageSnapshot | None = None
 _cache_negative_until: float = 0.0
+# fetch_plan_usage roda no worker do PlanUsagePoller; o lock protege os
+# globals contra leitura simultânea da UI thread (cooldown_remaining_seconds).
+_lock = threading.Lock()
 
 
 def cooldown_remaining_seconds() -> int:
     """Quantos segundos até o próximo retry permitido (>0 indica que a
     última chamada falhou e estamos em backoff)."""
-    if _cache_negative_until <= 0:
+    with _lock:
+        negative_until = _cache_negative_until
+    if negative_until <= 0:
         return 0
-    remaining = _cache_negative_until - time.monotonic()
+    remaining = negative_until - time.monotonic()
     return max(0, int(remaining))
 
 
@@ -116,20 +122,26 @@ def fetch_plan_usage(force: bool = False) -> PlanUsageSnapshot | None:
     deve cair pro cálculo USD-baseado nesse caso."""
     global _cache, _cache_negative_until
     now = time.monotonic()
-    if not force and _cache is not None and (now - _cache.fetched_at) < CACHE_TTL_SECONDS:
-        return _cache
-    # Cache negativo: depois de uma falha (rate limit/token expirado),
-    # não retentar por um tempo — evita martelar a API a cada refresh
-    # do painel (que roda a cada poucos segundos). Mesmo com force=True
-    # (clique no ⟳), respeitamos o Retry-After do servidor — forçar
-    # durante cooldown só renova a janela de 429 e prolonga o bloqueio.
-    if now < _cache_negative_until:
-        return _cache  # devolve o cache antigo se ainda existir (pode ser None)
+    with _lock:
+        if (
+            not force
+            and _cache is not None
+            and (now - _cache.fetched_at) < CACHE_TTL_SECONDS
+        ):
+            return _cache
+        # Cache negativo: depois de uma falha (rate limit/token expirado),
+        # não retentar por um tempo — evita martelar a API a cada refresh
+        # do painel (que roda a cada poucos segundos). Mesmo com force=True
+        # (clique no ⟳), respeitamos o Retry-After do servidor — forçar
+        # durante cooldown só renova a janela de 429 e prolonga o bloqueio.
+        if now < _cache_negative_until:
+            return _cache  # devolve o cache antigo se ainda existir (pode ser None)
 
     token = _read_oauth_token()
     if not token:
-        _cache_negative_until = now + CACHE_TTL_SECONDS
-        return _cache
+        with _lock:
+            _cache_negative_until = now + CACHE_TTL_SECONDS
+            return _cache
 
     req = urllib.request.Request(
         USAGE_URL,
@@ -163,23 +175,27 @@ def fetch_plan_usage(force: bool = False) -> PlanUsageSnapshot | None:
             "falha em /api/oauth/usage: HTTP %s (retry-after %ss)",
             exc.code, retry_after or "?",
         )
-        _cache_negative_until = now + wait
-        return _cache
+        with _lock:
+            _cache_negative_until = now + wait
+            return _cache
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         log.debug("falha em /api/oauth/usage: %s", exc)
-        _cache_negative_until = now + CACHE_TTL_SECONDS
-        return _cache
+        with _lock:
+            _cache_negative_until = now + CACHE_TTL_SECONDS
+            return _cache
 
     try:
         payload = json.loads(body)
     except json.JSONDecodeError:
-        _cache_negative_until = now + CACHE_TTL_SECONDS
-        return _cache
+        with _lock:
+            _cache_negative_until = now + CACHE_TTL_SECONDS
+            return _cache
 
     if not isinstance(payload, dict) or "error" in payload:
         log.debug("/api/oauth/usage devolveu erro: %s", payload)
-        _cache_negative_until = now + CACHE_TTL_SECONDS
-        return _cache
+        with _lock:
+            _cache_negative_until = now + CACHE_TTL_SECONDS
+            return _cache
 
     snap = PlanUsageSnapshot(
         five_hour=_parse_bucket(payload.get("five_hour")),
@@ -188,6 +204,7 @@ def fetch_plan_usage(force: bool = False) -> PlanUsageSnapshot | None:
         seven_day_sonnet=_parse_bucket(payload.get("seven_day_sonnet")),
         fetched_at=now,
     )
-    _cache = snap
-    _cache_negative_until = 0.0
+    with _lock:
+        _cache = snap
+        _cache_negative_until = 0.0
     return snap

@@ -8,7 +8,11 @@ mudar preços.
 
 import json
 import logging
-from dataclasses import dataclass, field
+import os
+import stat as stat_mod
+import threading
+import time
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -236,56 +240,148 @@ def aggregate_usage_by_workspace(
     return out
 
 
+def _accumulate_session_line(stats: UsageStats, raw: bytes) -> None:
+    """Acumula uma linha de JSONL de sessão em `stats`. Todos os campos
+    são append-monotônicos (somas, max de ts, overwrite do "último"), então
+    aplicar só as linhas novas equivale a re-parsear o arquivo inteiro."""
+    try:
+        msg = json.loads(raw)
+    except json.JSONDecodeError:
+        return
+    if msg.get("type") != "assistant":
+        return
+    ts = _parse_timestamp(msg.get("timestamp", ""))
+    inner = msg.get("message") or {}
+    if not isinstance(inner, dict):
+        return
+    usage = inner.get("usage") or {}
+    if not isinstance(usage, dict):
+        return
+    model = inner.get("model") or "?"
+    i = int(usage.get("input_tokens") or 0)
+    o = int(usage.get("output_tokens") or 0)
+    cc = int(usage.get("cache_creation_input_tokens") or 0)
+    cr = int(usage.get("cache_read_input_tokens") or 0)
+    if i + o + cc + cr <= 0 and model == "?":
+        return
+    stats.input_tokens += i
+    stats.output_tokens += o
+    stats.cache_creation_tokens += cc
+    stats.cache_read_tokens += cr
+    stats.cost_usd += _model_cost(model, usage)
+    stats.by_model[model] = stats.by_model.get(model, 0) + (i + o + cc + cr)
+    if model and model != "?":
+        stats.last_model = model
+    # Tokens "em contexto" desta virada: input + cache (lido + criado).
+    # Sobrescreve a cada iteração — fica com o valor da última mensagem
+    # assistant do JSONL.
+    stats.last_context_tokens = i + cc + cr
+    if ts and (stats.last_used is None or ts > stats.last_used):
+        stats.last_used = ts
+
+
+@dataclass
+class _SessionCacheEntry:
+    size: int
+    mtime_ns: int
+    ino: int
+    offset: int  # byte logo após a última linha completa já parseada
+    tail: bytes  # últimos bytes antes do offset — detecta rewrite in-place
+    stats: UsageStats
+    last_access: float
+
+
+_TAIL_CHECK_BYTES = 64
+
+
+# Cache incremental de usage_for_session: o tick de 5s da MainWindow chama
+# isso pra cada console visível, e re-parsear um JSONL de dezenas de MB a
+# cada tick travava a UI. A invalidação é por estado do arquivo (size +
+# mtime_ns + inode), NUNCA por TTL — qualquer append/truncamento é detectado
+# na chamada seguinte, então o valor devolvido reflete sempre o disco atual.
+_session_cache: dict[str, _SessionCacheEntry] = {}
+_session_cache_lock = threading.Lock()
+_SESSION_CACHE_MAX = 64
+
+
+def _copy_stats(stats: UsageStats) -> UsageStats:
+    # by_model é mutável e compartilhado — nunca vaza o dict do cache.
+    return replace(stats, by_model=dict(stats.by_model))
+
+
 def usage_for_session(jsonl_path: Path) -> UsageStats:
     """Lê um único JSONL e devolve UsageStats agregado dessa sessão.
     `last_model` reflete o modelo da mensagem assistant mais recente —
-    útil quando o usuário usa /model no meio da sessão pra trocar."""
-    stats = UsageStats()
-    if not jsonl_path.is_file():
-        return stats
+    útil quando o usuário usa /model no meio da sessão pra trocar.
+
+    Incremental: arquivo inalterado → cache; cresceu (mesmo inode) → parseia
+    só os bytes novos; encolheu/trocou de inode/mudou sem crescer → re-parse
+    total. Linha parcial (append em andamento) fica pro próximo tick."""
+    key = str(jsonl_path)
     try:
-        with jsonl_path.open(encoding="utf-8") as fp:
-            for line in fp:
-                try:
-                    msg = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if msg.get("type") != "assistant":
-                    continue
-                ts = _parse_timestamp(msg.get("timestamp", ""))
-                inner = msg.get("message") or {}
-                if not isinstance(inner, dict):
-                    continue
-                usage = inner.get("usage") or {}
-                if not isinstance(usage, dict):
-                    continue
-                model = inner.get("model") or "?"
-                i = int(usage.get("input_tokens") or 0)
-                o = int(usage.get("output_tokens") or 0)
-                cc = int(usage.get("cache_creation_input_tokens") or 0)
-                cr = int(usage.get("cache_read_input_tokens") or 0)
-                if i + o + cc + cr <= 0 and model == "?":
-                    continue
-                stats.input_tokens += i
-                stats.output_tokens += o
-                stats.cache_creation_tokens += cc
-                stats.cache_read_tokens += cr
-                stats.cost_usd += _model_cost(model, usage)
-                stats.by_model[model] = (
-                    stats.by_model.get(model, 0) + (i + o + cc + cr)
-                )
-                if model and model != "?":
-                    stats.last_model = model
-                # Tokens "em contexto" desta virada: input + cache (lido +
-                # criado). Sobrescreve a cada iteração — fica com o valor
-                # da última mensagem assistant do JSONL.
-                stats.last_context_tokens = i + cc + cr
-                if ts and (stats.last_used is None or ts > stats.last_used):
-                    stats.last_used = ts
+        st = os.stat(jsonl_path)
+    except OSError:
+        with _session_cache_lock:
+            _session_cache.pop(key, None)
+        return UsageStats()
+    if not stat_mod.S_ISREG(st.st_mode):
+        return UsageStats()
+
+    now = time.monotonic()
+    sig = (st.st_size, st.st_mtime_ns, st.st_ino)
+    with _session_cache_lock:
+        entry = _session_cache.get(key)
+        if entry is not None and sig == (entry.size, entry.mtime_ns, entry.ino):
+            entry.last_access = now
+            return _copy_stats(entry.stats)
+
+    # Append no mesmo arquivo → retoma do offset salvo; qualquer outra
+    # mudança (truncamento, rewrite, rotação) → começa do zero. O tail
+    # confirma que o conteúdo já parseado não foi reescrito in-place.
+    incremental = (
+        entry is not None and st.st_ino == entry.ino and st.st_size > entry.size
+    )
+    offset = 0
+    stats = UsageStats()
+    try:
+        with open(jsonl_path, "rb") as fp:
+            if incremental and entry is not None:
+                fp.seek(max(0, entry.offset - len(entry.tail)))
+                if fp.read(len(entry.tail)) == entry.tail:
+                    stats = _copy_stats(entry.stats)
+                    stats.sessions = 0  # re-setado no fim, como no full
+                    offset = entry.offset
+                else:
+                    fp.seek(0)  # prefixo mudou: rewrite disfarçado de append
+            tail = entry.tail if offset else b""
+            for raw in fp:
+                if not raw.endswith(b"\n"):
+                    break  # linha parcial — consumida quando completar
+                offset += len(raw)
+                tail = (tail + raw)[-_TAIL_CHECK_BYTES:]
+                _accumulate_session_line(stats, raw)
         stats.sessions = 1
     except OSError:
         log.debug("falha ao ler %s", jsonl_path, exc_info=True)
-    return stats
+        return stats
+
+    with _session_cache_lock:
+        _session_cache[key] = _SessionCacheEntry(
+            size=st.st_size,
+            mtime_ns=st.st_mtime_ns,
+            ino=st.st_ino,
+            offset=offset,
+            tail=tail,
+            stats=stats,
+            last_access=now,
+        )
+        if len(_session_cache) > _SESSION_CACHE_MAX:
+            oldest = sorted(
+                _session_cache.items(), key=lambda kv: kv[1].last_access
+            )
+            for k, _ in oldest[: len(_session_cache) - _SESSION_CACHE_MAX]:
+                _session_cache.pop(k, None)
+    return _copy_stats(stats)
 
 
 def format_tokens(n: int) -> str:
@@ -307,62 +403,71 @@ class WeeklyPlanUsage:
     total_tokens: int = 0
 
 
+# Cache por arquivo das linhas assistant relevantes pro plan usage. Chave de
+# validade = (size, mtime_ns, inode): arquivo inalterado não é re-parseado;
+# QUALQUER mudança re-lê o arquivo na mesma chamada (sem TTL → sem dado velho).
+# rows: lista de (ts, model, usage) com ts válido e tokens > 0 — exatamente o
+# conjunto que as janelas 5h e semanal filtram. Não mutar as rows devolvidas.
+_rows_cache: dict[str, tuple[tuple[int, int, int], list[tuple]]] = {}
+_rows_cache_lock = threading.Lock()
+
+
+def _assistant_rows(jsonl: Path) -> list[tuple]:
+    try:
+        st = os.stat(jsonl)
+    except OSError:
+        return []
+    sig = (st.st_size, st.st_mtime_ns, st.st_ino)
+    key = str(jsonl)
+    with _rows_cache_lock:
+        hit = _rows_cache.get(key)
+        if hit is not None and hit[0] == sig:
+            return hit[1]
+    rows: list[tuple] = []
+    try:
+        with open(jsonl, "rb") as fp:
+            for raw in fp:
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if msg.get("type") != "assistant":
+                    continue
+                ts = _parse_timestamp(msg.get("timestamp", ""))
+                if ts is None:
+                    continue
+                inner = msg.get("message") or {}
+                if not isinstance(inner, dict):
+                    continue
+                usage = inner.get("usage") or {}
+                if not isinstance(usage, dict):
+                    continue
+                i = int(usage.get("input_tokens") or 0)
+                o = int(usage.get("output_tokens") or 0)
+                cc = int(usage.get("cache_creation_input_tokens") or 0)
+                cr = int(usage.get("cache_read_input_tokens") or 0)
+                if i + o + cc + cr <= 0:
+                    continue
+                rows.append((ts, inner.get("model") or "?", usage))
+    except OSError:
+        return rows
+    with _rows_cache_lock:
+        _rows_cache[key] = (sig, rows)
+    return rows
+
+
+def _prune_rows_cache(keep: set[str]) -> None:
+    """Descarta entradas de arquivos que saíram da janela de varredura —
+    sem isso o cache cresceria com cada sessão que já foi recente um dia."""
+    with _rows_cache_lock:
+        for k in [k for k in _rows_cache if k not in keep]:
+            _rows_cache.pop(k, None)
+
+
 def weekly_plan_usage(window_days: int = 7) -> WeeklyPlanUsage:
     """Soma custos de assistant messages nos últimos `window_days` dias,
-    separando Sonnet do total. Reaproveita o mesmo varrer de JSONLs do
-    plan_usage 5h, mas em janela maior."""
-    out = WeeklyPlanUsage()
-    base = Path.home() / ".claude" / "projects"
-    if not base.is_dir():
-        return out
-    cutoff = datetime.now(UTC) - timedelta(days=window_days)
-    cutoff_epoch = cutoff.timestamp()
-    try:
-        projects = list(base.iterdir())
-    except OSError:
-        return out
-    for proj in projects:
-        if not proj.is_dir():
-            continue
-        for jsonl in proj.glob("*.jsonl"):
-            try:
-                if jsonl.stat().st_mtime < cutoff_epoch:
-                    continue
-            except OSError:
-                continue
-            try:
-                with jsonl.open(encoding="utf-8") as fp:
-                    for line in fp:
-                        try:
-                            msg = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if msg.get("type") != "assistant":
-                            continue
-                        ts = _parse_timestamp(msg.get("timestamp", ""))
-                        if ts is None or ts < cutoff:
-                            continue
-                        inner = msg.get("message") or {}
-                        if not isinstance(inner, dict):
-                            continue
-                        usage = inner.get("usage") or {}
-                        if not isinstance(usage, dict):
-                            continue
-                        model = inner.get("model") or "?"
-                        i = int(usage.get("input_tokens") or 0)
-                        o = int(usage.get("output_tokens") or 0)
-                        cc = int(usage.get("cache_creation_input_tokens") or 0)
-                        cr = int(usage.get("cache_read_input_tokens") or 0)
-                        if i + o + cc + cr <= 0:
-                            continue
-                        cost = _model_cost(model, usage)
-                        out.all_cost_usd += cost
-                        out.total_tokens += i + o + cc + cr
-                        if "sonnet" in model.lower():
-                            out.sonnet_cost_usd += cost
-            except OSError:
-                continue
-    return out
+    separando Sonnet do total."""
+    return local_plan_usage(window_days=window_days)[1]
 
 
 @dataclass
@@ -378,72 +483,75 @@ class PlanUsageWindow:
 
 
 def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
-    """Replica `Plan usage limits → Current session` do claude.ai.
+    """Replica `Plan usage limits → Current session` do claude.ai."""
+    return local_plan_usage(window_seconds=window_seconds)[0]
 
-    Anthropic abre uma "sessão" de 5h na 1a mensagem após um gap >=5h e
-    fecha quando passa 5h do início. O que conta é o uso DESSA sessão
-    atual — não uma janela rolante. Algoritmo:
-      1. Coleta todas as mensagens dos JSONL recentes (mtime na última
-         janela 2x pra cobrir borda).
+
+def local_plan_usage(
+    window_seconds: int = 5 * 3600, window_days: int = 7
+) -> tuple[PlanUsageWindow, WeeklyPlanUsage]:
+    """Calcula as duas janelas locais (sessão 5h + semanal) numa única
+    varredura de ~/.claude/projects — o cutoff de mtime da janela 5h é
+    subconjunto do semanal, então não há por que varrer duas vezes.
+
+    Janela 5h: Anthropic abre uma "sessão" na 1a mensagem após um gap
+    >=5h e fecha quando passa 5h do início. O que conta é o uso DESSA
+    sessão atual — não uma janela rolante. Algoritmo:
+      1. Coleta as mensagens dos JSONL recentes (mtime na última janela
+         2x pra cobrir borda).
       2. Ordena por ts e detecta o `session_start` corrente: 1a mensagem
          tal que `session_start + window` > now.
       3. Soma só do `session_start` em diante.
     `first_ts` no retorno é o session_start (não o cutoff da janela),
-    então `first_ts + 5h` = reset real exibido pela UI.
-    """
-    out = PlanUsageWindow()
+    então `first_ts + 5h` = reset real exibido pela UI."""
+    recent = PlanUsageWindow()
+    weekly = WeeklyPlanUsage()
     base = Path.home() / ".claude" / "projects"
     if not base.is_dir():
-        return out
+        return recent, weekly
     now = datetime.now(UTC)
-    # Pré-filtra arquivos modificados na última 2*janela — cobre o caso
-    # de a sessão atual ter começado pouco antes do cutoff rolante.
-    mtime_cutoff = (now - timedelta(seconds=window_seconds * 2)).timestamp()
+    weekly_cutoff = now - timedelta(days=window_days)
+    weekly_cutoff_epoch = weekly_cutoff.timestamp()
+    # Pré-filtro da janela 5h: arquivos modificados na última 2*janela —
+    # cobre o caso de a sessão atual ter começado pouco antes do cutoff.
+    recent_mtime_cutoff = (now - timedelta(seconds=window_seconds * 2)).timestamp()
     try:
         projects = list(base.iterdir())
     except OSError:
-        return out
+        return recent, weekly
 
-    msgs: list[tuple[datetime, str, dict]] = []  # (ts, model, usage)
+    msgs: list[tuple] = []  # (ts, model, usage) dos arquivos recentes
+    seen: set[str] = set()
     for proj in projects:
         if not proj.is_dir():
             continue
         for jsonl in proj.glob("*.jsonl"):
             try:
-                if jsonl.stat().st_mtime < mtime_cutoff:
-                    continue
+                mtime = jsonl.stat().st_mtime
             except OSError:
                 continue
-            try:
-                with jsonl.open(encoding="utf-8") as fp:
-                    for line in fp:
-                        try:
-                            msg = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if msg.get("type") != "assistant":
-                            continue
-                        ts = _parse_timestamp(msg.get("timestamp", ""))
-                        if ts is None:
-                            continue
-                        inner = msg.get("message") or {}
-                        if not isinstance(inner, dict):
-                            continue
-                        usage = inner.get("usage") or {}
-                        if not isinstance(usage, dict):
-                            continue
-                        i = int(usage.get("input_tokens") or 0)
-                        o = int(usage.get("output_tokens") or 0)
-                        cc = int(usage.get("cache_creation_input_tokens") or 0)
-                        cr = int(usage.get("cache_read_input_tokens") or 0)
-                        if i + o + cc + cr <= 0:
-                            continue
-                        msgs.append((ts, inner.get("model") or "?", usage))
-            except OSError:
+            if mtime < weekly_cutoff_epoch:
                 continue
+            rows = _assistant_rows(jsonl)
+            seen.add(str(jsonl))
+            is_recent_file = mtime >= recent_mtime_cutoff
+            for ts, model, usage in rows:
+                if ts >= weekly_cutoff:
+                    i = int(usage.get("input_tokens") or 0)
+                    o = int(usage.get("output_tokens") or 0)
+                    cc = int(usage.get("cache_creation_input_tokens") or 0)
+                    cr = int(usage.get("cache_read_input_tokens") or 0)
+                    cost = _model_cost(model, usage)
+                    weekly.all_cost_usd += cost
+                    weekly.total_tokens += i + o + cc + cr
+                    if "sonnet" in model.lower():
+                        weekly.sonnet_cost_usd += cost
+                if is_recent_file:
+                    msgs.append((ts, model, usage))
+    _prune_rows_cache(seen)
 
     if not msgs:
-        return out
+        return recent, weekly
     msgs.sort(key=lambda x: x[0])
     window = timedelta(seconds=window_seconds)
     # Walk: cada vez que aparece uma msg fora da janela do session_start
@@ -453,7 +561,7 @@ def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
         if session_start is None or ts >= session_start + window:
             session_start = ts
     if session_start is None or session_start + window <= now:
-        return out  # sessão expirou — nada a mostrar
+        return recent, weekly  # sessão 5h expirou — nada a mostrar
 
     for ts, model, usage in msgs:
         if ts < session_start:
@@ -462,9 +570,9 @@ def recent_plan_usage(window_seconds: int = 5 * 3600) -> PlanUsageWindow:
         o = int(usage.get("output_tokens") or 0)
         cc = int(usage.get("cache_creation_input_tokens") or 0)
         cr = int(usage.get("cache_read_input_tokens") or 0)
-        out.cost_usd += _model_cost(model, usage)
-        out.total_tokens += i + o + cc + cr
-        if out.latest_ts is None or ts > out.latest_ts:
-            out.latest_ts = ts
-    out.first_ts = session_start
-    return out
+        recent.cost_usd += _model_cost(model, usage)
+        recent.total_tokens += i + o + cc + cr
+        if recent.latest_ts is None or ts > recent.latest_ts:
+            recent.latest_ts = ts
+    recent.first_ts = session_start
+    return recent, weekly

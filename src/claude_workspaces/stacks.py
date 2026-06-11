@@ -61,5 +61,9 @@ def detect_stacks_cached(folders: list[str]) -> set[str]:
     if hit is not None and (now - hit[0]) < _STACKS_TTL_S:
         return set(hit[1])
     result = detect_stacks(folders)
+    # Poda expiradas no insert — workspaces editados/removidos mudam a
+    # tuple-chave e a entrada antiga ficaria órfã pra sempre.
+    for k in [k for k, v in _stacks_cache.items() if (now - v[0]) >= _STACKS_TTL_S]:
+        _stacks_cache.pop(k, None)
     _stacks_cache[key] = (now, set(result))
     return result

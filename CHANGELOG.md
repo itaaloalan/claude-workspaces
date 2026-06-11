@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.5.1] — 2026-06-11
+
+### Correções de performance e vazamento de memória
+- **Parse incremental dos JSONLs de sessão.** O tick de 5s parseava o
+  transcript inteiro de cada console visível no main thread (arquivos de
+  até 40 MB → stutter constante). `usage_for_session` agora tem cache
+  incremental: arquivo inalterado não é relido; append parseia só os bytes
+  novos. Invalidação por (mtime, size, inode) + verificação de tail —
+  qualquer mudança no arquivo é refletida no mesmo tick, sem TTL cego e
+  sem risco de número desatualizado/errado após truncamento ou rewrite.
+- **Status de uso do plano 100% assíncrono.** `fetch_plan_usage` fazia
+  urlopen síncrono (timeout 8s) na UI thread a cada expiração do cache de
+  30min e a cada clique no ⟳; o fallback USD-baseado varria os JSONLs de
+  ~/.claude/projects inteiros no main thread. Tudo migrou pro novo
+  `PlanUsagePoller` (QThreadPool single-flight, recálculo no máx. a cada
+  30s; ⟳ força na hora). As janelas 5h e semanal viraram uma varredura
+  única (`local_plan_usage`) com cache por arquivo chaveado por
+  (mtime, size) — só arquivos modificados são re-parseados.
+- **Backend opencode não lê mais o SQLite como JSONL.** O tick de 5s
+  passava o path do banco do opencode pro agregador de JSONL — leitura
+  binária inteira a cada tick parseando lixo. Agora só paths `.jsonl`.
+- **Limpeza de estado ao fechar aba.** `_handle_tab_removed` não limpava
+  `_working_since`/`_long_running_notified`/`_ready_alert_last`; como
+  tab_id reusa `id()` do CPython, console novo podia herdar debounce de
+  "Pronto" ou receber "Execução longa" de aba já fechada. Removida também
+  a maquinaria morta de keepalive de notificação (`_active_notifications`,
+  `_notification_keepalive` e métodos associados, sem callers desde o
+  DesktopNotifierAdapter).
+- **Caches com poda.** `state_server._branch_cache`, `stacks._stacks_cache`
+  e `mcp_inspector._project_names_cache` agora descartam entradas expiradas
+  no insert; `_last_reminder` das notificações poda ids que saíram do
+  store; lista de PR/MR do console limitada às 20 últimas URLs.
+- **os.walk das watches do painel Git fora do main thread.** Montar a
+  lista de diretórios observados (até 1500) travava a troca de seleção em
+  monorepos grandes; agora roda no pool com epoch-guard, e a janela sem
+  watch é coberta pelo poll de 30s.
+
 ## [1.5.0] — 2026-06-11
 
 ### Novidades

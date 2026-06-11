@@ -126,6 +126,13 @@ def list_project_server_names_cached(workspace_folders: list[str]) -> list[str]:
     except Exception:
         log.exception("list_project_server_names_cached falhou")
         names = []
+    # Poda expiradas no insert — chave por tuple(folders) muda quando o
+    # workspace é editado, e a entrada antiga ficaria órfã pra sempre.
+    for k in [
+        k for k, v in _project_names_cache.items()
+        if (now - v[0]) >= _PROJECT_NAMES_TTL_S
+    ]:
+        _project_names_cache.pop(k, None)
     _project_names_cache[key] = (now, list(names))
     return names
 
