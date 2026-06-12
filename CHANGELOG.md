@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.8.1] — 2026-06-12
+
+### Correção: o checkbox "stack" do runner parecia um botão de parar
+- **Na lista de runners da sidebar, o checkbox de "incluir no ⬇ Subir stack"
+  virava um quadrado verde cheio quando marcado** — e, colado nos botões `↻`
+  (reiniciar) e `▶` (iniciar), o trio lia como `■ ↻ ▶` (parar/reiniciar/
+  iniciar). Era fácil clicar achando que ia parar o runner.
+- **Agora o toggle carrega a palavra `stack` e um indicador com ✓.** A label
+  entre o indicador e os botões de ação quebra a leitura de "transporte", o
+  ✓ deixa claro que é uma seleção (não um `■`), e um respiro extra separa o
+  toggle dos botões `↻`/`▶`. Verde só reforça "faz parte da stack".
+- O ✓ é renderizado uma vez (qtawesome → PNG em cache no tempdir) na criação
+  da primeira row; sem qtawesome o indicador cai no quadrado verde, mas
+  continua rotulado `stack`. Comportamento e o sinal de toggle não mudaram.
+
 ## [1.8.0] — 2026-06-12
 
 ### Marcador de runner em execução na sidebar (por console)

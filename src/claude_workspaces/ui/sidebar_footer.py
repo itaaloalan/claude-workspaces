@@ -15,7 +15,9 @@ API pública compatível com sidebar_builder (reassigned attributes):
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal
@@ -89,13 +91,51 @@ class _UsageVisibilityProxy(QWidget):
             self._detail.setVisible(False)
 
 
+# ✓ branco/escuro desenhado dentro do indicador marcado do toggle "stack".
+# Caminho fixo (só string) no import; o PNG é renderizado lazy na criação
+# do 1º row, quando já há QGuiApplication. Sufixo de versão permite trocar
+# a arte sem colidir com um cache antigo.
+_CHECK_ICON_PATH = os.path.join(
+    tempfile.gettempdir(), "claude_workspaces_stack_check_v1.png"
+).replace("\\", "/")
+_check_icon_ready = False
+
+
+def _ensure_check_icon() -> None:
+    """Garante (uma vez) o ✓ usado no indicador marcado do toggle 'stack'.
+    Falha silenciosa → o indicador cai no quadrado verde cheio (ainda
+    rotulado 'stack', então nada de confusão com botão de parar)."""
+    global _check_icon_ready
+    if _check_icon_ready:
+        return
+    _check_icon_ready = True
+    try:
+        if os.path.exists(_CHECK_ICON_PATH):
+            return
+        from PySide6.QtCore import QSize
+
+        from .icons import ic
+        pm = ic("mdi6.check-bold", color="#0f2e0f").pixmap(QSize(12, 12))
+        if not pm.isNull():
+            pm.save(_CHECK_ICON_PATH, "PNG")
+    except Exception:
+        pass
+
+
+# Toggle "stack" (include_in_stack). Antes era um checkbox sem label cuja
+# caixa marcada virava um quadrado verde cheio — colado no ↻/▶, lia como o
+# ■ de um trio stop/restart/play. Agora carrega a palavra "stack" e um
+# indicador com ✓, então é claramente uma seleção, não um botão de parar.
 _STACK_CHK_QSS = (
-    "QCheckBox { spacing: 0; }"
-    "QCheckBox::indicator { width: 13px; height: 13px; border-radius: 3px; "
+    f"QCheckBox {{ spacing: 4px; color: {theme.TEXT_DISABLED}; "
+    "font-size: 9px; font-weight: 700; letter-spacing: 0.3px; }"
+    f"QCheckBox:hover {{ color: {theme.TEXT_FADED}; }}"
+    f"QCheckBox:checked {{ color: {theme.SUCCESS}; }}"
+    "QCheckBox::indicator { width: 12px; height: 12px; border-radius: 3px; "
     f"border: 1px solid {theme.BORDER_INPUT}; background: transparent; }}"
-    f"QCheckBox::indicator:hover {{ border-color: {theme.TEXT_LINK}; }}"
+    f"QCheckBox::indicator:hover {{ border-color: {theme.SUCCESS}; }}"
     f"QCheckBox::indicator:checked {{ background: {theme.SUCCESS}; "
-    f"border-color: {theme.SUCCESS}; }}"
+    f"border-color: {theme.SUCCESS}; image: url({_CHECK_ICON_PATH}); }}"
 )
 
 
@@ -164,16 +204,20 @@ class _RunnerFooterRow(QWidget):
         # Sempre visível (não hover-only) pra dar de relance quais runners
         # sobem pra stack do console.
         if scope == "workspace":
-            self._stack_chk = QCheckBox()
+            _ensure_check_icon()
+            self._stack_chk = QCheckBox("stack")
             self._stack_chk.setChecked(bool(include_in_stack))
             self._stack_chk.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
             self._stack_chk.setStyleSheet(_STACK_CHK_QSS)
             self._stack_chk.setToolTip(
-                "Criar este runner no console ao '⬇ Subir stack'.\n"
-                "Desmarque os que não fazem parte da stack paralela."
+                "Incluir este runner ao '⬇ Subir stack' no console.\n"
+                "Marcado = entra na stack paralela; desmarque os que não."
             )
             self._stack_chk.toggled.connect(self._on_stack_chk_toggled)
             layout.addWidget(self._stack_chk, 0, Qt.AlignmentFlag.AlignVCenter)
+            # Pequeno respiro entre o toggle de seleção e os botões de ação
+            # (↻/▶) — reforça que "stack" não é um terceiro botão de transporte.
+            layout.addSpacing(2)
 
         self._restart_btn = self._action_btn("↻", "Reiniciar runner")
         self._restart_btn.clicked.connect(
