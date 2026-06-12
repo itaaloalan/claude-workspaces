@@ -290,6 +290,10 @@ class TerminalWidget(QWidget):
         # `effective_title()`. Persistido em `session_marks.json` por
         # session_id assim que a sessão é reivindicada.
         self._custom_name: str = ""
+        # True quando o nome atual foi auto-derivado da branch do worktree
+        # (branch_to_session_name), não digitado pelo usuário. Nome auto
+        # acompanha o worktree adotado; nome do usuário nunca é sobrescrito.
+        self._name_from_branch: bool = False
         # mtime do session_marks.json visto no último poll — detecta
         # renames externos (skill /criar-worktree etc.) escritos direto
         # no arquivo enquanto a sessão está aberta.
@@ -657,6 +661,9 @@ class TerminalWidget(QWidget):
         if name == self._custom_name:
             return
         self._custom_name = name
+        # Por padrão trata como nome do usuário; _maybe_name_after_branch
+        # remarca como auto logo depois de chamar este método.
+        self._name_from_branch = False
         sid = self.claimed_session_id()
         if sid:
             try:
@@ -722,6 +729,19 @@ class TerminalWidget(QWidget):
             # este fallthrough o título ficava preso em "claude (resume)" e
             # o custom_name (gravado no id antigo) nunca carregava. Cai na
             # detecção de sessão nova abaixo; o _claim_session migra o nome.
+        # Já reivindicamos uma sessão mas o preview ainda não apareceu: re-lê
+        # o preview DESSE id em vez de re-selecionar. Sem isso o filtro
+        # _claimed_session_ids abaixo exclui o nosso próprio claim e o widget
+        # pula pra outra sessão a cada poll (claim churn) — com vários consoles
+        # no mesmo project-dir, acaba escaneando o JSONL de outro console.
+        if self._claimed_session_id:
+            for s in sessions:
+                if s.id == self._claimed_session_id:
+                    if s.preview:
+                        self._session_preview = s.preview
+                        self._session_resolved = True
+                    return
+            return
         # Sessão nova — exclui (a) JSONLs que já existiam ANTES do nosso
         # start e (b) IDs já reivindicados por outros TerminalWidgets vivos.
         # Sem esses filtros, duas abas no mesmo cwd disputavam o mesmo
@@ -886,14 +906,19 @@ class TerminalWidget(QWidget):
         self.worktree_adopted.emit(path, branch)
 
     def _maybe_name_after_branch(self, branch: str) -> None:
-        """Batiza a sessão com o nome da branch do worktree quando ela
-        ainda não tem nome custom — espelha o rename da skill
-        /criar-worktree pros worktrees criados/adotados pelo app."""
-        if self._custom_name:
+        """Batiza a sessão com o nome da branch do worktree — espelha o
+        rename da skill /criar-worktree pros worktrees criados/adotados pelo
+        app. Nome posto pelo usuário (ou herdado dos marks) nunca é tocado;
+        nome auto-derivado acompanha o worktree adotado atual, pra que o chip
+        de worktree e o título nunca desincronizem quando o console adota um
+        worktree diferente do que originou o nome."""
+        if self._custom_name and not self._name_from_branch:
             return
         name = branch_to_session_name(branch)
-        if name:
-            self.set_custom_name(name)
+        if not name or name == self._custom_name:
+            return
+        self.set_custom_name(name)      # zera _name_from_branch
+        self._name_from_branch = True   # ...então remarca como auto
 
     def backend(self) -> str:
         return getattr(self, "_backend", "claude")

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.7.1] — 2026-06-12
+
+### Correção: sessão nova ficava com o nome de outra (chip de worktree certo)
+- **O título de um console parava congelado no branch do worktree errado.**
+  Quando vários consoles eram lançados no MESMO cwd (ex.: `…/sipe/sipe/src`) e
+  cada um criava seu worktree em runtime (`/criar-worktree`), eles dividiam o
+  mesmo `project_sessions_dir` e a resolução de sessão escorregava: o chip `wt`
+  corrigia pro worktree certo, mas o nome ficava preso no branch de outro
+  console (dois consoles exibindo "feat: tarja ambiente desenvolvimento").
+- **Nome auto-derivado de branch agora acompanha o worktree adotado atual.**
+  `_maybe_name_after_branch` passou a distinguir nome auto (da branch) de nome
+  posto pelo usuário (novo flag `_name_from_branch`): o auto re-deriva na troca
+  de worktree pra nunca desincronizar do chip; o do usuário continua intocável.
+- **Fim do "claim churn".** `_try_resolve_session`, ao já ter reivindicado uma
+  sessão sem preview, agora re-lê o preview DESSE id em vez de re-selecionar —
+  antes o filtro `_claimed_session_ids` excluía o próprio claim e o widget
+  pulava pra outra sessão a cada poll, escaneando o JSONL de outro console.
+
 ## [1.7.0] — 2026-06-12
 
 ### Plugin do browser: aviso de worktrees divergentes entre runners do app
