@@ -92,6 +92,7 @@ class WorkspaceItemWidget(QWidget):
         on_toggle_collapse: Callable[[], None],
         on_toggle_pin: Callable[[], None] | None = None,
         on_minimize: Callable[[], None] | None = None,
+        on_change_icon: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -101,7 +102,13 @@ class WorkspaceItemWidget(QWidget):
         self._on_toggle_collapse = on_toggle_collapse
         self._on_toggle_pin = on_toggle_pin
         self._on_minimize = on_minimize
+        self._on_change_icon = on_change_icon
         self._pinned = False
+        # Caminho do ícone custom ("ícone real do projeto"). "" = pasta
+        # padrão. Cache do pixmap carregado pra não reler o disco a cada
+        # repaint/seleção (keyed pelo path).
+        self._icon_path = ""
+        self._icon_pixmap_cache: tuple[str, object] | None = None
         # Enable hover tracking pro reveal das ações secundárias.
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         # CRÍTICO: WA_StyledBackground faz o QSS de bg/border renderizar
@@ -232,6 +239,12 @@ class WorkspaceItemWidget(QWidget):
             f"color: {theme.TEXT_BRIGHT}; }}"
         )
         menu.addAction("＋  Abrir console novo…").triggered.connect(self._on_add_claude)
+        if self._on_change_icon is not None:
+            menu.addSeparator()
+            icon_label = (
+                "🖼  Trocar ícone…" if self._icon_path else "🖼  Definir ícone do projeto…"
+            )
+            menu.addAction(icon_label).triggered.connect(self._on_change_icon)
         if self._on_toggle_pin is not None:
             menu.addSeparator()
             pin_label = "📌  Desafixar workspace" if self._pinned else "📌  Fixar workspace"
@@ -354,10 +367,54 @@ class WorkspaceItemWidget(QWidget):
         self._expanded = expanded
         self._apply_card_qss()
 
+    def set_icon(self, path: str) -> None:
+        """Define o ícone custom do workspace (caminho de imagem). "" volta
+        pro ícone de pasta padrão. Re-renderiza imediatamente."""
+        path = (path or "").strip()
+        if path == self._icon_path:
+            return
+        self._icon_path = path
+        self._icon_pixmap_cache = None
+        self._apply_label_color()
+
+    def _custom_icon_pixmap(self):
+        """Pixmap do ícone custom escalado pro tamanho do slot, ou None se
+        não há ícone setado / o arquivo não carrega. Cacheado por path."""
+        if not self._icon_path:
+            return None
+        cache = self._icon_pixmap_cache
+        if cache is not None and cache[0] == self._icon_path:
+            return cache[1] or None
+        from pathlib import Path
+
+        from PySide6.QtCore import QSize as _QS
+        from PySide6.QtGui import QPixmap
+        pm = None
+        try:
+            if Path(self._icon_path).is_file():
+                raw = QPixmap(self._icon_path)
+                if not raw.isNull():
+                    pm = raw.scaled(
+                        _QS(16, 16),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+        except Exception:
+            pm = None
+        # Cacheia inclusive o "falhou" (pm None) pra não retentar disco.
+        self._icon_pixmap_cache = (self._icon_path, pm)
+        return pm
+
     def _apply_label_color(self) -> None:
         from .icons import ic as _ic
         color = theme.TEXT_PRIMARY if self._selected else theme.TEXT_MUTED
         self._label.setStyleSheet(f"color: {color};")
+        custom = self._custom_icon_pixmap()
+        if custom is not None:
+            # Ícone real do projeto: não recolore por seleção (é a arte do
+            # projeto), só renderiza centralizado no slot.
+            self._ws_icon.setPixmap(custom)
+            return
         icon_color = (
             self._ws_icon_color_selected
             if self._selected

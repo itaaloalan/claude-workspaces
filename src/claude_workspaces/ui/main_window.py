@@ -2100,6 +2100,80 @@ class MainWindow(QMainWindow):
         'Minimizados' no rodapé. Restauração via clique no chip."""
         self.workspaces_coord.set_minimized(ws.id, True)
 
+    def _change_workspace_icon(self, ws: "Workspace") -> None:
+        """Menu pra escolher o ícone do card do workspace: candidatos
+        auto-detectados nas pastas do projeto (favicon/logo/app icon),
+        escolher uma imagem à mão, ou voltar pro ícone de pasta padrão.
+        Persiste via coordinator (que repinta a sidebar)."""
+        from pathlib import Path
+
+        from PySide6.QtCore import QSize as _QS
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtWidgets import QMenu
+
+        from ..services.project_icon import detect_project_icons
+
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            f"QMenu {{ background: {theme.BG_SURFACE}; "
+            f"color: {theme.TEXT_PRIMARY}; border: 1px solid {theme.BORDER_INPUT}; }}"
+            f"QMenu::item {{ padding: 6px 14px; }}"
+            f"QMenu::item:selected {{ background: {theme.PRIMARY}; "
+            f"color: {theme.TEXT_BRIGHT}; }}"
+        )
+
+        def _thumb(path: str) -> QIcon:
+            try:
+                pm = QPixmap(path)
+                if not pm.isNull():
+                    return QIcon(pm.scaled(
+                        _QS(16, 16),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    ))
+            except Exception:
+                pass
+            return QIcon()
+
+        candidates = detect_project_icons(ws.folders)
+        if candidates:
+            head = menu.addAction("Ícones detectados no projeto")
+            head.setEnabled(False)
+            for path in candidates:
+                act = menu.addAction(_thumb(path), Path(path).name)
+                act.setToolTip(path)
+                act.setCheckable(True)
+                act.setChecked(path == ws.icon)
+                act.triggered.connect(
+                    lambda _c=False, p=path: self.workspaces_coord.set_icon(ws.id, p)
+                )
+            menu.addSeparator()
+        pick_act = menu.addAction("📂  Escolher imagem…")
+        pick_act.triggered.connect(
+            lambda _c=False: self._pick_workspace_icon_file(ws)
+        )
+        if ws.icon:
+            reset_act = menu.addAction("↩  Voltar pro ícone de pasta")
+            reset_act.triggered.connect(
+                lambda _c=False: self.workspaces_coord.set_icon(ws.id, "")
+            )
+        menu.exec(QCursor.pos())
+
+    def _pick_workspace_icon_file(self, ws: "Workspace") -> None:
+        """Abre o seletor de arquivo de imagem e aplica como ícone do
+        workspace. Começa na pasta primária do projeto."""
+        from PySide6.QtWidgets import QFileDialog
+
+        start_dir = ws.primary_folder or ""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Escolher ícone do workspace",
+            start_dir,
+            "Imagens (*.png *.ico *.svg *.jpg *.jpeg *.webp *.gif *.bmp)",
+        )
+        if path:
+            self.workspaces_coord.set_icon(ws.id, path)
+
     def _on_minimized_workspace_restore(self, workspace_id: str) -> None:
         """Click no chip da faixa 'Minimizados' → workspace volta pra lista."""
         if self.workspaces_coord.set_minimized(workspace_id, False):
@@ -2210,6 +2284,18 @@ class MainWindow(QMainWindow):
             )
             min_act.triggered.connect(lambda _c=False, w=ws: self._minimize_workspace(w))
             menu.addAction(min_act)
+            icon_label = (
+                "🖼 Trocar ícone…" if ws.icon else "🖼 Definir ícone do projeto…"
+            )
+            icon_act = QAction(icon_label, menu)
+            icon_act.setToolTip(
+                "Usar o ícone real do projeto (favicon/logo) no card do "
+                "workspace, escolher uma imagem ou voltar pra pasta padrão."
+            )
+            icon_act.triggered.connect(
+                lambda _c=False, w=ws: self._change_workspace_icon(w)
+            )
+            menu.addAction(icon_act)
             menu.addSeparator()
             self._add_create_worktree_action(menu, ws)
             self._add_remove_worktree_menu(menu, ws)
@@ -3442,14 +3528,19 @@ class MainWindow(QMainWindow):
         def on_minimize() -> None:
             self._minimize_workspace(ws)
 
+        def on_change_icon() -> None:
+            self._change_workspace_icon(ws)
+
         from PySide6.QtCore import QSize as _QS
 
         widget = WorkspaceItemWidget(
-            ws.name, on_add, on_toggle, on_toggle_pin, on_minimize
+            ws.name, on_add, on_toggle, on_toggle_pin, on_minimize,
+            on_change_icon=on_change_icon,
         )
         widget.set_collapsed(not item.isExpanded())
         widget.set_expanded_visual(item.isExpanded())
         widget.set_pinned(ws.pinned)
+        widget.set_icon(ws.icon)
         widget.set_running_count(
             self.terminals_coord.state.running_counts.get(ws.id, 0)
         )

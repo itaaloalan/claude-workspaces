@@ -115,6 +115,10 @@ class Workspace:
     # faixa "Minimizados" no rodapé — clicar no chip restaura. Independente
     # de pinned: minimizado ganha prioridade (não aparece como card).
     minimized: bool = False
+    # Ícone custom do workspace na sidebar (caminho pra um arquivo de imagem
+    # — o "ícone real do projeto", ex.: favicon/logo). "" = ícone de pasta
+    # padrão. Detectado via services.project_icon ou escolhido à mão.
+    icon: str = ""
 
     @property
     def primary_folder(self) -> str | None:
@@ -169,4 +173,5 @@ class Workspace:
             runners=runners,
             pinned=bool(data.get("pinned", False)),
             minimized=bool(data.get("minimized", False)),
+            icon=str(data.get("icon") or ""),
         )

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.9.0] — 2026-06-12
+
+### Ícone real do projeto no card do workspace
+- **Dá pra trocar a "pastinha" genérica de cada workspace pelo ícone real do
+  projeto** (favicon/logo/app icon). No menu `⋯` do workspace (e no clique
+  direito): **🖼 Definir ícone do projeto…**.
+- **Auto-detecção.** O menu lista os candidatos encontrados nas pastas do
+  projeto — `favicon.*`/`logo.*`/`icon.*` no raiz, `public/`, `static/`,
+  `assets/`, `src/assets/`, `www/`, mipmaps Android, `Assets.xcassets` iOS —
+  cada um com um thumbnail. Varredura barata (só caminhos/globs conhecidos em
+  pastas rasas, nunca walk recursivo). Workspaces multi-repo agregam de todas
+  as pastas.
+- **Escolher imagem… / Voltar pro ícone de pasta.** Seletor de arquivo
+  (png/ico/svg/jpg/webp/gif/bmp) abrindo na pasta do projeto, e reset pro
+  ícone de pasta padrão a qualquer momento.
+- O ícone (caminho) é persistido em `Workspace.icon` e renderizado no card
+  escalado (KeepAspectRatio); pixmap cacheado por caminho. Imagem que não
+  carrega cai de volta no ícone de pasta — sem quebrar a sidebar.
+
 ## [1.8.1] — 2026-06-12
 
 ### Correção: o checkbox "stack" do runner parecia um botão de parar

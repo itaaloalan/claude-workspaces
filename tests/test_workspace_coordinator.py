@@ -308,3 +308,51 @@ def test_invalidate_cache_all(coord):
     c._session_text_cache["b"] = "y"
     c.invalidate_cache()
     assert c._session_text_cache == {}
+
+
+# ---------- set_icon ----------
+
+def test_set_icon_sets_and_persists(coord):
+    c, saves = coord
+    ws = _ws()
+    c.workspaces.append(ws)
+    saves.clear()
+    result = c.set_icon(ws.id, "/tmp/logo.png")
+    assert result is True
+    assert ws.icon == "/tmp/logo.png"
+    assert len(saves) == 1
+
+
+def test_set_icon_noop_if_same(coord):
+    c, saves = coord
+    ws = _ws()
+    ws.icon = "/tmp/logo.png"
+    c.workspaces.append(ws)
+    saves.clear()
+    result = c.set_icon(ws.id, "/tmp/logo.png")
+    assert result is False
+    assert len(saves) == 0
+
+
+def test_set_icon_empty_resets(coord):
+    c, _ = coord
+    ws = _ws()
+    ws.icon = "/tmp/logo.png"
+    c.workspaces.append(ws)
+    assert c.set_icon(ws.id, "") is True
+    assert ws.icon == ""
+
+
+def test_set_icon_emits_signal(coord):
+    c, _ = coord
+    ws = _ws()
+    c.workspaces.append(ws)
+    emitted = []
+    c.workspaces_changed.connect(lambda: emitted.append(1))
+    c.set_icon(ws.id, "/tmp/logo.png")
+    assert len(emitted) == 1
+
+
+def test_set_icon_unknown_id(coord):
+    c, _ = coord
+    assert c.set_icon("nope", "/tmp/x.png") is False

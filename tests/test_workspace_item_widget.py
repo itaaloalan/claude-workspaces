@@ -282,3 +282,57 @@ def test_state_summary_para_blink_quando_resolve(widget_and_calls):
     assert w._dot_blink_timer.isActive()
     w.set_state_summary({"working": 1})
     assert not w._dot_blink_timer.isActive()
+
+
+# ---------- ícone custom do projeto ----------
+
+def _make_png(path):
+    """Cria um PNG válido carregável pelo QPixmap."""
+    from PySide6.QtGui import QPixmap
+    pm = QPixmap(8, 8)
+    pm.fill()
+    pm.save(str(path), "PNG")
+    return str(path)
+
+
+def test_set_icon_renders_custom_pixmap(widget_and_calls, tmp_path):
+    w, _ = widget_and_calls
+    path = _make_png(tmp_path / "logo.png")
+    w.set_icon(path)
+    assert w._icon_path == path
+    assert w._custom_icon_pixmap() is not None
+    assert not w._ws_icon.pixmap().isNull()
+
+
+def test_set_icon_empty_falls_back_to_folder(widget_and_calls, tmp_path):
+    w, _ = widget_and_calls
+    w.set_icon(_make_png(tmp_path / "logo.png"))
+    w.set_icon("")
+    assert w._icon_path == ""
+    assert w._custom_icon_pixmap() is None
+    # ainda desenha algo (a pasta padrão)
+    assert not w._ws_icon.pixmap().isNull()
+
+
+def test_set_icon_invalid_path_no_crash(widget_and_calls):
+    w, _ = widget_and_calls
+    w.set_icon("/caminho/que/nao/existe.png")
+    assert w._custom_icon_pixmap() is None
+
+
+def test_change_icon_action_present_when_callback(qapp):
+    called = []
+    w = WorkspaceItemWidget(
+        "Proj",
+        on_add_claude=lambda: None,
+        on_toggle_collapse=lambda: None,
+        on_change_icon=lambda: called.append(1),
+    )
+    # menu é construído sob demanda; verifica via reflexão do handler
+    assert w._on_change_icon is not None
+
+
+def test_no_change_icon_callback_ok(widget_and_calls):
+    # sem on_change_icon o widget continua válido (callback opcional)
+    w, _ = widget_and_calls
+    assert w._on_change_icon is None

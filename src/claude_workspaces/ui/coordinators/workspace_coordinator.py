@@ -80,6 +80,18 @@ class WorkspaceCoordinator(QObject):
         self.workspaces_changed.emit()
         return True
 
+    def set_icon(self, workspace_id: str, icon: str) -> bool:
+        """Define/limpa o ícone custom do workspace ("" = pasta padrão),
+        persiste e avisa a sidebar pra repintar o card."""
+        ws = self.find_by_id(workspace_id)
+        icon = (icon or "").strip()
+        if ws is None or ws.icon == icon:
+            return False
+        ws.icon = icon
+        save_workspaces(self.workspaces)
+        self.workspaces_changed.emit()
+        return True
+
     def set_minimized(self, workspace_id: str, minimized: bool) -> bool:
         ws = self.find_by_id(workspace_id)
         if ws is None or ws.minimized == minimized:
