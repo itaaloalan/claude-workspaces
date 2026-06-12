@@ -893,9 +893,8 @@ class RunnerArea(QWidget):
             return
         added = 0
         replaced = 0
-        from ..services.port_alloc import next_free_port, reserved_console_ports
-
         from ..git_worktree import translate_dir_for_repo
+        from ..services.port_alloc import next_free_port, reserved_console_ports
 
         for src in sources:
             data = src.to_dict()
@@ -931,8 +930,16 @@ class RunnerArea(QWidget):
             # porta já alocada da cópia anterior (estável entre "Subir
             # stack aqui" repetidos); cópia nova ganha a próxima livre a
             # partir da base — recomputado a cada iteração pra cópias do
-            # mesmo lote não colidirem entre si. O runner workspace-scope
-            # (port=base) conta como usado → 1ª cópia pega base+1.
+            # mesmo lote não colidirem entre si.
+            #
+            # Alocação DETERMINÍSTICA (probe_os=False): a porta de cada
+            # worktree é função só das cópias de console já existentes —
+            # 1 worktree → base (= porta do runner do workspace); 2+
+            # worktrees → base, base+1, base+2… Sem o bind test, o estado
+            # de execução do SO não interfere: a 1ª cópia reusa a base mesmo
+            # com o runner do workspace rodando nela (antes o bind test
+            # bumpava pra base+1, quebrando a regra "1 worktree → mesma
+            # porta do workspace").
             if clone.port > 0:
                 prev = (
                     self._ws.runners[existing_idx] if existing_idx >= 0 else None
@@ -943,12 +950,12 @@ class RunnerArea(QWidget):
                     try:
                         # Só cópias de console reservam porta: runners
                         # workspace (inclusive irmãos na MESMA base, ex
-                        # api jdk25/jdk8 em 8091) não contam — se algum
-                        # estiver rodando, o bind test pega. Garante a
-                        # regra "sem cópia de console → mesma porta".
+                        # api jdk25/jdk8 em 8091) não contam → 1ª cópia
+                        # reusa a base; cópias seguintes incrementam.
                         clone.port = next_free_port(
                             clone.port,
                             reserved_console_ports(self._ws),
+                            probe_os=False,
                         )
                     except RuntimeError:
                         _logger().warning(

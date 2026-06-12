@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.9.1] — 2026-06-12
+
+### Correção: porta da cópia de console por worktree agora é determinística
+- **Ao "⬇ Subir stack" num console/worktree, a porta da cópia oscilava com o
+  estado de execução.** A regra desejada — 1 worktree usa a porta base (= a do
+  runner do workspace), 2+ worktrees ganham portas diferentes (base, base+1,
+  base+2…) — só valia quando o runner do workspace estava parado. Com ele
+  **rodando** na base, o bind test do `next_free_port` "via" a porta ocupada e
+  bumpava a 1ª cópia pra base+1, quebrando o "1 worktree → mesma porta".
+- **`next_free_port` ganhou `probe_os` (default `True`); a cópia pra console
+  usa `probe_os=False`.** A alocação passou a ser função só das cópias de
+  console já existentes (`reserved_console_ports`), não do SO: a 1ª cópia reusa
+  a base mesmo com o runner do workspace rodando nela, e cada worktree seguinte
+  incrementa de forma previsível. Demais usos de `next_free_port` seguem com o
+  bind test.
+- Teste cobrindo o cenário (api do workspace rodando na base + três worktrees →
+  base, base+1, base+2).
+
 ## [1.9.0] — 2026-06-12
 
 ### Ícone real do projeto no card do workspace

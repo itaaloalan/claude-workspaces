@@ -12,7 +12,6 @@ from claude_workspaces.services.port_alloc import (
 )
 from claude_workspaces.services.runner_expand import build_env, expand_port
 
-
 # ---- expand_port -----------------------------------------------------------
 
 
@@ -109,6 +108,20 @@ def test_next_free_port_pula_ocupadas_no_so(monkeypatch):
 
 def test_next_free_port_base_zero():
     assert next_free_port(0, {3000}) == 0
+
+
+def test_next_free_port_probe_os_false_ignora_so(monkeypatch):
+    """Determinístico: com probe_os=False a porta ocupada no SO é reusada;
+    só `used` faz pular. É o modo da cópia pra console."""
+    monkeypatch.setattr(
+        "claude_workspaces.services.port_alloc.is_port_free",
+        lambda p, host="127.0.0.1": False,  # tudo "ocupado" no SO
+    )
+    # base livre em `used` → reusa, mesmo "ocupada" no SO.
+    assert next_free_port(3000, set(), probe_os=False) == 3000
+    # com a base reservada por uma cópia, incrementa determinístico.
+    assert next_free_port(3000, {3000}, probe_os=False) == 3001
+    assert next_free_port(3000, {3000, 3001}, probe_os=False) == 3002
 
 
 def test_next_free_port_estoura(monkeypatch):
@@ -357,3 +370,38 @@ def test_irmaos_workspace_na_mesma_base_nao_reservam(monkeypatch):
         RunnerConfig(name="api jdk 25", port=8091, console_session_id="s1")
     )
     assert next_free_port(8091, reserved_console_ports(ws)) == 8092
+
+
+def test_porta_por_worktree_deterministica_com_workspace_rodando(monkeypatch):
+    """Cenário do usuário: api do workspace na 8080 RODANDO; cada worktree
+    que sobe a stack ganha porta determinística — 1 worktree usa a base
+    (= porta do workspace), worktrees seguintes incrementam. O bind test
+    não interfere (probe_os=False)."""
+    from claude_workspaces.services.port_alloc import reserved_console_ports
+
+    # SO reporta a base ocupada (workspace api rodando nela).
+    monkeypatch.setattr(
+        "claude_workspaces.services.port_alloc.is_port_free",
+        lambda p, host="127.0.0.1": p != 8080,
+    )
+    api = RunnerConfig(name="api", port=8080)
+    ws = Workspace(name="sipe", runners=[api])
+
+    # Worktree A: 1ª cópia reusa a base mesmo com o workspace rodando nela.
+    port_a = next_free_port(8080, reserved_console_ports(ws), probe_os=False)
+    assert port_a == 8080
+    ws.runners.append(
+        RunnerConfig(name="api", port=port_a, console_session_id="A")
+    )
+
+    # Worktree B: porta diferente da do A.
+    port_b = next_free_port(8080, reserved_console_ports(ws), probe_os=False)
+    assert port_b == 8081
+    ws.runners.append(
+        RunnerConfig(name="api", port=port_b, console_session_id="B")
+    )
+
+    # Worktree C: incrementa de novo — três worktrees, três portas.
+    port_c = next_free_port(8080, reserved_console_ports(ws), probe_os=False)
+    assert port_c == 8082
+    assert len({port_a, port_b, port_c}) == 3
