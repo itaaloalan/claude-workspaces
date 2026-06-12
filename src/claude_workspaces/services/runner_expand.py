@@ -67,11 +67,18 @@ def apply_port_arg(cmd: str, port: int) -> str | None:
     if re.match(r"(?:npx\s+)?next\s+(?:dev|start)\b", last):
         return f"{cmd} -p {port}"
     if re.match(r"npm\s+(?:start\b|run\s+\S+)", last):
+        # npm CONSOME o `--` e repassa só o resto pro script — sem o `--`
+        # ele trata `--port` como flag do próprio npm e não chega no script.
         sep = "" if re.search(r"\s--(?:\s|$)", last) else " --"
         return f"{cmd}{sep} --port {port}"
     if re.match(r"pnpm\s+\S+", last):
-        sep = "" if re.search(r"\s--(?:\s|$)", last) else " --"
-        return f"{cmd}{sep} --port {port}"
+        # pnpm (v7+) repassa args extras DIRETO pro script, sem precisar de
+        # `--`. Pior: com `--` ele inclui o próprio `--` nos args do script
+        # (`pnpm dev -- --port` vira `vite -- --port`), e aí vite/ng tratam
+        # tudo depois do `--` como posicional e IGNORAM a porta, caindo na
+        # do vite.config (3000) → "Port 3000 is already in use". Então anexa
+        # `--port` direto, igual ao yarn.
+        return f"{cmd} --port {port}"
     if re.match(r"yarn\s+\S+", last):
         return f"{cmd} --port {port}"
     return None

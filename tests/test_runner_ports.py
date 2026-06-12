@@ -275,7 +275,21 @@ def test_apply_port_yarn_e_pnpm():
     from claude_workspaces.services.runner_expand import apply_port_arg
 
     assert apply_port_arg("yarn start", 4202) == "yarn start --port 4202"
-    assert apply_port_arg("pnpm dev", 4202) == "pnpm dev -- --port 4202"
+    # pnpm (v7+) repassa args sem `--`; com `--` ele poluía os args do
+    # script (`vite -- --port`) e a porta era ignorada. Sem `--`, igual yarn.
+    assert apply_port_arg("pnpm dev", 4202) == "pnpm dev --port 4202"
+    assert apply_port_arg("pnpm run dev", 4202) == "pnpm run dev --port 4202"
+
+
+def test_apply_port_pnpm_vite_nao_insere_dash_dash():
+    """Regressão: `pnpm dev` (script = vite) precisa virar `pnpm dev --port N`
+    e NUNCA `pnpm dev -- --port N` — senão vira `vite -- --port N` e o vite
+    ignora a porta, caindo na 3000 do config ('Port 3000 already in use')."""
+    from claude_workspaces.services.runner_expand import apply_port_arg
+
+    out = apply_port_arg("pnpm dev", 3001)
+    assert out == "pnpm dev --port 3001"
+    assert " -- " not in out
 
 
 def test_apply_port_nao_reconhecido():

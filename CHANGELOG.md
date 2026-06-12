@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.9.2] — 2026-06-12
+
+### Correção: `pnpm` + vite ignorava a porta alocada (caía na 3000)
+- **Runner `pnpm dev` (script = vite) subia na porta errada.** A aplicação
+  automática de porta gerava `pnpm dev -- --port 3001`, mas o pnpm (v7+)
+  repassa o próprio `--` pros args do script → `vite -- --port 3001`. O vite
+  trata tudo depois do `--` como argumento posicional e **ignora `--port`**,
+  caindo na porta do `vite.config` (3000) → `Error: Port 3000 is already in
+  use` ao subir a stack num segundo worktree.
+- **`apply_port_arg` deixou de inserir `--` pro pnpm.** Agora gera
+  `pnpm dev --port 3001` (igual ao yarn) — pnpm repassa `--port 3001` direto
+  pro script e o vite/ng bindam a porta certa. `npm` continua com `--` (ele
+  consome o separador; sem ele trataria `--port` como flag do npm) e `yarn`
+  segue sem `--`.
+- Verificado empiricamente o repasse de args de pnpm/npm. Testes:
+  `pnpm dev`/`pnpm run dev` → `--port` sem `--`; regressão garantindo que
+  nunca sai ` -- ` no comando pnpm.
+
 ## [1.9.1] — 2026-06-12
 
 ### Correção: porta da cópia de console por worktree agora é determinística
