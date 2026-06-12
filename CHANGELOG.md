@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.6.1] — 2026-06-12
+
+### Correção: pill do browser mostrava o worktree errado na porta compartilhada
+- **A pill/badge agora reflete o worktree que REALMENTE serve a porta.**
+  Quando um runner web morria (`exited`) sem largar a porta no estado interno
+  e o usuário subia **outro** worktree na **mesma porta** (ex.: trocar
+  `fix/filtro-ocorrencia` por `fix/editar-documento` na `:3000`), a extensão
+  continuava mostrando o branch do runner **morto** — porque ele ainda segurava
+  a chave da porta (`_current_url` retida) e o `_payload` exibia `entry.branch`
+  dele. O app já sabia a verdade via `served_cwd` (Detecção A, `/proc/PID/cwd`),
+  só não usava pra exibir.
+- **Reatribuição no `StateServer._payload`.** Em mismatch, a entrada da porta é
+  reatribuída ao runner **vivo** cujo cwd casa com o `served_cwd` (igualdade de
+  path ou mesma raiz de worktree `*.claude/<wt>`, priorizando `running`):
+  copia `branch`/`worktree`/`head_commit`/`cwd`/`state`/`runner` e sincroniza
+  `console_session_id`/`console_branch` (pra "ir pra sessão" cair no console
+  certo). Como o exibido passa a ser o servido, o ⚠ deixa de aparecer.
+- **Zumbi fora dos runners.** Se nenhum runner gerenciado casa com o
+  `served_cwd` (processo órfão), o branch é resolvido direto do `served_cwd` e o
+  ⚠ "deploy fora do worktree" é mantido — a Detecção A continua útil. Resolução
+  em duas passadas (resolve branch de todas as entradas, depois reatribui),
+  sem nenhuma chamada de git fora da thread do handler.
+
 ## [1.6.0] — 2026-06-12
 
 ### Worktree visível no painel "Runners do console"

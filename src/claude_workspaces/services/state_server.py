@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -43,6 +44,39 @@ _STATIC_WHITELIST = {
     "addon-fit.js": "application/javascript",
     "xterm.css": "text/css",
 }
+
+# Raiz do worktree num path tipo `<repo>.claude/<worktree>/src/web` → o segmento
+# `<repo>.claude/<worktree>` (primeiro `.claude/<dir>`). "" quando não há.
+_WORKTREE_ROOT_RE = re.compile(r"^(.*?\.claude/[^/]+)")
+
+
+def _worktree_root(path: str) -> str:
+    m = _WORKTREE_ROOT_RE.match(path)
+    return m.group(1) if m else ""
+
+
+def _find_serving_entry(ports: dict, current_port: str, served_cwd: str) -> dict | None:
+    """Acha, no snapshot, o runner que de fato serve `served_cwd` — pra
+    reatribuir a exibição da porta a ele (e não ao runner morto que ficou
+    segurando a chave). Casa por path normalizado exato ou mesma raiz de
+    worktree; prioriza state=="running" e match exato."""
+    target = os.path.normpath(served_cwd)
+    target_root = _worktree_root(target)
+    best: tuple[dict, bool, bool] | None = None  # (entry, running, exact)
+    for p, e in ports.items():
+        if p == current_port:
+            continue
+        cwd = e.get("cwd") or ""
+        if not cwd:
+            continue
+        cwd = os.path.normpath(cwd)
+        exact = cwd == target
+        if not (exact or (target_root and _worktree_root(cwd) == target_root)):
+            continue
+        running = e.get("state") == "running"
+        if best is None or (running, exact) > (best[1], best[2]):
+            best = (e, running, exact)
+    return best[0] if best else None
 
 
 class StateServer:
@@ -269,15 +303,48 @@ class StateServer:
         with self._lock:
             snap = json.loads(json.dumps(self._snapshot))  # deep copy barato
             served = {p: dict(v) for p, v in self._served.items()}
-        for port, entry in snap.get("ports", {}).items():
+        ports_map = snap.get("ports", {})
+        # 1ª passada: resolve branch/worktree/head_commit de cada entry (cache
+        # TTL). Tem que vir ANTES da reatribuição — esta copia o branch já
+        # resolvido do runner que realmente serve a porta (pode aparecer depois
+        # no dict).
+        for entry in ports_map.values():
             cwd = entry.get("cwd") or ""
             if cwd:
                 entry.update(self._branch_info(cwd))
-            # Detecção A: merge do served-info (só o bool importa pra pill).
+        # 2ª passada: Detecção A + reatribuição ao worktree realmente servido.
+        for port, entry in ports_map.items():
             si = served.get(port)
-            if si:
-                entry["served_mismatch"] = bool(si.get("served_mismatch"))
-                entry["served_cwd"] = si.get("served_cwd") or ""
+            if not si:
+                continue
+            smatch = bool(si.get("served_mismatch"))
+            scwd = si.get("served_cwd") or ""
+            entry["served_cwd"] = scwd
+            if not (smatch and scwd):
+                entry["served_mismatch"] = smatch
+                continue
+            # A pill tem que mostrar o worktree REALMENTE servido — não o do
+            # runner que (talvez morto) ainda segura a chave da porta por causa
+            # de uma `_current_url` retida. Reatribui a exibição ao runner vivo
+            # que casa com o served_cwd; senão (zumbi fora dos runners) resolve
+            # o branch direto e mantém o ⚠.
+            owner = _find_serving_entry(ports_map, port, scwd)
+            if owner is not None:
+                for k in ("branch", "worktree", "head_commit", "cwd",
+                          "state", "runner"):
+                    if k in owner:
+                        entry[k] = owner[k]
+                # Sincroniza os campos de console pra "ir pra sessão" cair no
+                # console certo (remove o do runner antigo se o owner não tem).
+                entry["console_session_id"] = owner.get("console_session_id", "")
+                entry["console_branch"] = owner.get("console_branch", "")
+                entry["served_mismatch"] = False  # exibido == servido
+            else:
+                info = self._branch_info(scwd)
+                if info.get("branch"):
+                    entry.update(info)
+                    entry["cwd"] = scwd
+                entry["served_mismatch"] = True
         snap["ts"] = time.time()
         snap["token"] = self.token
         return snap

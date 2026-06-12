@@ -59,6 +59,68 @@ def test_payload_merges_served_mismatch(tmp_path):
     assert entry["served_cwd"] == "/repo/principal"
 
 
+def _fake_branch_info(cwd: str) -> dict:
+    if "editar-documento" in cwd:
+        return {"branch": "fix/editar-documento", "worktree": True,
+                "head_commit": "doc123"}
+    if "filtro-ocorrencia" in cwd:
+        return {"branch": "fix/filtro-ocorrencia", "worktree": True,
+                "head_commit": "flt123"}
+    return {"branch": "", "worktree": False, "head_commit": ""}
+
+
+def test_payload_reatribui_porta_ao_runner_vivo_servido():
+    """Runner morto segura a chave da porta, mas quem serve é outro worktree
+    (vivo, sob chave sintética). A pill tem que mostrar o worktree servido."""
+    srv = StateServer(port=_free_port())
+    srv._branch_info = _fake_branch_info  # sem git de verdade
+    doc = "/r/sipe.claude/sipepro_fix_editar-documento/src/web"
+    flt = "/r/sipe.claude/sipepro_fix_filtro-ocorrencia/src/web"
+    srv.update({"ports": {
+        "3000": {"workspace": "sipepro", "runner": "web", "scope": "console",
+                 "cwd": flt, "state": "exited",
+                 "console_session_id": "sid-filtro",
+                 "console_branch": "fix/filtro-ocorrencia"},
+        "r:doc": {"workspace": "sipepro", "runner": "web", "scope": "console",
+                  "cwd": doc, "state": "running",
+                  "console_session_id": "sid-doc",
+                  "console_branch": "fix/editar-documento"},
+    }})
+    srv._served = {"3000": {"served_pid": 99, "served_cwd": doc,
+                            "served_mismatch": True}}
+    entry = srv._payload()["ports"]["3000"]
+    # Exibe o worktree REALMENTE servido (documentos), não o do runner morto.
+    assert entry["branch"] == "fix/editar-documento"
+    assert entry["worktree"] is True
+    assert entry["head_commit"] == "doc123"
+    assert entry["cwd"] == doc
+    assert entry["state"] == "running"
+    # Exibido == servido → sem ⚠; "ir pra sessão" aponta o console certo.
+    assert entry["served_mismatch"] is False
+    assert entry["console_session_id"] == "sid-doc"
+    assert entry["console_branch"] == "fix/editar-documento"
+
+
+def test_payload_zumbi_sem_runner_usa_served_cwd():
+    """Processo órfão fora dos runners do app → resolve o branch direto do
+    served_cwd e mantém o ⚠ (Detecção A continua útil)."""
+    srv = StateServer(port=_free_port())
+    srv._branch_info = _fake_branch_info
+    flt = "/r/sipe.claude/sipepro_fix_filtro-ocorrencia/src/web"
+    doc = "/r/sipe.claude/sipepro_fix_editar-documento/src/web"
+    srv.update({"ports": {
+        "3000": {"workspace": "sipepro", "runner": "web", "scope": "console",
+                 "cwd": flt, "state": "exited"},
+    }})
+    srv._served = {"3000": {"served_pid": 99, "served_cwd": doc,
+                            "served_mismatch": True}}
+    entry = srv._payload()["ports"]["3000"]
+    assert entry["branch"] == "fix/editar-documento"  # via served_cwd
+    assert entry["worktree"] is True
+    assert entry["cwd"] == doc
+    assert entry["served_mismatch"] is True            # zumbi → mantém ⚠
+
+
 def test_state_server_404_em_path_desconhecido():
     port = _free_port()
     srv = StateServer(port=port)
