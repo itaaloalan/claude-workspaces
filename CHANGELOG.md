@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.7.0] — 2026-06-12
+
+### Plugin do browser: aviso de worktrees divergentes entre runners do app
+- **A pill mostra os runners do mesmo console e avisa quando divergem de
+  worktree.** Um app (ex.: SIPE) é servido por vários runners — `api`, `web`,
+  `app` (repo `sipe`) e `manager` (repo `sipe/manager`). Quando o console é
+  apontado pra um worktree, todos os runners daquele repo deveriam rodar do
+  mesmo worktree; às vezes um fica na pasta errada (ex.: `web` em documentos mas
+  `api` ainda em filtro) e nada avisava. Agora, quando há divergência **dentro
+  do mesmo repo**, a pill fica âmbar com o selo `⚠ worktrees` e o menu ganha a
+  seção **"Runners deste console"** listando cada runner com `✓`/`⚠` e seu
+  branch. Agrupa por repo (git common-dir), então o `manager` (outro repo) não
+  gera falso alarme mesmo com nome de branch igual.
+- **Backend.** `_branch_info` agora resolve um `repo` estável por cwd (common-dir
+  via `repo_root`/`resolve_git_dirs`), igual pra checkout principal e worktrees
+  do mesmo repo. O agrupamento em si é feito por-aba no `background.js` (JS puro,
+  sem inchar o `state.json`).
+
+### Correções na reatribuição da porta servida (refina o 1.6.0/1.6.1)
+- **Não mislabela mais um runner irmão.** O match de "quem serve a porta" passou
+  de "mesma raiz de worktree" para **containment de path** (igualdade exata ou
+  subdir). Antes, com o runner `web` ausente do snapshot e só o `api` do mesmo
+  worktree presente, a porta `:3000` era atribuída ao `api` (cwd/runner errados);
+  agora cai no fallback (branch do `served_cwd`, mantém ⚠) ou casa o runner certo
+  quando ele existe.
+- **`/focus` e `/open` seguem o dono reatribuído.** Os endpoints liam o snapshot
+  bruto e focavam/abriam o console que segurava a chave da porta — não o que
+  realmente serve. Agora usam a mesma reatribuição da pill (`_resolved_entry`),
+  então "Ir para a sessão" e "Abrir pasta" batem com o que é exibido.
+
 ## [1.6.1] — 2026-06-12
 
 ### Correção: pill do browser mostrava o worktree errado na porta compartilhada

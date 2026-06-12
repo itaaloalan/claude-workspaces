@@ -60,13 +60,14 @@ def test_payload_merges_served_mismatch(tmp_path):
 
 
 def _fake_branch_info(cwd: str) -> dict:
+    repo = "/r/manager/.git" if "/manager/" in cwd else "/r/sipe/.git"
     if "editar-documento" in cwd:
         return {"branch": "fix/editar-documento", "worktree": True,
-                "head_commit": "doc123"}
+                "head_commit": "doc123", "repo": repo}
     if "filtro-ocorrencia" in cwd:
         return {"branch": "fix/filtro-ocorrencia", "worktree": True,
-                "head_commit": "flt123"}
-    return {"branch": "", "worktree": False, "head_commit": ""}
+                "head_commit": "flt123", "repo": repo}
+    return {"branch": "", "worktree": False, "head_commit": "", "repo": ""}
 
 
 def test_payload_reatribui_porta_ao_runner_vivo_servido():
@@ -101,6 +102,58 @@ def test_payload_reatribui_porta_ao_runner_vivo_servido():
     assert entry["console_branch"] == "fix/editar-documento"
 
 
+def test_payload_reatribui_web_exato_nao_irmao_api():
+    """Com api E web do mesmo worktree no snapshot, a porta servida pelo web
+    vai pro web (cwd exato) — nunca pro api (irmão da mesma raiz)."""
+    srv = StateServer(port=_free_port())
+    srv._branch_info = _fake_branch_info
+    web = "/r/sipe.claude/sipepro_fix_editar-documento/src/web"
+    api = "/r/sipe.claude/sipepro_fix_editar-documento/src/api/src/Sipe.Api"
+    srv.update({"ports": {
+        "3000": {"workspace": "sipepro", "runner": "web", "scope": "console",
+                 "cwd": "/r/sipe.claude/sipepro_fix_filtro-ocorrencia/src/web",
+                 "state": "exited", "console_session_id": "sid-filtro"},
+        "r:web": {"workspace": "sipepro", "runner": "web (5173)",
+                  "scope": "console", "cwd": web, "state": "running",
+                  "console_session_id": "sid-doc"},
+        "r:api": {"workspace": "sipepro", "runner": "api (5000)",
+                  "scope": "console", "cwd": api, "state": "running",
+                  "console_session_id": "sid-doc"},
+    }})
+    srv._served = {"3000": {"served_pid": 1, "served_cwd": web,
+                            "served_mismatch": True}}
+    entry = srv._payload()["ports"]["3000"]
+    assert entry["runner"] == "web (5173)"   # web exato, não o api
+    assert entry["cwd"] == web
+    assert entry["branch"] == "fix/editar-documento"
+    assert entry["served_mismatch"] is False
+
+
+def test_payload_nao_mislabela_irmao_quando_web_ausente():
+    """Web (quem serve) não está no snapshot — só sobrou o api do mesmo
+    worktree. A porta NÃO pode virar 'api'; cai no fallback (served_cwd) e
+    mantém o ⚠ (o runner real do web não está vivo no app)."""
+    srv = StateServer(port=_free_port())
+    srv._branch_info = _fake_branch_info
+    web = "/r/sipe.claude/sipepro_fix_editar-documento/src/web"
+    api = "/r/sipe.claude/sipepro_fix_editar-documento/src/api/src/Sipe.Api"
+    srv.update({"ports": {
+        "3000": {"workspace": "sipepro", "runner": "web", "scope": "console",
+                 "cwd": "/r/sipe.claude/sipepro_fix_filtro-ocorrencia/src/web",
+                 "state": "exited", "console_session_id": "sid-filtro"},
+        "r:api": {"workspace": "sipepro", "runner": "api (5000)",
+                  "scope": "console", "cwd": api, "state": "running",
+                  "console_session_id": "sid-doc"},
+    }})
+    srv._served = {"3000": {"served_pid": 1, "served_cwd": web,
+                            "served_mismatch": True}}
+    entry = srv._payload()["ports"]["3000"]
+    assert entry["runner"] != "api (5000)"        # não mislabela o irmão
+    assert entry["branch"] == "fix/editar-documento"  # verdade via served_cwd
+    assert entry["cwd"] == web
+    assert entry["served_mismatch"] is True       # web real não está vivo → ⚠
+
+
 def test_payload_zumbi_sem_runner_usa_served_cwd():
     """Processo órfão fora dos runners do app → resolve o branch direto do
     served_cwd e mantém o ⚠ (Detecção A continua útil)."""
@@ -119,6 +172,27 @@ def test_payload_zumbi_sem_runner_usa_served_cwd():
     assert entry["worktree"] is True
     assert entry["cwd"] == doc
     assert entry["served_mismatch"] is True            # zumbi → mantém ⚠
+
+
+def test_focus_segue_o_dono_reatribuido():
+    """/focus numa porta servida por outro worktree foca o console do runner
+    que REALMENTE serve (bate com o que a pill mostra), não o que segurava a
+    chave."""
+    srv = StateServer(port=_free_port())
+    web = "/r/sipe.claude/sipepro_fix_editar-documento/src/web"
+    srv.update({"ports": {
+        "3000": {"workspace": "sipepro", "runner": "web",
+                 "cwd": "/r/sipe.claude/sipepro_fix_filtro-ocorrencia/src/web",
+                 "state": "exited", "console_session_id": "sid-filtro"},
+        "r:web": {"workspace": "sipepro", "runner": "web (5173)", "cwd": web,
+                  "state": "running", "console_session_id": "sid-doc"},
+    }})
+    srv._served = {"3000": {"served_pid": 1, "served_cwd": web,
+                            "served_mismatch": True}}
+    focused: list[dict] = []
+    srv.set_focus_callback(focused.append)
+    assert srv._request_focus("/focus?port=3000") is True
+    assert focused and focused[0]["console_session_id"] == "sid-doc"
 
 
 def test_state_server_404_em_path_desconhecido():
@@ -185,6 +259,40 @@ def test_branch_info_em_worktree_real(tmp_path):
         assert entry["branch"] == "feat/x"
     finally:
         srv.stop()
+
+
+def test_branch_info_repo_key_consistente_entre_worktrees(tmp_path):
+    """A chave `repo` (common-dir) é a MESMA pro checkout principal e pros
+    worktrees do mesmo repo, e diferente entre repos — base do agrupamento
+    api/web vs manager no plugin."""
+    import subprocess
+
+    def run(args, cwd):
+        subprocess.run(args, cwd=cwd, capture_output=True, check=True)
+
+    def init_repo(path):
+        path.mkdir()
+        run(["git", "init", "-q", "-b", "main"], path)
+        run(["git", "config", "user.email", "t@t"], path)
+        run(["git", "config", "user.name", "t"], path)
+        (path / "f.txt").write_text("hi")
+        run(["git", "add", "f.txt"], path)
+        run(["git", "commit", "-q", "-m", "init"], path)
+
+    from claude_workspaces.git_worktree import add_worktree
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    ok, _m, wt = add_worktree(str(repo), "feat/x")
+    assert ok
+    other = tmp_path / "other"
+    init_repo(other)
+
+    srv = StateServer(port=_free_port())
+    main_repo = srv._branch_info(str(repo))["repo"]
+    wt_repo = srv._branch_info(str(wt))["repo"]
+    other_repo = srv._branch_info(str(other))["repo"]
+    assert main_repo and main_repo == wt_repo      # worktrees do MESMO repo
+    assert other_repo and other_repo != main_repo  # repo diferente
 
 
 def test_open_endpoint(tmp_path, monkeypatch):

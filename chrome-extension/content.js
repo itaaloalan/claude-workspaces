@@ -137,6 +137,39 @@ function buildMenu(accent) {
     menu.appendChild(openWin);
   }
 
+  // Runners do mesmo console/escopo — mostra quem está em qual worktree, com
+  // ⚠ nos que divergem (mesmo repo, branch diferente). Outro repo = neutro.
+  if (
+    lastEntry &&
+    Array.isArray(lastEntry.scope_runners) &&
+    lastEntry.scope_runners.length >= 2
+  ) {
+    const sepS = document.createElement("div");
+    sepS.style.cssText = "height:1px;background:#333;margin:4px 6px";
+    menu.appendChild(sepS);
+
+    const head = document.createElement("div");
+    head.textContent = lastEntry.scope_mismatch
+      ? "⚠ Runners em worktrees diferentes"
+      : "Runners deste console";
+    head.style.cssText =
+      "padding:5px 10px 2px;font-size:11px;" +
+      (lastEntry.scope_mismatch
+        ? "color:#e0b020;font-weight:700"
+        : "opacity:.65");
+    menu.appendChild(head);
+
+    for (const r of lastEntry.scope_runners) {
+      const row = document.createElement("div");
+      row.textContent =
+        `${r.ok ? "✓" : "⚠"} ${r.runner}` + (r.branch ? ` · ${r.branch}` : "");
+      row.style.cssText =
+        "padding:3px 10px;white-space:nowrap;font-size:11px;" +
+        (r.ok ? "color:#bdbdbd" : "color:#e0b020;font-weight:600");
+      menu.appendChild(row);
+    }
+  }
+
   const sep = document.createElement("div");
   sep.style.cssText = "height:1px;background:#333;margin:4px 6px";
   menu.appendChild(sep);
@@ -332,7 +365,12 @@ function renderBar(entry) {
   if (!entry || dismissed) return;
   const isWt = Boolean(entry.worktree);
   const alert = deployAlert(entry);
-  const accent = alert ? "#e05252" : (isWt ? "#e5953b" : "#3fa55f");
+  // Worktrees divergentes no escopo (api/web em pastas diferentes) — âmbar,
+  // distinto do vermelho de deploy (que tem prioridade).
+  const scopeWarn = !alert && Boolean(entry.scope_mismatch);
+  const accent = alert
+    ? "#e05252"
+    : scopeWarn ? "#e0b020" : (isWt ? "#e5953b" : "#3fa55f");
   const pill = document.createElement("div");
   pill.id = BAR_ID;
   pill.style.cssText = [
@@ -346,6 +384,7 @@ function renderBar(entry) {
   ].join(";");
   pill.title =
     (alert ? `⚠ ${alert.reason}\n` : "") +
+    (scopeWarn ? "⚠ runners deste app em worktrees diferentes (veja o menu)\n" : "") +
     `${entry.workspace} / ${entry.runner}` +
     (entry.scope === "console" ? " (console)" : "") +
     (entry.branch ? ` · 🌿 ${entry.branch}` : "") +
@@ -374,7 +413,9 @@ function renderBar(entry) {
   kind.style.cssText =
     `flex:none;font-size:10px;font-weight:700;color:${accent};` +
     "text-transform:uppercase;letter-spacing:.4px";
-  kind.textContent = alert ? "⚠ deploy" : (isWt ? "worktree" : "principal");
+  kind.textContent = alert
+    ? "⚠ deploy"
+    : scopeWarn ? "⚠ worktrees" : (isWt ? "worktree" : "principal");
   pill.appendChild(kind);
 
   const close = document.createElement("span");

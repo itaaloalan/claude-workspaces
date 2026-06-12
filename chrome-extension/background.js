@@ -37,6 +37,36 @@ function shortBranch(branch) {
   return name.slice(0, 4);
 }
 
+// Runners do MESMO escopo (console, senão workspace) que a aba atual, pra
+// avisar quando api/web/etc. estão em worktrees diferentes. Agrupa por `repo`
+// (git common-dir, vindo do backend): só conta divergência DENTRO do mesmo
+// repo — o `manager` é de outro repo e às vezes tem o mesmo nome de branch.
+function computeScope(ports, entry) {
+  const scopeId = entry.console_session_id || entry.workspace_id || "";
+  if (!scopeId) return { scope_runners: [], scope_mismatch: false };
+  const seen = new Set();
+  const runners = [];
+  for (const e of Object.values(ports || {})) {
+    const eid = e.console_session_id || e.workspace_id || "";
+    if (eid !== scopeId) continue;
+    const rid = e.runner_id || `${e.runner}|${e.cwd}`;
+    if (seen.has(rid)) continue;
+    seen.add(rid);
+    const sameRepo = Boolean(entry.repo) && e.repo === entry.repo;
+    runners.push({
+      runner: e.runner || "(runner)",
+      branch: e.branch || "",
+      worktree: Boolean(e.worktree),
+      sameRepo,
+      ok: !sameRepo || (e.branch || "") === (entry.branch || ""),
+    });
+  }
+  const branches = new Set(
+    runners.filter((r) => r.sameRepo).map((r) => r.branch).filter(Boolean)
+  );
+  return { scope_runners: runners, scope_mismatch: branches.size > 1 };
+}
+
 async function refreshTab(tabId, url) {
   const port = portFromUrl(url || "");
   if (!port) {
@@ -55,6 +85,10 @@ async function refreshTab(tabId, url) {
   const isWt = Boolean(entry.worktree);
   // Token do app vai junto — os endpoints /console/* exigem.
   entry._token = (state && state.token) || "";
+  // Irmãos do escopo (api/web/...) + aviso de worktrees divergentes.
+  const scope = computeScope(state.ports, entry);
+  entry.scope_runners = scope.scope_runners;
+  entry.scope_mismatch = scope.scope_mismatch;
   // Detecção A: o app sabe que a porta é servida de outra pasta → badge
   // vermelho ⚠. (A Detecção B — build desatualizado — fica na pill do
   // content.js, que tem acesso ao carimbo da página.)
@@ -72,6 +106,9 @@ async function refreshTab(tabId, url) {
     title:
       (mismatch
         ? `⚠ deploy fora do worktree — servido de ${entry.served_cwd || "outra pasta"}\n`
+        : "") +
+      (!mismatch && entry.scope_mismatch
+        ? "⚠ runners deste app em worktrees diferentes\n"
         : "") +
       `${entry.workspace} · ${entry.runner}` +
       (entry.branch ? ` · 🌿 ${entry.branch}` : "") +

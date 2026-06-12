@@ -45,37 +45,38 @@ _STATIC_WHITELIST = {
     "xterm.css": "text/css",
 }
 
-# Raiz do worktree num path tipo `<repo>.claude/<worktree>/src/web` → o segmento
-# `<repo>.claude/<worktree>` (primeiro `.claude/<dir>`). "" quando não há.
-_WORKTREE_ROOT_RE = re.compile(r"^(.*?\.claude/[^/]+)")
-
-
-def _worktree_root(path: str) -> str:
-    m = _WORKTREE_ROOT_RE.match(path)
-    return m.group(1) if m else ""
+def _path_contained(a: str, b: str) -> bool:
+    """True se `a` e `b` são o mesmo path ou um está contido no outro (subdir).
+    Compara com separador final pra não casar `.../src/web` com `.../src/web2`."""
+    if a == b:
+        return True
+    aa = a if a.endswith(os.sep) else a + os.sep
+    bb = b if b.endswith(os.sep) else b + os.sep
+    return aa.startswith(bb) or bb.startswith(aa)
 
 
 def _find_serving_entry(ports: dict, current_port: str, served_cwd: str) -> dict | None:
     """Acha, no snapshot, o runner que de fato serve `served_cwd` — pra
     reatribuir a exibição da porta a ele (e não ao runner morto que ficou
-    segurando a chave). Casa por path normalizado exato ou mesma raiz de
-    worktree; prioriza state=="running" e match exato."""
+    segurando a chave). Casa SÓ por path: igualdade exata ou containment
+    (served_cwd é subdir do cwd do runner, ou vice-versa) — nunca um irmão que
+    só compartilha a raiz do worktree (ex.: api vs web). Prefere match exato,
+    depois state=="running", depois o cwd mais específico (mais longo)."""
     target = os.path.normpath(served_cwd)
-    target_root = _worktree_root(target)
-    best: tuple[dict, bool, bool] | None = None  # (entry, running, exact)
+    best: tuple[dict, tuple] | None = None  # (entry, chave de preferência)
     for p, e in ports.items():
         if p == current_port:
             continue
-        cwd = e.get("cwd") or ""
-        if not cwd:
+        raw = e.get("cwd") or ""
+        if not raw:
             continue
-        cwd = os.path.normpath(cwd)
+        cwd = os.path.normpath(raw)
         exact = cwd == target
-        if not (exact or (target_root and _worktree_root(cwd) == target_root)):
+        if not (exact or _path_contained(target, cwd)):
             continue
-        running = e.get("state") == "running"
-        if best is None or (running, exact) > (best[1], best[2]):
-            best = (e, running, exact)
+        key = (exact, e.get("state") == "running", len(cwd))
+        if best is None or key > best[1]:
+            best = (e, key)
     return best[0] if best else None
 
 
@@ -330,8 +331,8 @@ class StateServer:
             # o branch direto e mantém o ⚠.
             owner = _find_serving_entry(ports_map, port, scwd)
             if owner is not None:
-                for k in ("branch", "worktree", "head_commit", "cwd",
-                          "state", "runner"):
+                for k in ("branch", "worktree", "head_commit", "repo", "cwd",
+                          "state", "runner", "runner_id"):
                     if k in owner:
                         entry[k] = owner[k]
                 # Sincroniza os campos de console pra "ir pra sessão" cair no
@@ -527,6 +528,24 @@ class StateServer:
         Signal.emit pra despachar pra UI thread com segurança."""
         self._focus_cb = fn
 
+    def _resolved_entry(self, port: str) -> dict:
+        """Entry da porta com a MESMA reatribuição de dono que o /state.json
+        aplica (Detecção A): quando a porta é servida por outro worktree, devolve
+        a entrada do runner que REALMENTE serve — pra /focus e /open baterem com
+        o que a pill mostra. Só identidade, sem git."""
+        with self._lock:
+            ports = {
+                p: dict(v) for p, v in self._snapshot.get("ports", {}).items()
+            }
+            served = {p: dict(v) for p, v in self._served.items()}
+        entry = ports.get(port) or {}
+        si = served.get(port)
+        if entry and si and si.get("served_mismatch") and si.get("served_cwd"):
+            owner = _find_serving_entry(ports, port, si["served_cwd"])
+            if owner is not None:
+                return dict(owner)
+        return dict(entry)
+
     def _request_focus(self, raw_path: str) -> bool:
         """`/focus?port=NNNN` — pede pro app focar a sessão/console dono
         do runner daquela porta."""
@@ -537,8 +556,7 @@ class StateServer:
         )
         if not port or self._focus_cb is None:
             return False
-        with self._lock:
-            entry = dict(self._snapshot.get("ports", {}).get(port) or {})
+        entry = self._resolved_entry(port)
         if not entry:
             return False
         try:
@@ -561,8 +579,7 @@ class StateServer:
         )
         if not port:
             return False
-        with self._lock:
-            entry = dict(self._snapshot.get("ports", {}).get(port) or {})
+        entry = self._resolved_entry(port)
         cwd = entry.get("cwd") or ""
         if not cwd or not Path(cwd).is_dir():
             return False
@@ -583,13 +600,28 @@ class StateServer:
             hit = self._branch_cache.get(cwd)
             if hit and hit[0] > now:
                 return hit[1]
-        info = {"branch": "", "worktree": False, "head_commit": ""}
+        info = {"branch": "", "worktree": False, "head_commit": "", "repo": ""}
         try:
             import subprocess
 
-            from ..git_worktree import current_branch, is_worktree_path
+            from ..git_worktree import (
+                current_branch,
+                is_worktree_path,
+                repo_root,
+                resolve_git_dirs,
+            )
             info["worktree"] = bool(is_worktree_path(cwd))
             info["branch"] = current_branch(cwd) or ""
+            # Identidade ESTÁVEL do repo (common-dir): igual pro checkout
+            # principal e todos os worktrees, diferente entre repos. Agrupa os
+            # runners por repo no plugin (api/web do sipe vs manager).
+            try:
+                root = repo_root(cwd)
+                dirs = resolve_git_dirs(root) if root else None
+                if dirs is not None:
+                    info["repo"] = str(dirs[1].resolve())
+            except Exception:
+                log.debug("repo-key falhou pra %s", cwd, exc_info=True)
             # HEAD curto pra Detecção B (carimbo de build vs commit atual).
             try:
                 r = subprocess.run(  # noqa: S603
