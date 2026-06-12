@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0] — 2026-06-12
+
+### Worktree visível no painel "Runners do console"
+- **Chip de worktree no header.** O painel **Runners do console** agora
+  exibe, ao lado do título, um chip `📂 <nome-do-worktree>` mostrando o
+  diretório em que os runners daquele console rodam por padrão. Com vários
+  consoles Claude em paralelo apontados pra worktrees diferentes, dá pra
+  ter certeza de qual worktree está executando sem precisar olhar o
+  sidebar. O path completo fica no tooltip; nomes longos são elididos no
+  meio pra não empurrar os botões. Atualiza ao trocar o console ativo ou
+  usar "📁 Apontar todos". Só no painel de console (o workspace-scope roda
+  no primary_folder, já óbvio no sidebar) e sem nenhuma chamada de git na
+  UI thread.
+
 ## [1.5.1] — 2026-06-11
 
 ### Correções de performance e vazamento de memória

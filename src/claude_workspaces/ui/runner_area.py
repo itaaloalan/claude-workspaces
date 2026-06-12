@@ -134,6 +134,23 @@ class RunnerArea(QWidget):
             f"color: {theme.TEXT_MUTED}; font-size: 11px; font-weight: 700;"
         )
         h.addWidget(title)
+
+        # Chip com o worktree em que os runners deste console rodam por padrão.
+        # Só no painel de console — vários consoles em paralelo apontam pra
+        # worktrees diferentes, então mostrar o diretório evita rodar a stack
+        # no lugar errado (a info já aparece no sidebar; aqui é a garantia
+        # local). Workspace-scope roda no primary_folder, já óbvio no sidebar.
+        self._cwd_chip: QLabel | None = None
+        if console_session_id:
+            self._cwd_chip = QLabel()
+            self._cwd_chip.setStyleSheet(
+                "QLabel { background: rgba(255,255,255,7); "
+                f"color: {theme.TEXT_MUTED}; "
+                "border: 1px solid rgba(255,255,255,18); border-radius: 6px; "
+                "padding: 2px 8px; font-size: 11px; }"
+            )
+            h.addWidget(self._cwd_chip)
+
         h.addStretch(1)
 
         self._run_all_btn = QPushButton("▶ Rodar todos")
@@ -231,6 +248,7 @@ class RunnerArea(QWidget):
         # de gerenciamento dos runners console-scoped do workspace.
         self._manage_console_runners_handler: Callable[[], None] | None = None
 
+        self._refresh_cwd_chip()
         self._refresh_from_workspace()
 
     # ---- API pública -----------------------------------------------------
@@ -314,10 +332,40 @@ class RunnerArea(QWidget):
             return
         self._default_cwd_override = cwd
         self._translate_cache.clear()
+        self._refresh_cwd_chip()
         for i in range(self.tabs.count()):
             w = self.tabs.widget(i)
             if isinstance(w, RunnerWidget):
                 w.set_default_cwd(self._default_cwd_for(w.config()))
+
+    def _refresh_cwd_chip(self) -> None:
+        """Atualiza o chip de worktree do header (só painel de console).
+
+        Mostra o basename do diretório padrão deste painel (worktree do
+        console) com o path completo no tooltip. Usa só o path em memória —
+        nada de git/subprocess, que rodaria na UI thread a cada refresh."""
+        chip = getattr(self, "_cwd_chip", None)
+        if chip is None:
+            return
+        from pathlib import Path
+
+        from PySide6.QtGui import QFontMetrics
+
+        cwd = (self._default_cwd_override or self._ws.primary_folder or "").strip()
+        if not cwd:
+            chip.setVisible(False)
+            return
+        name = Path(cwd).name or cwd
+        elided = QFontMetrics(chip.font()).elidedText(
+            name, Qt.TextElideMode.ElideMiddle, 260
+        )
+        chip.setText(f"📂 {elided}")
+        chip.setToolTip(
+            f"Worktree deste console:\n{cwd}\n"
+            "Os runners rodam aqui por padrão (cada runner pode divergir — "
+            "veja o chip 📁 de cada um)."
+        )
+        chip.setVisible(True)
 
     def _repo_folder_for(self, runner: RunnerConfig) -> str:
         """Pasta do workspace a que o runner pertence: a que contém o cwd
