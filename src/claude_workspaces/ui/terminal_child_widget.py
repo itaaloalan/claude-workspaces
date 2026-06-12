@@ -247,6 +247,21 @@ class TerminalChildWidget(QWidget):
         self._notif_badge.hide()
         title_row.addWidget(self._notif_badge, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # Badge verde de runner(s) em execução neste console — pintado pelo
+        # MainWindow a partir da RunnerArea console-scoped (running_count).
+        self._runner_badge = QLabel("")
+        self._runner_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._runner_badge.setStyleSheet(
+            "QLabel {"
+            "  background: rgba(90, 195, 138, 60);"
+            "  color: #7ee0a0;"
+            "  font-size: 9px; font-weight: 700;"
+            "  padding: 1px 5px; border-radius: 6px;"
+            "}"
+        )
+        self._runner_badge.hide()
+        title_row.addWidget(self._runner_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+
         # Estado atual + elegibilidade pro ▶ continuar. O continue só faz
         # sentido em sessões restauradas no startup (--resume) que estão
         # ociosas — caso típico: app fechou no meio de uma tarefa e o
@@ -283,6 +298,8 @@ class TerminalChildWidget(QWidget):
         self._git_files: list = []
         self._pr_urls: list[str] = []
         self._pr_chips: dict[str, QLabel] = {}
+        # Nº de runners (console-scoped) em execução neste console agora.
+        self._runner_running: int = 0
 
         # Bloco de ações fica na própria title row, à direita do título —
         # mantém o título com peso visual (bold) e libera a linha do estado
@@ -423,6 +440,22 @@ class TerminalChildWidget(QWidget):
             return
         self._notif_badge.setText(str(count) if count < 100 else "99+")
         self._notif_badge.show()
+
+    def set_runner_running(self, count: int) -> None:
+        """Pinta o badge verde ▶ com o nº de runners em execução neste
+        console (console-scoped). Esconde quando não há nenhum rodando."""
+        count = max(0, int(count))
+        self._runner_running = count
+        if count <= 0:
+            self._runner_badge.hide()
+            return
+        self._runner_badge.setText("▶" if count == 1 else f"▶ {count}")
+        self._runner_badge.setToolTip(
+            "1 runner em execução neste console"
+            if count == 1
+            else f"{count} runners em execução neste console"
+        )
+        self._runner_badge.show()
 
     def set_title(self, title: str, tooltip: str = "") -> None:
         if title:
@@ -854,6 +887,7 @@ class TerminalChildWidget(QWidget):
             "is_worktree": self._is_worktree,
             "ahead": self._ahead,
             "behind": self._behind,
+            "runner_running": self._runner_running,
             "title": self._title,
             # `pr_url`: último MR/PR (compat). `pr_urls`: todos, pro footer
             # renderizar um link por MR quando a sessão tem várias pastas.

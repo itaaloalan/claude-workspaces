@@ -70,6 +70,38 @@ def test_initial_notif_badge_hidden(widget_and_calls):
     assert w._notif_badge.isHidden()
 
 
+# ---------- marcador de runner em execução ----------
+
+def test_runner_badge_hidden_by_default(widget_and_calls):
+    w, _ = widget_and_calls
+    assert w._runner_badge.isHidden()
+    assert w._runner_running == 0
+
+
+def test_runner_badge_shows_play_for_single(widget_and_calls):
+    w, _ = widget_and_calls
+    w.set_runner_running(1)
+    assert not w._runner_badge.isHidden()
+    assert w._runner_badge.text() == "▶"
+    assert w._runner_running == 1
+
+
+def test_runner_badge_shows_count_for_multiple(widget_and_calls):
+    w, _ = widget_and_calls
+    w.set_runner_running(3)
+    assert not w._runner_badge.isHidden()
+    assert w._runner_badge.text() == "▶ 3"
+    assert w.status_info()["runner_running"] == 3
+
+
+def test_runner_badge_hides_when_back_to_zero(widget_and_calls):
+    w, _ = widget_and_calls
+    w.set_runner_running(2)
+    w.set_runner_running(0)
+    assert w._runner_badge.isHidden()
+    assert w._runner_running == 0
+
+
 # ---------- update_state ----------
 
 def test_update_state_working_sets_current_state(widget_and_calls):

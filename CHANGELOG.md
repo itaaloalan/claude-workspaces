@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.8.0] — 2026-06-12
+
+### Marcador de runner em execução na sidebar (por console)
+- **Cada sessão da sidebar agora mostra um badge verde `▶` quando tem
+  runner(s) console-scoped rodando.** Antes só dava pra saber abrindo o pane
+  "Runners (console)"; o badge no workspace só contava runners do workspace,
+  nunca os do console. Agora o item do console exibe `▶` (1 rodando) ou
+  `▶ N` (N rodando), ao lado do badge de notificações, com tooltip.
+- **Fonte de verdade e atualização.** O badge lê o `running_count()` da
+  `RunnerArea` console-scoped (indexada por `id(terminal)`) e repinta quando
+  `running_count_changed` dispara (runner sobe/cai) e nos rebuilds do item —
+  então consoles restaurados no boot com runner já vivo já nascem marcados.
+- Novo `TerminalChildWidget.set_runner_running(count)`; `status_info()` passa
+  a expor `runner_running` pra futura agregação no header do workspace.
+
 ## [1.7.1] — 2026-06-12
 
 ### Correção: sessão nova ficava com o nome de outra (chip de worktree certo)

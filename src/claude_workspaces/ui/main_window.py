@@ -3891,6 +3891,27 @@ class MainWindow(QMainWindow):
                 count += 1
         return count
 
+    def _console_runner_running_count(self, tab_id: int) -> int:
+        """Quantos runners console-scoped deste console (tab_id == id(term))
+        estão rodando agora. 0 se o console não tem RunnerArea ainda."""
+        for per_ws in self._console_runner_areas.values():
+            area = per_ws.get(tab_id)
+            if area is not None:
+                return area.running_count()
+        return 0
+
+    def _refresh_console_runner_marker(self, tab_id: int) -> None:
+        """Atualiza o badge ▶ de runner em execução no item de sidebar do
+        console. Chamado no build/refresh do item e quando a contagem de
+        runners rodando do console muda (running_count_changed)."""
+        item = self.terminals_coord.state.tree_items.get(tab_id)
+        if item is None:
+            return
+        widget = self.list_widget.itemWidget(item, 0)
+        from .terminal_child_widget import TerminalChildWidget
+        if isinstance(widget, TerminalChildWidget):
+            widget.set_runner_running(self._console_runner_running_count(tab_id))
+
     def _update_runner_group_badges(self, workspace_id: str) -> None:
         from .runner_group_widget import RunnerGroupWidget
         from .workspace_item_widget import WorkspaceItemWidget
@@ -5451,6 +5472,12 @@ class MainWindow(QMainWindow):
             lambda rid, cwd, wid=workspace.id:
                 self._on_runner_cwd_changed(wid, rid, cwd)
         )
+        # Marcador ▶ na sidebar: quando os runners deste console começam/param
+        # de rodar, repinta o badge do item correspondente (chave = id(term)).
+        area.running_count_changed.connect(
+            lambda _count, tid=id(terminal):
+                self._refresh_console_runner_marker(tid)
+        )
         self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
         # Painel mora no pane "Runners console" (separado) — não embute mais
         # no próprio terminal. O toolbar `▤ Runners` do terminal foca o pane.
@@ -6750,6 +6777,8 @@ class MainWindow(QMainWindow):
         ws_data = ws_item.data(0, Qt.ItemDataRole.UserRole)
         if isinstance(ws_data, Workspace):
             self._install_console_runner_children(child, ws_data, tab_id)
+        # Estado inicial do marcador ▶ (console restaurado com runner já vivo).
+        self._refresh_console_runner_marker(tab_id)
         self._refresh_empty_placeholder(ws_item)
 
     def _update_terminal_child(
@@ -6793,6 +6822,8 @@ class MainWindow(QMainWindow):
         widget.set_continue_eligible(
             term is not None and term.was_restored_on_startup()
         )
+        # Mantém o marcador ▶ de runner coerente após rebuilds do item.
+        self._refresh_console_runner_marker(tab_id)
         # Esconde na sidebar quando a tarefa termina; reaparece se o processo
         # voltar a rodar (raro, mas mantém consistência).
         item.setHidden(state == STATE_DONE)
