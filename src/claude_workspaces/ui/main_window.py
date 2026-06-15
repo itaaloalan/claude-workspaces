@@ -5077,6 +5077,9 @@ class MainWindow(QMainWindow):
         area.set_console_dirs_provider(
             lambda wid=workspace.id: self._console_dirs_for(wid)
         )
+        area.set_open_sessions_provider(
+            lambda wid=workspace.id: self._open_console_sids(wid)
+        )
         self._runner_areas[workspace.id] = area
         self.runner_host.addWidget(area)
         # StackAll: o widget recém-adicionado fica visível e pintado por
@@ -5142,6 +5145,20 @@ class MainWindow(QMainWindow):
             return
         console_area = self._ensure_terminal_runner_panel(workspace, term)
         console_area.raise_stack_here()
+
+    def _open_console_sids(self, workspace_id: str) -> set[str]:
+        """Session-ids (real + pending) de todos os consoles ABERTOS do
+        workspace. Usado pra filtrar órfãos na alocação de porta de cópias
+        console-scoped — consoles fechados não reservam porta."""
+        sids: set[str] = set()
+        t_area = self.terminals_coord._areas.get(workspace_id)
+        if t_area is None:
+            return sids
+        for i in range(t_area.tabs.count()):
+            term = t_area.tabs.widget(i)
+            if isinstance(term, TerminalWidget):
+                sids |= self._console_runner_sids(term)
+        return sids
 
     def _console_runner_groups(self, ws: Workspace) -> list[dict]:
         """Grupos de runners console-scoped de um workspace, um por
@@ -5526,6 +5543,9 @@ class MainWindow(QMainWindow):
         )
         area.set_console_dirs_provider(
             lambda wid=workspace.id: self._console_dirs_for(wid)
+        )
+        area.set_open_sessions_provider(
+            lambda wid=workspace.id: self._open_console_sids(wid)
         )
         area.set_edit_handler(
             lambda runner, w=workspace, a=area:

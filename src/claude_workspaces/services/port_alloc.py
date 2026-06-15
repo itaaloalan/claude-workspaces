@@ -56,7 +56,10 @@ def next_free_port(
     )
 
 
-def reserved_console_ports(workspace) -> set[int]:
+def reserved_console_ports(
+    workspace,
+    open_session_ids: set[str] | None = None,
+) -> set[int]:
     """Portas reservadas pelas cópias CONSOLE-scoped do workspace.
 
     Runners workspace-scoped NÃO reservam porta na alocação de cópias —
@@ -64,11 +67,19 @@ def reserved_console_ports(workspace) -> set[int]:
     estiver rodando, o bind test já detecta a porta ocupada. Sem isso,
     dois runners workspace com a mesma base faziam a 1ª cópia sempre
     incrementar, violando a regra "sem cópia de console → mesma porta".
+
+    `open_session_ids`: quando fornecido, somente cópias cujo
+    `console_session_id` esteja no conjunto são contadas. Cópias de
+    consoles **fechados** (órfãos) ficam fora — suas portas são
+    reutilizáveis e não devem empurrar novas cópias pra base+N. Quando
+    `None` (padrão), todas as cópias contam (comportamento legado).
     """
     return {
         r.port
         for r in workspace.runners
-        if getattr(r, "port", 0) > 0 and (r.console_session_id or "")
+        if getattr(r, "port", 0) > 0
+        and (sid := (r.console_session_id or ""))
+        and (open_session_ids is None or sid in open_session_ids)
     }
 
 

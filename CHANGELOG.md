@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.9.3] — 2026-06-15
+
+### Correção: órfãos de consoles fechados não reservam mais porta
+
+- **Problema:** ao subir a stack num console novo, a 1ª cópia recebia
+  `base+N` em vez da porta base (`api :5002`/`web :3002` no lugar de
+  `:5000`/`:3000`). Isso ocorria porque `reserved_console_ports()` contava
+  **todas** as cópias console-scoped em `workspaces.json`, incluindo as de
+  consoles já fechados (órfãos). Cada ciclo abre/fecha acumula mais um
+  órfão, empurrando novas cópias pra portas cada vez mais altas — mesmo
+  sem nenhum console aberto.
+- **Correção:** `reserved_console_ports` ganhou o parâmetro opcional
+  `open_session_ids: set[str] | None`. Quando fornecido, só cópias de
+  consoles **atualmente abertos** reservam porta; órfãos são ignorados e
+  suas portas ficam disponíveis para reuso. O `main_window` calcula o
+  conjunto de sids abertos via `_open_console_sids` (reutilizando
+  `_console_runner_sids`) e injeta no `RunnerArea` via novo provider
+  `set_open_sessions_provider`. Com `None` (padrão), o comportamento
+  anterior é mantido (retrocompatível).
+- **Resultado:** num projeto sem consoles abertos, a 1ª cópia sempre usa a
+  porta base, independente de quantos órfãos existam em `workspaces.json`.
+
 ## [1.9.2] — 2026-06-12
 
 ### Correção: `pnpm` + vite ignorava a porta alocada (caía na 3000)

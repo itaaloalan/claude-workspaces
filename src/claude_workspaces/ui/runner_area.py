@@ -96,6 +96,11 @@ class RunnerArea(QWidget):
         # RunnerWidgets) — injetado pela main_window via
         # set_console_dirs_provider.
         self._console_dirs_provider: Callable | None = None
+        # Provider de session-ids dos consoles ABERTOS do workspace —
+        # injetado pela main_window via set_open_sessions_provider. Usado em
+        # _copy_runners_to_console pra que cópias de consoles fechados
+        # (órfãos) não reservem porta e não empurrem novas cópias pra base+N.
+        self._open_sessions_provider: Callable | None = None
         # Cache de translate_dir_for_repo por (target, repo) — limpo quando
         # o default do painel muda. Evita git subprocess a cada refresh.
         self._translate_cache: dict[tuple[str, str], str] = {}
@@ -324,6 +329,13 @@ class RunnerArea(QWidget):
             w = self.tabs.widget(i)
             if isinstance(w, RunnerWidget):
                 w.set_console_dirs_provider(fn)
+
+    def set_open_sessions_provider(self, fn: Callable | None) -> None:
+        """Callable() -> set[str] com os session-ids dos consoles ABERTOS do
+        workspace. Usado na alocação de porta de cópias console-scoped:
+        somente cópias de consoles no conjunto reservam porta — órfãos
+        (consoles fechados) não reservam e suas portas são reaproveitadas."""
+        self._open_sessions_provider = fn
 
     def set_default_cwd(self, cwd: str) -> None:
         """Atualiza o cwd padrão dos runners deste painel (worktree do
@@ -952,9 +964,16 @@ class RunnerArea(QWidget):
                         # workspace (inclusive irmãos na MESMA base, ex
                         # api jdk25/jdk8 em 8091) não contam → 1ª cópia
                         # reusa a base; cópias seguintes incrementam.
+                        # Cópias de consoles FECHADOS (órfãos) também não
+                        # reservam — open_ids filtra só os abertos.
+                        open_ids = (
+                            self._open_sessions_provider()
+                            if self._open_sessions_provider is not None
+                            else None
+                        )
                         clone.port = next_free_port(
                             clone.port,
-                            reserved_console_ports(self._ws),
+                            reserved_console_ports(self._ws, open_ids),
                             probe_os=False,
                         )
                     except RuntimeError:

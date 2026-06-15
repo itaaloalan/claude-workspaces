@@ -419,3 +419,66 @@ def test_porta_por_worktree_deterministica_com_workspace_rodando(monkeypatch):
     port_c = next_free_port(8080, reserved_console_ports(ws), probe_os=False)
     assert port_c == 8082
     assert len({port_a, port_b, port_c}) == 3
+
+
+def test_reserved_console_ports_orfaos_nao_reservam():
+    """Cenário do print: sem nenhum console aberto, cópias de consoles
+    FECHADOS (órfãos) não devem reservar porta — a 1ª cópia nova volta pra
+    base."""
+    from claude_workspaces.services.port_alloc import reserved_console_ports
+
+    ws = Workspace(
+        name="sipepro",
+        runners=[
+            RunnerConfig(name="api", port=5000),
+            RunnerConfig(name="web", port=3000),
+            # Órfão A — console já fechado.
+            RunnerConfig(name="api", port=5000, console_session_id="closed-A"),
+            RunnerConfig(name="web", port=3000, console_session_id="closed-A"),
+            # Órfão B — outro console fechado, ganhou base+1 na época.
+            RunnerConfig(name="api", port=5001, console_session_id="closed-B"),
+            RunnerConfig(name="web", port=3001, console_session_id="closed-B"),
+        ],
+    )
+
+    # Sem provider (None) → comportamento legado: todos reservam.
+    assert reserved_console_ports(ws) == {5000, 3000, 5001, 3001}
+
+    # Com open_session_ids vazio (nenhum console aberto) → nada reservado.
+    assert reserved_console_ports(ws, open_session_ids=set()) == set()
+
+    # 1ª cópia nova volta pra base mesmo com os órfãos em workspaces.json.
+    assert (
+        next_free_port(5000, reserved_console_ports(ws, open_session_ids=set()), probe_os=False)
+        == 5000
+    )
+    assert (
+        next_free_port(3000, reserved_console_ports(ws, open_session_ids=set()), probe_os=False)
+        == 3000
+    )
+
+
+def test_reserved_console_ports_orfaos_nao_bloqueiam_abertos():
+    """Com 1 console aberto (sid "open-C") contendo a porta base, a próxima
+    cópia vai pra base+1 — a filtragem não quebra o caso legítimo."""
+    from claude_workspaces.services.port_alloc import reserved_console_ports
+
+    ws = Workspace(
+        name="sipepro",
+        runners=[
+            RunnerConfig(name="api", port=5000),
+            # Cópia de console ABERTO.
+            RunnerConfig(name="api", port=5000, console_session_id="open-C"),
+            # Órfão — fechado.
+            RunnerConfig(name="api", port=5001, console_session_id="closed-D"),
+        ],
+    )
+
+    open_ids = {"open-C"}
+    assert reserved_console_ports(ws, open_session_ids=open_ids) == {5000}
+    # Próxima cópia nova: pula 5000 (open-C reserva), vai pra 5001 — mas
+    # closed-D (5001) não reserva, então 5001 está livre.
+    assert (
+        next_free_port(5000, reserved_console_ports(ws, open_ids), probe_os=False)
+        == 5001
+    )
