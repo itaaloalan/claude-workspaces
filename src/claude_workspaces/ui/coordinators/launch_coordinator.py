@@ -76,19 +76,27 @@ class LaunchCoordinator(QObject):
         submit_initial_prompt = False
         if cwd_override:
             cwd = cwd_override
-            # Mantém as demais pastas do workspace como --add-dir. Antes zerava,
-            # e como restore/resume sempre passam cwd_override, os add-dirs eram
-            # perdidos: o Claude não via as outras pastas e a sidebar só pollava
-            # MR/git do cwd (MAP mostrava só 1 MR).
-            extras = [f for f in workspace.folders if f != cwd_override]
-            # Restore/resume não passam pelo dialog, então `is_worktree` viria
-            # sempre False e o badge 🌿 sumia. Detecta a worktree direto do cwd.
-            from ...git_worktree import current_branch, is_worktree_path
+            from ...git_worktree import (
+                current_branch,
+                is_worktree_group,
+                is_worktree_path,
+                worktree_group_members,
+            )
             if is_worktree_path(cwd):
                 is_worktree = True
+                extras = [f for f in workspace.folders if f != cwd_override]
                 if not worktree_label:
                     br = current_branch(cwd)
                     worktree_label = f" · {br}" if br else " · isolado"
+            elif is_worktree_group(cwd):
+                is_worktree = True
+                extras = []
+                if not worktree_label:
+                    members = worktree_group_members(cwd)
+                    br = members[0]["branch"] if members else ""
+                    worktree_label = f" · {br}" if br else " · grupo"
+            else:
+                extras = [f for f in workspace.folders if f != cwd_override]
         elif not resume_session_id and not skip_dialog:
             # Importa local pra evitar circular import e custo de
             # importar Qt widgets pesados em testes

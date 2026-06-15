@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.11.0] — 2026-06-15
+
+### Feature: abrir console em grupo de worktrees
+
+- Novos helpers em `git_worktree.py`: `worktree_group_members(parent)` lista
+  subdiretórios de uma pasta-pai que sejam worktrees linkadas; `is_worktree_group(parent)`
+  retorna `True` quando há ≥ 2 membros — identifica "pasta-grupo" sem repo git próprio.
+- Menu de contexto **🌿 Abrir console no grupo**: aparece no card de sessão e no
+  menu de worktrees quando o workspace possui 2+ worktrees irmãs; ao clicar, abre
+  um console novo com `cwd` apontando para a pasta-pai do grupo (todas as worktrees
+  visíveis como subdiretórios).
+- Submenu "Alternar esta sessão para worktree" agora detecta grupos: quando o
+  destino seria uma pasta-pai de grupo, abre console novo no pai (em vez de emitir
+  `EnterWorktree` in-place).
+- `LaunchCoordinator`: quando `cwd_override` é um pasta-grupo, seta
+  `is_worktree=True`, `extras=[]` e monta o label `· grupo`/branch a partir do
+  primeiro membro, sem requerer passagem pelo diálogo de launch.
+
 ## [1.10.0] — 2026-06-15
 
 ### Feature: diff rico e lista de mudanças estilo VSCode/GitHub no painel Git

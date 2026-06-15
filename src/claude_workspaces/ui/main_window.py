@@ -2234,6 +2234,7 @@ class MainWindow(QMainWindow):
                     )
                 self._add_create_worktree_action(menu, owner_ws, wt_suggested)
                 self._add_open_in_worktree_menu(menu, owner_ws)
+                self._add_open_in_group_menu(menu, owner_ws)
                 if term.is_running():
                     self._add_switch_to_worktree_menu(menu, owner_ws, term)
                 self._add_remove_worktree_menu(menu, owner_ws)
@@ -2377,10 +2378,50 @@ class MainWindow(QMainWindow):
             sub.addAction(act)
         menu.addSeparator()
 
+    def _add_open_in_group_menu(self, menu: QMenu, workspace: Workspace) -> None:
+        from ..git_worktree import list_worktrees, repo_root
+
+        groups: dict[str, list[dict]] = {}
+        for folder in workspace.folders:
+            root = repo_root(folder)
+            if not root:
+                continue
+            root_res = Path(root).resolve()
+            for wt in list_worktrees(root):
+                path = wt.get("worktree", "")
+                if not path or Path(path).resolve() == root_res:
+                    continue
+                parent = str(Path(path).parent)
+                if parent not in groups:
+                    groups[parent] = []
+                branch = wt.get("branch", "")
+                if branch.startswith("refs/heads/"):
+                    branch = branch[len("refs/heads/"):]
+                groups[parent].append({"path": path, "branch": branch})
+
+        valid_groups = {p: members for p, members in groups.items() if len(members) >= 2}
+        if not valid_groups:
+            return
+
+        sub = menu.addMenu("🌿 Abrir console no grupo")
+        sub.setToolTipsVisible(True)
+        for parent_path, members in valid_groups.items():
+            branch = members[0]["branch"] if members else ""
+            label = branch or Path(parent_path).name
+            act = QAction(f"🌿 {label}", sub)
+            act.setToolTip(parent_path)
+            act.triggered.connect(
+                lambda _c=False, w=workspace, p=parent_path: self._launch_claude_for(
+                    w, "", p
+                )
+            )
+            sub.addAction(act)
+        menu.addSeparator()
+
     def _add_switch_to_worktree_menu(
         self, menu: QMenu, workspace: Workspace, term: "TerminalWidget"
     ) -> None:
-        from ..git_worktree import list_worktrees, repo_root
+        from ..git_worktree import list_worktrees, repo_root, worktree_group_members
 
         cwd = getattr(term, "_claude_cwd", "") or ""
         if not cwd:
@@ -2409,7 +2450,10 @@ class MainWindow(QMainWindow):
             if cwd_root_res in paths:
                 repo_wts = wts
                 break
-        entries: list[tuple[str, str]] = []
+        # entries: (label, target_path, is_group)
+        # is_group=True → abre console novo no pai; False → EnterWorktree in-place
+        entries: list[tuple[str, str, bool]] = []
+        seen_group_parents: set[str] = set()
         for wt in repo_wts:
             path = wt.get("worktree", "")
             if not path:
@@ -2420,24 +2464,43 @@ class MainWindow(QMainWindow):
             branch = wt.get("branch", "")
             if branch.startswith("refs/heads/"):
                 branch = branch[len("refs/heads/"):]
-            entries.append((branch or Path(path).name, str(p_res / offset)))
+            parent = str(p_res.parent)
+            members = worktree_group_members(parent)
+            is_multi_repo_group = len({m["repo"] for m in members if m.get("repo")}) >= 2
+            if is_multi_repo_group:
+                if parent not in seen_group_parents:
+                    seen_group_parents.add(parent)
+                    entries.append((branch or Path(path).name, parent, True))
+            else:
+                entries.append((branch or Path(path).name, str(p_res / offset), False))
         if not entries:
             return
         sub = menu.addMenu("🌿 Alternar esta sessão para worktree")
         sub.setToolTipsVisible(True)
-        for label, path in entries:
+        for label, path, is_group in entries:
             act = QAction(f"🌿 {label}", sub)
-            act.setToolTip(
-                f"Pede pro Claude desta sessão entrar em {path} "
-                f"(EnterWorktree)"
-            )
-            act.triggered.connect(
-                lambda _c=False, t=term, p=path: t.send_text(
-                    f'Use a ferramenta EnterWorktree com path "{p}" '
-                    f"para alternar esta sessão para esse worktree.",
-                    submit=True,
+            if is_group:
+                act.setToolTip(
+                    f"Abre um console NOVO no grupo {path} "
+                    f"(cwd=pai, @map-api/... e @map-web/... disponíveis)"
                 )
-            )
+                act.triggered.connect(
+                    lambda _c=False, w=workspace, p=path: self._launch_claude_for(
+                        w, "", p
+                    )
+                )
+            else:
+                act.setToolTip(
+                    f"Pede pro Claude desta sessão entrar em {path} "
+                    f"(EnterWorktree)"
+                )
+                act.triggered.connect(
+                    lambda _c=False, t=term, p=path: t.send_text(
+                        f'Use a ferramenta EnterWorktree com path "{p}" '
+                        f"para alternar esta sessão para esse worktree.",
+                        submit=True,
+                    )
+                )
             sub.addAction(act)
         menu.addSeparator()
 
@@ -2656,6 +2719,7 @@ class MainWindow(QMainWindow):
         if term.is_running():
             self._add_switch_to_worktree_menu(menu, ws, term)
         self._add_open_in_worktree_menu(menu, ws)
+        self._add_open_in_group_menu(menu, ws)
         self._add_remove_worktree_menu(menu, ws)
         # Refresh: re-consulta `git worktree list` (reabre o menu). Útil quando
         # um worktree recém-criado pela sessão ainda não aparecia por corrida

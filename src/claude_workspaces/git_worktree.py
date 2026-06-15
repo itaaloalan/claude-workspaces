@@ -322,3 +322,36 @@ def list_worktrees(repo_path: str) -> list[dict]:
     if current:
         result.append(current)
     return result
+
+
+def worktree_group_members(parent: str) -> list[dict]:
+    """Lista os membros de um grupo de worktrees (pasta-pai sem repo git).
+
+    Para cada subdir imediato de `parent` que for uma git worktree linkada,
+    coleta {path, repo_name, branch}. Retorna lista vazia se `parent` não é
+    uma pasta-grupo valida (é repo git, é worktree ela mesma, ou não existe).
+    """
+    p = Path(parent)
+    if not p.is_dir() or is_worktree_path(parent) or (p / ".git").exists():
+        return []
+    members: list[dict] = []
+    try:
+        subdirs = sorted(p.iterdir())
+    except OSError:
+        return []
+    for sub in subdirs:
+        if not sub.is_dir():
+            continue
+        if is_worktree_path(str(sub)):
+            branch = current_branch(str(sub))
+            dirs = resolve_git_dirs(str(sub))
+            repo_id = str(dirs[1]) if dirs else ""
+            members.append(
+                {"path": str(sub), "repo_name": sub.name, "branch": branch, "repo": repo_id}
+            )
+    return members
+
+
+def is_worktree_group(parent: str) -> bool:
+    """True se `parent` é uma pasta-pai com 2+ git worktrees linkadas."""
+    return len(worktree_group_members(parent)) >= 2

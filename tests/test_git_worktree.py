@@ -4,6 +4,7 @@ import pytest
 
 from claude_workspaces.git_worktree import (
     add_worktree,
+    is_worktree_group,
     list_local_branches,
     remove_worktree,
     resolve_git_dirs,
@@ -11,6 +12,7 @@ from claude_workspaces.git_worktree import (
     safe_dir_name,
     suggest_branch_name,
     worktree_base,
+    worktree_group_members,
     worktree_path_for,
 )
 
@@ -327,3 +329,29 @@ def test_same_repo_repos_diferentes_e_nao_git(two_repos, tmp_path):
     nao_git.mkdir()
     assert same_repo(str(api), str(nao_git)) is False
     assert same_repo("", str(api)) is False
+
+
+def test_worktree_group_members_multi_repo(two_repos, tmp_path):
+    """Pasta-pai com worktrees de repos DIFERENTES → members com repo distintos."""
+    api, web = two_repos
+    parent = tmp_path / ".worktrees" / "feat_x"
+    parent.mkdir(parents=True)
+    _run(["git", "worktree", "add", str(parent / "map-api"), "-b", "feat/x"], api)
+    _run(["git", "worktree", "add", str(parent / "map-web"), "-b", "feat/x"], web)
+    members = worktree_group_members(str(parent))
+    assert len(members) == 2
+    repo_ids = {m["repo"] for m in members if m.get("repo")}
+    assert len(repo_ids) == 2, "repos distintos devem ter common_dir diferentes"
+    assert is_worktree_group(str(parent))
+
+
+def test_worktree_group_members_mesmo_repo_nao_e_grupo(repo):
+    """Pasta-pai com worktrees do MESMO repo → repo IDs iguais (não é grupo multi-repo)."""
+    ok_a, _, _ = add_worktree(str(repo), "fix/a")
+    ok_b, _, _ = add_worktree(str(repo), "fix/b")
+    assert ok_a and ok_b
+    base = worktree_base(str(repo))
+    members = worktree_group_members(str(base))
+    assert len(members) == 2
+    repo_ids = {m["repo"] for m in members if m.get("repo")}
+    assert len(repo_ids) == 1, "branches do mesmo repo devem ter o mesmo common_dir"
