@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.9.4] — 2026-06-15
+
+### Correção: notificações de decisão inconsistentes
+
+Duas causas sobrepostas faziam a notificação de "Aguardando / Decisão" falhar
+silenciosamente:
+
+1. **Bug principal — debounce bloqueava decisões:** o debounce de 60s de
+   "Pronto" em `_on_inbox_alert` lia `kind` **depois** do bloco de supressão,
+   então notificações de picker/permission que chegavam dentro de 60s de
+   qualquer alerta anterior eram descartadas sem verificar se eram decisões.
+   Corrigido lendo `kind` antes do bloco e excluindo `kind == "decision"` do
+   debounce — decisões nunca são debounced.
+
+2. **Bug secundário — `already_present` silenciava decisão pós-"Pronto":** em
+   `terminal_coordinator._on_tab_activity`, a transição `entered_decision=True`
+   não emitia `inbox_alert` quando o tab já estava no inbox como "Pronto"
+   (`already_present=True`). Agora `entered_decision` sempre emite o alerta,
+   independente do estado anterior do inbox.
+
 ## [1.9.3] — 2026-06-15
 
 ### Correção: órfãos de consoles fechados não reservam mais porta

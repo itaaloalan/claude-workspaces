@@ -6360,13 +6360,17 @@ class MainWindow(QMainWindow):
                     tab_id,
                 )
                 return
+        # `kind` lido cedo porque o debounce abaixo só se aplica a "Pronto"
+        # — notificações de "decisão" (picker/permission) NUNCA são
+        # debounced: exigem ação imediata do usuário.
+        kind = info.get("kind", "ready")
         # Debounce do "Pronto": se o mesmo tab disparou working→idle nos
         # últimos 60s, suprime esse alerta. Console oscila com Claude
         # rodando hooks/sub-passos entre working↔idle várias vezes e o
-        # usuário só quer ser avisado uma vez por turno. Reminders ignoram
-        # o debounce — eles rodam num timer separado, são intencionais.
+        # usuário só quer ser avisado uma vez por turno. Reminders e
+        # decisões ignoram o debounce — são intencionais / urgentes.
         import time
-        if not is_reminder:
+        if not is_reminder and kind != "decision":
             last = self._ready_alert_last.get(tab_id, 0.0)
             now = time.monotonic()
             if now - last < 60.0:
@@ -6384,7 +6388,6 @@ class MainWindow(QMainWindow):
             log.debug("inbox_alert suprimido — workspace %s minimizado", ws.id)
             return
         ws_name = ws.name if ws else "Workspace"
-        kind = info.get("kind", "ready")
         if is_reminder:
             title_prefix = self.settings.notify_reminder_prefix
         elif kind == "decision":

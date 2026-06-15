@@ -223,7 +223,10 @@ class TerminalCoordinator(QObject):
             self.inbox_changed.emit(len(self.state.inbox))
             # Primeira chegada (não bounce de working transiente): emite
             # alerta inicial. Bounces preservam added_at — não realertam.
-            if not already_present:
+            # Decisões sempre alertam, mesmo que o tab já esteja no inbox
+            # como "Pronto" — sem isso um picker aparecendo num console
+            # já "Pronto" (usuário não respondeu ainda) ficava mudo.
+            if not already_present or entered_decision:
                 self.inbox_alert.emit(
                     tab_id, dict(self.state.inbox[tab_id]), False
                 )
