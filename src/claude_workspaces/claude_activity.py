@@ -167,22 +167,32 @@ def _has_decision_prompt(lines: list[str]) -> bool:
     """True se as últimas linhas contêm um permission prompt ou picker
     interativo do Claude.
 
-    Janela maior (16) porque o "Do you want to..." / "Allow..." pode
-    ficar algumas linhas acima da seta de escolha. O footer de picker
-    ("Enter to select…") sozinho já basta — ele só aparece com input
-    bloqueado. Formato moderno usa "❯ Yes/No" ou "> Yes/No" sem número."""
-    tail = lines[-16:]
-    tail_norm = [_normalize(ln) for ln in tail]
-    full_tail_norm = "".join(tail_norm)
-    # Footer do picker interativo — sozinho basta.
-    if any(_INTERACTIVE_FOOTER_NORM in n for n in tail_norm):
+    O footer "Enter to select" e as frases exclusivas de permission são
+    verificados em TODOS os lines — o picker redraws via cursor positioning
+    adiciona novos bytes DEPOIS do footer no stream PTY bruto, empurrando o
+    footer pra fora de qualquer janela fixa após cada keypress de navegação.
+    Resultado: com janela fixa, `has_decision` vira False após ~16 teclas →
+    fallback marca `is_working=True` (output recente do redraw) →
+    `_needs_decision_held` é limpo → estado cai pra "Ocioso" mesmo com o
+    picker visível.
+
+    Padrões mais genéricos (❯ Yes/No, Allow?) ficam numa janela de 32 linhas
+    pra evitar falsos positivos de texto antigo da conversa."""
+    all_norm = [_normalize(ln) for ln in lines]
+    full_all_norm = "".join(all_norm)
+    # Footer do picker interativo — procurado em TODOS os lines pois
+    # redraws o empurram pra longe do fim do buffer.
+    if any(_INTERACTIVE_FOOTER_NORM in n for n in all_norm):
         return True
     # Frases exclusivas do permission prompt (ex: "don't ask again",
     # "allow once") — únicas nesse contexto, dispensam presença de ❯.
-    if any(p in full_tail_norm for p in _PERM_SPECIFIC_NORMS):
+    if any(p in full_all_norm for p in _PERM_SPECIFIC_NORMS):
         return True
-    # Formato moderno: "❯ Yes/No" (Unicode) ou "> Yes/No" (ASCII, \s* por
-    # eventual cursor positioning que remove o espaço após strip).
+    # Padrões mais genéricos: janela de 32 linhas pra capturar pickers
+    # com descrições longas sem casar conteúdo antigo da conversa.
+    tail = lines[-32:]
+    tail_norm = [_normalize(ln) for ln in tail]
+    # Formato moderno: "❯ Yes/No" (Unicode) ou "> Yes/No" (ASCII).
     has_yn_choice = any(
         DECISION_CHOICE_YN_RE.search(ln) or DECISION_CHOICE_ASCII_RE.match(ln)
         for ln in tail

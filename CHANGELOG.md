@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.9.6] — 2026-06-15
+
+### Correção: sidebar mostra "Ocioso" mesmo com picker/decision visível
+
+- **Causa raiz:** `_has_decision_prompt` procurava o footer
+  "Enter to select" apenas nas últimas 16 linhas do buffer PTY. Cada
+  keypress de navegação no picker (↑/↓) faz o Claude emitir bytes de
+  redraw via cursor positioning que, após `strip_ansi`, são appendados
+  como novas linhas — empurrando o footer pra além da janela de 16 linhas
+  após ~16 teclas. Resultado: `has_decision=False` → fallback
+  `is_working = recent and not has_decision` retornava `True` (output
+  recente do redraw) → `_needs_decision_held` era limpo → estado caia
+  pra "Ocioso" mesmo com o picker visível.
+- **Fix:** footer "Enter to select" e frases exclusivas de permission
+  ("don't ask again", "allow once", etc.) agora são procurados em
+  **todos** os lines do buffer — são únicos o suficiente para não gerar
+  falsos positivos. Padrões mais genéricos (❯ Yes/No, Allow?) mantêm
+  janela de 32 linhas (foi 16) para evitar falsos positivos de texto
+  antigo da conversa.
+
 ## [1.9.5] — 2026-06-15
 
 ### Remoção: ícone de robô do card de sessão

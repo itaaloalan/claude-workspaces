@@ -350,3 +350,42 @@ def test_decision_prompt_and_working_not_both_true():
     a = parse_status(buf, last_output_age=0.5)
     # As duas propriedades são mutuamente exclusivas
     assert not (a.is_working and a.needs_decision)
+
+
+def test_picker_footer_detectado_apos_multiplos_redraws():
+    """Regressão: picker ativo onde o usuário navegou várias vezes (↑/↓).
+
+    Cada keypress de navegação faz o Claude emitir bytes de redraw via
+    cursor positioning, que após strip_ansi são appendados como novas linhas
+    no buffer — empurrando o footer 'Enter to select' pra longe do fim.
+    Com janela fixa de 16 linhas, o footer some da janela após ~16 teclas →
+    has_decision=False → fallback marca is_working=True (output recente do
+    redraw) → _needs_decision_held limpo → estado cai pra 'Ocioso' mesmo
+    com o picker visível na tela.
+
+    O fix: 'Enter to select' é procurado em TODOS os lines, não só no tail."""
+    picker_initial = (
+        "□ Origem\n"
+        "\n"
+        "Qual rótulo a nova origem deve exibir na coluna Origem?\n"
+        "\n"
+        "❯ 1. Teste de produção (Recomendado)\n"
+        "   Novo valor no enum OrigemRegistroParada com label.\n"
+        "2. Teste de poço\n"
+        "   Mesmo enum novo mas label diferente.\n"
+        "3. Type something.\n"
+        "4. Chat about this\n"
+        "\n"
+        "Enter to select · ↑/↓ to navigate · Esc to cancel\n"
+    )
+    # Simula 20 redraws de navegação após o draw inicial. Cada redraw
+    # adiciona ~2 linhas (opção selecionada re-emitida via cursor positioning).
+    redraws = "".join(
+        f"❯ {(i % 4) + 1}. Opção redrawada\n  2. outra\n"
+        for i in range(20)
+    )
+    buf = (picker_initial + redraws).encode()
+    # Output recente (age < 2.5s) simula redraw chegando pelo PTY.
+    a = parse_status(buf, last_output_age=0.3)
+    assert a.is_working is False, "redraws do picker não devem virar is_working=True"
+    assert a.needs_decision is True, "footer deve ser detectado mesmo após 20 redraws"
