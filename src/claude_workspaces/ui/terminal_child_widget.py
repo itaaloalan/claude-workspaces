@@ -9,11 +9,10 @@ console do Claude rodando num workspace, no estilo card moderno:
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
-    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -174,38 +173,6 @@ class TerminalChildWidget(QWidget):
         self._icon = QLabel()
         self._icon.setVisible(False)
 
-        # Ícone do Claude (robot) à esquerda — sinaliza "este card é uma
-        # sessão Claude". A cor acompanha sempre o estado (ver _robot_pixmap).
-        self._claude_icon = QLabel()
-        self._claude_icon.setFixedSize(16, 16)
-        self._claude_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._claude_icon.setStyleSheet(
-            "QLabel { background: transparent; border: 0; }"
-        )
-        # O robô usa SEMPRE a cor do estado atual (mesma fonte do label de
-        # estado e da faixa lateral: STATE_COLOR). Pixmaps são gerados sob
-        # demanda por estado e cacheados pra não recriar a cada tick.
-        self._robot_pix_cache: dict[str, object] = {}
-        self._claude_icon.setPixmap(self._robot_pixmap(STATE_IDLE))
-        outer.addWidget(
-            self._claude_icon, 0, Qt.AlignmentFlag.AlignVCenter
-        )
-
-        # Animação de pulso (opacidade) do robô — só roda em STATE_WORKING.
-        # Heartbeat suave 1.0↔0.35 em loop; ativada/desativada por
-        # _set_working_anim a partir de update_state.
-        self._claude_icon_opacity = QGraphicsOpacityEffect(self._claude_icon)
-        self._claude_icon_opacity.setOpacity(1.0)
-        self._claude_icon.setGraphicsEffect(self._claude_icon_opacity)
-        self._working_anim = QPropertyAnimation(
-            self._claude_icon_opacity, b"opacity", self
-        )
-        self._working_anim.setDuration(750)
-        self._working_anim.setStartValue(1.0)
-        self._working_anim.setKeyValueAt(0.5, 0.35)
-        self._working_anim.setEndValue(1.0)
-        self._working_anim.setLoopCount(-1)
-        self._working_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
         vbox = QVBoxLayout()
         vbox.setContentsMargins(0, 0, 0, 0)
@@ -535,9 +502,6 @@ class TerminalChildWidget(QWidget):
         # Memoriza estado e reavalia visibilidade do ▶ — ele só aparece
         # em sessão restaurada+ociosa.
         self._current_state = state
-        # Robô segue a cor do estado (igual ao label/faixa lateral).
-        self._claude_icon.setPixmap(self._robot_pixmap(state))
-        self._set_working_anim(state == STATE_WORKING)
         self._refresh_continue_visibility()
         # Atualiza a borda lateral colorida (state-driven).
         self._apply_card_qss()
@@ -642,25 +606,6 @@ class TerminalChildWidget(QWidget):
             f"#ConsoleCard QPushButton {{ background: transparent; }}"
             f"#ConsoleCard QWidget {{ background: transparent; }}"
         )
-
-    def _robot_pixmap(self, state: str):
-        """Pixmap do robô na cor do estado (STATE_COLOR), cacheado por estado."""
-        pix = self._robot_pix_cache.get(state)
-        if pix is None:
-            from .icons import ic as _ic
-            pix = _ic("fa5s.robot", color=STATE_COLOR[state]).pixmap(11, 11)
-            self._robot_pix_cache[state] = pix
-        return pix
-
-    def _set_working_anim(self, active: bool) -> None:
-        """Liga/desliga só o *pulso* (opacidade) do robô. A cor é definida
-        pelo estado em update_state — aqui não trocamos mais o pixmap."""
-        if active:
-            if self._working_anim.state() != QPropertyAnimation.State.Running:
-                self._working_anim.start()
-        else:
-            self._working_anim.stop()
-            self._claude_icon_opacity.setOpacity(1.0)
 
     def set_selected(self, selected: bool) -> None:
         """Pinta o background do card com tint discreto quando selecionado.

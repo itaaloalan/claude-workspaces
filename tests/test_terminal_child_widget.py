@@ -327,30 +327,6 @@ def test_status_info_exposes_all_pr_urls(widget_and_calls):
 
 # ---------- cor do robô segue o estado ----------
 
-def test_robot_pixmap_cached_per_state(widget_and_calls):
-    w, _ = widget_and_calls
-    p1 = w._robot_pixmap(STATE_WORKING)
-    p2 = w._robot_pixmap(STATE_WORKING)
-    assert p1 is p2  # mesmo estado → mesmo pixmap cacheado
-    assert w._robot_pixmap(STATE_ERROR) is not p1
-
-
-def test_robot_color_follows_state_on_update(widget_and_calls):
-    """update_state troca o pixmap do robô pelo da cor do estado atual."""
-    w, _ = widget_and_calls
-    for state in (STATE_WORKING, STATE_AWAITING, STATE_IDLE, STATE_ERROR, STATE_DONE):
-        w.update_state(state, "")
-        assert w._claude_icon.pixmap().cacheKey() == w._robot_pixmap(state).cacheKey()
-
-
-def test_selection_does_not_change_robot_color(widget_and_calls):
-    """Seleção não mexe na cor do robô — ele segue só o estado."""
-    w, _ = widget_and_calls
-    w.update_state(STATE_AWAITING, "")
-    before = w._claude_icon.pixmap().cacheKey()
-    w.set_selected(True)
-    assert w._claude_icon.pixmap().cacheKey() == before
-
 
 # ---------- callbacks ----------
 

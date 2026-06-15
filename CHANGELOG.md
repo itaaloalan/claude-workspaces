@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.5] — 2026-06-15
+
+### Remoção: ícone de robô do card de sessão
+
+- Removido o ícone 🤖 (robot) e a animação de pulso do card de sessão
+  Claude na sidebar — ocupava espaço sem agregar informação, já que a
+  faixa lateral colorida já indica o estado.
+
 ## [1.9.4] — 2026-06-15
 
 ### Correção: notificações de decisão inconsistentes
