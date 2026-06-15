@@ -175,12 +175,27 @@ def get_status(folder: str) -> GitStatus:
         return GitStatus(folder=folder, is_repo=True, error=str(e))
 
 
-def get_diff(folder: str, file_path: str, staged: bool = False) -> str:
-    """Devolve o diff do arquivo (relativo ao folder).
-    - staged=True: diff entre index e HEAD (mudanças staged)
-    - staged=False: diff entre working tree e index (mudanças unstaged)
-    Para arquivos untracked, retorna o conteúdo cru com prefixo +."""
+def get_diff(
+    folder: str,
+    file_path: str,
+    staged: bool = False,
+    context: int | None = None,
+) -> str:
+    """Devolve o diff do arquivo (relativo ao folder) em formato unified.
+
+    - staged=True:    diff entre index e HEAD (mudanças staged)
+    - staged=False:   diff entre working tree e index (mudanças unstaged)
+    - context=None:   contexto padrão do git (3 linhas)
+    - context=N:      adiciona -U<N> (ex.: 100000 = arquivo inteiro)
+
+    Para arquivos untracked gera um unified diff via --no-index (compatível
+    com diff2html/highlight.js, ao contrário do formato antigo com prefixo +).
+    Retorna string vazia quando não há diferenças; string iniciada com '('
+    indica erro ou aviso a ser exibido como texto simples.
+    """
     args = ["git", "diff", "--no-color"]
+    if context is not None:
+        args.append(f"-U{context}")
     if staged:
         args.append("--cached")
     args.extend(["--", file_path])
@@ -192,38 +207,42 @@ def get_diff(folder: str, file_path: str, staged: bool = False) -> str:
         return f"(git diff falhou: {r.stderr.strip()})"
     if r.stdout:
         if len(r.stdout) > MAX_DIFF_BYTES:
+            # Diff grande: retornar aviso em vez de diff parcial (que quebraria
+            # o parser do diff2html).
             return (
-                r.stdout[:MAX_DIFF_BYTES]
-                + f"\n\n(... diff truncado em {MAX_DIFF_BYTES // 1024} KiB —"
-                " abra o arquivo pra ver completo)"
+                f"(diff grande demais ({len(r.stdout) // 1024} KiB) — "
+                "abra o arquivo no editor para ver as mudanças completas)"
             )
         return r.stdout
-    # Vazio = pode ser untracked. Mostra o conteúdo com + na frente.
+    # Saída vazia: pode ser arquivo untracked (??).  Gera unified diff via
+    # --no-index para que diff2html consiga parsear e highlight.js colorir.
     abs_path = Path(folder) / file_path
-    if abs_path.is_file():
-        try:
-            size = abs_path.stat().st_size
-        except OSError as e:
-            return f"(falha lendo arquivo: {e})"
-        if size > MAX_DIFF_BYTES:
-            return (
-                f"(arquivo novo grande: {size // 1024} KiB — preview truncado)\n\n"
-                + _read_prefixed(abs_path, MAX_DIFF_BYTES)
-            )
-        try:
-            text = abs_path.read_text(encoding="utf-8", errors="replace")
-        except OSError as e:
-            return f"(falha lendo arquivo: {e})"
-        prefix_lines = "\n".join(f"+{line}" for line in text.splitlines())
-        return f"(arquivo novo, sem versão anterior)\n\n{prefix_lines}"
-    return "(sem alterações)"
-
-
-def _read_prefixed(path: Path, max_bytes: int) -> str:
+    if not abs_path.is_file():
+        return ""
     try:
-        with path.open("rb") as fh:
-            blob = fh.read(max_bytes)
+        size = abs_path.stat().st_size
     except OSError as e:
-        return f"(falha lendo arquivo: {e})"
-    text = blob.decode("utf-8", errors="replace")
-    return "\n".join(f"+{line}" for line in text.splitlines())
+        return f"(falha ao ler arquivo: {e})"
+    if size > MAX_DIFF_BYTES:
+        return (
+            f"(arquivo novo grande: {size // 1024} KiB — "
+            "abra no editor para ver o conteúdo completo)"
+        )
+    ctx_args = [f"-U{context}"] if context is not None else []
+    try:
+        r2 = subprocess.run(
+            ["git", "diff", "--no-color", *ctx_args, "--no-index", "--", "/dev/null", str(abs_path)],
+            cwd=folder,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_S,
+            env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return f"(erro ao gerar diff de arquivo novo: {e})"
+    # git diff --no-index retorna 1 quando há diferenças (comportamento normal)
+    if r2.returncode not in (0, 1):
+        return f"(git diff --no-index falhou: {r2.stderr.strip()})"
+    return r2.stdout or ""
+
+

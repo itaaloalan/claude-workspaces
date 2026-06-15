@@ -13,6 +13,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
+from PySide6.QtCore import QRect
 from PySide6.QtGui import (
     QAction,
     QBrush,
@@ -20,18 +21,19 @@ from PySide6.QtGui import (
     QColor,
     QFont,
     QGuiApplication,
-    QSyntaxHighlighter,
-    QTextCharFormat,
+    QPainter,
 )
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QStyledItemDelegate,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -61,6 +63,7 @@ from ..git_status import GitFile, GitStatus, get_diff, get_status
 from ..git_worktree import resolve_git_dirs
 from ..models import Workspace
 from . import theme
+from .diff_web_view import DiffWebView
 from .spinner import Spinner
 
 log = logging.getLogger(__name__)
@@ -175,6 +178,7 @@ POLL_INTERVAL_MS = 30_000
 T_GROUP = "group"
 T_FILE = "file"
 T_REPO = "repo"
+T_FOLDER = "folder"  # separador de pasta na lista de arquivos
 
 # Pastas que o watcher do worktree nunca observa (pesadas/irrelevantes pro
 # feed) + teto de diretórios pra não estourar o limite de inotify.
@@ -245,40 +249,53 @@ def _fingerprint_statuses(statuses: dict[str, GitStatus]) -> tuple:
     )
 
 
-class _DiffHighlighter(QSyntaxHighlighter):
-    """Highlighter de diff unified — só aplica formato à linha visível
-    via Qt (re-highlight incremental do framework). Substitui o loop
-    manual O(n) que rodava em todas as QTextBlock a cada troca de
-    arquivo."""
+class _StatsDelegate(QStyledItemDelegate):
+    """Pinta a coluna de stats (+N -M) em verde e vermelho.
 
-    def __init__(self, document) -> None:
-        super().__init__(document)
-        self.plus = QTextCharFormat()
-        self.plus.setForeground(QColor("#5ac35a"))
-        self.minus = QTextCharFormat()
-        self.minus.setForeground(QColor("#d57272"))
-        self.header = QTextCharFormat()
-        self.header.setForeground(QColor("#7aa6e6"))
+    O dado UserRole da coluna 1 é uma tupla (added: int, removed: int).
+    Renderiza da direita pra esquerda: '-M' (vermelho) mais à direita,
+    '+N' (verde) à esquerda dele, alinhados à margem direita da célula.
+    """
 
-    def highlightBlock(self, text: str) -> None:
-        if not text:
+    _ADD = QColor("#5ac35a")
+    _DEL = QColor("#d57272")
+
+    def paint(self, painter: QPainter, option, index) -> None:  # type: ignore[override]
+        super().paint(painter, option, index)
+        raw = index.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(raw, tuple) or len(raw) != 2:
             return
-        # Headers de hunk/file primeiro (prefixos de 2-4 chars) — antes do +/-
-        # pra "+++" / "---" não cair no caso single-char.
-        if (
-            text.startswith("+++")
-            or text.startswith("---")
-            or text.startswith("@@")
-            or text.startswith("diff ")
-            or text.startswith("index ")
-        ):
-            self.setFormat(0, len(text), self.header)
+        added, removed = raw
+        if not added and not removed:
             return
-        c = text[0]
-        if c == "+":
-            self.setFormat(0, len(text), self.plus)
-        elif c == "-":
-            self.setFormat(0, len(text), self.minus)
+        painter.save()
+        painter.setFont(option.font)
+        fm = painter.fontMetrics()
+        r = option.rect
+        x = r.right() - 4
+
+        if removed:
+            s = f"-{removed}"
+            w = fm.horizontalAdvance(s)
+            painter.setPen(self._DEL)
+            painter.drawText(
+                QRect(x - w, r.top(), w, r.height()),
+                Qt.AlignmentFlag.AlignVCenter,
+                s,
+            )
+            x = x - w - 5
+
+        if added:
+            s = f"+{added}"
+            w = fm.horizontalAdvance(s)
+            painter.setPen(self._ADD)
+            painter.drawText(
+                QRect(x - w, r.top(), w, r.height()),
+                Qt.AlignmentFlag.AlignVCenter,
+                s,
+            )
+
+        painter.restore()
 
 
 class GitPanel(QWidget):
@@ -309,6 +326,11 @@ class GitPanel(QWidget):
         self._status_fingerprint: tuple = ()
         self._has_any_repo: bool = False
         self._diff_visible: bool = False
+        # Arquivo atualmente exibido no diff rico: (folder, rel_path, staged)
+        # None quando não há diff aberto.
+        self._shown_diff: tuple[str, str, bool] | None = None
+        # Linhas de contexto no diff: 3 (padrão) ou grande (arquivo inteiro)
+        self._diff_context: int = 3
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -339,6 +361,7 @@ class GitPanel(QWidget):
         )
 
         self._tree = QTreeWidget()
+        self._tree.setColumnCount(2)
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(True)
         self._tree.setExpandsOnDoubleClick(False)
@@ -351,6 +374,14 @@ class GitPanel(QWidget):
             "QTreeWidget::item:hover { background: #2a3142; color: #fff; }"
             "QTreeWidget::item:selected { background: #3d6ea8; color: #fff; }"
         )
+        # Coluna 0 = filename (estica pra preencher); coluna 1 = stats +/- (fixo)
+        hdr = self._tree.header()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        hdr.resizeSection(1, 72)
+        # Delegate que renderiza +N (verde) -M (vermelho) na coluna de stats
+        self._stats_delegate = _StatsDelegate(self._tree)
+        self._tree.setItemDelegateForColumn(1, self._stats_delegate)
         self._tree.itemChanged.connect(self._on_item_changed)
         self._tree.itemClicked.connect(self._on_single_click)
         self._tree.itemDoubleClicked.connect(self._on_double_click)
@@ -359,21 +390,64 @@ class GitPanel(QWidget):
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
         split.addWidget(self._tree)
 
-        self._diff = QPlainTextEdit()
-        self._diff.setReadOnly(True)
-        self._diff.setPlaceholderText("Clique num arquivo pra ver o diff.")
-        mono = QFont("monospace")
-        mono.setStyleHint(QFont.StyleHint.Monospace)
-        self._diff.setFont(mono)
-        self._diff.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background: #0e0e0e; border: 1px solid #2c2c2c;"
-            "  border-radius: 6px; color: #d0d0d0; padding: 4px;"
-            "}"
+        # Container do diff: header fino (arquivo + toggles) + DiffWebView
+        diff_container = QWidget()
+        diff_container.setVisible(False)
+        diff_vlay = QVBoxLayout(diff_container)
+        diff_vlay.setContentsMargins(0, 0, 0, 0)
+        diff_vlay.setSpacing(0)
+
+        # Header do diff pane — linha com nome do arquivo, toggles de formato
+        # e botão de expandir contexto
+        diff_hdr = QWidget()
+        diff_hdr.setStyleSheet(
+            "QWidget { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; }"
+            "QPushButton { background: transparent; color: #888; border: 1px solid transparent;"
+            " border-radius: 3px; padding: 1px 7px; font-size: 11px; }"
+            "QPushButton:hover { color: #ccc; border-color: #444; }"
+            "QPushButton:checked { background: #2d4a70; color: #7ab8f5; border-color: #3d6ea8; }"
         )
-        self._diff.setVisible(False)
-        self._diff_highlighter = _DiffHighlighter(self._diff.document())
-        split.addWidget(self._diff)
+        hdr_lay = QHBoxLayout(diff_hdr)
+        hdr_lay.setContentsMargins(6, 2, 6, 2)
+        hdr_lay.setSpacing(4)
+
+        self._diff_filename = QLabel("")
+        self._diff_filename.setStyleSheet("color: #9aa0a6; font-size: 11px; background: transparent;")
+        hdr_lay.addWidget(self._diff_filename)
+        hdr_lay.addStretch()
+
+        # Toggles inline ↔ lado-a-lado
+        self._diff_inline_btn = QPushButton("Inline")
+        self._diff_inline_btn.setCheckable(True)
+        self._diff_inline_btn.setChecked(True)
+        self._diff_inline_btn.setToolTip("Diff unificado (inline)")
+        self._diff_inline_btn.clicked.connect(lambda: self._set_diff_format("line-by-line"))
+        hdr_lay.addWidget(self._diff_inline_btn)
+
+        self._diff_side_btn = QPushButton("Lado a lado")
+        self._diff_side_btn.setCheckable(True)
+        self._diff_side_btn.setToolTip("Diff lado a lado com scroll sincronizado")
+        self._diff_side_btn.clicked.connect(lambda: self._set_diff_format("side-by-side"))
+        hdr_lay.addWidget(self._diff_side_btn)
+
+        # Separador visual
+        sep = QLabel("·")
+        sep.setStyleSheet("color: #444; background: transparent;")
+        hdr_lay.addWidget(sep)
+
+        self._diff_ctx_btn = QPushButton("Expandir")
+        self._diff_ctx_btn.setCheckable(True)
+        self._diff_ctx_btn.setToolTip("Mostrar arquivo completo / só hunks")
+        self._diff_ctx_btn.clicked.connect(self._toggle_diff_context)
+        hdr_lay.addWidget(self._diff_ctx_btn)
+
+        diff_vlay.addWidget(diff_hdr)
+
+        self._diff_web = DiffWebView(diff_container)
+        diff_vlay.addWidget(self._diff_web, stretch=1)
+
+        self._diff_container = diff_container
+        split.addWidget(diff_container)
         split.setSizes([400, 0])
         self._tree_diff_split = split
 
@@ -555,8 +629,8 @@ class GitPanel(QWidget):
         )
         self._toggle_diff_btn = _icon_btn(
             "fa5s.eye",
-            "Ver diff das mudanças não commitadas (HEAD → working tree)",
-            self._open_changes_diff,
+            "Mostrar / esconder painel de diff inline",
+            self._toggle_diff,
         )
         actions_row.addWidget(self._toggle_diff_btn)
         self._toggle_log_btn = _icon_btn(
@@ -725,6 +799,11 @@ class GitPanel(QWidget):
             self._feed_folders_key = folders_key
         self._process_feed_events(active_folders, new_statuses, numstats or {})
 
+        # Refresh ao vivo do diff exibido — roda ANTES do early-return de
+        # fingerprint porque o diff pode mudar sem alterar a lista de arquivos
+        # (ex.: editar de novo um arquivo já "M").
+        self._refresh_shown_diff(new_statuses)
+
         # Coleta primeiro, decide depois: se nada mudou desde o último
         # refresh, evita rebuild da árvore (preserva scroll/seleção e zera
         # custo de paint do QTreeWidget). Fingerprint = tuple imutável das
@@ -757,7 +836,11 @@ class GitPanel(QWidget):
             if not status.is_repo:
                 continue
             repo_folders.append(folder)
-            self._add_repo(folder, status, prev_unchecked.get(folder, set()))
+            self._add_repo(
+                folder, status,
+                prev_unchecked.get(folder, set()),
+                numstats.get(folder) if numstats else None,
+            )
             total_files += len(status.files)
 
         self._has_any_repo = bool(repo_folders)
@@ -1078,7 +1161,9 @@ class GitPanel(QWidget):
         folder: str,
         status: GitStatus,
         prev_unchecked: set[str],
+        numstats: dict[str, tuple[int, int]] | None = None,
     ) -> None:
+        ns = numstats or {}
         name = Path(folder).name
         ahead_behind = ""
         if status.ahead or status.behind:
@@ -1089,8 +1174,16 @@ class GitPanel(QWidget):
                 bits.append(f"↓{status.behind}")
             ahead_behind = " " + "".join(bits)
         marker = "✓ limpo" if not status.files else f"{len(status.files)} mudança(s)"
+        # Totais +/- para o label do repo
+        total_add = sum(a for a, _ in ns.values())
+        total_del = sum(d for _, d in ns.values())
+        stats_str = ""
+        if total_add:
+            stats_str += f"  +{total_add}"
+        if total_del:
+            stats_str += f"  -{total_del}"
         repo_item = QTreeWidgetItem(
-            [f"{name}  ·  {status.branch}{ahead_behind}  ·  {marker}"]
+            [f"{name}  ·  {status.branch}{ahead_behind}  ·  {marker}{stats_str}", ""]
         )
         repo_item.setData(
             0, Qt.ItemDataRole.UserRole, {"type": T_REPO, "folder": folder}
@@ -1114,20 +1207,50 @@ class GitPanel(QWidget):
         if changes:
             grp = self._make_group_item(folder, "Changes", len(changes))
             repo_item.addChild(grp)
-            for gf in changes:
-                child = self._make_file_item(folder, gf, prev_unchecked)
-                grp.addChild(child)
+            self._add_files_with_dirs(grp, folder, changes, prev_unchecked, ns)
             grp.setExpanded(True)
         if untracked:
             grp = self._make_group_item(folder, "Unversioned Files", len(untracked))
             repo_item.addChild(grp)
-            for gf in untracked:
-                child = self._make_file_item(folder, gf, prev_unchecked)
-                grp.addChild(child)
+            self._add_files_with_dirs(grp, folder, untracked, prev_unchecked, ns)
             grp.setExpanded(True)
 
         repo_item.setExpanded(True)
         self._tree.addTopLevelItem(repo_item)
+
+    def _add_files_with_dirs(
+        self,
+        parent: QTreeWidgetItem,
+        folder: str,
+        files: list[GitFile],
+        prev_unchecked: set[str],
+        numstats: dict[str, tuple[int, int]],
+    ) -> None:
+        """Insere arquivos agrupados por pasta (separadores de diretório dimmed)."""
+        # Ordena por caminho para agrupar arquivos da mesma pasta
+        sorted_files = sorted(files, key=lambda gf: gf.path)
+        last_dir = None
+        for gf in sorted_files:
+            rel_dir = gf.path.rsplit("/", 1)[0] if "/" in gf.path else ""
+            if rel_dir != last_dir:
+                last_dir = rel_dir
+                if rel_dir:
+                    sep = self._make_folder_sep(rel_dir)
+                    parent.addChild(sep)
+            child = self._make_file_item(folder, gf, prev_unchecked, numstats)
+            parent.addChild(child)
+
+    def _make_folder_sep(self, rel_dir: str) -> QTreeWidgetItem:
+        """Linha separadora de pasta — dimmed, não selecionável, sem checkbox."""
+        item = QTreeWidgetItem([rel_dir, ""])
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # não selecionável nem editável
+        item.setForeground(0, QBrush(QColor("#585e68")))
+        f = item.font(0)
+        f.setFamily("monospace")
+        f.setPointSizeF(f.pointSizeF() * 0.9)
+        item.setFont(0, f)
+        item.setData(0, Qt.ItemDataRole.UserRole, {"type": T_FOLDER})
+        return item
 
     def _make_group_item(self, folder: str, name: str, count: int) -> QTreeWidgetItem:
         item = QTreeWidgetItem([f"{name}  ({count})"])
@@ -1149,17 +1272,13 @@ class GitPanel(QWidget):
         folder: str,
         gf: GitFile,
         prev_unchecked: set[str],
+        numstats: dict[str, tuple[int, int]] | None = None,
     ) -> QTreeWidgetItem:
         rel = gf.path
-        parent_path = ""
-        name = rel
-        if "/" in rel:
-            parent_path, name = rel.rsplit("/", 1)
-        text = f"{gf.status}  {name}"
-        if parent_path:
-            text += f"   {parent_path}"
-        item = QTreeWidgetItem([text])
+        # Só o basename — o diretório pai é exibido pelo separador acima
+        name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
         color = STATUS_COLOR.get(gf.label(), "#aaa")
+        item = QTreeWidgetItem([name, ""])
         item.setForeground(0, QBrush(QColor(color)))
         mono = item.font(0)
         mono.setFamily("monospace")
@@ -1185,6 +1304,11 @@ class GitPanel(QWidget):
                 "is_untracked": gf.is_untracked,
             },
         )
+        # Coluna 1: stats +/- via delegate
+        if numstats:
+            added, removed = numstats.get(rel, (0, 0))
+            if added or removed:
+                item.setData(1, Qt.ItemDataRole.UserRole, (added, removed))
         return item
 
     # ---------- interação ----------
@@ -1196,14 +1320,17 @@ class GitPanel(QWidget):
         data = item.data(0, Qt.ItemDataRole.UserRole) or {}
         if data.get("type") != T_FILE:
             return
-        if not self._diff_visible:
-            return
         folder = data["folder"]
         rel = data["rel_path"]
-        text = get_diff(folder, rel, staged=data["is_staged"] and not data["is_unstaged"])
-        # setPlainText dispara o QSyntaxHighlighter automaticamente — Qt
-        # re-formata só os blocks afetados, sem precisar varrer o doc.
-        self._diff.setPlainText(text)
+        staged = data["is_staged"] and not data["is_unstaged"]
+        self._shown_diff = (folder, rel, staged)
+        # Auto-revelar o pane de diff ao clicar num arquivo (sem precisar do toggle)
+        if not self._diff_visible:
+            self._toggle_diff()
+        text = get_diff(folder, rel, staged=staged, context=self._diff_context)
+        name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
+        self._diff_filename.setText(rel)
+        self._diff_web.show_diff(text, name)
 
     def _on_double_click(self, item: QTreeWidgetItem, _col: int) -> None:
         data = item.data(0, Qt.ItemDataRole.UserRole) or {}
@@ -1211,8 +1338,7 @@ class GitPanel(QWidget):
             self.open_file_requested.emit(data["path"])
 
     def _show_diff_for(self, item: QTreeWidgetItem) -> None:
-        if not self._diff_visible:
-            self._toggle_diff()
+        # _on_single_click já auto-revela o pane — delega direto.
         self._on_single_click(item, 0)
 
     def _open_changes_diff(self) -> None:
@@ -1237,11 +1363,66 @@ class GitPanel(QWidget):
 
     def _toggle_diff(self) -> None:
         self._diff_visible = not self._diff_visible
-        self._diff.setVisible(self._diff_visible)
+        self._diff_container.setVisible(self._diff_visible)
         if self._diff_visible:
-            self._tree_diff_split.setSizes([300, 200])
+            self._tree_diff_split.setSizes([260, 220])
+            # Se já há um arquivo salvo, re-renderiza imediatamente
+            if self._shown_diff and not self._diff_web.has_diff():
+                folder, rel, staged = self._shown_diff
+                text = get_diff(folder, rel, staged=staged, context=self._diff_context)
+                name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
+                self._diff_web.show_diff(text, name)
         else:
             self._tree_diff_split.setSizes([400, 0])
+
+    def _set_diff_format(self, fmt: str) -> None:
+        """Alterna o formato do diff (inline / lado-a-lado)."""
+        self._diff_inline_btn.setChecked(fmt == "line-by-line")
+        self._diff_side_btn.setChecked(fmt == "side-by-side")
+        self._diff_web.set_output_format(fmt)
+
+    def _toggle_diff_context(self) -> None:
+        """Alterna entre contexto padrão (3 linhas) e arquivo inteiro."""
+        if self._diff_ctx_btn.isChecked():
+            self._diff_context = 100_000  # arquivo inteiro
+            self._diff_ctx_btn.setText("Recolher")
+        else:
+            self._diff_context = 3
+            self._diff_ctx_btn.setText("Expandir")
+        if self._shown_diff and self._diff_visible:
+            folder, rel, staged = self._shown_diff
+            text = get_diff(folder, rel, staged=staged, context=self._diff_context)
+            name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
+            self._diff_web.show_diff(text, name)
+
+    def _refresh_shown_diff(self, statuses: dict) -> None:
+        """Atualiza o diff exibido se o arquivo ainda tem mudanças.
+
+        Chamado em cada scan — antes do early-return de fingerprint — pra que
+        o diff fique ao vivo mesmo quando a lista de arquivos não muda (ex.: o
+        usuário salva o arquivo de novo sem commit).
+        """
+        if self._shown_diff is None or not self._diff_visible:
+            return
+        folder, rel, staged = self._shown_diff
+        st = statuses.get(folder)
+        if st is None or not st.is_repo:
+            # Pasta saiu do conjunto ativo (troca de console/override)
+            self._diff_web.clear_diff()
+            self._diff_filename.setText("")
+            self._shown_diff = None
+            return
+        paths_in_status = {gf.path for gf in st.files}
+        if rel not in paths_in_status:
+            # Arquivo não tem mais mudanças (commitado ou revertido)
+            self._diff_web.clear_diff()
+            self._diff_filename.setText("")
+            self._shown_diff = None
+            return
+        # Re-renderiza com o conteúdo mais recente
+        text = get_diff(folder, rel, staged=staged, context=self._diff_context)
+        name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
+        self._diff_web.show_diff(text, name)
 
     # ---------- collecting checked files ----------
 
@@ -1412,6 +1593,10 @@ class GitPanel(QWidget):
         self, menu: QMenu, items: list[QTreeWidgetItem]
     ) -> None:
         folder = items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
+        menu.addAction(
+            self._action("📋 Changes (todos)", self._open_changes_diff)
+        )
+        menu.addSeparator()
         menu.addAction(
             self._action("⤓ Pull (ff-only)", lambda: self._do_pull_one(folder))
         )

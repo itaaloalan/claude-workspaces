@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="vendor/diff2html.min.css">
+    <link rel="stylesheet" href="vendor/github-dark.min.css">
+    <style>
+        html, body {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            background: #0e0e0e; color: #d0d0d0;
+            overflow: auto;
+            font-family: 'JetBrains Mono', 'Hack', 'Fira Code', 'DejaVu Sans Mono', monospace;
+            font-size: 12px;
+        }
+
+        #placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #555;
+            font-size: 12px;
+            font-family: monospace;
+            user-select: none;
+        }
+
+        #diff-wrap {
+            padding: 4px 0 8px;
+        }
+
+        /* ── Override diff2html → dark theme ───────────────── */
+        .d2h-wrapper { background: transparent; }
+
+        .d2h-file-wrapper {
+            background: #141414;
+            border: 1px solid #2a2a2a !important;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 0 4px 6px;
+        }
+
+        .d2h-file-header {
+            background: #1c1c1c !important;
+            border-bottom: 1px solid #2a2a2a !important;
+            padding: 5px 10px;
+        }
+
+        .d2h-file-name { color: #cdd3da !important; font-weight: 600; }
+        .d2h-file-stats { color: #6a737d !important; }
+        .d2h-tag {
+            color: #7aa6e6 !important;
+            background: rgba(122,166,230,0.10) !important;
+            border: 1px solid rgba(122,166,230,0.3) !important;
+            border-radius: 3px;
+        }
+
+        /* context / unchanged lines */
+        .d2h-code-line { color: #c9d1d9; background: transparent; }
+        .d2h-cntx-line, .d2h-cntx-line td { background: #111 !important; }
+        td.d2h-code-linenumber.d2h-cntx { background: #1a1a1a !important; }
+
+        /* deletions */
+        .d2h-del-line td, .d2h-del { background: #3a2326 !important; }
+        td.d2h-code-linenumber.d2h-del { background: #2f1a1c !important; }
+        .d2h-del-line .d2h-code-line { color: #ffa0a0; }
+        .d2h-deletion { color: #f87171; }
+
+        /* insertions */
+        .d2h-ins-line td, .d2h-ins { background: #1a2e1a !important; }
+        td.d2h-code-linenumber.d2h-ins { background: #142314 !important; }
+        .d2h-ins-line .d2h-code-line { color: #c0ffc0; }
+        .d2h-insertion { color: #86efac; }
+
+        /* word-level diff highlight */
+        .d2h-del .d2h-change { background: #6e2f33 !important; }
+        .d2h-ins .d2h-change { background: #2d572d !important; }
+
+        /* hunk header @@ */
+        .d2h-info-line td, .d2h-info { background: #101c30 !important; color: #5282b0 !important; }
+        td.d2h-code-linenumber.d2h-info { background: #0e1828 !important; }
+
+        /* gutter numbers */
+        .d2h-code-linenumber, .d2h-code-side-linenumber {
+            background: #1a1a1a !important;
+            border-color: #2a2a2a !important;
+            color: #484e57 !important;
+            min-width: 28px;
+        }
+
+        /* side-by-side separator */
+        .d2h-file-side-diff { background: #141414; }
+        .d2h-diff-table { width: 100%; }
+
+        /* collapser "N unmodified lines" */
+        .d2h-code-line-ctn { white-space: pre-wrap; word-break: break-all; }
+
+        /* scrollbar sutil */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.10);
+            border-radius: 4px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100,160,255,0.35);
+            background-clip: padding-box;
+        }
+        ::-webkit-scrollbar-corner { background: transparent; }
+
+        /* ensure hljs tokens are visible on dark bg */
+        .hljs { background: transparent !important; color: #c9d1d9; }
+    </style>
+</head>
+<body>
+    <div id="placeholder">Clique num arquivo para ver o diff.</div>
+    <div id="diff-wrap" style="display:none;"></div>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="vendor/diff2html-ui.min.js"></script>
+    <script src="diff.js"></script>
+</body>
+</html>

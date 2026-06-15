@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.10.0] — 2026-06-15
+
+### Feature: diff rico e lista de mudanças estilo VSCode/GitHub no painel Git
+
+#### Diff inline rico (webview + diff2html + highlight.js)
+- Substituído o `QPlainTextEdit` de diff simples por um webview lazy (mesmo
+  padrão do terminal xterm.js): `QWebEngineView` + `QWebChannel` com diff2html
+  + highlight.js vendorados em `ui/static/vendor/`.
+- Syntax highlighting por linguagem (via highlight.js), números de linha no
+  gutter, vermelho/verde coloridos, e regiões colapsáveis de contexto.
+- **Toggle inline ↔ lado-a-lado** com scroll sincronizado (diff2html
+  `synchronisedScroll`).
+- **Expandir contexto**: botão alterna entre 3 linhas (padrão) e arquivo inteiro.
+- **Ao vivo**: diff atualiza automaticamente a cada scan do worktree (antes do
+  early-return de fingerprint), sem precisar reclicar.
+- **Segue console ativo**: ao trocar de console/worktree, o diff limpa ou
+  recarrega conforme o arquivo exibido.
+- Clicar num arquivo **auto-revela** o pane de diff (sem precisar do toggle
+  manual primeiro).
+- `get_diff()` em `git_status.py` ganha parâmetro `context: int | None` para
+  `-U<N>`, e arquivos untracked passam a usar `git diff --no-index` (unified
+  diff real, compatível com diff2html e highlight.js).
+
+#### Lista de arquivos mais rica (estilo GitHub Desktop)
+- `QTreeWidget` com 2 colunas: coluna 0 = nome do arquivo; coluna 1 = `+N -M`
+  pintado por `_StatsDelegate` em verde/vermelho.
+- **Separadores de pasta** (dimmed, não selecionáveis) agrupam arquivos do
+  mesmo diretório — path do diretório pai aparece como header antes dos arquivos.
+- Nome do arquivo agora mostra apenas o basename (sem o path sufixo), tornando
+  a leitura mais rápida em repos com caminhos longos.
+- Totais `+X -Y` aparecem no label do repo-root.
+- Botão "olho" na toolbar redirigido para toggle do painel de diff inline; acesso
+  ao diálogo "Changes (todos)" movido para o menu de contexto do repo.
+
 ## [1.9.6] — 2026-06-15
 
 ### Correção: sidebar mostra "Ocioso" mesmo com picker/decision visível
