@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.11.3] — 2026-06-16
+
+### Correção: skill `criar-worktree` trava em modo plano (alias `ia`)
+
+- O alias `ia` inicia o Claude em `--permission-mode plan`, que bloqueia
+  mutações git — a skill caía em loop de "planejamento" sem criar nada.
+- Adicionado gate `ExitPlanMode` no Step 3 (após os existence checks,
+  que são read-only): quando detecta modo plano, apresenta um mini-plano
+  (branch + base + path) para aprovação e só então realiza o `git fetch`
+  + `git worktree add`. Fora do modo plano o gate é ignorado.
+- Adicionada nota `**Plan mode:**` no topo da skill explicando o comportamento.
+
 ## [1.11.2] — 2026-06-16
 
 ### Correção: `_find_workspace_for_group` usava `repo_root()` errado

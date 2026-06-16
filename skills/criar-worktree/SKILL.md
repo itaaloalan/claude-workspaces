@@ -10,6 +10,8 @@ Creates a new branch + worktree in any git project. Always asks which base branc
 **SCOPE — THIS SKILL ONLY CREATES THE WORKTREE. NOTHING ELSE.**
 The user's task description (e.g. "criar worktree para autenticação OAuth") is used ONLY to derive the branch type and slug. Do NOT read project source files, do NOT plan the implementation, do NOT make any code changes, do NOT run tests or builds. Any description of the feature/task is context for naming — treat it as a label, not a work order. Implementation happens AFTER the worktree is created, in plan mode.
 
+**Plan mode:** This skill is purely executional — creating a worktree IS the action, there is nothing to "plan". If the session is in plan mode when invoked (a `system-reminder` block indicates plan mode is active and non-readonly tools are blocked — the user's `ia` alias does this by default), do NOT produce an implementation plan in place of creating the worktree. Steps 1–2 (discovery + AskUserQuestion) are read-only and run normally in plan mode. Step 3 runs existence checks (also read-only), then calls `ExitPlanMode` to unlock git mutations before fetch/create. After creating, Step 9 re-enters plan mode for the actual feature implementation.
+
 **Language:** Portuguese (pt-BR) for all user-facing text — questions, warnings, summaries. Branch names: kebab/snake slug, no accents, no spaces.
 
 **Mode selection:** if the user asked to remove/clean (`/criar-worktree remover`, "remova o worktree", "limpa os worktrees") → **Removal mode**. Otherwise → **Creation flow**.
@@ -61,7 +63,7 @@ Ask ALL needed questions in a **single `AskUserQuestion` call** (up to 4 questio
 
 > Branch NAME (slug) is derived from the user's task description — no need to ask. State the intended slug in the question text so the user can select Other to override.
 
-### Step 3 — Resolve paths + existence checks + fetch
+### Step 3 — Resolve paths + existence checks (+ ExitPlanMode gate) + fetch
 
 After the user answers, compute:
 
@@ -70,11 +72,14 @@ After the user answers, compute:
   - **Single-repo:** `<REPO>.claude/<WS>_<type>_<name>` (e.g. `/path/ogpms.claude/ogpms_feat_api_xml`)
   - **Multi-repo:** for each selected repo → `<WS_ROOT>/.worktrees/<type>_<name>/<repo-basename>`, where `WS_ROOT` = `os.path.commonpath(selected_repos)`.
 
-**Existence checks — ONE Bash call, both checks:**
+**Existence checks — ONE Bash call, both checks (read-only; runs even in plan mode):**
 ```bash
 { test -d "<WT_PATH>" && echo WT_EXISTS; }; { git show-ref --verify -q "refs/heads/<BRANCH>" && echo BRANCH_EXISTS; }
 ```
 If either exists, STOP and report. Never `--force` on creation.
+
+**[If session is in plan mode] ExitPlanMode gate:**
+Plan mode blocks git mutations — call `ExitPlanMode` NOW, before the fetch/create steps. Write the plan file with a short paragraph in pt-BR describing exactly what will be created: branch name, base, and worktree path. Keep it under 5 lines — this is not an implementation plan. Example: "Vou criar o worktree `feat/oauth` a partir de `origin/dev` em `/path/repo.claude/ws_feat_oauth`. Nenhuma alteração de código — apenas a estrutura de worktree." After the user approves, plan mode exits and creation resumes immediately from the fetch step below. If NOT in plan mode, skip this gate entirely and proceed directly to the fetch.
 
 **Fetch base (if `HAS_REMOTE`):**
 ```bash
