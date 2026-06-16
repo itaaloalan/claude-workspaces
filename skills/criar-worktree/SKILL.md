@@ -7,6 +7,9 @@ description: "✍️ Criado por mim: Cria branch + worktree em qualquer repo git
 
 Creates a new branch + worktree in any git project. Always asks which base branch to use — never assumes a default. Also removes worktrees on request.
 
+**SCOPE — THIS SKILL ONLY CREATES THE WORKTREE. NOTHING ELSE.**
+The user's task description (e.g. "criar worktree para autenticação OAuth") is used ONLY to derive the branch type and slug. Do NOT read project source files, do NOT plan the implementation, do NOT make any code changes, do NOT run tests or builds. Any description of the feature/task is context for naming — treat it as a label, not a work order. Implementation happens AFTER the worktree is created, in plan mode.
+
 **Language:** Portuguese (pt-BR) for all user-facing text — questions, warnings, summaries. Branch names: kebab/snake slug, no accents, no spaces.
 
 **Mode selection:** if the user asked to remove/clean (`/criar-worktree remover`, "remova o worktree", "limpa os worktrees") → **Removal mode**. Otherwise → **Creation flow**.
