@@ -2378,6 +2378,19 @@ class MainWindow(QMainWindow):
             sub.addAction(act)
         menu.addSeparator()
 
+    def _find_workspace_for_group(self, group_parent: str) -> "Workspace | None":
+        """Tenta achar o workspace dono de um grupo de worktrees.
+        Resolve pelo repo root de qualquer membro — se um workspace tiver
+        esse root em suas pastas (ou contiver o root via prefixo), é o dono."""
+        from ..git_worktree import repo_root as _repo_root, worktree_group_members
+        for m in worktree_group_members(group_parent):
+            root = _repo_root(m["path"])
+            if root:
+                ws = self.workspaces_coord.find_for_cwd(root)
+                if ws is not None:
+                    return ws
+        return None
+
     def _add_open_in_group_menu(self, menu: QMenu, workspace: Workspace) -> None:
         from ..git_worktree import list_worktrees, repo_root
 
@@ -2410,8 +2423,9 @@ class MainWindow(QMainWindow):
             label = branch or Path(parent_path).name
             act = QAction(f"🌿 {label}", sub)
             act.setToolTip(parent_path)
+            target_ws = self._find_workspace_for_group(parent_path) or workspace
             act.triggered.connect(
-                lambda _c=False, w=workspace, p=parent_path: self._launch_claude_for(
+                lambda _c=False, w=target_ws, p=parent_path: self._launch_claude_for(
                     w, "", p
                 )
             )
@@ -2484,8 +2498,9 @@ class MainWindow(QMainWindow):
                     f"Abre um console NOVO no grupo {path} "
                     f"(cwd=pai, @map-api/... e @map-web/... disponíveis)"
                 )
+                group_ws = self._find_workspace_for_group(path) or workspace
                 act.triggered.connect(
-                    lambda _c=False, w=workspace, p=path: self._launch_claude_for(
+                    lambda _c=False, w=group_ws, p=path: self._launch_claude_for(
                         w, "", p
                     )
                 )

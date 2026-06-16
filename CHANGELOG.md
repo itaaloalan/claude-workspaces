@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.11.1] — 2026-06-16
+
+### Correções: sessões misturadas entre workspaces e duplo `#N` nos nomes
+
+- **Workspace errado ao abrir grupo:** `_add_open_in_group_menu` e
+  `_add_switch_to_worktree_menu` usavam o workspace do contexto do menu
+  para lançar o console do grupo, mesmo quando o grupo pertencia a outro
+  projeto. Agora `_find_workspace_for_group` resolve o workspace correto
+  pelo repo root de um membro do grupo antes de chamar `_launch_claude_for`.
+- **Duplo `#N` no nome da sessão:** `launch_coordinator` embutia
+  `#{area.count()+1}` no título da aba (`"claude #1"`), que depois era
+  prefixado por `disambiguated_title` → `"#1 claude #1"`. Removido o
+  número do título base; `disambiguated_title` já cuida da numeração na
+  sidebar.
+
 ## [1.11.0] — 2026-06-15
 
 ### Feature: abrir console em grupo de worktrees

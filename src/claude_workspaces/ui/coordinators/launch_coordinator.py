@@ -164,7 +164,7 @@ class LaunchCoordinator(QObject):
         area = self.terminals.get_or_create_area(workspace)
         backend_short = "opencode" if backend == "opencode" else "claude"
         title = f"{backend_short} (resume)" if resume_session_id else backend_short
-        title = f"{title} #{area.count() + 1}{worktree_label}"
+        title = f"{title}{worktree_label}"
         terminal = area.add_terminal(title)
         terminal.configure_claude(cwd, resume_session_id or None, backend=backend)
         terminal.set_context_info(
