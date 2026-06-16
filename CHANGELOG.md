@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.11.2] — 2026-06-16
+
+### Correção: `_find_workspace_for_group` usava `repo_root()` errado
+
+- `repo_root(worktree_path)` em uma worktree linkada retorna o caminho da
+  própria worktree (não o repo principal), então `find_for_cwd` não encontrava
+  nenhum workspace — o grupo era lançado no workspace errado.
+- Corrigido: usa `m["repo"]` (= `common_dir`, já calculado por
+  `worktree_group_members`) → `Path(m["repo"]).parent` = raiz do repo principal.
+  Busca bidirecionalmente: `folder == main_repo`, `folder` dentro de `main_repo`,
+  ou `main_repo` dentro de `folder` — cobre workspaces com pastas dentro do repo.
+
 ## [1.11.1] — 2026-06-16
 
 ### Correções: sessões misturadas entre workspaces e duplo `#N` nos nomes

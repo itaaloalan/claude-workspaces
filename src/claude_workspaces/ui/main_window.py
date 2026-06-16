@@ -2380,15 +2380,25 @@ class MainWindow(QMainWindow):
 
     def _find_workspace_for_group(self, group_parent: str) -> "Workspace | None":
         """Tenta achar o workspace dono de um grupo de worktrees.
-        Resolve pelo repo root de qualquer membro — se um workspace tiver
-        esse root em suas pastas (ou contiver o root via prefixo), é o dono."""
-        from ..git_worktree import repo_root as _repo_root, worktree_group_members
+
+        m['repo'] = str(common_dir) = caminho do .git principal (ex:
+        /map/map-api/.git). common_dir.parent = main repo root. Verifica
+        nos dois sentidos porque alguns workspaces apontam para subpastas
+        do repo (ex: sipe/src dentro de sipe/).
+        """
+        from pathlib import Path as _Path
+        from ..git_worktree import worktree_group_members
         for m in worktree_group_members(group_parent):
-            root = _repo_root(m["path"])
-            if root:
-                ws = self.workspaces_coord.find_for_cwd(root)
-                if ws is not None:
-                    return ws
+            repo_git = m.get("repo", "")
+            if not repo_git:
+                continue
+            main_repo = str(_Path(repo_git).parent)
+            for ws in self.workspaces_coord.workspaces:
+                for folder in ws.folders:
+                    if (folder == main_repo
+                            or folder.startswith(main_repo + "/")
+                            or main_repo.startswith(folder + "/")):
+                        return ws
         return None
 
     def _add_open_in_group_menu(self, menu: QMenu, workspace: Workspace) -> None:
