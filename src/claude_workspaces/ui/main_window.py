@@ -2398,6 +2398,30 @@ class MainWindow(QMainWindow):
             sub.addAction(act)
         menu.addSeparator()
 
+    def _find_workspace_for_cwd(self, cwd: str) -> "Workspace | None":
+        """Acha o workspace dono de um cwd, cobrindo sessões normais,
+        grupos de worktree e worktrees individuais."""
+        from pathlib import Path as _Path
+        from ..git_worktree import is_worktree_group, resolve_git_dirs
+
+        ws = self.workspaces_coord.find_for_cwd(cwd)
+        if ws is not None:
+            return ws
+
+        if is_worktree_group(cwd):
+            return self._find_workspace_for_group(cwd)
+
+        dirs = resolve_git_dirs(cwd)
+        if dirs:
+            main_repo = str(_Path(dirs[1]).parent)
+            for ws_candidate in self.workspaces_coord.workspaces:
+                for folder in ws_candidate.folders:
+                    if (folder == main_repo
+                            or folder.startswith(main_repo + "/")
+                            or main_repo.startswith(folder + "/")):
+                        return ws_candidate
+        return None
+
     def _find_workspace_for_group(self, group_parent: str) -> "Workspace | None":
         """Tenta achar o workspace dono de um grupo de worktrees.
 
@@ -7944,6 +7968,13 @@ class MainWindow(QMainWindow):
                     entry.session_id, entry.workspace_id,
                 )
                 continue
+            cwd_ws = self._find_workspace_for_cwd(entry.cwd)
+            if cwd_ws is not None and cwd_ws.id != ws.id:
+                log.info(
+                    "Sessão %s: workspace corrigido de '%s' para '%s' (cwd: %s)",
+                    entry.session_id, ws.name, cwd_ws.name, entry.cwd,
+                )
+                ws = cwd_ws
             if not entry.session_file().exists():
                 log.info(
                     "Sessão %s ignorada: JSONL inexistente em %s",

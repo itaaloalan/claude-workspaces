@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.11.5] — 2026-06-16
+
+### Correção: restore restaura sessão no workspace correto mesmo com `session_state.json` antigo
+
+- `_restore_sessions` usava só o `workspace_id` salvo pra rotear a sessão.
+  Entradas gravadas antes dos fixes 1.11.1–1.11.2 tinham `workspace_id` errado
+  (sessões de grupo/worktree foram abertas no workspace errado pelo bug antigo).
+- Novo helper `_find_workspace_for_cwd(cwd)`: tenta correspondência direta via
+  `find_for_cwd`; se falhar, tenta detecção de grupo (`is_worktree_group` →
+  `_find_workspace_for_group`); por último, resolve via `resolve_git_dirs` →
+  `common_dir.parent` com busca bidirecional nas pastas do workspace.
+- No restore, se o cwd aponta para um workspace diferente do salvo, usa o
+  resultado do cwd — corrige automaticamente entradas antigas sem intervenção.
+
 ## [1.11.4] — 2026-06-17
 
 ### Correção: ao reabrir, o app restaurava sessões de uma execução anterior
