@@ -10,7 +10,16 @@ from pathlib import Path
 # o Chromium embarcado pra X11/XWayland mantém o app principal no
 # Wayland (sem perder DPI/HiDPI) mas evita as surfaces fantasmas dos
 # renderers. Precisa ser setado ANTES de qualquer import do QtWebEngine.
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--ozone-platform-hint=x11")
+# --process-per-site: todos os consoles e runners carregam o MESMO
+# terminal.html (mesma origem file://), então o Chromium agrupa todas as
+# QWebEngineView num único processo renderer em vez de 1 por view. Sem
+# isso, cada console/runner aberto sobe um processo Chromium próprio
+# (~50-440MB cada) e eles nunca morrem — terminate()/closeEvent() só
+# encerram o PTY, não destroem a view. Colapsa dezenas de renderers em ~1.
+os.environ.setdefault(
+    "QTWEBENGINE_CHROMIUM_FLAGS",
+    "--ozone-platform-hint=x11 --process-per-site",
+)
 
 from PySide6.QtCore import Qt, QTimer  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402

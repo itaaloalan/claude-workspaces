@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.11.6] — 2026-06-17
+
+### Correção: consoles/runners consolidados num único renderer Chromium (`--process-per-site`)
+
+- Cada console e cada runner cria sua própria `QWebEngineView`, e por padrão
+  o Chromium sobe um processo renderer separado por view (~50–440MB cada).
+  Como `terminate()`/`closeEvent()` só encerram o PTY e nunca destroem a view,
+  os renderers nascidos nunca morriam — chegando a dezenas de processos
+  (vários GB de RAM) numa sessão longa.
+- Todos carregam o **mesmo** `terminal.html` (mesma origem `file://`), então
+  adicionar a flag `--process-per-site` ao `QTWEBENGINE_CHROMIUM_FLAGS` faz o
+  Chromium agrupar todas as views num único processo renderer compartilhado.
+- Resultado: dezenas de renderers colapsam para ~1–2, economia de RAM na casa
+  dos GB. Trade-off: um crash do renderer afeta todos os terminais juntos
+  (raro com xterm.js puro).
+
 ## [1.11.5] — 2026-06-16
 
 ### Correção: restore restaura sessão no workspace correto mesmo com `session_state.json` antigo
