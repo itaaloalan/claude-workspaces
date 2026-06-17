@@ -373,9 +373,29 @@ class MainWindow(QMainWindow):
         self.plugin_coord.init(self.plugins_view, self.details.git_panel())
         # ctx.ui.notify/toast → toast nativo. Sem isso plugins viram silenciosos.
         self.plugin_coord.notification_received.connect(self._on_plugin_notification)
+        # Persistência incremental das sessões abertas. O save só rodava no
+        # closeEvent; um kill/crash (ou "Sair" pela bandeja, que usa
+        # QApplication.quit e pula o closeEvent) deixava o session_state.json
+        # com o snapshot de uma execução anterior, restaurando sessões erradas.
+        # Timer periódico + cache de payload mantém o disco fresco a custo
+        # desprezível (save curto-circuita quando nada muda).
+        self._last_persisted_payload: list[dict] | None = None
+        self._shutdown_persisted = False
+        self._sessions_persist_timer = QTimer(self)
+        self._sessions_persist_timer.setInterval(8_000)
+        self._sessions_persist_timer.timeout.connect(self._persist_active_sessions)
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._persist_on_shutdown)
         # Restaura sessões Claude da execução anterior — defer pra deixar
         # a janela pintar primeiro, evitando flicker do dialog de launch.
-        QTimer.singleShot(0, self._restore_sessions)
+        # Só depois do restore popular as áreas é que ligamos o timer, senão
+        # o primeiro tick salvaria vazio por cima do estado a restaurar.
+        QTimer.singleShot(
+            0,
+            lambda: (self._restore_sessions(), self._sessions_persist_timer.start()),
+        )
         # Primeiro refresh um pouco depois pra dar tempo de o restore criar
         # os children e o claude_cwd estar disponível.
         QTimer.singleShot(800, self._refresh_terminal_git_info)
@@ -7861,9 +7881,23 @@ class MainWindow(QMainWindow):
         # _persist_layout já é @log_exceptions; chamada aqui não precisa
         # de outro wrapper.
         self._persist_layout()
-        self._persist_active_sessions()
+        self._persist_on_shutdown()
         self.plugin_coord.shutdown()
         super().closeEvent(event)
+
+    @log_exceptions(message="Falha ao persistir sessões Claude no shutdown")
+    def _persist_on_shutdown(self) -> None:
+        """Save único e idempotente para qualquer caminho de saída graciosa.
+        O closeEvent (botão X) e o aboutToQuit (ex.: 'Sair' da bandeja, que usa
+        QApplication.quit e não dispara closeEvent) chamam isto; o primeiro a
+        rodar grava o estado vivo, o segundo vira no-op — evita sobrescrever o
+        snapshot bom com lista vazia se os widgets já tiverem sido destruídos
+        no teardown."""
+        if self._shutdown_persisted:
+            return
+        self._shutdown_persisted = True
+        self._sessions_persist_timer.stop()
+        self._persist_active_sessions()
 
     @log_exceptions(message="Falha ao persistir sessões Claude ativas")
     def _persist_active_sessions(self) -> None:
@@ -7885,7 +7919,14 @@ class MainWindow(QMainWindow):
                     cwd=cwd,
                     backend=widget.backend(),
                 ))
+        # Curto-circuita quando nada mudou desde o último save — o timer
+        # periódico chama isto a cada poucos segundos, então evitar reescrever
+        # (e regravar o .json.bak) à toa mantém o custo desprezível.
+        payload = [s.to_dict() for s in saved if s.is_valid()]
+        if payload == self._last_persisted_payload:
+            return
         save_sessions(saved)
+        self._last_persisted_payload = payload
 
     @log_exceptions(message="Falha ao restaurar sessões Claude")
     def _restore_sessions(self) -> None:

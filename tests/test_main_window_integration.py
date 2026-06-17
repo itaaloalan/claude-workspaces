@@ -38,6 +38,7 @@ def main_window(qapp):
                 "_plan_usage_updated_timer",
                 "_layout_save_timer",
                 "_filter_timer",
+                "_sessions_persist_timer",
             ):
                 t = getattr(w, attr, None)
                 if t is not None:
@@ -284,3 +285,35 @@ def test_search_submit_no_crash(main_window):
     _add_ws(main_window, "ProjA")
     main_window.top_bar.search.setText("proj")
     main_window._search_submit()  # não deve lançar
+
+
+# ---------- persistência de sessões (incremental / shutdown) ----------
+
+def test_persist_active_sessions_skips_rewrite_when_unchanged(main_window):
+    """Sem mudanças no conjunto de consoles, _persist_active_sessions não
+    reescreve o arquivo (timer periódico chama isto a cada poucos segundos)."""
+    from claude_workspaces import session_persistence as sp
+
+    calls = []
+    with patch.object(sp, "save_sessions", side_effect=lambda s: calls.append(s)):
+        # main_window importa save_sessions no namespace do módulo
+        from claude_workspaces.ui import main_window as mw
+        with patch.object(mw, "save_sessions", side_effect=lambda s: calls.append(s)):
+            main_window._persist_active_sessions()  # 1ª vez: grava (vazio)
+            main_window._persist_active_sessions()  # 2ª: idêntico, no-op
+    assert len(calls) == 1
+
+
+def test_persist_on_shutdown_is_idempotent(main_window):
+    """closeEvent + aboutToQuit podem ambos chamar _persist_on_shutdown; só o
+    primeiro grava, o segundo vira no-op (não clobbera com lista vazia)."""
+    from claude_workspaces.ui import main_window as mw
+
+    calls = []
+    with patch.object(mw, "save_sessions", side_effect=lambda s: calls.append(s)):
+        main_window._persist_on_shutdown()
+        main_window._persist_on_shutdown()
+    assert main_window._shutdown_persisted is True
+    assert len(calls) == 1
+    # timer periódico é parado no shutdown
+    assert not main_window._sessions_persist_timer.isActive()

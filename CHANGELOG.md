@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.11.4] — 2026-06-17
+
+### Correção: ao reabrir, o app restaurava sessões de uma execução anterior
+
+- As sessões abertas só eram salvas no `closeEvent` da janela. Quando o
+  processo travava / era morto (ou ao sair pela bandeja, que usa
+  `QApplication.quit()` e pula o `closeEvent`), o `session_state.json` ficava
+  com o snapshot de um fechamento limpo anterior — e o próximo start restaurava
+  esse estado velho, abrindo consoles que não estavam abertos.
+- Adicionada persistência incremental: timer periódico (~8s) regrava o estado
+  das sessões ativas, com detecção de mudança (não reescreve nem regrava o
+  `.json.bak` quando nada muda). Um kill/crash agora deixa um snapshot recente.
+- Saída graciosa via `QApplication.aboutToQuit` (cobre o "Sair" da bandeja) e o
+  `closeEvent` passam por `_persist_on_shutdown()` — save único e idempotente
+  com guarda contra sobrescrever o estado bom com lista vazia durante o teardown.
+
 ## [1.11.3] — 2026-06-16
 
 ### Correção: skill `criar-worktree` trava em modo plano (alias `ia`)
