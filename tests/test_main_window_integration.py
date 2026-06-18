@@ -295,6 +295,9 @@ def test_persist_active_sessions_skips_rewrite_when_unchanged(main_window):
     from claude_workspaces import session_persistence as sp
 
     calls = []
+    # O restore semeia _last_persisted_payload no startup; zera pra exercitar
+    # o "1ª grava / 2ª no-op" de forma determinística.
+    main_window._last_persisted_payload = None
     with patch.object(sp, "save_sessions", side_effect=lambda s: calls.append(s)):
         # main_window importa save_sessions no namespace do módulo
         from claude_workspaces.ui import main_window as mw
@@ -310,6 +313,9 @@ def test_persist_on_shutdown_is_idempotent(main_window):
     from claude_workspaces.ui import main_window as mw
 
     calls = []
+    # Estado limpo: o restore semeia _last_persisted_payload no startup.
+    main_window._last_persisted_payload = None
+    main_window._shutdown_persisted = False
     with patch.object(mw, "save_sessions", side_effect=lambda s: calls.append(s)):
         main_window._persist_on_shutdown()
         main_window._persist_on_shutdown()

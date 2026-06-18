@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.19] — 2026-06-18
+
+### Chip "VS Code" no cabeçalho do console
+
+- Novo chip **VS Code** no header do console (ao lado de "Worktree") que abre o
+  worktree do console ativo — ou, na falta dele, a pasta de trabalho do console —
+  no editor configurado (`settings.vscode_command`, default `code`).
+- Reusa o `open_path_in_editor`/`vscode_command` já existentes; segue a mesma
+  visibilidade do chip de worktree (some quando não há console selecionado).
+
 ## [1.11.18] — 2026-06-18
 
 ### Performance: parsing de atividade idle e fervura do git status

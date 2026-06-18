@@ -1592,6 +1592,24 @@ class MainWindow(QMainWindow):
         self._worktree_chip_btn.clicked.connect(self._open_pane_worktree_menu)
         self._worktree_chip_btn.setVisible(False)
         th_layout.addWidget(self._worktree_chip_btn)
+        # Chip "VS Code" — abre o worktree (ou a pasta do console) no editor
+        # configurado (settings.vscode_command, default "code").
+        self._vscode_chip_btn = _QPB2(" VS Code")
+        self._vscode_chip_btn.setIcon(ic("fa5s.code", color="#9aa0a6"))
+        self._vscode_chip_btn.setIconSize(_QS(11, 11))
+        self._vscode_chip_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+        )
+        self._vscode_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._vscode_chip_btn.setToolTip(
+            "Abrir o worktree (ou a pasta do console) no VS Code"
+        )
+        self._vscode_chip_btn.clicked.connect(self._open_active_console_in_vscode)
+        self._vscode_chip_btn.setVisible(False)
+        th_layout.addWidget(self._vscode_chip_btn)
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
             ic("fa5s.window-minimize", color="#c8c8c8")
@@ -5054,6 +5072,8 @@ class MainWindow(QMainWindow):
             )
             if hasattr(self, "_worktree_chip_btn"):
                 self._worktree_chip_btn.setVisible(False)
+            if hasattr(self, "_vscode_chip_btn"):
+                self._vscode_chip_btn.setVisible(False)
             if getattr(self, "_terminal_pane_title_last", None) != placeholder:
                 log.info("[HEADER] → placeholder (ws/area/term faltando)")
                 self._terminal_pane_title.setText(placeholder)
@@ -5061,6 +5081,8 @@ class MainWindow(QMainWindow):
             return
         if hasattr(self, "_worktree_chip_btn"):
             self._worktree_chip_btn.setVisible(True)
+        if hasattr(self, "_vscode_chip_btn"):
+            self._vscode_chip_btn.setVisible(True)
         # `#N título` no mesmo formato usado pelo sidebar/área.
         try:
             display = area._compute_tab_display(term)
@@ -7852,6 +7874,31 @@ class MainWindow(QMainWindow):
         try:
             open_path_in_editor(abs_path, editor)
         except FileNotFoundError:
+            QMessageBox.warning(
+                self,
+                "Editor não encontrado",
+                f"Comando '{editor}' não está no PATH. Ajuste em Configurações.",
+            )
+
+    def _open_active_console_in_vscode(self) -> None:
+        """Chip "VS Code" do header: abre o worktree do console ativo (ou, na
+        falta dele, a pasta de trabalho do console) no editor configurado."""
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        if not isinstance(term, TerminalWidget):
+            return
+        path = term.worktree_dir() or term.claude_cwd() or ""
+        if not path:
+            QMessageBox.warning(
+                self,
+                "Sem pasta",
+                "Este console não tem um diretório associado para abrir.",
+            )
+            return
+        editor = self.settings.vscode_command or "code"
+        try:
+            open_path_in_editor(path, editor)
+        except Exception:  # noqa: BLE001 — vira aviso, não derruba a UI
             QMessageBox.warning(
                 self,
                 "Editor não encontrado",
