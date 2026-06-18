@@ -262,6 +262,11 @@ class TerminalWidget(QWidget):
         self._needs_decision_held = False
         self._is_plan_mode = False
         self._activity_dirty = False
+        # Memo do parse de atividade: enquanto o buffer não muda (`not dirty`),
+        # o texto parseado é idêntico — só `recent` (age<2.5s) pode mudar. Evita
+        # decode + 4 regex de ANSI sobre 8KB a cada tick num console idle.
+        self._activity_cache: tuple[bool, object] | None = None
+        self._idle_marker_cache: bool | None = None
         # Debounce working→idle: o parser oscila entre is_working True/False
         # durante o mesmo turno (tool calls intercalando com texto). Aguarda
         # N segundos estáveis em "não-working" antes de propagar pra UI, pra
@@ -1023,6 +1028,7 @@ class TerminalWidget(QWidget):
             del self._replay_buffer[: -self._replay_cap]
         self._last_output_time = time.monotonic()
         self._activity_dirty = True
+        self._idle_marker_cache = None
 
     def _poll_activity(self) -> None:
         from ..claude_activity import has_idle_marker, parse_status
@@ -1040,19 +1046,33 @@ class TerminalWidget(QWidget):
         # incremental do JSONL, throttled — antes dos early-returns abaixo.
         self._scan_session_worktrees()
         # Verifica callback de "pronto" independente do dirty check —
-        # depende do buffer corrente, não do diff de status
-        if self._ready_callback is not None and has_idle_marker(
-            bytes(self._output_buffer)
-        ):
-            self._fire_ready_callback(True)
+        # depende do buffer corrente, não do diff de status. Memoiza o scan
+        # (mesmo decode+strip caro do parse) enquanto o buffer não muda.
+        if self._ready_callback is not None:
+            if self._idle_marker_cache is None:
+                self._idle_marker_cache = has_idle_marker(bytes(self._output_buffer))
+            if self._idle_marker_cache:
+                self._fire_ready_callback(True)
         if not self._activity_dirty and self._last_working and age <= 2.5:
             # Importante: não retorna se há debounce idle pendente — precisamos
             # continuar parsando pra detectar se o Claude voltou a trabalhar
             # ou se os 5s estabilizaram.
             if self._pending_idle_since is None:
                 return
+        # Memo: com o buffer inalterado, parse_status só varia pelo bucket
+        # `recent` (age<2.5s). Reusa o último Activity e pula o decode + os
+        # 4 regex de ANSI sobre 8KB — o grande custo num console idle.
+        recent_bucket = age < 2.5
+        if (
+            not self._activity_dirty
+            and self._activity_cache is not None
+            and self._activity_cache[0] == recent_bucket
+        ):
+            activity = self._activity_cache[1]  # type: ignore[assignment]
+        else:
+            activity = parse_status(bytes(self._output_buffer), age)
+            self._activity_cache = (recent_bucket, activity)
         self._activity_dirty = False
-        activity = parse_status(bytes(self._output_buffer), age)
 
         # Hold needs_decision: uma vez que o permission prompt é detectado,
         # mantém needs_decision=True até Claude voltar a trabalhar (usuário

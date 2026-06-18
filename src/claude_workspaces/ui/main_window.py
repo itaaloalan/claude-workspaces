@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
         # Poller assíncrono pra branch+contagem de modificados ao lado de
         # cada console na sidebar. Criado antes de qualquer refresh pra
         # _add_terminal_child poder pedir status no primeiro paint.
-        self._repo_poller = RepoStatusPoller(ttl_seconds=4.0, parent=self)
+        self._repo_poller = RepoStatusPoller(ttl_seconds=12.0, parent=self)
         self._repo_poller.status_ready.connect(self._on_repo_status_ready)
         # Poller assíncrono de PR/MR aberto (GitHub via gh + GitLab via API).
         # TTL de 60s — PR não muda com frequência.
@@ -287,7 +287,7 @@ class MainWindow(QMainWindow):
         self._plan_usage_poller = PlanUsagePoller(parent=self)
         self._plan_usage_poller.done.connect(self._on_plan_usage_ready)
         self._repo_poll_timer = QTimer(self)
-        self._repo_poll_timer.setInterval(5_000)
+        self._repo_poll_timer.setInterval(8_000)
         self._repo_poll_timer.timeout.connect(self._refresh_terminal_git_info)
         self._repo_poll_timer.start()
 

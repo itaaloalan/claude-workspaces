@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.11.18] — 2026-06-18
+
+### Performance: parsing de atividade idle e fervura do git status
+
+- **Parsing de atividade (CPU):** cada console ativo reparsava o buffer de 8KB
+  inteiro a cada tick (decode UTF-8 + 4 regex de ANSI + splitlines + scans), mesmo
+  parado e sem output novo. Agora o resultado do `parse_status` e do
+  `has_idle_marker` é memoizado enquanto o buffer não muda — só `recent` (age<2.5s)
+  pode mudar, e isso é barato. Consoles idle-mas-rodando (o caso comum, Claude
+  esperando) param de queimar CPU à toa; com vários consoles abertos o ganho é
+  grande.
+- **Git status poller (CPU):** o poller pedia `git status` de todos os consoles a
+  cada 5s com TTL de cache de 4s, dando miss quase todo tick (≈3-4 subprocessos
+  git/s no pior caso). Intervalo afrouxado para 8s e TTL para 12s — ~3x menos
+  spawns de git, com o chip de branch/modificados na sidebar ainda fresco em ~12s.
+
 ## [1.11.17] — 2026-06-18
 
 ### Performance: mata o wrapper npm residente dos MCP por console (~128MB cada)
