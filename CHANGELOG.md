@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.11.12] — 2026-06-18
+
+### Destaque mais forte para o item selecionado na sidebar
+
+- A seleção antes era um tint de branco quase imperceptível (`rgba(255,255,255,12)`
+  no workspace, `8` no console) — mal dava pra ver qual estava selecionado.
+- Agora o **workspace selecionado** ganha um tint **azul (PRIMARY)** nítido, uma
+  **borda primary** de 1px e um **acento vertical** de 3px à esquerda. O
+  **console selecionado** ganha o mesmo tint azul + borda primary (mantendo a
+  barrinha lateral de estado). Estados não-selecionados usam borda transparente
+  de 1px pra não deslocar o layout ao selecionar.
+
 ## [1.11.11] — 2026-06-18
 
 ### Fix: sessão de um workspace renomeada "do nada" com o nome de outra

@@ -583,21 +583,25 @@ class TerminalChildWidget(QWidget):
         """Renderiza o console como item subordinado ao workspace."""
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
-            bg = "rgba(255, 255, 255, 8)"
+            bg = "rgba(61, 110, 168, 78)"
         elif state == STATE_AWAITING:
             bg = "rgba(224, 144, 96, 9)"
         elif state == STATE_ERROR:
             bg = "rgba(213, 114, 114, 10)"
         else:
             bg = "transparent"
+        # Borda primary só quando selecionado; demais ficam com borda
+        # transparente de 1px pra não deslocar o conteúdo ao selecionar.
+        border_color = theme.PRIMARY if self._selected else "transparent"
+        hover_bg = "rgba(74, 130, 197, 100)" if self._selected else "rgba(255, 255, 255, 6)"
         strip_color = STATE_COLOR[state]
         self._card.setStyleSheet(
             f"#ConsoleCard {{"
             f"  background: {bg};"
-            f"  border: 0;"
+            f"  border: 1px solid {border_color};"
             f"  border-radius: 5px;"
             f"}}"
-            f"#ConsoleCard:hover {{ background: rgba(255, 255, 255, 6); }}"
+            f"#ConsoleCard:hover {{ background: {hover_bg}; }}"
             f"#ConsoleStateStrip {{"
             f"  background: {strip_color};"
             f"  border-radius: 1px;"

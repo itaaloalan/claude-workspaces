@@ -338,15 +338,26 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o workspace como pill arredondado estilo Polaris."""
+        """Renderiza o workspace como pill arredondado estilo Polaris.
+        Selecionado ganha tint azul (PRIMARY) nítido + borda primary e um
+        acento vertical à esquerda, pra destacar bem do resto. Não-selecionado
+        mantém borda transparente de 1px pra não 'pular' o layout ao selecionar."""
         if self._selected:
-            bg = "rgba(255, 255, 255, 12)"
-            border_qss = "border: 0; border-radius: 6px;"
-            hover_extra = "background: rgba(255, 255, 255, 15);"
+            bg = "rgba(61, 110, 168, 92)"
+            border_qss = (
+                f"border: 1px solid {theme.PRIMARY};"
+                f"  border-left: 3px solid {theme.PRIMARY_HOVER};"
+                f"  border-radius: 6px;"
+            )
+            hover_extra = "background: rgba(74, 130, 197, 120);"
         else:
             bg = "transparent"
-            border_qss = "border: 0; border-radius: 6px;"
-            hover_extra = "background: rgba(255, 255, 255, 7);"
+            border_qss = (
+                "border: 1px solid transparent;"
+                "  border-left: 3px solid transparent;"
+                "  border-radius: 6px;"
+            )
+            hover_extra = "background: rgba(255, 255, 255, 10);"
 
         self.setStyleSheet(
             f"#WorkspaceCard {{"
