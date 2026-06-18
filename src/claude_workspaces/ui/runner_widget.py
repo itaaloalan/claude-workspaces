@@ -257,7 +257,7 @@ class RunnerWidget(QWidget):
         # go_live(_log_buf). O processo do runner segue vivo (output em _log_buf).
         self._unload_timer = QTimer(self)
         self._unload_timer.setSingleShot(True)
-        self._unload_timer.setInterval(5 * 60 * 1000)  # 5 min oculto
+        self._unload_timer.setInterval(90 * 1000)  # 90s oculto
         self._unload_timer.timeout.connect(self.unload_view)
         self._build_view()
 

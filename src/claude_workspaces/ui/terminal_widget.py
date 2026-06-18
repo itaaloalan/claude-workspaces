@@ -478,7 +478,7 @@ class TerminalWidget(QWidget):
         # arma/cancela este timer ao trocar de aba/workspace.
         self._unload_timer = QTimer(self)
         self._unload_timer.setSingleShot(True)
-        self._unload_timer.setInterval(5 * 60 * 1000)  # 5 min oculto
+        self._unload_timer.setInterval(90 * 1000)  # 90s oculto
         self._unload_timer.timeout.connect(self.unload_view)
 
         # Splitter vertical: topo = xterm (inserido sob demanda); rodapé

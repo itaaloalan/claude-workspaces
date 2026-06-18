@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.11.16] — 2026-06-18
+
+### Performance: gerenciador de recursos, amostragem de fundo e RAM do navegador
+
+- **CPU do gerenciador de recursos:** o `ResourceDialog` destruía e recriava toda
+  a árvore de widgets a cada tick — agora faz render in-place (reusa as linhas por
+  grupo, só atualiza barra/meta/título; cria/remove apenas o que mudou). Tick do
+  painel afrouxado de 2s para 3s. Enquanto o painel está aberto, o tick de fundo
+  do monitor é pausado (o diálogo passa a ser a única fonte de amostra), eliminando
+  o walk duplo do psutil.
+- **Custo de fundo sempre-ligado:** o rótulo RAM/CPU da status bar usava o
+  `sample()` completo (com `cmdline()` de todos os processos) só pra mostrar 3
+  totais. Novo `ProcessMonitor.sample_totals()` itera a árvore só para RSS, %CPU e
+  zumbis, pulando cmdline/nome/grupos/sort. Intervalo de fundo afrouxado de 5s para 8s.
+- **RAM do navegador embutido:** consoles e runners ocultos descarregam o renderer
+  Chromium (lazy-unload) após 90s em vez de 5min, recuperando memória do renderer
+  compartilhado muito antes. O buffer de replay é preservado, então reabrir
+  reconstrói o terminal sem perder o histórico recente.
+
 ## [1.11.15] — 2026-06-18
 
 ### Fix: clicar na sessão não alternava o console central

@@ -175,6 +175,42 @@ class ProcessMonitor:
             pass
         return 0.0
 
+    def sample_totals(self) -> Snapshot:
+        """Amostra leve só com os totais (RSS, %CPU, zumbis) — pro rótulo da
+        status bar. Pula `cmdline()`/`name()`, montagem de grupos e `ProcInfo`,
+        que são o caro do `sample()` completo e desnecessários pro footer."""
+        procs = self._tree()
+        if not procs:
+            return Snapshot()
+        total_rss = 0
+        total_cpu = 0.0
+        n_zombies = 0
+        seen: set[int] = set()
+        for p in procs:
+            try:
+                with p.oneshot():
+                    rss = int(p.memory_info().rss)
+                    is_zombie = p.status() == psutil.STATUS_ZOMBIE
+                cpu = self._cpu(p)
+            except psutil.Error:
+                continue
+            seen.add(p.pid)
+            total_rss += rss
+            total_cpu += cpu
+            if is_zombie:
+                n_zombies += 1
+        # Poda o cache de CPU pros pids ainda vivos (igual ao sample()).
+        self._cpu_cache = {
+            pid: proc for pid, proc in self._cpu_cache.items() if pid in seen
+        }
+        return Snapshot(
+            total_rss=total_rss,
+            total_cpu=total_cpu,
+            n_procs=len(seen),
+            n_zombies=n_zombies,
+            groups=[],
+        )
+
     def sample(self, leaders: dict[int, tuple[str, str]] | None = None) -> Snapshot:
         """Tira uma foto da árvore.
 

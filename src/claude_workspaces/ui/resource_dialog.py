@@ -97,8 +97,11 @@ class ResourceDialog(QDialog):
         self._on_free = on_free
         self._on_stop = on_stop
         self._on_kill = on_kill
-        # Grupos expandidos (por key) — persiste entre os refreshes de 2s.
+        # Grupos expandidos (por key) — persiste entre os refreshes.
         self._expanded: set = set()
+        # Linhas reusadas entre ticks (key do grupo → refs dos widgets), pra
+        # não destruir/recriar a árvore inteira a cada render.
+        self._rows_by_key: dict = {}
         self.setWindowTitle("Gerenciador de recursos")
         self.setMinimumSize(620, 460)
         self.setStyleSheet(f"QDialog {{ background: {theme.BG_PANEL}; }}")
@@ -154,7 +157,7 @@ class ResourceDialog(QDialog):
         # Auto-refresh enquanto aberto — o %CPU só faz sentido com amostras
         # repetidas (é delta entre ticks).
         self._timer = QTimer(self)
-        self._timer.setInterval(2000)
+        self._timer.setInterval(3000)
         self._timer.timeout.connect(self._render)
         self._timer.start()
         self._max_rss = 1
@@ -182,18 +185,33 @@ class ResourceDialog(QDialog):
             f"{zomb}"
         )
 
+        # Render in-place: reusa as linhas existentes (keyed por g.key) e só
+        # atualiza valores. Destruir/recriar toda a árvore a cada tick era o
+        # maior dreno de CPU enquanto o painel ficava aberto.
+        current_keys = {g.key for g in snap.groups}
+        for key in list(self._rows_by_key):
+            if key not in current_keys:
+                h = self._rows_by_key.pop(key)
+                h["container"].setParent(None)
+                h["container"].deleteLater()
+
+        # Destaca todos os itens do layout SEM destruir os containers reusados
+        # (só descarta o spacer final). Reanexa em ordem logo abaixo.
         while self._rows.count():
-            item = self._rows.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
+            self._rows.takeAt(0)
+
         for g in snap.groups:
-            self._rows.addWidget(self._make_row(g))
+            h = self._rows_by_key.get(g.key)
+            if h is None:
+                h = self._create_row(g)
+                self._rows_by_key[g.key] = h
+            self._update_row(h, g)
+            self._rows.addWidget(h["container"])
         self._rows.addStretch(1)
 
-    def _make_row(self, g: ProcGroup) -> QWidget:
-        expanded = g.key in self._expanded
+    def _create_row(self, g: ProcGroup) -> dict:
+        """Cria a linha de um grupo uma única vez; valores mutáveis (barra,
+        meta, título, detalhe) são preenchidos depois por `_update_row`."""
         container = QWidget()
         cv = QVBoxLayout(container)
         cv.setContentsMargins(0, 0, 0, 0)
@@ -210,7 +228,7 @@ class ResourceDialog(QDialog):
         h.setContentsMargins(10, 7, 10, 7)
         h.setSpacing(10)
 
-        chevron = QLabel("▾" if expanded else "▸")
+        chevron = QLabel("▸")
         chevron.setStyleSheet(f"color: {theme.TEXT_FAINT}; font-size: 11px;")
         h.addWidget(chevron, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -220,10 +238,7 @@ class ResourceDialog(QDialog):
 
         col = QVBoxLayout()
         col.setSpacing(3)
-        title_txt = g.label
-        if g.zombies:
-            title_txt += f"  <span style='color:{theme.DANGER}'>⚠ {g.zombies} moribundo(s)</span>"
-        title = QLabel(title_txt)
+        title = QLabel("")
         title.setTextFormat(Qt.TextFormat.RichText)
         title.setStyleSheet(
             f"color: {theme.TEXT_PRIMARY}; font-size: 12px; font-weight: 600;"
@@ -236,18 +251,8 @@ class ResourceDialog(QDialog):
         bar = QProgressBar()
         bar.setTextVisible(False)
         bar.setFixedHeight(6)
-        bar.setMaximum(self._max_rss)
-        bar.setValue(g.rss)
-        color = _bar_color(g.rss)
-        bar.setStyleSheet(
-            "QProgressBar { background: #202020; border: 0; border-radius: 3px; }"
-            f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
-        )
         bar_row.addWidget(bar, stretch=1)
-        meta = QLabel(
-            f"{human_bytes(g.rss)}  ·  CPU {g.cpu:.0f}%  ·  "
-            f"{g.count} proc{'s' if g.count != 1 else ''}"
-        )
+        meta = QLabel("")
         meta.setStyleSheet(f"color: {theme.TEXT_FAINT}; font-size: 11px;")
         bar_row.addWidget(meta, 0)
         col.addLayout(bar_row)
@@ -259,11 +264,54 @@ class ResourceDialog(QDialog):
             stop.clicked.connect(lambda _c=False, gr=g: self._confirm_stop(gr))
             h.addWidget(stop, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        row.clicked.connect(lambda k=g.key: self._toggle(k))
+        row.clicked.connect(lambda _c=False, k=g.key: self._toggle(k))
         cv.addWidget(row)
+        return {
+            "container": container,
+            "cv": cv,
+            "chevron": chevron,
+            "title": title,
+            "bar": bar,
+            "meta": meta,
+            "detail": None,
+            "color": "",
+            "title_txt": "",
+        }
 
-        # Painel expandido: um processo por linha (PID, comando, RAM/CPU, matar).
+    def _update_row(self, h: dict, g: ProcGroup) -> None:
+        expanded = g.key in self._expanded
+        h["chevron"].setText("▾" if expanded else "▸")
+
+        title_txt = g.label
+        if g.zombies:
+            title_txt += f"  <span style='color:{theme.DANGER}'>⚠ {g.zombies} moribundo(s)</span>"
+        if title_txt != h["title_txt"]:
+            h["title"].setText(title_txt)
+            h["title_txt"] = title_txt
+
+        bar = h["bar"]
+        bar.setMaximum(self._max_rss)
+        bar.setValue(g.rss)
+        color = _bar_color(g.rss)
+        if color != h["color"]:
+            bar.setStyleSheet(
+                "QProgressBar { background: #202020; border: 0; border-radius: 3px; }"
+                f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
+            )
+            h["color"] = color
+
+        h["meta"].setText(
+            f"{human_bytes(g.rss)}  ·  CPU {g.cpu:.0f}%  ·  "
+            f"{g.count} proc{'s' if g.count != 1 else ''}"
+        )
+
+        # Detalhe expandido: rebuild só do grupo expandido (poucos por vez),
+        # mantendo os valores por-processo frescos a cada tick.
         if expanded:
+            old = h["detail"]
+            if old is not None:
+                old.setParent(None)
+                old.deleteLater()
             detail = QFrame()
             detail.setStyleSheet(
                 "QFrame { background: #121212; border: 1px solid #242424; "
@@ -275,8 +323,12 @@ class ResourceDialog(QDialog):
             dv.setSpacing(2)
             for pi in g.procs:
                 dv.addWidget(self._make_proc_row(pi))
-            cv.addWidget(detail)
-        return container
+            h["cv"].addWidget(detail)
+            h["detail"] = detail
+        elif h["detail"] is not None:
+            h["detail"].setParent(None)
+            h["detail"].deleteLater()
+            h["detail"] = None
 
     def _make_proc_row(self, pi: ProcInfo) -> QWidget:
         row = QWidget()

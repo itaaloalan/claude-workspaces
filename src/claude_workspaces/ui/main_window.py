@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
         from ..process_monitor import ProcessMonitor
         self._process_monitor = ProcessMonitor()
         self._resource_timer = QTimer(self)
-        self._resource_timer.setInterval(5_000)
+        self._resource_timer.setInterval(8_000)
         self._resource_timer.timeout.connect(self._sample_resources)
         self._resource_timer.start()
         QTimer.singleShot(800, self._sample_resources)
@@ -3429,9 +3429,11 @@ class MainWindow(QMainWindow):
         return leaders
 
     def _sample_resources(self) -> None:
-        """Tick do monitor: amostra a árvore e atualiza o footer."""
+        """Tick do monitor: amostra só os totais e atualiza o footer (caminho
+        leve, sem cmdline/grupos). O gerenciador aberto usa o sample() completo
+        e empurra os totais pra cá pelo seu próprio callback."""
         try:
-            snap = self._process_monitor.sample(self._resource_leaders())
+            snap = self._process_monitor.sample_totals()
         except Exception:  # noqa: BLE001 — monitor nunca pode derrubar a UI
             log.exception("falha amostrando recursos")
             return
@@ -3506,17 +3508,36 @@ class MainWindow(QMainWindow):
             return
         from .resource_dialog import ResourceDialog
 
+        def _provider() -> "Snapshot":
+            # O diálogo já amostra a árvore inteira a cada tick; reusa esse
+            # mesmo snapshot pra atualizar o footer e evita um 2º walk do
+            # psutil pelo _resource_timer (que fica pausado enquanto aberto).
+            snap = self._process_monitor.sample(self._resource_leaders())
+            self.status_widgets.set_resources(
+                snap.total_rss, snap.total_cpu, snap.n_zombies
+            )
+            return snap
+
+        # Pausa o tick de fundo: o diálogo passa a ser a única fonte de amostra.
+        self._resource_timer.stop()
         dlg = ResourceDialog(
-            snapshot_provider=lambda: self._process_monitor.sample(
-                self._resource_leaders()
-            ),
+            snapshot_provider=_provider,
             on_free=self._process_monitor.free_memory,
             on_stop=self._stop_process_by_pid,
             on_kill=self._kill_pid,
             parent=self,
         )
         self._resource_dialog = dlg
-        dlg.finished.connect(lambda *_: setattr(self, "_resource_dialog", None))
+
+        def _on_finished(*_a: object) -> None:
+            self._resource_dialog = None
+            # Religa o tick de fundo só se a janela não estiver minimizada
+            # (mesma regra de _update_idle_timers).
+            if not self.isMinimized() and not self._resource_timer.isActive():
+                self._resource_timer.start()
+                QTimer.singleShot(0, self._sample_resources)
+
+        dlg.finished.connect(_on_finished)
         dlg.show()
 
     def _refresh_status_bar_console(self) -> None:
@@ -8014,9 +8035,16 @@ class MainWindow(QMainWindow):
         NÃO toca no polling de atividade dos consoles (alimenta notificações de
         fundo)."""
         active = not self.isMinimized()
+        # Com o gerenciador de recursos aberto, ele é a única fonte de amostra
+        # (o _resource_timer fica pausado pra não duplicar o walk do psutil).
+        dlg_open = getattr(self, "_resource_dialog", None) is not None
         for name in ("_resource_timer", "_idle_tick_timer", "_plan_usage_updated_timer"):
             t = getattr(self, name, None)
             if t is None:
+                continue
+            if name == "_resource_timer" and dlg_open:
+                if t.isActive():
+                    t.stop()
                 continue
             if active and not t.isActive():
                 t.start()
