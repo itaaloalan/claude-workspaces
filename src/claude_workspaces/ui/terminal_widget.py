@@ -33,6 +33,16 @@ def _login_shell() -> str:
 log = logging.getLogger(__name__)
 
 
+def tab_uid_of(widget: object) -> int:
+    """"tab_id" estável de um widget de console. Usa o contador monotônico
+    do TerminalWidget (nunca reusado); cai pra id() só pra widgets que não
+    têm uid (não deveria acontecer pra abas de console). NUNCA usar id()
+    direto como identidade de aba — endereços CPython são reciclados e
+    fazem um console novo herdar estado em cache de um console morto."""
+    uid = getattr(widget, "_tab_uid", None)
+    return uid if isinstance(uid, int) else id(widget)
+
+
 def branch_to_session_name(branch: str) -> str:
     """Nome de sessão derivado da branch do worktree:
     `fix/extrair-informacoes-lacres` → "fix: extrair informacoes lacres".
@@ -224,6 +234,13 @@ class TerminalWidget(QWidget):
     # `set_idle_debounce_seconds` quando o usuário muda em Settings;
     # todos os terminais vivos passam a usar o novo valor no próximo poll.
     _idle_debounce_s: float = 20.0
+    # Contador monotônico pra dar a cada widget um "tab_id" ESTÁVEL e
+    # único. NÃO usar id(widget) (endereço CPython) como identidade de
+    # aba: ele é RECICLADO quando um widget morre e outro nasce no mesmo
+    # endereço — fazendo um console novo herdar título/atividade em cache
+    # de um console morto (bug: sessão de um workspace renomeada "do nada"
+    # com o nome da sessão de outro). Um contador nunca reusa valor.
+    _tab_uid_counter: int = 0
 
     @classmethod
     def set_idle_debounce_seconds(cls, seconds: float) -> None:
@@ -231,6 +248,8 @@ class TerminalWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        TerminalWidget._tab_uid_counter += 1
+        self._tab_uid = TerminalWidget._tab_uid_counter
         self._is_running = False
         self._output_buffer = bytearray()
         self._last_output_time = 0.0
@@ -719,7 +738,7 @@ class TerminalWidget(QWidget):
         if sid:
             try:
                 from ..session_marks import set_custom_name as _persist
-                _persist(sid, name, self._claude_cwd or "")
+                _persist(sid, name, self._worktree_dir or self._claude_cwd or "")
             except Exception:
                 log.debug("falha ao persistir custom_name", exc_info=True)
         # Re-emite activity pra que TerminalArea propague o novo título.
@@ -840,7 +859,7 @@ class TerminalWidget(QWidget):
                     saved = get_custom_name(self._claude_resume_id)
                     if saved:
                         set_custom_name(
-                            session_id, saved, self._claude_cwd or ""
+                            session_id, saved, self._worktree_dir or self._claude_cwd or ""
                         )
                 if saved:
                     self._custom_name = saved
@@ -856,7 +875,7 @@ class TerminalWidget(QWidget):
             # agora que sabemos o session_id, persiste retroativamente.
             try:
                 from ..session_marks import set_custom_name as _persist
-                _persist(session_id, self._custom_name, self._claude_cwd or "")
+                _persist(session_id, self._custom_name, self._worktree_dir or self._claude_cwd or "")
             except Exception:
                 log.debug("falha ao persistir custom_name", exc_info=True)
         # Informa o painel embutido (e MainWindow) que o session_id mudou —
@@ -870,6 +889,11 @@ class TerminalWidget(QWidget):
         if self._claimed_session_id is not None:
             TerminalWidget._claimed_session_ids.discard(self._claimed_session_id)
             self._claimed_session_id = None
+
+    def tab_uid(self) -> int:
+        """Identidade estável (nunca reusada) deste widget, usada como
+        "tab_id" em toda a UI no lugar de id(widget)."""
+        return self._tab_uid
 
     def claimed_session_id(self) -> str | None:
         """ID da sessão JSONL atualmente vinculada (resolvida pelo scan ou

@@ -95,7 +95,7 @@ from .terminal_child_widget import (
     STATE_WORKING,
     TerminalChildWidget,
 )
-from .terminal_widget import TerminalWidget
+from .terminal_widget import TerminalWidget, tab_uid_of
 from .theme import (
     LAYOUT_SAVE_DEBOUNCE_MS,
     RIGHT_DOCK_DEFAULT_W,
@@ -2987,7 +2987,7 @@ class MainWindow(QMainWindow):
                 widget = area.tabs.widget(i)
                 if not isinstance(widget, TerminalWidget):
                     continue
-                tab_id = id(widget)
+                tab_id = tab_uid_of(widget)
                 base_title = widget.property("_base_title") or area.tabs.tabText(i)
                 self._add_terminal_child(
                     ws_item, tab_id, base_title,
@@ -3224,7 +3224,7 @@ class MainWindow(QMainWindow):
         if area is not None:
             for i in range(area.tabs.count()):
                 w = area.tabs.widget(i)
-                if id(w) == tab_id and isinstance(w, TerminalWidget):
+                if tab_uid_of(w) == tab_id and isinstance(w, TerminalWidget):
                     session_id = w.claimed_session_id()
                     title = w.effective_title() if hasattr(w, "effective_title") else title
                     break
@@ -4148,7 +4148,7 @@ class MainWindow(QMainWindow):
         return count
 
     def _console_runner_running_count(self, tab_id: int) -> int:
-        """Quantos runners console-scoped deste console (tab_id == id(term))
+        """Quantos runners console-scoped deste console (tab_id == tab_uid)
         estão rodando agora. 0 se o console não tem RunnerArea ainda."""
         for per_ws in self._console_runner_areas.values():
             area = per_ws.get(tab_id)
@@ -5044,7 +5044,7 @@ class MainWindow(QMainWindow):
         branch_html = ""
         model_html = ""
         try:
-            tab_id = id(term)
+            tab_id = tab_uid_of(term)
             tree_item = self.terminals_coord.state.tree_items.get(tab_id)
             if tree_item is not None:
                 child = self.list_widget.itemWidget(tree_item, 0)
@@ -5155,7 +5155,7 @@ class MainWindow(QMainWindow):
                         break
                 if ws_id is not None:
                     target = self._console_runner_areas.get(ws_id, {}).get(
-                        id(term)
+                        tab_uid_of(term)
                     )
         if target is not None:
             self.console_runner_host.setCurrentWidget(target)
@@ -5599,7 +5599,7 @@ class MainWindow(QMainWindow):
         area.restart_all()
 
     def _stop_all_console_runners(self, workspace: Workspace, terminal) -> None:
-        area = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
+        area = self._console_runner_areas.get(workspace.id, {}).get(tab_uid_of(terminal))
         if area is None:
             return
         area.stop_all()
@@ -5654,7 +5654,7 @@ class MainWindow(QMainWindow):
         em sessões novas (que só ganham id depois do primeiro flush do
         JSONL). Quando o id real chega, `_on_terminal_session_id_changed`
         re-stampa todos os runners com essa chave."""
-        return f"pending:{id(terminal):x}"
+        return f"pending:{tab_uid_of(terminal):x}"
 
     def _wire_terminal_runner_panel(self, workspace: Workspace, terminal) -> None:
         terminal.runner_panel_toggle_requested.connect(
@@ -5689,7 +5689,7 @@ class MainWindow(QMainWindow):
         )
 
     def _ensure_terminal_runner_panel(self, workspace: Workspace, terminal) -> RunnerArea:
-        existing = self._console_runner_areas.get(workspace.id, {}).get(id(terminal))
+        existing = self._console_runner_areas.get(workspace.id, {}).get(tab_uid_of(terminal))
         if existing is not None:
             # Já existe — só foca o pane "Runners console" e seleciona a area.
             self.console_runner_host.setCurrentWidget(existing)
@@ -5749,12 +5749,12 @@ class MainWindow(QMainWindow):
                 self._on_runner_cwd_changed(wid, rid, cwd)
         )
         # Marcador ▶ na sidebar: quando os runners deste console começam/param
-        # de rodar, repinta o badge do item correspondente (chave = id(term)).
+        # de rodar, repinta o badge do item correspondente (chave = tab_uid).
         area.running_count_changed.connect(
-            lambda _count, tid=id(terminal):
+            lambda _count, tid=tab_uid_of(terminal):
                 self._refresh_console_runner_marker(tid)
         )
-        self._console_runner_areas.setdefault(workspace.id, {})[id(terminal)] = area
+        self._console_runner_areas.setdefault(workspace.id, {})[tab_uid_of(terminal)] = area
         # Painel mora no pane "Runners console" (separado) — não embute mais
         # no próprio terminal. O toolbar `▤ Runners` do terminal foca o pane.
         self.console_runner_host.addWidget(area)
@@ -5764,10 +5764,10 @@ class MainWindow(QMainWindow):
         # area existe, o lookup pelo `_console_runner_areas` casa o sid
         # com os runners persistidos (chave pending criada no boot
         # antes de o session_id ter sido reportado).
-        term_item = self.terminals_coord.state.tree_items.get(id(terminal))
+        term_item = self.terminals_coord.state.tree_items.get(tab_uid_of(terminal))
         if term_item is not None:
             self._install_console_runner_children(
-                term_item, workspace, id(terminal)
+                term_item, workspace, tab_uid_of(terminal)
             )
         return area
 
@@ -5775,7 +5775,7 @@ class MainWindow(QMainWindow):
         self, workspace: Workspace, terminal, sid: str
     ) -> None:
         areas = self._console_runner_areas.get(workspace.id, {})
-        area = areas.get(id(terminal))
+        area = areas.get(tab_uid_of(terminal))
         if area is None:
             return
         old = area.console_session_id()
@@ -5794,7 +5794,7 @@ class MainWindow(QMainWindow):
                 self._persist_workspace(workspace)
         area.set_console_session_id(sid)
         # Re-anexa runner children do console na sidebar usando o sid novo.
-        tab_id = id(terminal)
+        tab_id = tab_uid_of(terminal)
         term_item = self.terminals_coord.state.tree_items.get(tab_id)
         if term_item is not None:
             self._install_console_runner_children(term_item, workspace, tab_id)
@@ -6230,7 +6230,7 @@ class MainWindow(QMainWindow):
             parent_item.removeChild(item)
         self._tab_base_titles.pop(tab_id, None)
         # Leak: a RunnerArea console-scoped deste console (chaveada por
-        # id(terminal) == tab_id) ficava viva em _console_runner_areas com suas
+        # tab_uid == tab_id) ficava viva em _console_runner_areas com suas
         # QWebEngineView + PtySessions mesmo após o console fechar. Encerra e
         # remove — só os runners DESTE console (os de workspace seguem vivos).
         for ws_id, per_console in list(self._console_runner_areas.items()):
@@ -6247,9 +6247,9 @@ class MainWindow(QMainWindow):
                 self._console_runner_areas.pop(ws_id, None)
         self._sync_console_runner_host()
         # Estado de notificação/atividade do tab: sem esses pops, fechar uma
-        # aba trabalhando deixa entradas órfãs — e como tab_id == id(widget)
-        # (CPython reusa ids), um console novo podia herdar o debounce de
-        # "Pronto" ou disparar "Execução longa" de uma aba já fechada.
+        # aba trabalhando deixa entradas órfãs no dicionário. O tab_id agora é
+        # um uid monotônico (nunca reusado), então um console novo não herda
+        # mais o estado de um morto; ainda assim limpamos pra não vazar.
         self._working_since.pop(tab_id, None)
         self._long_running_notified.discard(tab_id)
         self._ready_alert_last.pop(tab_id, None)
@@ -6787,6 +6787,30 @@ class MainWindow(QMainWindow):
         ws = self.workspaces_coord.find_by_id(workspace_id)
         return ws is not None and ws.minimized
 
+    def _move_terminal_to_workspace(
+        self, term: "TerminalWidget", target_ws: "Workspace"
+    ) -> None:
+        """Move terminal fisicamente de seu workspace atual para target_ws.
+
+        Reconecta os sinais de atividade/running no novo TerminalArea,
+        atualiza tab_workspaces e reconstrói o sidebar."""
+        tab_id = tab_uid_of(term)
+        old_ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id)
+        if not old_ws_id or old_ws_id == target_ws.id:
+            return
+        old_area = self.terminals_coord.area_for(old_ws_id)
+        if old_area is None:
+            return
+        tab_text = old_area.remove_terminal(term)
+        new_area = self.terminals_coord.get_or_create_area(target_ws)
+        new_area.adopt_terminal(term, tab_text)
+        self.terminals_coord.state.register_tab(tab_id, target_ws.id)
+        # Rebuild da sidebar: tree_items precisam refletir o novo workspace.
+        current_id = target_ws.id
+        self._rebuild_list(current_id, tab_id)
+        # Mostra o terminal no novo workspace.
+        self.terminal_host.setCurrentWidget(new_area)
+
     def _on_worktree_adopted(self, path: str, branch: str) -> None:
         """A sessão de um console criou (ou removeu) um git worktree em
         runtime — pede git status do worktree na hora (chip 🌿 da sidebar
@@ -6797,6 +6821,15 @@ class MainWindow(QMainWindow):
         term = self.sender()
         if path:
             self._repo_poller.request(path)
+            # Se o worktree pertence a um workspace diferente do atual,
+            # migra o console para lá (sidebar + terminal_host).
+            if isinstance(term, TerminalWidget):
+                target_ws = self._find_workspace_for_cwd(path)
+                if target_ws is not None:
+                    tab_id = tab_uid_of(term)
+                    cur_ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id)
+                    if cur_ws_id and cur_ws_id != target_ws.id:
+                        self._move_terminal_to_workspace(term, target_ws)
         else:
             # Associação desfeita (worktree removido) — re-polla o cwd pra
             # voltar o chip ao repo principal.
@@ -6808,7 +6841,7 @@ class MainWindow(QMainWindow):
         # ao cwd do console quando desfeito).
         if isinstance(term, TerminalWidget):
             for areas in getattr(self, "_console_runner_areas", {}).values():
-                area = areas.get(id(term))
+                area = areas.get(tab_uid_of(term))
                 if area is not None:
                     area.set_default_cwd(path or (term.claude_cwd() or ""))
         self._refresh_terminal_pane_title()
@@ -6908,7 +6941,7 @@ class MainWindow(QMainWindow):
         for area in self.terminals_coord._areas.values():
             for i in range(area.tabs.count()):
                 w = area.tabs.widget(i)
-                if id(w) == tab_id and isinstance(w, TerminalWidget):
+                if tab_uid_of(w) == tab_id and isinstance(w, TerminalWidget):
                     return w
         return None
 
@@ -6936,7 +6969,7 @@ class MainWindow(QMainWindow):
         for area in self.terminals_coord._areas.values():
             for i in range(area.tabs.count()):
                 w = area.tabs.widget(i)
-                if id(w) == tab_id:
+                if tab_uid_of(w) == tab_id:
                     area._close_tab(i)
                     return
 

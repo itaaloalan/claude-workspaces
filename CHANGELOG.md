@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.11.11] — 2026-06-18
+
+### Fix: sessão de um workspace renomeada "do nada" com o nome de outra
+
+- **Causa:** a UI usava `id(widget)` (o endereço do objeto em CPython) como
+  identidade estável de aba (`tab_id`) em toda parte — sidebar, dicionário de
+  atividade, `_console_runner_areas`, lookups de rename, etc. Esse endereço é
+  **reciclado** quando um console é fechado e outro nasce no mesmo lugar de
+  memória. Um console novo herdava então o estado em cache de um console morto
+  (título/atividade/runners), fazendo, por exemplo, uma sessão do **ogpms**
+  aparecer com o nome `feat: melhorias criacao cliente` criado no **sipepro**.
+- **Correção:** cada `TerminalWidget` ganhou um `tab_uid` monotônico, único e
+  **nunca reusado** (contador de classe), exposto via `tab_uid()`. Novo helper
+  `tab_uid_of(widget)`. Todas as ocorrências de `id(widget)`/`id(term)` que
+  serviam de `tab_id` passaram a usar `tab_uid_of`, em `terminal_widget.py`,
+  `terminal_area.py`, `terminal_coordinator.py` e `main_window.py`.
+
 ## [1.11.10] — 2026-06-18
 
 ### Gerenciador de recursos: expandir grupo e matar processo individual

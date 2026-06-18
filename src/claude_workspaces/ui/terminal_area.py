@@ -10,7 +10,7 @@ from .terminal_child_widget import (
     STATE_IDLE,
     STATE_WORKING,
 )
-from .terminal_widget import TerminalWidget
+from .terminal_widget import TerminalWidget, tab_uid_of
 
 # Cor do texto da aba em função do status do console. Mantém paridade
 # com o STATE_COLOR usado nas linhas da sidebar — usuário vê de relance
@@ -241,7 +241,7 @@ class TerminalArea(QWidget):
             )
         )
         widget.session_exited.connect(
-            lambda code, w=widget: self.tab_session_exited.emit(id(w), code)
+            lambda code, w=widget: self.tab_session_exited.emit(tab_uid_of(w), code)
         )
         idx = self._stack.addWidget(widget)
         self._bar.insertTab(idx, title)
@@ -252,12 +252,12 @@ class TerminalArea(QWidget):
         self._apply_tab_color(idx, widget)
         self._refresh_tab_bar_visibility()
         # Emite estado inicial
-        self.tab_activity_changed.emit(id(widget), title, "", False, False, False)
+        self.tab_activity_changed.emit(tab_uid_of(widget), title, "", False, False, False)
         return widget
 
     def _compute_tab_display(self, widget: TerminalWidget) -> str:
         """Mesmo formato `#N Title` usado no sidebar: N é a posição entre
-        os irmãos ordenados por `id(widget)` crescente (mais antigo = #1).
+        os irmãos ordenados por `tab_uid` crescente (mais antigo = #1).
         Title é o `effective_title()` do widget — espelha custom_name /
         session_preview / base_title, então renomear via sidebar reflete
         aqui imediatamente."""
@@ -265,9 +265,9 @@ class TerminalArea(QWidget):
         for i in range(self._stack.count()):
             w = self._stack.widget(i)
             if w is not None:
-                sibling_ids.append(id(w))
+                sibling_ids.append(tab_uid_of(w))
         sibling_ids.sort()
-        wid = id(widget)
+        wid = tab_uid_of(widget)
         if wid in sibling_ids:
             position = sibling_ids.index(wid) + 1
         else:
@@ -314,7 +314,7 @@ class TerminalArea(QWidget):
         self._bar.setTabText(idx, f"{prefix} {self._compute_tab_display(widget)}")
         self._apply_tab_color(idx, widget)
         self.tab_activity_changed.emit(
-            id(widget),
+            tab_uid_of(widget),
             title,
             status,
             is_working,
@@ -336,7 +336,7 @@ class TerminalArea(QWidget):
 
     def _close_tab(self, index: int) -> None:
         widget = self._stack.widget(index)
-        tab_id = id(widget) if widget is not None else 0
+        tab_id = tab_uid_of(widget) if widget is not None else 0
         if isinstance(widget, TerminalWidget):
             widget.terminate()
             widget.release_session_claim()
@@ -363,6 +363,61 @@ class TerminalArea(QWidget):
                 prefix = "●" if w.is_running() else "✓"
                 self._bar.setTabText(i, f"{prefix} {self._compute_tab_display(w)}")
                 self._apply_tab_color(i, w)
+
+    def remove_terminal(self, widget: TerminalWidget) -> str:
+        """Remove widget from this area without deleting it (for transfer to another area).
+        Returns the tab bar text. Disconnects bound-method signals; lambda slots
+        become no-ops after widget leaves the stack (indexOf returns -1)."""
+        idx = self._stack.indexOf(widget)
+        if idx < 0:
+            return ""
+        text = self._bar.tabText(idx)
+        try:
+            widget.running_changed.disconnect(self._on_running_changed)
+        except RuntimeError:
+            pass
+        try:
+            widget.session_exited.disconnect()
+        except RuntimeError:
+            pass
+        self._bar.removeTab(idx)
+        self._stack.removeWidget(widget)
+        if widget.is_running() and self._running_count > 0:
+            self._running_count -= 1
+            self.running_count_changed.emit(self._running_count)
+        self._refresh_tab_bar_visibility()
+        self._refresh_all_tab_texts()
+        return text
+
+    def adopt_terminal(self, widget: TerminalWidget, title: str = "") -> None:
+        """Add an existing TerminalWidget (from another area) to this one."""
+        if not title:
+            title = widget.property("_base_title") or ""
+        widget.running_changed.connect(self._on_running_changed)
+        widget.running_changed.connect(
+            lambda running, w=widget: self._mark_tab_state(w, running)
+        )
+        widget.running_changed.connect(
+            lambda running, w=widget: self._emit_activity(
+                w, w._last_status, running, w._last_needs_decision
+            )
+        )
+        widget.activity_changed.connect(
+            lambda status, working, needs_decision, w=widget: self._emit_activity(
+                w, status, working, needs_decision
+            )
+        )
+        widget.session_exited.connect(
+            lambda code, w=widget: self.tab_session_exited.emit(tab_uid_of(w), code)
+        )
+        idx = self._stack.addWidget(widget)
+        self._bar.insertTab(idx, title)
+        if widget.is_running():
+            self._running_count += 1
+            self.running_count_changed.emit(self._running_count)
+        self._set_current_index(idx)
+        self._refresh_tab_bar_visibility()
+        self._refresh_all_tab_texts()
 
     def close_all(self) -> None:
         while self._bar.count():

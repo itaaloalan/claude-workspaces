@@ -28,6 +28,7 @@ from ...models import Workspace
 from ..spinner import SPINNER_FRAMES, SPINNER_INTERVAL_MS
 from ..terminal_area import TerminalArea
 from ..terminal_state import TerminalState
+from ..terminal_widget import tab_uid_of
 
 log = logging.getLogger(__name__)
 
@@ -281,7 +282,7 @@ class TerminalCoordinator(QObject):
         widget = area.tabs.widget(idx)
         if widget is None:
             return
-        tab_id = id(widget)
+        tab_id = tab_uid_of(widget)
         if self.state.remove_from_inbox(tab_id):
             self.inbox_changed.emit(len(self.state.inbox))
             self.inbox_entry_removed.emit(tab_id)
