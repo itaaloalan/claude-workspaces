@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.11.17] — 2026-06-18
+
+### Performance: mata o wrapper npm residente dos MCP por console (~128MB cada)
+
+- Cada console subia o MCP postgres via `npx -y @modelcontextprotocol/server-postgres`,
+  o que deixava um processo `npm exec` **residente** (~128MB) só como pai do `node`
+  que de fato serve o protocolo (~58MB). Com vários consoles, o wrapper npm
+  dominava a RAM do app.
+- Novo `services/mcp_lean.py`: ao gerar o `--mcp-config` por workspace, reescreve
+  `npx/npm exec <pkg> …` para `node <entry> …`, resolvendo o entry-point real do
+  pacote já em disco no cache do npx (`~/.npm/_npx/<hash>/node_modules/<pkg>`).
+  Vale para qualquer MCP via npx (postgres, filesystem, github…).
+- É só otimização de launch: se não der pra resolver (cache ausente, sem `node` no
+  PATH, formato inesperado), mantém o comando `npx` original — o próprio npx
+  repovoa o cache e na próxima já enxuga. O `~/.claude.json` global não é tocado.
+- Efeito: ~128MB economizados por console aberto (some o processo `npm exec`).
+  Vale para consoles novos/relançados; os já abertos seguem com o wrapper até
+  reabrir.
+
 ## [1.11.16] — 2026-06-18
 
 ### Performance: gerenciador de recursos, amostragem de fundo e RAM do navegador

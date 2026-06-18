@@ -92,11 +92,15 @@ def _mcp_dir():
 def _write_config(names: list[str], filename: str) -> str | None:
     """Escreve {"mcpServers": {nome: cfg_global}} em mcp/<filename> e devolve o
     caminho. Devolve None em falha de escrita."""
+    from .mcp_lean import lean_mcp_cfg
+
     servers: dict[str, dict] = {}
     for name in names:
         cfg = mcp_manager.get_mcp(name)
         if cfg:
-            servers[name] = cfg
+            # Reescreve `npx -y <pkg>` → `node <entry>` quando possível, pra não
+            # deixar o wrapper npm residente (~128MB) por console.
+            servers[name] = lean_mcp_cfg(cfg)
     path = _mcp_dir() / filename
     try:
         path.write_text(
