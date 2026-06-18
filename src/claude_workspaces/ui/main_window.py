@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
         from ..process_monitor import ProcessMonitor
         self._process_monitor = ProcessMonitor()
         self._resource_timer = QTimer(self)
-        self._resource_timer.setInterval(3_000)
+        self._resource_timer.setInterval(5_000)
         self._resource_timer.timeout.connect(self._sample_resources)
         self._resource_timer.start()
         QTimer.singleShot(800, self._sample_resources)
@@ -6203,6 +6203,23 @@ class MainWindow(QMainWindow):
                 self._console_runner_group_items.pop(gk, None)
             parent_item.removeChild(item)
         self._tab_base_titles.pop(tab_id, None)
+        # Leak: a RunnerArea console-scoped deste console (chaveada por
+        # id(terminal) == tab_id) ficava viva em _console_runner_areas com suas
+        # QWebEngineView + PtySessions mesmo após o console fechar. Encerra e
+        # remove — só os runners DESTE console (os de workspace seguem vivos).
+        for ws_id, per_console in list(self._console_runner_areas.items()):
+            area = per_console.pop(tab_id, None)
+            if area is None:
+                continue
+            area.close_all()
+            try:
+                self.console_runner_host.removeWidget(area)
+            except Exception:
+                log.debug("removeWidget da RunnerArea console falhou", exc_info=True)
+            area.deleteLater()
+            if not per_console:
+                self._console_runner_areas.pop(ws_id, None)
+        self._sync_console_runner_host()
         # Estado de notificação/atividade do tab: sem esses pops, fechar uma
         # aba trabalhando deixa entradas órfãs — e como tab_id == id(widget)
         # (CPython reusa ids), um console novo podia herdar o debounce de
@@ -7906,6 +7923,31 @@ class MainWindow(QMainWindow):
                 self.setGeometry(x, y, w, h)
                 return
         self.resize(1200, 780)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange:
+            self._update_idle_timers()
+
+    def _update_idle_timers(self) -> None:
+        """Pausa timers ociosos (monitor de recursos psutil — o mais caro — e o
+        tick de ociosidade da sidebar) quando a janela está minimizada: ninguém
+        vê esses readouts e o psutil percorre a árvore inteira a cada tick.
+        Religa ao restaurar, com uma amostra imediata pra não ficar defasado.
+        NÃO toca no polling de atividade dos consoles (alimenta notificações de
+        fundo)."""
+        active = not self.isMinimized()
+        for name in ("_resource_timer", "_idle_tick_timer", "_plan_usage_updated_timer"):
+            t = getattr(self, name, None)
+            if t is None:
+                continue
+            if active and not t.isActive():
+                t.start()
+            elif not active and t.isActive():
+                t.stop()
+        if active and hasattr(self, "_process_monitor"):
+            QTimer.singleShot(0, self._sample_resources)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         # _persist_layout já é @log_exceptions; chamada aqui não precisa

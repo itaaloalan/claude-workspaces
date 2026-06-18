@@ -515,6 +515,8 @@ class TerminalWidget(QWidget):
         if self._view_built:
             return
         self._view_built = True
+        # Console em foco: polling de atividade responsivo (status bar/spinner).
+        self._activity_timer.setInterval(250)
         self.view = QWebEngineView(self)
         self.view.setMinimumWidth(0)
         settings = self.view.settings()
@@ -549,6 +551,10 @@ class TerminalWidget(QWidget):
         # Para o repasse ao vivo; o bridge persiste e segue capturando p/ replay.
         self.bridge._live = False
         self._primed = False
+        # Console oculto: alenta o polling de atividade (250ms→1s). Mantém as
+        # notificações de fundo (status working/needs_decision) funcionando, mas
+        # corta ~4x o custo de regex por console oculto.
+        self._activity_timer.setInterval(1000)
         view = self.view
         self.view = None
         self._view_built = False

@@ -119,6 +119,13 @@ class Workspace:
     # — o "ícone real do projeto", ex.: favicon/logo). "" = ícone de pasta
     # padrão. Detectado via services.project_icon ou escolhido à mão.
     icon: str = ""
+    # Servidores MCP (de ~/.claude.json) que ESTE workspace carrega ao lançar
+    # o Claude (via --mcp-config --strict-mcp-config). Controla memória: sem
+    # isto toda sessão sobe TODOS os MCP globais. Semântica:
+    #   None  → auto-inferir pelo nome/pastas (services.mcp_scope)
+    #   []    → nenhum MCP (strict vazio)
+    #   [...] → exatamente esses
+    mcp_servers: list[str] | None = None
 
     @property
     def primary_folder(self) -> str | None:
@@ -174,4 +181,9 @@ class Workspace:
             pinned=bool(data.get("pinned", False)),
             minimized=bool(data.get("minimized", False)),
             icon=str(data.get("icon") or ""),
+            mcp_servers=(
+                list(data["mcp_servers"])
+                if isinstance(data.get("mcp_servers"), list)
+                else None
+            ),
         )

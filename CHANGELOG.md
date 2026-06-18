@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.11.8] — 2026-06-17
+
+### Memória: escopo de MCP por workspace + pausar polling ocioso + faxina de leaks
+
+Após o navegador embutido cair pra ~358MB (v1.11.7), o gargalo de RAM passou a ser as
+sessões `claude` — especificamente os **6 servidores MCP postgres globais** que subiam em
+TODA sessão (`npx -y` × ~10 sessões = dezenas de processos node).
+
+- **MCP escopado por workspace:** cada sessão agora sobe só o(s) MCP que o workspace precisa.
+  O app gera `~/.config/claude-workspaces/mcp/<id>.json` e lança o `claude` com
+  `--mcp-config <arquivo> --strict-mcp-config`. A escolha é **auto-inferida pelo nome/pastas**
+  do workspace (map→map, sipepro→sipepro, …; match exato com fallback por substring) e pode
+  ser ajustada na edição do workspace (seção "Servidores MCP", com modo automático ou seleção
+  manual). Workspaces sem match sobem com **zero MCP**. Novo campo `Workspace.mcp_servers`
+  (None=auto, []=nenhum, [...] =explícito) e setting global `mcp_scope_per_workspace` (liga/desliga).
+  Corta ~6× os processos MCP por sessão. (`services/mcp_scope.py`, `services/launch_planner.py`,
+  `ui/coordinators/launch_coordinator.py`, `ui/workspace_dialog.py`.)
+- **CPU ocioso:** o monitor de recursos (`_resource_timer`, psutil) passou de 3s→5s e **pausa
+  quando a janela está minimizada** (junto do tick de ociosidade), via `changeEvent`. O polling
+  de atividade dos consoles ocultos alenta de 250ms→1s (mantém as notificações de fundo, corta
+  ~4× o regex por console oculto).
+- **Faxina:** a `RunnerArea` console-scoped não era liberada ao fechar o console — ficava viva
+  em `_console_runner_areas` com suas QWebEngineView+PTYs. Agora é encerrada e removida no
+  `_handle_tab_removed` (os runners de workspace seguem intactos). Também passou a preservar
+  `minimized`/`icon` na edição do workspace (eram zerados).
+
 ## [1.11.7] — 2026-06-17
 
 ### Memória: scrollback menor, lazy-unload de consoles ocultos e fim do vazamento de órfãos

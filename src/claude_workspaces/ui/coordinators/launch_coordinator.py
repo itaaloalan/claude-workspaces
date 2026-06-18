@@ -153,12 +153,25 @@ class LaunchCoordinator(QObject):
                 if initial_prompt.strip()
                 else extra_context
             )
+        # Escopo de MCP por workspace: gera um arquivo de config só com os MCP
+        # que este workspace precisa e passa --mcp-config --strict-mcp-config.
+        # Evita que toda sessão suba TODOS os MCP globais (gargalo de memória).
+        # Só pro backend claude e quando a feature está ligada.
+        mcp_config_path = ""
+        if backend != "opencode" and self.settings.mcp_scope_per_workspace:
+            try:
+                from ...services.mcp_scope import write_workspace_mcp_config
+                mcp_config_path = write_workspace_mcp_config(workspace) or ""
+            except Exception:
+                log.debug("Falha gerando config MCP do workspace", exc_info=True)
+
         argv = build_ai_argv(
             backend,
             command,
             launch_args,
             extras,
             resume_session_id,
+            mcp_config_path,
         )
 
         area = self.terminals.get_or_create_area(workspace)

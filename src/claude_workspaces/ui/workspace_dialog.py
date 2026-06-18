@@ -128,6 +128,7 @@ class WorkspaceDialog(QDialog):
         layout.addLayout(folder_actions)
 
         layout.addWidget(self._build_overrides_section(workspace))
+        layout.addWidget(self._build_mcp_section(workspace))
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -177,6 +178,69 @@ class WorkspaceDialog(QDialog):
 
         v.addLayout(form)
         return box
+
+    def _build_mcp_section(self, workspace: Workspace | None) -> QGroupBox:
+        """Escolhe quais servidores MCP (de ~/.claude.json) este workspace
+        carrega ao abrir o Claude. Menos MCP = menos memória por sessão."""
+        from .. import mcp_manager
+        from ..services.mcp_scope import infer_mcp_servers
+
+        box = QGroupBox("Servidores MCP (memória por sessão)")
+        v = QVBoxLayout(box)
+        v.setSpacing(4)
+
+        available = mcp_manager.list_mcp_names()
+        self._mcp_checks: dict[str, QCheckBox] = {}
+
+        if not available:
+            note = QLabel("Nenhum servidor MCP global configurado em ~/.claude.json.")
+            note.setWordWrap(True)
+            note.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+            v.addWidget(note)
+            self._mcp_auto_chk = None
+            return box
+
+        info = QLabel(
+            "Só estes MCP sobem nas sessões deste workspace (via "
+            "--strict-mcp-config). No automático, são inferidos pelo nome/pastas."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        v.addWidget(info)
+
+        is_auto = workspace is None or workspace.mcp_servers is None
+        inferred = set(
+            infer_mcp_servers(workspace, available) if workspace else []
+        )
+        self._mcp_auto_chk = QCheckBox("Automático (inferir pelo nome do workspace)")
+        self._mcp_auto_chk.setChecked(is_auto)
+        v.addWidget(self._mcp_auto_chk)
+
+        for name in available:
+            chk = QCheckBox(name)
+            if is_auto:
+                chk.setChecked(name in inferred)
+            else:
+                chk.setChecked(name in (workspace.mcp_servers or []))
+            chk.setEnabled(not is_auto)
+            v.addWidget(chk)
+            self._mcp_checks[name] = chk
+
+        def _on_auto(checked: bool) -> None:
+            for nm, c in self._mcp_checks.items():
+                c.setEnabled(not checked)
+                if checked:
+                    c.setChecked(nm in inferred)
+
+        self._mcp_auto_chk.toggled.connect(_on_auto)
+        return box
+
+    def _collect_mcp_servers(self) -> list[str] | None:
+        """None = automático (inferir no launch); lista = explícito."""
+        auto = getattr(self, "_mcp_auto_chk", None)
+        if auto is None or auto.isChecked():
+            return None
+        return [n for n, c in self._mcp_checks.items() if c.isChecked()]
 
     def _override_value(self, combo) -> bool | None:
         idx = combo.currentIndex()
@@ -237,6 +301,7 @@ class WorkspaceDialog(QDialog):
         branch_prefix = self.branch_prefix_edit.text().strip()
         isolate = self._override_value(self.isolate_combo)
         create_branch = self._override_value(self.create_branch_combo)
+        mcp_servers = self._collect_mcp_servers()
         if self._original is not None:
             # Preserva id — edição não invalida referências existentes em
             # _terminal_areas / _running_counts da MainWindow
@@ -252,6 +317,9 @@ class WorkspaceDialog(QDialog):
                 # workspace (ex: adicionar pasta) zerava todos os runners.
                 runners=self._original.runners,
                 pinned=self._original.pinned,
+                minimized=self._original.minimized,
+                icon=self._original.icon,
+                mcp_servers=mcp_servers,
             )
         return Workspace(
             name=self.name_edit.text().strip(),
@@ -260,4 +328,5 @@ class WorkspaceDialog(QDialog):
             branch_prefix=branch_prefix,
             default_isolate_worktree=isolate,
             default_create_new_branch=create_branch,
+            mcp_servers=mcp_servers,
         )

@@ -182,6 +182,12 @@ class Settings:
     # API pública). Ajustar via settings.json se necessário.
     plan_weekly_usd_limit_all: float = 236_000.0
     plan_weekly_usd_limit_sonnet: float = 118_000.0
+    # Escopo de MCP por workspace: quando ligado, cada sessão claude sobe só
+    # os servidores MCP do workspace (auto-inferidos pelo nome ou escolhidos na
+    # edição do workspace), via --mcp-config --strict-mcp-config. Evita que
+    # toda sessão carregue TODOS os MCP globais (grande economia de memória).
+    # Desligado = comportamento antigo (Claude usa o global ~/.claude.json).
+    mcp_scope_per_workspace: bool = True
 
     @classmethod
     def load(cls) -> "Settings":

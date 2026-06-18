@@ -103,15 +103,20 @@ def build_claude_argv(
     extra_args: list[str],
     extras: list[str],
     resume_session_id: str = "",
+    mcp_config_path: str = "",
 ) -> list[str]:
     """Monta argv pra rodar claude com os parâmetros corretos.
     Inclui --resume quando resume_session_id ≠ '' e --add-dir pra cada
-    pasta em extras. Pura."""
+    pasta em extras. Quando mcp_config_path ≠ '', adiciona
+    --mcp-config <path> --strict-mcp-config (escopo de MCP por workspace —
+    o Claude usa só os servidores desse arquivo, ignorando o global). Pura."""
     argv: list[str] = [claude_command, *extra_args]
     if resume_session_id:
         argv.extend(["--resume", resume_session_id])
     for extra in extras:
         argv.extend(["--add-dir", extra])
+    if mcp_config_path:
+        argv.extend(["--mcp-config", mcp_config_path, "--strict-mcp-config"])
     return argv
 
 
@@ -136,8 +141,11 @@ def build_ai_argv(
     extra_args: list[str],
     extras: list[str],
     resume_session_id: str = "",
+    mcp_config_path: str = "",
 ) -> list[str]:
-    """Monta argv pro backend ativo."""
+    """Monta argv pro backend ativo. mcp_config_path só se aplica ao claude."""
     if backend == "opencode":
         return build_opencode_argv(command, extra_args, extras, resume_session_id)
-    return build_claude_argv(command, extra_args, extras, resume_session_id)
+    return build_claude_argv(
+        command, extra_args, extras, resume_session_id, mcp_config_path
+    )
