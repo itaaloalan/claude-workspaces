@@ -1,6 +1,6 @@
 ---
 name: criar-worktree
-description: "✍️ Criado por mim: Cria branch + worktree em qualquer repo git, sempre perguntando qual branch base usar (dev/develop/main/master ou a branch atual). Branch segue prefixos convencionais (feat/, fix/, chore/, refactor/...). Worktree individual em <repo>.claude/<ws>_<type>_<nome>; multi-repo usa pasta-pai (<WS_ROOT>/.worktrees/<type>_<nome>/<repo>), abrível via 'Abrir console no grupo'. Copia CLAUDE.md/.env e sincroniza banco pelo MCP. Remove worktrees com /criar-worktree remover. Usar ao pedir /criar-worktree, criar worktree, criar branch com worktree, ou remover worktrees."
+description: "✍️ Criado por mim: Cria branch + worktree em qualquer repo git, sempre perguntando qual branch base usar (dev/develop/main/master ou a branch atual), o tipo (feat/, fix/, chore/, refactor/...) e o nome da worktree — tudo via perguntas, mesmo o nome. Worktree individual em <repo>.claude/<ws>_<type>_<nome>; multi-repo usa pasta-pai (<WS_ROOT>/.worktrees/<type>_<nome>/<repo>), abrível via 'Abrir console no grupo'. Copia CLAUDE.md/.env e sincroniza banco pelo MCP. Remove worktrees com /criar-worktree remover. Usar ao pedir /criar-worktree, criar worktree, criar branch com worktree, ou remover worktrees."
 ---
 
 # criar-worktree
@@ -8,9 +8,9 @@ description: "✍️ Criado por mim: Cria branch + worktree em qualquer repo git
 Creates a new branch + worktree in any git project. Always asks which base branch to use — never assumes a default. Also removes worktrees on request.
 
 **SCOPE — THIS SKILL ONLY CREATES THE WORKTREE. NOTHING ELSE.**
-The user's task description (e.g. "criar worktree para autenticação OAuth") is used ONLY to derive the branch type and slug. Do NOT read project source files, do NOT plan the implementation, do NOT make any code changes, do NOT run tests or builds. Any description of the feature/task is context for naming — treat it as a label, not a work order. Implementation happens AFTER the worktree is created, in plan mode.
+The user's task description (e.g. "criar worktree para autenticação OAuth") is used ONLY to derive the branch type and slug. Do NOT read project source files, do NOT plan the implementation, do NOT make any code changes, do NOT run tests or builds. Any description of the feature/task is context for naming — treat it as a label, not a work order.
 
-**Plan mode:** This skill is purely executional — creating a worktree IS the action, there is nothing to "plan". If the session is in plan mode when invoked (a `system-reminder` block indicates plan mode is active and non-readonly tools are blocked — the user's `ia` alias does this by default), do NOT produce an implementation plan in place of creating the worktree. Steps 1–2 (discovery + AskUserQuestion) are read-only and run normally in plan mode. Step 3 runs existence checks (also read-only), then calls `ExitPlanMode` to unlock git mutations before fetch/create. After creating, Step 9 re-enters plan mode for the actual feature implementation.
+**Plan mode:** If the session is in plan mode when invoked (a `system-reminder` block confirms this), call `ExitPlanMode` IMMEDIATELY — before Step 1, before any Bash calls, before any questions. Do NOT write a plan file. Do NOT describe what will be created. Just call `ExitPlanMode` with a generic `allowedPrompts` for git operations and wait for approval. After approval, proceed normally from Step 1.
 
 **Language:** Portuguese (pt-BR) for all user-facing text — questions, warnings, summaries. Branch names: kebab/snake slug, no accents, no spaces.
 
@@ -57,13 +57,17 @@ Ask ALL needed questions in a **single `AskUserQuestion` call** (up to 4 questio
 - Show whether each option exists on the remote and is in sync, when useful.
 - If NO conventional branches exist AND there is no usable current branch, stop and warn.
 
-**Q2 (only if `FOLDERS` has 2+ entries): Which repos to create the worktree in.** multiSelect; list all folders as options. Use project memory to pre-select the relevant default (e.g. MAP: map-api + map-web). 1 selected → single-repo mode; 2+ → multi-repo mode.
+**Q2 (always): Branch type.** Header `Tipo`. Options: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`. If a type is inferable from the user's request, put it first with "(Recomendado)"; otherwise list them in the order above. Always ask — never skip even when the type seems obvious.
 
-**Q3 (only if branch type is NOT determinable from the user's request): Branch type.** Options: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`.
+**Q3 (always): Worktree name (slug).** Header `Nome`. Always ask — never derive the name silently.
+- If the user typed a task description when invoking the skill: turn the derived kebab slug (no accents, no spaces) into option 1 "(Recomendado)". Optionally add one sensible alternative phrasing as a second option. The user picks one or types "Outro" for a custom name.
+- If the skill was invoked bare (no description): there is no useful suggestion — phrase the question to tell the user to type the name in "Outro" (AskUserQuestion always offers "Outro" as a free-text field). Do NOT invent a generic slug.
 
-> Branch NAME (slug) is derived from the user's task description — no need to ask. State the intended slug in the question text so the user can select Other to override.
+**Q4 (only if `FOLDERS` has 2+ entries): Which repos to create the worktree in.** multiSelect; list all folders as options. Use project memory to pre-select the relevant default (e.g. MAP: map-api + map-web). 1 selected → single-repo mode; 2+ → multi-repo mode.
 
-### Step 3 — Resolve paths + existence checks (+ ExitPlanMode gate) + fetch
+> Whatever the user picks/types in Q3 is normalized to a kebab/snake slug (no accents, no spaces) before building the branch and paths.
+
+### Step 3 — Resolve paths + existence checks + fetch
 
 After the user answers, compute:
 
@@ -72,14 +76,11 @@ After the user answers, compute:
   - **Single-repo:** `<REPO>.claude/<WS>_<type>_<name>` (e.g. `/path/ogpms.claude/ogpms_feat_api_xml`)
   - **Multi-repo:** for each selected repo → `<WS_ROOT>/.worktrees/<type>_<name>/<repo-basename>`, where `WS_ROOT` = `os.path.commonpath(selected_repos)`.
 
-**Existence checks — ONE Bash call, both checks (read-only; runs even in plan mode):**
+**Existence checks — ONE Bash call, both checks:**
 ```bash
 { test -d "<WT_PATH>" && echo WT_EXISTS; }; { git show-ref --verify -q "refs/heads/<BRANCH>" && echo BRANCH_EXISTS; }
 ```
 If either exists, STOP and report. Never `--force` on creation.
-
-**[If session is in plan mode] ExitPlanMode gate:**
-Plan mode blocks git mutations — call `ExitPlanMode` NOW, before the fetch/create steps. Write the plan file with a short paragraph in pt-BR describing exactly what will be created: branch name, base, and worktree path. Keep it under 5 lines — this is not an implementation plan. Example: "Vou criar o worktree `feat/oauth` a partir de `origin/dev` em `/path/repo.claude/ws_feat_oauth`. Nenhuma alteração de código — apenas a estrutura de worktree." After the user approves, plan mode exits and creation resumes immediately from the fetch step below. If NOT in plan mode, skip this gate entirely and proceed directly to the fetch.
 
 **Fetch base (if `HAS_REMOTE`):**
 ```bash
@@ -176,7 +177,7 @@ EOF
 
 > The claude-workspaces app also auto-adopts the worktree and auto-names the session from the branch — this rename is a belt-and-suspenders fallback that produces the same result.
 
-### Step 9 — Summary + EnterPlanMode
+### Step 9 — Summary
 
 **Summary (in Portuguese):** branch name, base (`origin/<BASE>` + short SHA), worktree path(s), files copied, session name (or that rename was skipped).
 
@@ -185,8 +186,6 @@ For multi-repo: note that both repos live under the shared parent `<WS_ROOT>/.wo
 When claude-workspaces is running: it detects the `git worktree add` from this session's JSONL and makes THIS session adopt the worktree — 🌿 chip + branch appear, runners switch cwd to the worktree, Git panel inspects the worktree's branch. The CLI process keeps the main repo as physical cwd, but for runners/git/chip this session IS the worktree.
 
 **CRITICAL — editing files after worktree creation:** All Read/Edit/Write calls must use absolute **worktree** paths — single-repo: `<REPO>.claude/<WS>_<type>_<name>/...`; multi-repo: `<WS_ROOT>/.worktrees/<type>_<name>/<repo>/...` — NOT the main repo path. Every code change must land in the worktree; the running server won't see changes in the main repo.
-
-**Call `EnterPlanMode`.** The worktree is ready — the natural next step is planning what to implement in it. Plan mode prevents accidental edits or commands in the wrong path before the user aligns on the approach.
 
 ---
 
