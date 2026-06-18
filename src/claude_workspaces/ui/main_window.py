@@ -381,6 +381,7 @@ class MainWindow(QMainWindow):
         # desprezível (save curto-circuita quando nada muda).
         self._last_persisted_payload: list[dict] | None = None
         self._shutdown_persisted = False
+        self._sessions_terminated = False
         self._sessions_persist_timer = QTimer(self)
         self._sessions_persist_timer.setInterval(8_000)
         self._sessions_persist_timer.timeout.connect(self._persist_active_sessions)
@@ -388,6 +389,11 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             app.aboutToQuit.connect(self._persist_on_shutdown)
+            # Sem isto, fechar/reiniciar o app deixava os processos `claude`
+            # órfãos (reparented pro init), acumulando RAM entre execuções —
+            # closeEvent/aboutToQuit só persistiam estado, nunca encerravam os
+            # PTYs. Mata todas as sessões no shutdown (persist roda antes).
+            app.aboutToQuit.connect(self._terminate_all_sessions)
         # Restaura sessões Claude da execução anterior — defer pra deixar
         # a janela pintar primeiro, evitando flicker do dialog de launch.
         # Só depois do restore popular as áreas é que ligamos o timer, senão
@@ -7906,8 +7912,29 @@ class MainWindow(QMainWindow):
         # de outro wrapper.
         self._persist_layout()
         self._persist_on_shutdown()
+        # Encerra os PTYs (mata os process groups dos `claude`/runners) ANTES
+        # de destruir os widgets — senão viram órfãos. Persist roda acima, com
+        # o estado ainda vivo. Idempotente vs. o aboutToQuit.
+        self._terminate_all_sessions()
         self.plugin_coord.shutdown()
         super().closeEvent(event)
+
+    @log_exceptions(message="Falha ao encerrar sessões no shutdown")
+    def _terminate_all_sessions(self) -> None:
+        """Termina todas as sessões PTY (consoles + runners) no fechamento do
+        app. Idempotente: closeEvent (botão X) e aboutToQuit (Sair da bandeja,
+        que usa QApplication.quit e não dispara closeEvent) chamam isto; o
+        segundo vira no-op. Sem isto os processos `claude` ficavam órfãos."""
+        if self._sessions_terminated:
+            return
+        self._sessions_terminated = True
+        for area in list(self.terminals_coord._areas.values()):
+            area.close_all()
+        for runner_area in list(self._runner_areas.values()):
+            runner_area.close_all()
+        for per_ws in list(self._console_runner_areas.values()):
+            for runner_area in list(per_ws.values()):
+                runner_area.close_all()
 
     @log_exceptions(message="Falha ao persistir sessões Claude no shutdown")
     def _persist_on_shutdown(self) -> None:

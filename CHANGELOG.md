@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.11.7] — 2026-06-17
+
+### Memória: scrollback menor, lazy-unload de consoles ocultos e fim do vazamento de órfãos
+
+Investigação (PSS) mostrou que o navegador embutido (QtWebEngine) consumia ~1.3GB,
+dominado pelos terminais xterm.js, e que processos `claude` viravam órfãos a cada
+restart. Três frentes, mantendo o xterm.js (um terminal nativo via `pyte` foi medido
+e descartado: ~0.5 MB/s vs dezenas de MB/s do xterm.js):
+
+- **Scrollback do xterm.js de 5000 → 1500 linhas** (`terminal.js`): corta a memória por
+  terminal de forma ~linear no renderer compartilhado.
+- **Lazy-unload do renderer de consoles/runners ocultos:** a `QWebEngineView` (processo
+  Chromium pesado) é destruída quando o console/runner fica oculto por 5 min, mantendo só
+  o buffer de replay leve em Python (~2MB no console, `_log_buf` 1MB no runner). Reabrir
+  reconstrói o xterm via `go_live()`; o PTY segue vivo e o output continua sendo capturado.
+  `TerminalWidget`/`RunnerWidget` ganham `unload_view()`/`schedule_unload()`/`cancel_unload()`,
+  com o `TerminalArea` orquestrando por troca de aba (StackAll) e hide/show da área.
+- **Vazamento de processos `claude` órfãos corrigido:** `MainWindow.closeEvent` e
+  `aboutToQuit` agora encerram todas as sessões PTY (`_terminate_all_sessions`, idempotente)
+  antes de destruir os widgets — antes só persistiam estado, deixando os `claude` órfãos
+  (reparented pro init) acumulando RAM entre execuções.
+
 ## [1.11.6] — 2026-06-17
 
 ### Correção: consoles/runners consolidados num único renderer Chromium (`--process-per-site`)

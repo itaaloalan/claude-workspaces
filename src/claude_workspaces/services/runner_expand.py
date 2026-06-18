@@ -30,16 +30,27 @@ def expand_port_refs(text: str, ports: dict[str, int]) -> str:
     referenciar a porta da api da mesma stack: cada cópia de console
     resolve pros vizinhos dela (web do console A enxerga a api do A).
 
-    Nome casado por igualdade case-insensitive (trim). Referência não
-    encontrada (ou porta 0) fica intacta no texto — visível pro usuário
-    perceber o nome errado.
+    Nome casado por igualdade case-insensitive (trim). Sem match exato,
+    cai pra prefixo de palavra — `{port:api}` resolve pra "api jdk8" ou
+    "api jdk 25" (a variante de api presente no escopo), pro stack não
+    precisar saber qual variante o console escolheu. Só resolve quando o
+    prefixo aponta pra uma ÚNICA porta (variantes alternativas dividem a
+    mesma porta → contam como uma); prefixo ambíguo (portas distintas) ou
+    referência não encontrada fica intacto no texto — visível pro usuário.
     """
     if not text or "{port:" not in text:
         return text
     norm = {k.strip().casefold(): v for k, v in ports.items() if v > 0}
 
+    def _resolve(raw: str) -> int | None:
+        key = raw.strip().casefold()
+        if key in norm:
+            return norm[key]
+        hits = {v for k, v in norm.items() if k.startswith(key + " ")}
+        return next(iter(hits)) if len(hits) == 1 else None
+
     def _sub(m: re.Match) -> str:
-        port = norm.get(m.group(1).strip().casefold())
+        port = _resolve(m.group(1))
         return str(port) if port else m.group(0)
 
     return _PORT_REF_RE.sub(_sub, text)

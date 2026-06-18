@@ -247,6 +247,23 @@ class RunnerWidget(QWidget):
         self.bridge = TerminalBridge(self.session)
         self.bridge.ready.connect(self._on_bridge_ready)
 
+        self._outer = outer
+        self.view: QWebEngineView | None = None
+        self.channel: QWebChannel | None = None
+        self._bridge_ready = False
+        self._pending_cmd: tuple[str, str] | None = None  # (cmd, intent)
+        # Lazy-unload: descarrega o renderer Chromium (pesado) quando o runner
+        # fica oculto por um tempo; reabrir reconstrói o xterm via
+        # go_live(_log_buf). O processo do runner segue vivo (output em _log_buf).
+        self._unload_timer = QTimer(self)
+        self._unload_timer.setSingleShot(True)
+        self._unload_timer.setInterval(5 * 60 * 1000)  # 5 min oculto
+        self._unload_timer.timeout.connect(self.unload_view)
+        self._build_view()
+
+    def _build_view(self) -> None:
+        if self.view is not None:
+            return
         self.view = QWebEngineView(self)
         s = self.view.settings()
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
@@ -258,10 +275,40 @@ class RunnerWidget(QWidget):
         self.view.page().setWebChannel(self.channel)
         html_path = STATIC_DIR / "terminal.html"
         self.view.setUrl(QUrl.fromLocalFile(str(html_path)))
-        outer.addWidget(self.view, stretch=1)
+        self._outer.addWidget(self.view, stretch=1)
 
+    def unload_view(self) -> None:
+        """Destrói a QWebEngineView do runner oculto, mantendo só o _log_buf
+        (cap 1MB) pra reconstruir ao reabrir. O processo do runner segue vivo."""
+        self._unload_timer.stop()
+        if self.view is None:
+            return
+        self.bridge._live = False
         self._bridge_ready = False
-        self._pending_cmd: tuple[str, str] | None = None  # (cmd, intent)
+        view = self.view
+        self.view = None
+        if self.channel is not None:
+            self.channel.deleteLater()
+            self.channel = None
+        view.setParent(None)
+        view.deleteLater()
+
+    def schedule_unload(self) -> None:
+        if self.view is not None:
+            self._unload_timer.start()
+
+    def cancel_unload(self) -> None:
+        self._unload_timer.stop()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.cancel_unload()
+        # Reconstrói a view se foi descarregada enquanto oculto.
+        self._build_view()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.schedule_unload()
 
     # ---- toolbar menu ----------------------------------------------------
 
@@ -725,6 +772,7 @@ class RunnerWidget(QWidget):
                 cwd,
                 env=env or None,
                 kill_group_on_replace=(intent == "start"),
+                isolate=True,
             )
         except OSError as e:
             log.exception("Falha ao iniciar runner")

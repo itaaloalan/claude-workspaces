@@ -4,7 +4,7 @@
         fontSize: 13,
         cursorBlink: true,
         allowProposedApi: true,
-        scrollback: 5000,
+        scrollback: 1500,
         theme: {
             background: '#0e0e0e',
             foreground: '#e0e0e0',

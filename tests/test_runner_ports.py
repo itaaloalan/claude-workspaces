@@ -333,6 +333,24 @@ def test_port_ref_sem_placeholder_eh_noop():
     assert expand_port_refs("", {"api": 8080}) == ""
 
 
+def test_port_ref_prefixo_resolve_variante():
+    from claude_workspaces.services.runner_expand import expand_port_refs
+
+    # Sem nome exato "api", cai pro prefixo de palavra: resolve a variante de
+    # api presente no escopo (jdk8 OU jdk 25), pro stack web nao precisar saber
+    # qual o console escolheu.
+    assert expand_port_refs("{port:api}", {"api jdk8": 8091, "web": 4201}) == "8091"
+    assert expand_port_refs("{port:api}", {"api jdk 25": 8092}) == "8092"
+    # Variantes alternativas dividem a mesma porta -> contam como uma.
+    assert expand_port_refs("{port:api}", {"api jdk 25": 8093, "api jdk8": 8093}) == "8093"
+    # Prefixo ambiguo (portas distintas) -> fica intacto.
+    assert expand_port_refs("{port:api}", {"api jdk8": 8091, "api jdk 25": 8092}) == "{port:api}"
+    # Nome exato tem prioridade sobre o prefixo.
+    assert expand_port_refs("{port:api}", {"api": 9000, "api jdk8": 8091}) == "9000"
+    # Prefixo nao casa pedaco de palavra (evita "api" casar "apiserver").
+    assert expand_port_refs("{port:api}", {"apiserver": 8080}) == "{port:api}"
+
+
 # ---- include_in_stack ----------------------------------------------------------
 
 

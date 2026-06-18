@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..pty_session import PtySession
+from ..pty_session import PtySession, _CONSOLE_SLICE
 
 
 def _login_shell() -> str:
@@ -445,12 +445,22 @@ class TerminalWidget(QWidget):
         self.view: QWebEngineView | None = None
         self.channel: QWebChannel | None = None
         self._view_built = False
-        # Histórico bruto do PTY pra reconstruir o xterm no 1º open. Capado
-        # (o scrollback do xterm também é limitado); só cresce enquanto o
-        # console não foi aberto — depois do replay (go_live) é liberado.
+        # Histórico bruto do PTY pra reconstruir o xterm. Capado em ~2MB e
+        # mantido SEMPRE rolando (não é liberado após o 1º open): é a fonte de
+        # replay também quando a view é descarregada (lazy-unload) e reaberta.
+        # Custo ~2MB/console é desprezível vs o renderer Chromium liberado.
         self._replay_buffer = bytearray()
         self._replay_cap = 2_000_000
         self._primed = False
+
+        # Lazy-unload: quando o console fica oculto por um tempo, destrói a
+        # QWebEngineView (processo Chromium pesado) e mantém só o
+        # _replay_buffer. Reabrir reconstrói via go_live(). O TerminalArea
+        # arma/cancela este timer ao trocar de aba/workspace.
+        self._unload_timer = QTimer(self)
+        self._unload_timer.setSingleShot(True)
+        self._unload_timer.setInterval(5 * 60 * 1000)  # 5 min oculto
+        self._unload_timer.timeout.connect(self.unload_view)
 
         # Splitter vertical: topo = xterm (inserido sob demanda); rodapé
         # (opcional) = painel de runners do console. O painel é criado sob
@@ -494,7 +504,8 @@ class TerminalWidget(QWidget):
         # há mais comando pendente esperando o bridge.
         self.bridge.go_live(bytes(self._replay_buffer))
         self._primed = True
-        self._replay_buffer.clear()
+        # NÃO limpa o _replay_buffer: ele segue rolando (cap 2MB) pra permitir
+        # reconstruir o terminal se a view for descarregada (lazy-unload).
 
     def ensure_view_loaded(self) -> None:
         """Cria o QWebEngineView e carrega o terminal.html sob demanda — na
@@ -526,6 +537,40 @@ class TerminalWidget(QWidget):
 
         html_path = STATIC_DIR / "terminal.html"
         self.view.setUrl(QUrl.fromLocalFile(str(html_path)))
+
+    def unload_view(self) -> None:
+        """Descarrega o renderer Chromium (pesado) de um console oculto,
+        mantendo só o _replay_buffer (~2MB) pra reconstruir o xterm ao reabrir.
+        O PTY segue VIVO; _record_output continua capturando o output. Reabrir
+        chama ensure_view_loaded() → bridge.ready → go_live(_replay_buffer)."""
+        self._unload_timer.stop()
+        if not self._view_built or self.view is None:
+            return
+        # Para o repasse ao vivo; o bridge persiste e segue capturando p/ replay.
+        self.bridge._live = False
+        self._primed = False
+        view = self.view
+        self.view = None
+        self._view_built = False
+        if self.channel is not None:
+            self.channel.deleteLater()
+            self.channel = None
+        view.setParent(None)
+        view.deleteLater()
+        # Recria o placeholder escuro no topo do splitter (mesmo do __init__).
+        self._view_placeholder = QWidget()
+        self._view_placeholder.setStyleSheet("background: #0e0e0e;")
+        self._view_placeholder.setMinimumWidth(0)
+        self._main_splitter.insertWidget(0, self._view_placeholder)
+        self._main_splitter.setStretchFactor(0, 1)
+
+    def schedule_unload(self) -> None:
+        """Arma o timer pra descarregar a view se ficar oculta tempo bastante."""
+        if self._view_built and self.view is not None:
+            self._unload_timer.start()
+
+    def cancel_unload(self) -> None:
+        self._unload_timer.stop()
 
     def _set_running(self, running: bool) -> None:
         if self._is_running != running:
@@ -941,13 +986,11 @@ class TerminalWidget(QWidget):
         self._output_buffer.extend(data)
         if len(self._output_buffer) > 8192:
             del self._output_buffer[:-8192]
-        # Enquanto o console não foi aberto/carregado, guarda o output bruto
-        # pra replay no 1º open (go_live). Depois do replay (_primed) o xterm
-        # vira a fonte do scrollback e paramos de acumular.
-        if not self._primed:
-            self._replay_buffer.extend(data)
-            if len(self._replay_buffer) > self._replay_cap:
-                del self._replay_buffer[: -self._replay_cap]
+        # Mantém o output bruto rolando (cap 2MB) pra replay — tanto no 1º open
+        # quanto ao reabrir após um lazy-unload. Independe de _primed/_live.
+        self._replay_buffer.extend(data)
+        if len(self._replay_buffer) > self._replay_cap:
+            del self._replay_buffer[: -self._replay_cap]
         self._last_output_time = time.monotonic()
         self._activity_dirty = True
 
@@ -1235,7 +1278,7 @@ class TerminalWidget(QWidget):
         if self.session.is_running():
             self.session.terminate()
         try:
-            self.session.start(argv, cwd)
+            self.session.start(argv, cwd, isolate=True, isolate_slice=_CONSOLE_SLICE)
         except OSError as e:
             log.exception("Falha ao iniciar pty")
             self._status.setText(f"(erro) {e}")
@@ -1285,9 +1328,20 @@ class TerminalWidget(QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        # Voltou a ficar visível: cancela um unload pendente. A (re)criação da
+        # view é dirigida pelo TerminalArea (_materialize_current_view), pra não
+        # carregar todos os consoles de uma vez no startup.
+        self.cancel_unload()
         # Show é raro o suficiente pra disparar direto (sem debounce)
         if hasattr(self, "bridge") and self._bridge_ready:
             self.bridge.force_fit_requested.emit()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        # Ficou oculto (ex.: troca de workspace): agenda o lazy-unload. Trocas
+        # de aba dentro da área usam StackAll (não disparam hide) e são tratadas
+        # explicitamente pelo TerminalArea.
+        self.schedule_unload()
 
     def _emit_force_fit(self) -> None:
         if hasattr(self, "bridge") and self._bridge_ready:

@@ -159,8 +159,36 @@ class TerminalArea(QWidget):
             # Lazy-load: agenda a criação do WebView do console que ficou
             # ativo (coalescido p/ não materializar tudo durante o restore).
             self._materialize_timer.start()
+            # Lazy-unload: o StackAll mantém todas as views vivas, então a
+            # troca de aba não dispara hideEvent. Arma o descarregamento dos
+            # consoles que saíram de foco e cancela o do que ficou ativo.
+            for i in range(self._stack.count()):
+                w = self._stack.widget(i)
+                if isinstance(w, TerminalWidget):
+                    if i == idx:
+                        w.cancel_unload()
+                    else:
+                        w.schedule_unload()
         self._refresh_tab_bar_visibility()
         self.tabs.currentChanged.emit(idx)
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        # Área inteira oculta (troca de workspace): agenda lazy-unload de todos
+        # os consoles desta área.
+        for i in range(self._stack.count()):
+            w = self._stack.widget(i)
+            if isinstance(w, TerminalWidget):
+                w.schedule_unload()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Área voltou a ficar visível: cancela o unload do console ativo e o
+        # (re)materializa caso tenha sido descarregado enquanto oculto.
+        cur = self._stack.currentWidget()
+        if isinstance(cur, TerminalWidget):
+            cur.cancel_unload()
+        self._materialize_timer.start()
 
     def _materialize_current_view(self) -> None:
         """Cria o WebView do console ativo sob demanda (lazy-load) e devolve

@@ -2,13 +2,62 @@ import fcntl
 import logging
 import os
 import pty
+import shutil
 import signal
 import struct
+import subprocess
 import termios
 
 from PySide6.QtCore import QObject, QSocketNotifier, Signal
 
 log = logging.getLogger(__name__)
+
+# Slice do systemd (--user) onde cada runner ganha seu PRÓPRIO scope/cgroup.
+# Sem isso, todo runner herda o cgroup do app e o systemd-oomd, ao mirar o
+# conjunto sob pressão de swap, derruba o app inteiro (GUI + todos os runners)
+# de uma vez. Com cada runner num cgroup isolado, o oomd recicla UM runner
+# descontrolado e o GUI (no cgroup do próprio serviço) segue vivo e protegido.
+_RUNNER_SLICE = "cw-runners.slice"
+_CONSOLE_SLICE = "cw-consoles.slice"
+_scope_supported: bool | None = None
+
+
+def _scope_prefix(cwd: str, slice_name: str = _RUNNER_SLICE) -> list[str] | None:
+    """Prefixo `systemd-run --user --scope` que põe o processo num cgroup próprio
+    (sob a slice `slice_name`: runners e consoles em slices distintas pra permitir
+    política de oomd diferenciada depois),
+    ou None se o isolamento não estiver disponível (sem systemd-run ou sem
+    manager de usuário — aí o caller faz o spawn direto, como antes).
+
+    Por que é transparente pro kill/reap: `--scope` faz `exec()` do comando (não
+    deixa um supervisor no meio), então o pid forkado continua sendo o
+    session-leader do `bash` — killpg(pid) e waitpid(pid) seguem idênticos.
+    `--scope` também herda env e cwd do processo. Checado uma vez e cacheado."""
+    global _scope_supported
+    if _scope_supported is None:
+        ok = False
+        if shutil.which("systemd-run"):
+            try:
+                r = subprocess.run(
+                    ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+                     "--slice=" + _RUNNER_SLICE, "true"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=5,
+                )
+                ok = r.returncode == 0
+            except Exception:
+                ok = False
+        _scope_supported = ok
+        log.info("isolamento de runner em cgroup (systemd-run --scope): %s",
+                 "ativo" if ok else "indisponível (spawn direto)")
+    if not _scope_supported:
+        return None
+    return [
+        "systemd-run", "--user", "--scope", "--quiet", "--collect",
+        "--slice=" + slice_name,
+        "--working-directory=" + cwd,
+        "--",
+    ]
 
 
 class PtySession(QObject):
@@ -55,9 +104,20 @@ class PtySession(QObject):
         cwd: str,
         env: dict[str, str] | None = None,
         kill_group_on_replace: bool = True,
+        isolate: bool = False,
+        isolate_slice: str = _RUNNER_SLICE,
     ) -> None:
         if self.pid is not None:
             self.terminate(kill_group=kill_group_on_replace)
+
+        # Isola o runner num cgroup próprio (systemd-run --user --scope) pra que
+        # o oomd possa reciclá-lo sozinho sem derrubar o app. Transparente pro
+        # kill/reap (--scope faz exec, o pid forkado segue session-leader do
+        # bash). Cai no spawn direto se o isolamento não estiver disponível.
+        if isolate:
+            prefix = _scope_prefix(cwd, isolate_slice)
+            if prefix is not None:
+                argv = prefix + argv
 
         log.info("Starting pty: %s (cwd=%s)", argv, cwd)
         try:
