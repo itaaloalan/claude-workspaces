@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-workspaces"
-version = "1.11.8"
+version = "1.11.9"
 description = "Workspace manager for launching Claude Code with per-project context"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,6 +29,7 @@ dev = [
 
 [project.scripts]
 claude-workspaces = "claude_workspaces.app:main"
+claude-workspaces-mcp-scope = "claude_workspaces.services.mcp_scope:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

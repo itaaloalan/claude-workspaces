@@ -14,8 +14,10 @@ Resolução (Workspace.mcp_servers):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import re
 
 from .. import mcp_manager
@@ -30,30 +32,45 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.lower())
 
 
-def infer_mcp_servers(workspace: Workspace, available: list[str]) -> list[str]:
-    """Infere os MCP do workspace casando nome + basenames das pastas contra os
-    nomes dos servidores globais. Match por substring normalizada nos dois
-    sentidos (ex.: workspace 'MAP' casa 'map'; pasta 'sipe' casa 'sipepro')."""
-    if not available:
+def _match_names(tokens: set[str], available: list[str]) -> list[str]:
+    """Casa um conjunto de tokens (já normalizados) contra os nomes dos MCP
+    globais. Prioriza match EXATO (nome == token) — evita que 'ponto' case
+    'ponto_antigo' por substring. Só cai pra substring (nos dois sentidos) se
+    não houver nenhum exato."""
+    tokens = {t for t in tokens if t}
+    if not tokens or not available:
         return []
-    import os
-
-    tokens = {_norm(workspace.name)}
-    for folder in workspace.folders:
-        tokens.add(_norm(os.path.basename(folder.rstrip("/"))))
-    tokens.discard("")
-
-    # Prioriza match EXATO (nome == token) — evita que 'ponto' case
-    # 'ponto_antigo' por substring. Só cai pra substring se não houver exato.
     exact = [name for name in available if _norm(name) in tokens]
     if exact:
         return exact
     hits: list[str] = []
     for name in available:
         n = _norm(name)
-        if n and any(t and (t in n or n in t) for t in tokens):
+        if n and any(t in n or n in t for t in tokens):
             hits.append(name)
     return hits
+
+
+def infer_mcp_servers(workspace: Workspace, available: list[str]) -> list[str]:
+    """Infere os MCP do workspace casando nome + basenames das pastas contra os
+    nomes dos servidores globais (ex.: workspace 'MAP' casa 'map')."""
+    if not available:
+        return []
+    tokens = {_norm(workspace.name)}
+    for folder in workspace.folders:
+        tokens.add(_norm(os.path.basename(folder.rstrip("/"))))
+    return _match_names(tokens, available)
+
+
+def infer_mcp_servers_for_path(path: str, available: list[str]) -> list[str]:
+    """Versão por diretório (pro `ia` manual no terminal): casa o basename do
+    cwd + 1–2 componentes ancestrais contra os MCP globais. Ex.:
+    /x/logique/map/map-api → tokens {mapapi, map, logique}."""
+    if not available or not path:
+        return []
+    parts = [p for p in os.path.normpath(path).split(os.sep) if p]
+    tokens = {_norm(p) for p in parts[-3:]}  # cwd + até 2 ancestrais
+    return _match_names(tokens, available)
 
 
 def resolve_mcp_servers(workspace: Workspace) -> list[str]:
@@ -72,23 +89,58 @@ def _mcp_dir():
     return d
 
 
-def write_workspace_mcp_config(workspace: Workspace) -> str | None:
-    """Gera ~/.config/claude-workspaces/mcp/<id>.json com os MCP resolvidos do
-    workspace e devolve o caminho (string) pra usar em --mcp-config. Reescreve
-    sempre (pega mudanças do global). Lista vazia → {"mcpServers": {}} (strict
-    vazio = zero MCP na sessão). Devolve None em caso de falha de escrita."""
-    names = resolve_mcp_servers(workspace)
+def _write_config(names: list[str], filename: str) -> str | None:
+    """Escreve {"mcpServers": {nome: cfg_global}} em mcp/<filename> e devolve o
+    caminho. Devolve None em falha de escrita."""
     servers: dict[str, dict] = {}
     for name in names:
         cfg = mcp_manager.get_mcp(name)
         if cfg:
             servers[name] = cfg
-    path = _mcp_dir() / f"{workspace.id}.json"
+    path = _mcp_dir() / filename
     try:
         path.write_text(
             json.dumps({"mcpServers": servers}, indent=2), encoding="utf-8"
         )
     except OSError as e:
-        log.error("Falha escrevendo config MCP do workspace %s: %s", workspace.id, e)
+        log.error("Falha escrevendo config MCP %s: %s", filename, e)
         return None
     return str(path)
+
+
+def write_workspace_mcp_config(workspace: Workspace) -> str | None:
+    """Gera ~/.config/claude-workspaces/mcp/<id>.json com os MCP resolvidos do
+    workspace e devolve o caminho pra usar em --mcp-config. Reescreve sempre
+    (pega mudanças do global). Lista vazia → {"mcpServers": {}} (strict vazio =
+    zero MCP na sessão)."""
+    return _write_config(resolve_mcp_servers(workspace), f"{workspace.id}.json")
+
+
+def write_path_mcp_config(path: str) -> str | None:
+    """Pro `ia` manual: infere os MCP pela pasta `path` e gera um config
+    dedicado. Devolve o caminho do config, ou None se NÃO houver match (aí o
+    chamador cai no comportamento global — sem --mcp-config)."""
+    available = mcp_manager.list_mcp_names()
+    names = infer_mcp_servers_for_path(path, available)
+    if not names:
+        return None
+    digest = hashlib.sha1(os.path.normpath(path).encode("utf-8")).hexdigest()[:12]
+    return _write_config(names, f"cwd-{digest}.json")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI `claude-workspaces-mcp-scope [DIR]`: imprime o caminho de um config
+    MCP escopado pela pasta (default = cwd). Não imprime nada se não houver
+    match — o `ia` então roda o claude sem --mcp-config (global). Usado pela
+    função fish `ia` pra escopar sessões manuais por diretório."""
+    import sys
+
+    args = sys.argv[1:] if argv is None else argv
+    cwd = args[0] if args else os.getcwd()
+    try:
+        path = write_path_mcp_config(cwd)
+    except Exception:  # nunca quebra o `ia`
+        return 0
+    if path:
+        print(path)
+    return 0

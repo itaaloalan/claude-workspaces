@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.11.9] — 2026-06-18
+
+### CLI `claude-workspaces-mcp-scope`: escopar MCP por pasta (pro `claude` manual no terminal)
+
+As sessões `claude` abertas à mão no terminal (alias/função `ia`) não passam pelo app e subiam
+os 6 MCP postgres globais cada uma (~1–1.5GB com várias abertas). Agora dá pra escopá-las pela
+pasta, reaproveitando a inferência do escopo por workspace (v1.11.8):
+
+- Novo executável `claude-workspaces-mcp-scope [DIR]` (default = cwd): infere o(s) MCP pelo nome
+  da pasta (+ até 2 ancestrais), gera um `~/.config/claude-workspaces/mcp/cwd-<hash>.json` e
+  imprime o caminho. Sem match → não imprime nada (chamador cai no global, sem regressão).
+- `services/mcp_scope.py` refatorado: núcleo de match extraído (`_match_names`, exato→substring),
+  reusado por `infer_mcp_servers` (workspace) e `infer_mcp_servers_for_path` (diretório).
+- A função fish `ia` passou a chamar o CLI e, quando há match, roda
+  `claude … --mcp-config <cfg> --strict-mcp-config` — subindo só o MCP da pasta. (Config do fish
+  do usuário, fora do repo.)
+
 ## [1.11.8] — 2026-06-17
 
 ### Memória: escopo de MCP por workspace + pausar polling ocioso + faxina de leaks
