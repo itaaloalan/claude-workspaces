@@ -382,6 +382,9 @@ class MainWindow(QMainWindow):
         self._last_persisted_payload: list[dict] | None = None
         self._shutdown_persisted = False
         self._sessions_terminated = False
+        # True durante _restore_sessions no startup; impede _on_worktree_adopted
+        # de mover terminais enquanto as sessões ainda estão sendo recriadas.
+        self._restoring_sessions = True
         self._sessions_persist_timer = QTimer(self)
         self._sessions_persist_timer.setInterval(8_000)
         self._sessions_persist_timer.timeout.connect(self._persist_active_sessions)
@@ -400,7 +403,16 @@ class MainWindow(QMainWindow):
         # o primeiro tick salvaria vazio por cima do estado a restaurar.
         QTimer.singleShot(
             0,
-            lambda: (self._restore_sessions(), self._sessions_persist_timer.start()),
+            lambda: (
+                self._restore_sessions(),
+                setattr(self, "_restoring_sessions", False),
+                # Seed do payload logo após o restore: o timer só escreve quando
+                # algo mudar em relação a este estado inicial, evitando que o
+                # primeiro tick sobrescreva sessões recém-restauradas que ainda
+                # não estejam marcadas como running.
+                self._persist_active_sessions(),
+                self._sessions_persist_timer.start(),
+            ),
         )
         # Primeiro refresh um pouco depois pra dar tempo de o restore criar
         # os children e o claude_cwd estar disponível.
@@ -4914,6 +4926,11 @@ class MainWindow(QMainWindow):
                 # atual da área não dispara `currentChanged`, então o setFocus
                 # do handler não roda — força aqui pra digitação cair sem clique.
                 area.focus_active_console()
+                # Sincroniza o painel "Runners (console)" com o console agora
+                # focado. Necessário porque `setCurrentIndex(i)` com `i` já
+                # ativo não dispara `currentChanged` — sem isto o painel de
+                # runners ficaria preso no console anterior.
+                self._sync_console_runner_host()
                 self._refresh_terminal_pane_title()
                 log.info(
                     "[SIDEBAR-PERF] _focus_terminal_tab dt=%.1fms",
@@ -6823,7 +6840,7 @@ class MainWindow(QMainWindow):
             self._repo_poller.request(path)
             # Se o worktree pertence a um workspace diferente do atual,
             # migra o console para lá (sidebar + terminal_host).
-            if isinstance(term, TerminalWidget):
+            if isinstance(term, TerminalWidget) and not self._restoring_sessions:
                 target_ws = self._find_workspace_for_cwd(path)
                 if target_ws is not None:
                     tab_id = tab_uid_of(term)
@@ -8059,12 +8076,13 @@ class MainWindow(QMainWindow):
                 widget = area.tabs.widget(i)
                 if not isinstance(widget, TerminalWidget):
                     continue
-                if not widget.is_running():
-                    continue
                 session_id = widget.claimed_session_id()
                 cwd = widget.claude_cwd()
                 if not session_id or not cwd:
                     continue
+                # Inclui mesmo se não running: o tab ainda existe na área (não
+                # foi fechado pelo user). Pode ser falha de --resume — salvar
+                # permite nova tentativa no próximo restart sem perder a sessão.
                 saved.append(SavedSession(
                     workspace_id=ws_id,
                     session_id=session_id,
@@ -8087,7 +8105,9 @@ class MainWindow(QMainWindow):
         saved = load_saved_sessions()
         if not saved:
             return
+        log.info("Restaurando %d sessão(ões) do estado anterior", len(saved))
         restored = 0
+        skipped = 0
         for entry in saved:
             ws = self.workspaces_coord.find_by_id(entry.workspace_id)
             if ws is None:
@@ -8095,6 +8115,7 @@ class MainWindow(QMainWindow):
                     "Sessão %s ignorada: workspace %s não existe mais",
                     entry.session_id, entry.workspace_id,
                 )
+                skipped += 1
                 continue
             cwd_ws = self._find_workspace_for_cwd(entry.cwd)
             if cwd_ws is not None and cwd_ws.id != ws.id:
@@ -8108,6 +8129,7 @@ class MainWindow(QMainWindow):
                     "Sessão %s ignorada: JSONL inexistente em %s",
                     entry.session_id, entry.cwd,
                 )
+                skipped += 1
                 continue
             try:
                 self._launch_claude_for(
@@ -8120,8 +8142,11 @@ class MainWindow(QMainWindow):
                 restored += 1
             except Exception:
                 log.exception("Falha ao restaurar sessão %s", entry.session_id)
-        if restored:
-            log.info("Restauradas %d sessão(ões) Claude da execução anterior", restored)
+                skipped += 1
+        log.info(
+            "Restauração concluída: %d lançadas, %d ignoradas (de %d salvas)",
+            restored, skipped, len(saved),
+        )
 
     def _open_plugin_palette(self) -> None:
         """Ctrl+P: dialog com comandos declarados por plugins habilitados."""

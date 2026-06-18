@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.11.14] — 2026-06-18
+
+### Fix: clicar na sessão não alternava o "Runners console"
+
+- Ao clicar numa sessão na sidebar para um console que já era o índice ativo da
+  área, o `currentChanged` do Qt não dispara — então o painel "Runners (console)"
+  ficava preso no console anterior.
+- `_focus_terminal_tab` agora chama `_sync_console_runner_host()` explicitamente
+  após focar o console, garantindo a troca mesmo sem o sinal.
+
+### Restauração de sessões mais robusta no startup
+
+- Flag `_restoring_sessions` impede `_on_worktree_adopted` de migrar terminais
+  enquanto as sessões ainda estão sendo recriadas no boot.
+- Seed do payload de persistência logo após o restore: o timer só escreve quando
+  algo muda em relação ao estado inicial, evitando que o primeiro tick sobrescreva
+  sessões recém-restauradas ainda não marcadas como running.
+- Sessões são salvas mesmo quando não estão running (o tab ainda existe): permite
+  nova tentativa de `--resume` no próximo restart sem perder a sessão.
+- Logs de restauração mais informativos (lançadas / ignoradas / total).
+
 ## [1.11.13] — 2026-06-18
 
 ### Chip de minimizados não parece mais "minutos"
