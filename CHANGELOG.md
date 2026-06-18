@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.11.13] — 2026-06-18
+
+### Chip de minimizados não parece mais "minutos"
+
+- O chip do rodapé da sidebar mostrava a contagem de workspaces minimizados como
+  `4 min`, que se confundia com minutos (ainda mais ao lado do tempo de sessão).
+- Agora exibe `4 minimizados` / `1 minimizado`, pluralizando igual ao chip de
+  runners. O tooltip "Workspaces minimizados" foi mantido.
+
 ## [1.11.12] — 2026-06-18
 
 ### Destaque mais forte para o item selecionado na sidebar

@@ -448,7 +448,7 @@ class SidebarFooter(QWidget):
         fb.addWidget(self._usage_chip, 0, Qt.AlignmentFlag.AlignVCenter)
         fb.addWidget(self._runner_chip, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self._min_chip = QPushButton("0 min")
+        self._min_chip = QPushButton("0 minimizados")
         self._min_chip.setCheckable(True)
         self._min_chip.setVisible(False)
         self._min_chip.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -501,7 +501,7 @@ class SidebarFooter(QWidget):
 
     def _on_min_count_changed(self, count: int) -> None:
         if count:
-            self._min_chip.setText(f"{count} min")
+            self._min_chip.setText(f"{count} minimizado" + ("s" if count != 1 else ""))
             self._min_chip.setVisible(True)
         else:
             self._min_chip.setChecked(False)
