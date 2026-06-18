@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.10] — 2026-06-18
+
+### Gerenciador de recursos: expandir grupo e matar processo individual
+
+- Cada linha do gerenciador (console/runner/navegador/app) agora é **clicável** e expande,
+  listando os **processos individuais** da subárvore — PID, comando (caminho encurtado, com
+  senha de DB mascarada), RAM e CPU de cada um.
+- Cada processo ganhou um botão **✕** que o mata (SIGTERM + SIGKILL de fallback), com
+  confirmação. Útil pra encerrar um MCP/node específico sem derrubar a sessão inteira.
+- `ProcessMonitor.sample` passou a anexar a lista `ProcGroup.procs` (`ProcInfo` por processo,
+  ordenada por RAM); novo callback `on_kill` no `ResourceDialog` (genérico, diferente do
+  `on_stop` que só encerra runners pelo fluxo da UI).
+
 ## [1.11.9] — 2026-06-18
 
 ### CLI `claude-workspaces-mcp-scope`: escopar MCP por pasta (pro `claude` manual no terminal)

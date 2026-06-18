@@ -3460,6 +3460,31 @@ class MainWindow(QMainWindow):
                     self._sample_resources()
                     return
 
+    def _kill_pid(self, pid: int) -> None:
+        """Mata um processo individual escolhido no gerenciador de recursos.
+        SIGTERM + SIGKILL de fallback se não morrer. Genérico (qualquer pid da
+        árvore), diferente de _stop_process_by_pid que só encerra runners pelo
+        caminho da UI."""
+        import os
+        import signal
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return
+
+        def _force() -> None:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+        QTimer.singleShot(2000, _force)
+        self._sample_resources()
+
     def _open_resource_dialog(self) -> None:
         """Abre (ou reativa) o gerenciador de recursos."""
         existing = getattr(self, "_resource_dialog", None)
@@ -3475,6 +3500,7 @@ class MainWindow(QMainWindow):
             ),
             on_free=self._process_monitor.free_memory,
             on_stop=self._stop_process_by_pid,
+            on_kill=self._kill_pid,
             parent=self,
         )
         self._resource_dialog = dlg

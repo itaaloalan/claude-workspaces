@@ -150,6 +150,9 @@ def test_webengine_category_by_name(monkeypatch):
         def name(self):
             return self._name
 
+        def cmdline(self):
+            return [self._name]
+
         def status(self):
             return "running"
 

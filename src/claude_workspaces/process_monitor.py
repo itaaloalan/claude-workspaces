@@ -27,9 +27,13 @@ import ctypes
 import ctypes.util
 import gc
 import os
+import re
 from dataclasses import dataclass, field
 
 import psutil
+
+# Mascara user:senha em URLs (ex.: postgres dos MCP) pra não vazar no gerenciador.
+_CRED_RE = re.compile(r"://[^/@\s:]+:[^/@\s]+@")
 
 # Categorias de grupo, da mais "do usuário" pra mais "infra".
 CAT_RUNNER = "runner"
@@ -47,6 +51,18 @@ _WEBENGINE_HINT = "qtwebengine"
 
 
 @dataclass
+class ProcInfo:
+    """Um processo individual dentro de um grupo (linha expandida)."""
+
+    pid: int
+    name: str
+    rss: int = 0
+    cpu: float = 0.0
+    cmdline: str = ""     # já mascarado (sem senha)
+    zombie: bool = False
+
+
+@dataclass
 class ProcGroup:
     """Uma linha do gerenciador — um runner/console, o navegador ou o app."""
 
@@ -58,10 +74,24 @@ class ProcGroup:
     count: int = 0        # nº de processos dobrados nesta linha
     zombies: int = 0
     pid: int | None = None  # alvo de "encerrar" (session leader), se houver
+    procs: list[ProcInfo] = field(default_factory=list)  # processos da subárvore
 
     @property
     def stoppable(self) -> bool:
         return self.category in STOPPABLE and self.pid is not None
+
+
+def _short_cmdline(cmd: list[str], name: str) -> str:
+    """Linha de comando curta e sem segredos pra exibir no gerenciador."""
+    if not cmd:
+        return name
+    text = " ".join(cmd).strip()
+    text = _CRED_RE.sub("://***@", text)
+    # Encurta o primeiro token se for um caminho absoluto (mantém o basename).
+    if text.startswith("/"):
+        head, _, tail = text.partition(" ")
+        text = (os.path.basename(head) + (" " + tail if tail else "")).strip()
+    return text[:140]
 
 
 @dataclass
@@ -189,6 +219,10 @@ class ProcessMonitor:
                     rss = int(p.memory_info().rss)
                     name = p.name()
                     is_zombie = p.status() == psutil.STATUS_ZOMBIE
+                    try:
+                        cmd = p.cmdline()
+                    except psutil.Error:
+                        cmd = []
                 cpu = self._cpu(p)
             except psutil.Error:
                 continue
@@ -219,12 +253,24 @@ class ProcessMonitor:
             g.count += 1
             if is_zombie:
                 g.zombies += 1
+            g.procs.append(
+                ProcInfo(
+                    pid=p.pid,
+                    name=name,
+                    rss=rss,
+                    cpu=cpu,
+                    cmdline=_short_cmdline(cmd, name),
+                    zombie=is_zombie,
+                )
+            )
 
         # Poda o cache de CPU pros pids que ainda existem (evita crescer sem fim).
         self._cpu_cache = {
             pid: proc for pid, proc in self._cpu_cache.items() if pid in pidset
         }
 
+        for g in groups.values():
+            g.procs.sort(key=lambda pi: pi.rss, reverse=True)
         ordered = sorted(groups.values(), key=lambda g: g.rss, reverse=True)
         return Snapshot(
             total_rss=total_rss,
