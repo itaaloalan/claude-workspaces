@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.11.15] — 2026-06-18
+
+### Fix: clicar na sessão não alternava o console central
+
+- Desde o `8a0dcd8` os consoles passaram a ser identificados por
+  `tab_uid_of(widget)` (uid monotônico), mas quatro pontos de lookup ainda
+  comparavam com `id(widget)` (endereço CPython reciclável) — que nunca é igual
+  ao uid. O `if` do loop nunca casava, então clicar numa sessão na sidebar não
+  trocava o console central (nem focava o terminal).
+- Corrigido em `_focus_terminal_tab`, `_on_notification_clicked`,
+  `_open_git_panel_for_tab` e na supressão de popup de `_on_inbox_alert`,
+  alinhando com o padrão `tab_uid_of(...) == tab_id` já usado no resto do arquivo.
+
 ## [1.11.14] — 2026-06-18
 
 ### Fix: clicar na sessão não alternava o "Runners console"

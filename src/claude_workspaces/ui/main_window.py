@@ -4918,7 +4918,7 @@ class MainWindow(QMainWindow):
             log.info("[SIDEBAR] sem TerminalArea pra workspace=%s", workspace.id)
             return
         for i in range(area.tabs.count()):
-            if id(area.tabs.widget(i)) == tab_id:
+            if tab_uid_of(area.tabs.widget(i)) == tab_id:
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 self._bottom_tabs.setCurrentWidget(self.terminal_host)
@@ -6553,7 +6553,7 @@ class MainWindow(QMainWindow):
             area = self.terminal_host.currentWidget()
             tabs = getattr(area, "tabs", None) if area is not None else None
             current = tabs.currentWidget() if tabs is not None else None
-            if current is not None and id(current) == tab_id:
+            if current is not None and tab_uid_of(current) == tab_id:
                 log.debug(
                     "inbox_alert suprimido — console %s já está visível e em foco",
                     tab_id,
@@ -6904,7 +6904,7 @@ class MainWindow(QMainWindow):
         if area is None:
             return
         for i in range(area.tabs.count()):
-            if id(area.tabs.widget(i)) == tab_id:
+            if tab_uid_of(area.tabs.widget(i)) == tab_id:
                 area.tabs.setCurrentIndex(i)
                 self.terminal_host.setCurrentWidget(area)
                 # Se o usuário tava na aba "Runners workspace"/"Runners
@@ -6929,7 +6929,7 @@ class MainWindow(QMainWindow):
         area = self.terminals_coord.area_for(ws_id) if ws_id else None
         if area is not None:
             for i in range(area.tabs.count()):
-                if id(area.tabs.widget(i)) == tab_id:
+                if tab_uid_of(area.tabs.widget(i)) == tab_id:
                     area.tabs.setCurrentIndex(i)
                     self.terminal_host.setCurrentWidget(area)
                     self._bottom_tabs.setCurrentWidget(self.terminal_host)
