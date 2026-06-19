@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.20] — 2026-06-19
+
+### Botão "VS Code" preenchido (mais visível)
+
+- O botão VS Code do header virou um botão preenchido (azul do VS Code, texto e
+  ícone brancos) em vez do chip transparente discreto — fica claramente visível e
+  clicável.
+
 ## [1.11.19] — 2026-06-18
 
 ### Chip "VS Code" no cabeçalho do console

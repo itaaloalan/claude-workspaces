@@ -1595,13 +1595,14 @@ class MainWindow(QMainWindow):
         # Chip "VS Code" — abre o worktree (ou a pasta do console) no editor
         # configurado (settings.vscode_command, default "code").
         self._vscode_chip_btn = _QPB2(" VS Code")
-        self._vscode_chip_btn.setIcon(ic("fa5s.code", color="#9aa0a6"))
+        self._vscode_chip_btn.setIcon(ic("fa5s.code", color="#ffffff"))
         self._vscode_chip_btn.setIconSize(_QS(11, 11))
+        # Botão preenchido (azul do VS Code) — bem visível, não um chip discreto.
         self._vscode_chip_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #2c2c2c; border-radius: 9px; "
-            "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+            "QPushButton { background: #0e639c; color: #ffffff; "
+            "border: 1px solid #0e639c; border-radius: 9px; "
+            "padding: 1px 9px; font-size: 11px; font-weight: 600; }"
+            "QPushButton:hover { background: #1177bb; border-color: #1177bb; }"
         )
         self._vscode_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._vscode_chip_btn.setToolTip(
