@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.11.22] — 2026-06-19
+
+### Fix: branch cortada nas linhas de repo do painel Git (multi)
+
+- No painel "Git (multi)", as linhas de cabeçalho de repo (`map-api · v2.3.x-…`)
+  cortavam o nome da branch mesmo com espaço vazio à direita — a coluna de stats
+  (`+N -M`, 72px fixos) reservava espaço ocioso nessas linhas, e a coluna de texto,
+  sem esses pixels, elidia a branch.
+- A linha do repo agora ocupa a largura inteira (`setFirstColumnSpanned`),
+  recuperando os 72px pra branch; o fim redundante (`· N mudança(s) +/-`) é elidido
+  antes da branch. Tooltip com o texto completo no hover.
+
 ## [1.11.21] — 2026-06-19
 
 ### Minimizar workspace libera RAM: encerra os consoles (resumível)

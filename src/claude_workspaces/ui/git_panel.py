@@ -1194,6 +1194,11 @@ class GitPanel(QWidget):
         if status.error:
             repo_item.setForeground(0, QBrush(QColor("#d57272")))
             repo_item.setText(0, repo_item.text(0) + f"  ({status.error})")
+        # Linha de cabeçalho do repo ocupa a largura inteira: recupera os 72px
+        # reservados (ociosos) da coluna de stats pra branch não ser cortada.
+        # ElideRight corta o fim (· marcador/stats, redundante) antes da branch.
+        repo_item.setFirstColumnSpanned(True)
+        repo_item.setToolTip(0, repo_item.text(0))
 
         # Agrupar em Changes / Unversioned
         changes: list[GitFile] = []
