@@ -105,3 +105,58 @@ def clear_saved_sessions() -> None:
         path.unlink(missing_ok=True)
     except OSError:
         log.debug("Falha ao remover %s", path, exc_info=True)
+
+
+# ---- sessões de workspaces minimizados ------------------------------------
+# Ao minimizar um workspace, seus consoles são encerrados (libera RAM do
+# claude + MCP). As sessões resumíveis ficam guardadas por workspace_id pra
+# recriar via --resume quando o workspace volta. Persistido à parte do
+# session_state pra sobreviver a um restart com o workspace ainda minimizado.
+
+
+def minimized_sessions_file() -> Path:
+    return config_dir() / "minimized_sessions.json"
+
+
+def load_minimized_sessions() -> dict[str, list[SavedSession]]:
+    path = minimized_sessions_file()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        log.warning("Não consegui ler %s", path)
+        return {}
+    raw = data.get("workspaces", {})
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, list[SavedSession]] = {}
+    for ws_id, items in raw.items():
+        if not isinstance(items, list):
+            continue
+        sessions = [
+            SavedSession.from_dict(it) for it in items if isinstance(it, dict)
+        ]
+        sessions = [s for s in sessions if s.is_valid()]
+        if sessions:
+            result[str(ws_id)] = sessions
+    return result
+
+
+def save_minimized_sessions(mapping: dict[str, list[SavedSession]]) -> None:
+    path = minimized_sessions_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "workspaces": {
+            ws_id: [s.to_dict() for s in sessions if s.is_valid()]
+            for ws_id, sessions in mapping.items()
+            if sessions
+        }
+    }
+    try:
+        path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        log.exception("Falha ao salvar minimized sessions em %s", path)

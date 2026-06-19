@@ -52,7 +52,9 @@ from ..services.quick_open import find_files
 from ..services.system_open import open_in_file_manager
 from ..session_persistence import (
     SavedSession,
+    load_minimized_sessions,
     load_saved_sessions,
+    save_minimized_sessions,
     save_sessions,
 )
 from ..settings import OPENCODE_ENABLED, Settings
@@ -382,6 +384,12 @@ class MainWindow(QMainWindow):
         self._last_persisted_payload: list[dict] | None = None
         self._shutdown_persisted = False
         self._sessions_terminated = False
+        # Consoles encerrados ao minimizar cada workspace (workspace_id →
+        # sessões resumíveis). Recriados via --resume ao restaurar. Carregado
+        # do disco pra sobreviver a um restart com o workspace minimizado.
+        self._minimized_console_stash: dict[str, list[SavedSession]] = (
+            load_minimized_sessions()
+        )
         # True durante _restore_sessions no startup; impede _on_worktree_adopted
         # de mover terminais enquanto as sessões ainda estão sendo recriadas.
         self._restoring_sessions = True
@@ -2154,8 +2162,73 @@ class MainWindow(QMainWindow):
 
     def _minimize_workspace(self, ws: "Workspace") -> None:
         """Tira o workspace da lista da sidebar; ele vira um chip na faixa
-        'Minimizados' no rodapé. Restauração via clique no chip."""
+        'Minimizados' no rodapé. Antes de minimizar, encerra os consoles do
+        workspace pra liberar RAM (claude + MCP) e o renderer — as sessões
+        resumíveis ficam guardadas pra recriar via --resume ao restaurar."""
+        self._stash_and_terminate_workspace_consoles(ws.id)
         self.workspaces_coord.set_minimized(ws.id, True)
+
+    def _stash_and_terminate_workspace_consoles(self, ws_id: str) -> None:
+        """Guarda as sessões resumíveis dos consoles do workspace e encerra
+        tudo (PtySessions claude+MCP + webviews) via _cleanup_terminal_for."""
+        area = self.terminals_coord.area_for(ws_id)
+        saved: list[SavedSession] = []
+        if area is not None:
+            for i in range(area.tabs.count()):
+                widget = area.tabs.widget(i)
+                if not isinstance(widget, TerminalWidget):
+                    continue
+                session_id = widget.claimed_session_id()
+                cwd = widget.claude_cwd()
+                if not session_id or not cwd:
+                    continue
+                saved.append(SavedSession(
+                    workspace_id=ws_id,
+                    session_id=session_id,
+                    cwd=cwd,
+                    backend=widget.backend(),
+                ))
+        self._minimized_console_stash[ws_id] = saved
+        try:
+            save_minimized_sessions(self._minimized_console_stash)
+        except Exception:  # noqa: BLE001 — persistência nunca derruba o minimizar
+            log.exception("Falha ao persistir stash de consoles minimizados")
+        # Teardown completo: mata claude + MCP e libera o renderer Chromium.
+        self._cleanup_terminal_for(ws_id)
+
+    def _restore_minimized_workspace_consoles(self, ws_id: str) -> None:
+        """Recria via --resume os consoles encerrados quando o workspace foi
+        minimizado. Chamado ao restaurar o workspace."""
+        saved = self._minimized_console_stash.pop(ws_id, None)
+        try:
+            save_minimized_sessions(self._minimized_console_stash)
+        except Exception:  # noqa: BLE001
+            log.exception("Falha ao persistir stash de consoles minimizados")
+        if not saved:
+            return
+        ws = self.workspaces_coord.find_by_id(ws_id)
+        if ws is None:
+            return
+        for entry in saved:
+            if not entry.session_file().exists():
+                log.info(
+                    "Console %s não restaurado: JSONL inexistente em %s",
+                    entry.session_id, entry.cwd,
+                )
+                continue
+            try:
+                self._launch_claude_for(
+                    ws,
+                    entry.session_id,
+                    entry.cwd,
+                    restored_on_startup=True,
+                    backend=entry.backend,
+                )
+            except Exception:
+                log.exception(
+                    "Falha ao restaurar console %s do workspace minimizado",
+                    entry.session_id,
+                )
 
     def _change_workspace_icon(self, ws: "Workspace") -> None:
         """Menu pra escolher o ícone do card do workspace: candidatos
@@ -2232,8 +2305,10 @@ class MainWindow(QMainWindow):
             self.workspaces_coord.set_icon(ws.id, path)
 
     def _on_minimized_workspace_restore(self, workspace_id: str) -> None:
-        """Click no chip da faixa 'Minimizados' → workspace volta pra lista."""
+        """Click no chip da faixa 'Minimizados' → workspace volta pra lista e
+        seus consoles são recriados via --resume."""
         if self.workspaces_coord.set_minimized(workspace_id, False):
+            self._restore_minimized_workspace_consoles(workspace_id)
             item = self._find_workspace_item(workspace_id)
             if item is not None:
                 self.list_widget.setCurrentItem(item)
@@ -8190,6 +8265,15 @@ class MainWindow(QMainWindow):
                 log.info(
                     "Sessão %s ignorada: workspace %s não existe mais",
                     entry.session_id, entry.workspace_id,
+                )
+                skipped += 1
+                continue
+            if ws.minimized:
+                # Workspace minimizado: seus consoles vivem no stash de
+                # minimizados e são recriados só ao restaurar — não no startup.
+                log.info(
+                    "Sessão %s adiada: workspace %s está minimizado",
+                    entry.session_id, ws.name,
                 )
                 skipped += 1
                 continue

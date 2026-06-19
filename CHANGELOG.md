@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.11.21] — 2026-06-19
+
+### Minimizar workspace libera RAM: encerra os consoles (resumível)
+
+- Ao minimizar um workspace, seus consoles agora são **encerrados** — mata os
+  processos `claude` + os MCP servers (a maior fatia de RAM, ~186MB do MCP +
+  ~335MB do claude por console) e libera o renderer Chromium. Antes os processos
+  seguiam vivos e o renderer só descarregava após 90s.
+- As sessões resumíveis são guardadas por workspace e **recriadas via `--resume`**
+  quando o workspace é restaurado (clique no chip de minimizados) — a conversa
+  continua de onde parou. O stash é persistido em disco
+  (`minimized_sessions.json`), então sobrevive a um restart com o workspace ainda
+  minimizado.
+- Trade-off: o que estiver sendo gerado no instante da minimização é interrompido
+  (o histórico no JSONL é preservado e o `--resume` retoma). No startup, consoles
+  de workspaces minimizados não são recriados — só ao restaurar.
+
 ## [1.11.20] — 2026-06-19
 
 ### Botão "VS Code" preenchido (mais visível)
