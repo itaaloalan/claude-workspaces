@@ -4,7 +4,7 @@
         fontSize: 13,
         cursorBlink: true,
         allowProposedApi: true,
-        scrollback: 1500,
+        scrollback: 1000,
         theme: {
             background: '#0e0e0e',
             foreground: '#e0e0e0',
@@ -95,6 +95,16 @@
         if (bridge.clear_requested) {
             bridge.clear_requested.connect(function () {
                 term.reset();
+            });
+        }
+
+        // Limite de scrollback configurável (Settings → Console). Emitido no
+        // frontend_ready (valor inicial) e ao vivo quando o usuário muda.
+        if (bridge.scrollback_changed) {
+            bridge.scrollback_changed.connect(function (n) {
+                if (typeof n === 'number' && n > 0) {
+                    term.options.scrollback = n;
+                }
             });
         }
 

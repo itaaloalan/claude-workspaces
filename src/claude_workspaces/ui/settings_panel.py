@@ -153,6 +153,7 @@ class SettingsPanel(QWidget):
         outer.addWidget(self._build_worktree_section())
         outer.addWidget(self._build_browser_extension_section())
         outer.addWidget(self._build_notifications_section())
+        outer.addWidget(self._build_console_section())
         outer.addWidget(self._build_status_detection_section())
         outer.addWidget(self._build_inspectors_section())
 
@@ -254,6 +255,7 @@ class SettingsPanel(QWidget):
         self._notify_hook_title_fmt.setText(self.settings.notify_hook_title_format)
         self._notify_hook_default_body.setText(self.settings.notify_hook_default_body)
         self._idle_debounce_secs.setValue(self.settings.idle_debounce_seconds)
+        self._console_scrollback.setValue(int(self.settings.console_scrollback_lines))
         self._discord_enabled_chk.setChecked(self.settings.discord_webhook_enabled)
         self._discord_webhook_url.setText(self.settings.discord_webhook_url)
 
@@ -342,6 +344,7 @@ class SettingsPanel(QWidget):
             self._notify_hook_default_body.text().strip() or "(turno encerrado)"
         )
         self.settings.idle_debounce_seconds = int(self._idle_debounce_secs.value())
+        self.settings.console_scrollback_lines = int(self._console_scrollback.value())
         self.settings.discord_webhook_enabled = self._discord_enabled_chk.isChecked()
         self.settings.discord_webhook_url = self._discord_webhook_url.text().strip()
 
@@ -897,6 +900,34 @@ class SettingsPanel(QWidget):
                 self._notif_service.remove(n.id)
                 removed += 1
         log.info("Limpou %s notificações do histórico", removed)
+
+    def _build_console_section(self) -> QWidget:
+        box = QGroupBox("Console")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "Quantas linhas de histórico cada console (e painel de runner) "
+            "mantém roláveis. Esse buffer vive na memória do renderer — "
+            "menos linhas = menos memória; mais = histórico maior. A mudança "
+            "é aplicada ao vivo, sem reiniciar."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #c8c8c8;")
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        self._console_scrollback = QSpinBox()
+        self._console_scrollback.setRange(100, 100000)
+        self._console_scrollback.setSingleStep(100)
+        self._console_scrollback.setSuffix(" linhas")
+        self._console_scrollback.setToolTip(
+            "Limite de scrollback do console/runner. 100–100000 linhas. "
+            "Aplica ao vivo. Padrão: 1000."
+        )
+        form.addRow("Limite de scrollback:", self._console_scrollback)
+        layout.addLayout(form)
+
+        return box
 
     def _build_status_detection_section(self) -> QWidget:
         box = QGroupBox("Detecção de status")

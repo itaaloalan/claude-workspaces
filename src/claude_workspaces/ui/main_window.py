@@ -97,7 +97,7 @@ from .terminal_child_widget import (
     STATE_WORKING,
     TerminalChildWidget,
 )
-from .terminal_widget import TerminalWidget, tab_uid_of
+from .terminal_widget import TerminalBridge, TerminalWidget, tab_uid_of
 from .theme import (
     LAYOUT_SAVE_DEBOUNCE_MS,
     RIGHT_DOCK_DEFAULT_W,
@@ -271,6 +271,7 @@ class MainWindow(QMainWindow):
             enabled=self.settings.notify_reminder_enabled,
         )
         TerminalWidget.set_idle_debounce_seconds(self.settings.idle_debounce_seconds)
+        TerminalBridge.set_scrollback_lines(self.settings.console_scrollback_lines)
 
         # Poller assíncrono pra branch+contagem de modificados ao lado de
         # cada console na sidebar. Criado antes de qualquer refresh pra
@@ -6463,6 +6464,7 @@ class MainWindow(QMainWindow):
             enabled=self.settings.notify_reminder_enabled,
         )
         TerminalWidget.set_idle_debounce_seconds(self.settings.idle_debounce_seconds)
+        TerminalBridge.set_scrollback_lines(self.settings.console_scrollback_lines)
         if self.settings.notify_native_enabled and self._tray is None:
             self._init_tray()
         elif not self.settings.notify_native_enabled and self._tray is not None:

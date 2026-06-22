@@ -160,6 +160,11 @@ class Settings:
     # — evita flicker "Trabalhando ↔ Ocioso". Mínimo 0 (sem debounce),
     # máximo 120s.
     idle_debounce_seconds: int = 20
+    # Limite de linhas do scrollback do xterm.js (console + runners). Buffer
+    # visual rolável; mais linhas = mais histórico e mais memória do renderer.
+    # Ajustável ao vivo (TerminalBridge.set_scrollback_lines empurra pro JS sem
+    # reiniciar). Default 1000.
+    console_scrollback_lines: int = 1000
     # Mostra a barra de ações (Continuar / Ciclar modo / Effort / Modelo /
     # Encerrar) no topo de cada terminal. Toggle global controlado pelo
     # botão na top bar. Mesmo desligada, as ações continuam acessíveis

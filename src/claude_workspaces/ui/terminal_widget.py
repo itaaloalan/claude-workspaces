@@ -3,6 +3,7 @@ import os
 import pwd
 import shlex
 import time
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 
@@ -97,10 +98,35 @@ class TerminalBridge(QObject):
     force_fit_requested = Signal()
     clear_requested = Signal()
     ready = Signal()
+    # Empurra o limite de scrollback (linhas) pro xterm.js — tanto no initial
+    # load (emit no frontend_ready) quanto ao vivo (set_scrollback_lines).
+    scrollback_changed = Signal(int)
+
+    # Limite de linhas do scrollback aplicado a todo bridge vivo (console +
+    # runners). Atualizado por `set_scrollback_lines` quando o usuário muda em
+    # Settings; espelha o padrão de `TerminalWidget._idle_debounce_s`.
+    _scrollback_lines: int = 1000
+    # Registro de bridges vivos pra empurrar mudanças ao vivo. WeakSet pra não
+    # impedir a coleta de bridges de consoles/runners fechados.
+    _live_bridges: "weakref.WeakSet" = weakref.WeakSet()
+
+    @classmethod
+    def set_scrollback_lines(cls, lines: int) -> None:
+        """Define o limite de scrollback (linhas) e aplica ao vivo em todos os
+        consoles/runners abertos. Clamp em 100–100000."""
+        n = max(100, min(100_000, int(lines)))
+        cls._scrollback_lines = n
+        for bridge in list(cls._live_bridges):
+            try:
+                bridge.scrollback_changed.emit(n)
+            except RuntimeError:
+                # Bridge Qt já destruído entre o snapshot e o emit — ignora.
+                pass
 
     def __init__(self, session: PtySession) -> None:
         super().__init__()
         self.session = session
+        TerminalBridge._live_bridges.add(self)
         self.session.output_received.connect(self._on_pty_output)
         # Filtro opcional aplicado linha a linha (substring case-insensitive
         # após strip de ANSI). Vazio = pass-through. Usado pelo RunnerWidget
@@ -199,6 +225,8 @@ class TerminalBridge(QObject):
     @Slot()
     def frontend_ready(self) -> None:
         self.ready.emit()
+        # Aplica o limite de scrollback atual assim que o xterm.js carrega.
+        self.scrollback_changed.emit(TerminalBridge._scrollback_lines)
 
 
 class TerminalWidget(QWidget):

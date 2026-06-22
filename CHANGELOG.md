@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.13.0] — 2026-06-22
+
+### Limite configurável de scrollback do console (poupa memória)
+
+- **Novo setting `console_scrollback_lines` (default 1000):** o buffer de
+  histórico rolável do xterm.js deixa de ser fixo em 1500 linhas e passa a ser
+  configurável em **Configurações → Console**. Menos linhas = menos memória do
+  renderer; mais linhas = histórico maior.
+- **Aplica ao vivo:** mudar o valor e salvar empurra o novo limite pra todos os
+  consoles e painéis de runner abertos via `TerminalBridge.set_scrollback_lines`
+  (sinal `scrollback_changed` → `term.options.scrollback`), sem reiniciar o app.
+- Vale tanto pro console embutido quanto pros painéis de runner (compartilham o
+  mesmo `terminal.html` + `TerminalBridge`).
+
 ## [1.12.0] — 2026-06-22
 
 ### Worktree de grupo multi-repo: corrige "só map-web" e adiciona seletor de IDE
