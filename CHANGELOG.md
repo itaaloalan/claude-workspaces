@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.12.0] — 2026-06-22
+
+### Worktree de grupo multi-repo: corrige "só map-web" e adiciona seletor de IDE
+
+- **Raiz:** ao abrir um console num **grupo de worktrees** (pasta-pai com um
+  worktree por repo, ex.: `map-web` + `map-camera`), o launch zerava os `extras`
+  (`extras = []`), então o console não recebia as pastas-irmãs — nem como
+  `--add-dir` pro Claude, nem pro painel Git, nem pra abrir no editor. Agora os
+  membros do grupo (`worktree_group_members`) viram os extras.
+- **Painel Git (multi):** o sync passa a expandir um cwd que é grupo de worktrees
+  nos seus membros, listando `map-web` e `map-camera` uma vez cada (antes mostrava
+  `map-web` repetido).
+- **Abrir no editor (header + canto central):** o botão "VS Code" abre TODAS as
+  pastas (worktrees do grupo, ou pastas do workspace) numa janela multi-root, em
+  vez de só a primeira.
+- **Seletor de IDE:** a seta ▾ do botão "VS Code" abre um menu pra escolher qual(is)
+  repo(s) e qual IDE — **VS Code, PyCharm, WebStorm, IntelliJ ou Rider**.
+
 ## [1.11.22] — 2026-06-19
 
 ### Fix: branch cortada nas linhas de repo do painel Git (multi)

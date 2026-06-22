@@ -1617,6 +1617,11 @@ class MainWindow(QMainWindow):
             "Abrir o worktree (ou a pasta do console) no VS Code"
         )
         self._vscode_chip_btn.clicked.connect(self._open_active_console_in_vscode)
+        # Dropdown ▾: escolher qual(is) repo(s) e qual IDE abrir. Menu montado
+        # dinamicamente (aboutToShow) a partir do console ativo.
+        self._vscode_chip_menu = QMenu(self._vscode_chip_btn)
+        self._vscode_chip_menu.aboutToShow.connect(self._rebuild_vscode_chip_menu)
+        self._vscode_chip_btn.setMenu(self._vscode_chip_menu)
         self._vscode_chip_btn.setVisible(False)
         th_layout.addWidget(self._vscode_chip_btn)
         self._terminal_pane_minimize_btn = _QPB2()
@@ -2514,6 +2519,7 @@ class MainWindow(QMainWindow):
         """Acha o workspace dono de um cwd, cobrindo sessões normais,
         grupos de worktree e worktrees individuais."""
         from pathlib import Path as _Path
+
         from ..git_worktree import is_worktree_group, resolve_git_dirs
 
         ws = self.workspaces_coord.find_for_cwd(cwd)
@@ -2543,6 +2549,7 @@ class MainWindow(QMainWindow):
         do repo (ex: sipe/src dentro de sipe/).
         """
         from pathlib import Path as _Path
+
         from ..git_worktree import worktree_group_members
         for m in worktree_group_members(group_parent):
             repo_git = m.get("repo", "")
@@ -5316,29 +5323,39 @@ class MainWindow(QMainWindow):
             # principal enquanto o console trabalhava no worktree.
             cwd = term.worktree_dir() or term.claude_cwd()
             if cwd:
-                extras = list(term.extra_dirs())
-                # Multi-repo: o worktree do console é de UM repo; os extras
-                # entravam com o diretório PRINCIPAL dos outros repos. Se o
-                # repo do extra tem worktree da MESMA branch, o painel passa
-                # a inspecionar esse worktree irmão (translate_dir_for_repo).
-                # Cacheado por (cwd, extras) — o sync roda a cada clique e o
-                # translate chama git; o cache é limpo quando worktree é
-                # criado/adotado/removido pelo app.
-                if term.worktree_dir() and extras:
-                    cache = getattr(self, "_git_sync_xlate_cache", None)
-                    if cache is None:
-                        cache = self._git_sync_xlate_cache = {}
-                    key = (cwd, tuple(extras))
-                    translated = cache.get(key)
-                    if translated is None:
-                        from ..git_worktree import translate_dir_for_repo
-                        translated = [
-                            translate_dir_for_repo(cwd, e) or e
-                            for e in extras
-                        ]
-                        cache[key] = translated
-                    extras = translated
-                folders = [cwd, *extras]
+                from ..git_worktree import (
+                    is_worktree_group,
+                    worktree_group_members,
+                )
+                if is_worktree_group(cwd):
+                    # Grupo de worktrees: a pasta-pai não é repo git. Expande
+                    # nos membros (1 worktree por repo) pra o painel listar
+                    # map-web e map-camera, uma vez cada.
+                    folders = [m["path"] for m in worktree_group_members(cwd)]
+                else:
+                    extras = list(term.extra_dirs())
+                    # Multi-repo: o worktree do console é de UM repo; os extras
+                    # entravam com o diretório PRINCIPAL dos outros repos. Se o
+                    # repo do extra tem worktree da MESMA branch, o painel passa
+                    # a inspecionar esse worktree irmão (translate_dir_for_repo).
+                    # Cacheado por (cwd, extras) — o sync roda a cada clique e o
+                    # translate chama git; o cache é limpo quando worktree é
+                    # criado/adotado/removido pelo app.
+                    if term.worktree_dir() and extras:
+                        cache = getattr(self, "_git_sync_xlate_cache", None)
+                        if cache is None:
+                            cache = self._git_sync_xlate_cache = {}
+                        key = (cwd, tuple(extras))
+                        translated = cache.get(key)
+                        if translated is None:
+                            from ..git_worktree import translate_dir_for_repo
+                            translated = [
+                                translate_dir_for_repo(cwd, e) or e
+                                for e in extras
+                            ]
+                            cache[key] = translated
+                        extras = translated
+                    folders = [cwd, *extras]
         panel.set_folders_override(folders)
 
     def _console_dirs_for(self, workspace_id: str) -> list[tuple[str, str]]:
@@ -7956,30 +7973,70 @@ class MainWindow(QMainWindow):
                 f"Comando '{editor}' não está no PATH. Ajuste em Configurações.",
             )
 
+    def _console_open_targets(self, term: "TerminalWidget") -> list[tuple[str, str]]:
+        """Pastas abríveis (label, path) do console: um alvo por repo. Em grupo
+        de worktrees, um por membro; em worktree único, o cwd + extras
+        traduzidos pro worktree irmão; senão, cwd + extra_dirs()."""
+        from pathlib import Path as _Path
+
+        from ..git_worktree import (
+            is_worktree_group,
+            translate_dir_for_repo,
+            worktree_group_members,
+        )
+        cwd = term.worktree_dir() or term.claude_cwd() or ""
+        if not cwd:
+            return []
+        if is_worktree_group(cwd):
+            return [
+                (m.get("repo_name") or _Path(m["path"]).name, m["path"])
+                for m in worktree_group_members(cwd)
+            ]
+        extras = list(term.extra_dirs())
+        if term.worktree_dir() and extras:
+            extras = [translate_dir_for_repo(cwd, e) or e for e in extras]
+        return [(_Path(p).name, p) for p in [cwd, *extras]]
+
+    def _open_targets_in_ide(
+        self, ide_key: str, paths: list[str]
+    ) -> None:
+        from ..launchers import LauncherError, launch_ide_paths
+        try:
+            launch_ide_paths(ide_key, paths, self.settings)
+        except (LauncherError, FileNotFoundError) as e:
+            QMessageBox.warning(self, "Não foi possível abrir", str(e))
+
+    def _rebuild_vscode_chip_menu(self) -> None:
+        from .ide_menu import build_ide_menu
+        self._vscode_chip_menu.clear()
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        targets = (
+            self._console_open_targets(term)
+            if isinstance(term, TerminalWidget)
+            else []
+        )
+        built = build_ide_menu(self, targets, self._open_targets_in_ide)
+        for act in built.actions():
+            self._vscode_chip_menu.addAction(act)
+
     def _open_active_console_in_vscode(self) -> None:
-        """Chip "VS Code" do header: abre o worktree do console ativo (ou, na
-        falta dele, a pasta de trabalho do console) no editor configurado."""
+        """Chip "VS Code" do header: abre TODAS as pastas do console ativo
+        (worktrees do grupo, ou cwd + extras) no VS Code. A seta ▾ permite
+        escolher repo/IDE específicos."""
         area = self._active_terminal_area()
         term = area.tabs.currentWidget() if area is not None else None
         if not isinstance(term, TerminalWidget):
             return
-        path = term.worktree_dir() or term.claude_cwd() or ""
-        if not path:
+        targets = self._console_open_targets(term)
+        if not targets:
             QMessageBox.warning(
                 self,
                 "Sem pasta",
                 "Este console não tem um diretório associado para abrir.",
             )
             return
-        editor = self.settings.vscode_command or "code"
-        try:
-            open_path_in_editor(path, editor)
-        except Exception:  # noqa: BLE001 — vira aviso, não derruba a UI
-            QMessageBox.warning(
-                self,
-                "Editor não encontrado",
-                f"Comando '{editor}' não está no PATH. Ajuste em Configurações.",
-            )
+        self._open_targets_in_ide("vscode", [p for _label, p in targets])
 
     # ---------- CRUD de workspace ----------
 

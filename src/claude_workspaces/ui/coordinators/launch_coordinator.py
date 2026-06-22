@@ -90,9 +90,13 @@ class LaunchCoordinator(QObject):
                     worktree_label = f" · {br}" if br else " · isolado"
             elif is_worktree_group(cwd):
                 is_worktree = True
-                extras = []
+                # Pasta-pai do grupo: cada membro é o worktree de UM repo.
+                # Sem popular extras, o console não recebia as pastas-irmãs
+                # (--add-dir do Claude, painel Git, abrir no editor) e tudo a
+                # jusante enxergava só uma pasta.
+                members = worktree_group_members(cwd)
+                extras = [m["path"] for m in members]
                 if not worktree_label:
-                    members = worktree_group_members(cwd)
                     br = members[0]["branch"] if members else ""
                     worktree_label = f" · {br}" if br else " · grupo"
             else:

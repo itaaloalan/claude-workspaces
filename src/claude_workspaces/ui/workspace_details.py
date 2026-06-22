@@ -680,6 +680,11 @@ class WorkspaceDetailsPanel(QStackedWidget):
         if "vscode" not in added:
             btn = self._make_big_button("vscode", f"Abrir {IDE_LABEL['vscode']}")
             btn.clicked.connect(lambda: self._launch_ide("vscode"))
+            # Dropdown ▾: escolher qual(is) pasta(s) do workspace e qual IDE.
+            menu = QMenu(btn)
+            menu.aboutToShow.connect(self._rebuild_ide_dropdown_menu)
+            btn.setMenu(menu)
+            self._vscode_ide_menu = menu
             self._ide_row.addWidget(btn, stretch=1)
 
     def _refresh_sessions(self) -> None:
@@ -829,3 +834,26 @@ class WorkspaceDetailsPanel(QStackedWidget):
                 f"Falha ao abrir {IDE_LABEL.get(ide_key, ide_key)}",
                 str(e),
             )
+
+    def _open_paths_in_ide(self, ide_key: str, paths: list[str]) -> None:
+        from ..launchers import launch_ide_paths
+        try:
+            launch_ide_paths(ide_key, paths, self.settings)
+        except (LauncherError, FileNotFoundError) as e:
+            log.exception("Falha ao abrir %s (paths=%s)", ide_key, paths)
+            QMessageBox.warning(
+                self,
+                f"Falha ao abrir {IDE_LABEL.get(ide_key, ide_key)}",
+                str(e),
+            )
+
+    def _rebuild_ide_dropdown_menu(self) -> None:
+        from pathlib import Path
+
+        from .ide_menu import build_ide_menu
+        self._vscode_ide_menu.clear()
+        folders = list(self.workspace.folders) if self.workspace else []
+        targets = [(Path(f).name, f) for f in folders]
+        built = build_ide_menu(self, targets, self._open_paths_in_ide)
+        for act in built.actions():
+            self._vscode_ide_menu.addAction(act)

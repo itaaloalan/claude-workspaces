@@ -19,6 +19,7 @@ from claude_workspaces.launchers import (
     launch_claude_in_dir,
     launch_claude_resume,
     launch_ide,
+    launch_ide_paths,
     launch_konsole,
 )
 from claude_workspaces.models import Workspace
@@ -142,6 +143,25 @@ def test_launch_ide_unknown_command_errors(workspace, settings):
     # IDE não configurado → erro claro
     with pytest.raises(LauncherError, match="não definido"):
         launch_ide("nao-existe-ide", workspace, settings)
+
+
+def test_launch_ide_paths_empty_errors(settings):
+    with pytest.raises(LauncherError):
+        launch_ide_paths("vscode", [], settings)
+
+
+def test_launch_ide_paths_spawns_all_folders(settings, tmp_path):
+    a = tmp_path / "map-web"
+    b = tmp_path / "map-camera"
+    a.mkdir()
+    b.mkdir()
+    settings.vscode_command = "code"
+    with patch("claude_workspaces.launchers.shutil.which", return_value="/usr/bin/code"), \
+            patch("claude_workspaces.launchers._spawn") as spawn:
+        launch_ide_paths("vscode", [str(a), str(b)], settings)
+    argv, cwd = spawn.call_args[0]
+    assert argv == ["code", str(a), str(b)]
+    assert str(cwd) == str(a)
 
 
 def test_find_app_repo_root_locates_pyproject():

@@ -135,9 +135,14 @@ def launch_konsole(workspace: Workspace, settings: Settings) -> None:
     _spawn([settings.terminal_command], cwd)
 
 
-def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
-    if not workspace.folders:
-        raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
+def launch_ide_paths(
+    ide_key: str, paths: list[str], settings: Settings
+) -> None:
+    """Abre uma lista de pastas na IDE escolhida (uma janela multi-root).
+    Reusa a validação de comando do launch_ide. Lança LauncherError se a
+    lista for vazia, o comando não estiver definido, ou não estiver no PATH."""
+    if not paths:
+        raise LauncherError("Nenhuma pasta para abrir")
     cmd = settings.ide_command(ide_key)
     if not cmd:
         raise LauncherError(f"Comando para {IDE_LABEL.get(ide_key, ide_key)} não definido")
@@ -145,8 +150,13 @@ def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
         raise LauncherError(
             f"'{cmd}' não encontrado no PATH — ajuste o comando do {IDE_LABEL.get(ide_key, ide_key)} em Configurações"
         )
-    cwd, _ = workspace.launch_paths()
-    _spawn([cmd, *workspace.folders], cwd)
+    _spawn([cmd, *paths], paths[0])
+
+
+def launch_ide(ide_key: str, workspace: Workspace, settings: Settings) -> None:
+    if not workspace.folders:
+        raise LauncherError(f"Workspace '{workspace.name}' não tem nenhuma pasta")
+    launch_ide_paths(ide_key, list(workspace.folders), settings)
 
 
 def open_file_in_editor(path: str | Path, settings: Settings) -> None:
