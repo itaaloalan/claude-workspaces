@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.14.0] — 2026-06-23
+
+### Limite de scrollback por runner (exibir menos log)
+
+- **Novo item no menu ⋯ do runner: "📏 Linhas de log".** Permite limitar o
+  scrollback SÓ daquele runner (200, 500, 1000, 2000, 5000 linhas) ou seguir
+  o padrão global das Configurações. Útil em runners de log muito verboso
+  (ex.: build Maven com centenas de `[INFO]`) onde se quer reter menos linhas
+  e poupar memória do renderer.
+- **Aplica ao vivo e persiste:** a escolha empurra o novo limite pro xterm.js
+  na hora (`TerminalBridge.set_instance_scrollback`) e é salva em
+  `RunnerConfig.scrollback_lines`, sobrevivendo a restart do app.
+- **Override do global:** mudar o padrão global em Configurações → Console não
+  mais sobrescreve runners que têm um limite próprio definido.
+
 ## [1.13.0] — 2026-06-22
 
 ### Limite configurável de scrollback do console (poupa memória)

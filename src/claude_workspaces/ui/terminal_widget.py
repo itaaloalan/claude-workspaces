@@ -113,19 +113,42 @@ class TerminalBridge(QObject):
     @classmethod
     def set_scrollback_lines(cls, lines: int) -> None:
         """Define o limite de scrollback (linhas) e aplica ao vivo em todos os
-        consoles/runners abertos. Clamp em 100–100000."""
+        consoles/runners abertos. Clamp em 100–100000. Bridges com override
+        por instância (`set_instance_scrollback`) são pulados — a escolha
+        per-runner tem precedência sobre o padrão global."""
         n = max(100, min(100_000, int(lines)))
         cls._scrollback_lines = n
         for bridge in list(cls._live_bridges):
+            if getattr(bridge, "_scrollback_override", 0) > 0:
+                continue
             try:
                 bridge.scrollback_changed.emit(n)
             except RuntimeError:
                 # Bridge Qt já destruído entre o snapshot e o emit — ignora.
                 pass
 
+    def effective_scrollback(self) -> int:
+        """Limite de scrollback que ESTE bridge deve usar — override por
+        instância (se > 0), senão o padrão global da classe."""
+        return self._scrollback_override or TerminalBridge._scrollback_lines
+
+    def set_instance_scrollback(self, lines: int) -> None:
+        """Define um limite de scrollback SÓ deste bridge (override do padrão
+        global) e aplica ao vivo no xterm.js. `lines <= 0` limpa o override e
+        volta a seguir o padrão global. Clamp em 100–100000 quando > 0."""
+        n = int(lines)
+        self._scrollback_override = max(100, min(100_000, n)) if n > 0 else 0
+        try:
+            self.scrollback_changed.emit(self.effective_scrollback())
+        except RuntimeError:
+            pass
+
     def __init__(self, session: PtySession) -> None:
         super().__init__()
         self.session = session
+        # Override de scrollback por instância (0 = segue o padrão global da
+        # classe). Setado pelo RunnerWidget a partir de RunnerConfig.scrollback_lines.
+        self._scrollback_override: int = 0
         TerminalBridge._live_bridges.add(self)
         self.session.output_received.connect(self._on_pty_output)
         # Filtro opcional aplicado linha a linha (substring case-insensitive
@@ -225,8 +248,9 @@ class TerminalBridge(QObject):
     @Slot()
     def frontend_ready(self) -> None:
         self.ready.emit()
-        # Aplica o limite de scrollback atual assim que o xterm.js carrega.
-        self.scrollback_changed.emit(TerminalBridge._scrollback_lines)
+        # Aplica o limite de scrollback atual assim que o xterm.js carrega
+        # (override por instância, se houver, senão o padrão global).
+        self.scrollback_changed.emit(self.effective_scrollback())
 
 
 class TerminalWidget(QWidget):

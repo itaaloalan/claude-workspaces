@@ -534,6 +534,8 @@ class RunnerArea(QWidget):
         # Porta mudou pelo chip :porta → persiste via runners_changed
         # (main_window grava o workspace no JSON).
         widget.port_changed.connect(lambda _p: self.runners_changed.emit())
+        # Limite de scrollback per-runner mudou pelo menu ⋯ → mesma persistência.
+        widget.scrollback_pref_changed.connect(lambda _n: self.runners_changed.emit())
         if self._pty_tee is not None and not getattr(widget, "_tee_wired", False):
             widget._tee_wired = True
             widget.session.output_received.connect(

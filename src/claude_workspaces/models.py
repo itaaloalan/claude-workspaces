@@ -61,6 +61,12 @@ class RunnerConfig:
     # Persiste o apontamento entre restarts do app — "manter o último
     # executado". Path da máquina: removido no export, igual aos gen_*.
     last_cwd: str = ""
+    # Limite de scrollback (linhas) SÓ deste runner. 0 = segue o padrão
+    # global (Configurações → Console / console_scrollback_lines). Útil pra
+    # runners de log muito verboso (ex.: build Maven) onde o usuário quer
+    # reter menos linhas e poupar memória do renderer. Ajustável ao vivo
+    # pelo menu ⋯ do runner; persiste entre restarts.
+    scrollback_lines: int = 0
     id: str = field(default_factory=_new_id)
 
     def to_dict(self) -> dict:
@@ -74,6 +80,10 @@ class RunnerConfig:
             port = int(data.get("port") or 0)
         except (TypeError, ValueError):
             port = 0
+        try:
+            scrollback = int(data.get("scrollback_lines") or 0)
+        except (TypeError, ValueError):
+            scrollback = 0
         return cls(
             name=str(data.get("name", "")),
             start_cmd=str(data.get("start_cmd", "")),
@@ -91,6 +101,7 @@ class RunnerConfig:
             gen_session_id=str(data.get("gen_session_id", "")),
             gen_cwd=str(data.get("gen_cwd", "")),
             last_cwd=str(data.get("last_cwd", "")),
+            scrollback_lines=scrollback,
             id=str(data.get("id") or _new_id()),
         )
 

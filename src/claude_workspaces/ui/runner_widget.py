@@ -68,6 +68,9 @@ class RunnerWidget(QWidget):
     # Porta base mudou via chip :porta — RunnerArea re-emite runners_changed
     # pro main_window persistir.
     port_changed = Signal(int)
+    # Limite de scrollback per-runner mudou via menu ⋯ — RunnerArea re-emite
+    # runners_changed pro main_window persistir (igual ao port_changed).
+    scrollback_pref_changed = Signal(int)
 
     def __init__(
         self,
@@ -245,6 +248,13 @@ class RunnerWidget(QWidget):
         self.session.output_received.connect(self._on_pty_output)
 
         self.bridge = TerminalBridge(self.session)
+        # Override de scrollback salvo na config (0 = segue o padrão global).
+        # Setado direto no atributo (sem emit) porque a view ainda não existe;
+        # frontend_ready vai aplicar o effective_scrollback ao xterm.js.
+        if self._runner.scrollback_lines:
+            self.bridge._scrollback_override = max(
+                100, min(100_000, int(self._runner.scrollback_lines))
+            )
         self.bridge.ready.connect(self._on_bridge_ready)
 
         self._outer = outer
@@ -312,14 +322,54 @@ class RunnerWidget(QWidget):
 
     # ---- toolbar menu ----------------------------------------------------
 
+    # Presets de scrollback per-runner oferecidos no menu ⋯. 0 = seguir o
+    # padrão global (Configurações → Console). Os menores poupam memória do
+    # renderer em runners de log verboso (ex.: build Maven).
+    _SCROLLBACK_PRESETS = (200, 500, 1000, 2000, 5000)
+
     def _open_more_menu(self) -> None:
         menu = QMenu(self)
         menu.addAction("⚙ Editar", lambda: self.edit_requested.emit(self._runner.id))
         menu.addAction("📋 Copiar log", self._copy_log)
         menu.addAction("🧹 Limpar log", self._clear_log)
+        self._add_scrollback_submenu(menu)
         menu.addSeparator()
         menu.addAction("🗑 Remover runner", lambda: self.remove_requested.emit(self._runner.id))
         menu.exec(self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft()))
+
+    def _add_scrollback_submenu(self, parent: QMenu) -> None:
+        """Submenu '📏 Linhas de log' — limita o scrollback SÓ deste runner
+        (override do padrão global). Exibir menos linhas retém menos log em
+        memória; útil em runners barulhentos."""
+        from .terminal_widget import TerminalBridge
+
+        current = int(self._runner.scrollback_lines or 0)
+        sub = parent.addMenu("📏 Linhas de log")
+        global_n = TerminalBridge._scrollback_lines
+        default_act = sub.addAction(
+            f"Padrão das Configurações ({global_n})",
+            lambda: self._set_scrollback_pref(0),
+        )
+        default_act.setCheckable(True)
+        default_act.setChecked(current == 0)
+        sub.addSeparator()
+        for n in self._SCROLLBACK_PRESETS:
+            act = sub.addAction(
+                f"{n} linhas", lambda _c=False, v=n: self._set_scrollback_pref(v)
+            )
+            act.setCheckable(True)
+            act.setChecked(current == n)
+
+    def _set_scrollback_pref(self, lines: int) -> None:
+        """Aplica e persiste o limite de scrollback per-runner. `lines == 0`
+        volta a seguir o padrão global. Aplica ao vivo via bridge e pede
+        persistência via `scrollback_pref_changed` (RunnerArea→main_window)."""
+        n = int(lines)
+        if n == int(self._runner.scrollback_lines or 0):
+            return
+        self._runner.scrollback_lines = n
+        self.bridge.set_instance_scrollback(n)
+        self.scrollback_pref_changed.emit(n)
 
     # ---- config ----------------------------------------------------------
 

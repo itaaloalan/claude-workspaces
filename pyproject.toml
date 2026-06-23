@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-workspaces"
-version = "1.13.0"
+version = "1.14.0"
 description = "Workspace manager for launching Claude Code with per-project context"
 readme = "README.md"
 requires-python = ">=3.11"
