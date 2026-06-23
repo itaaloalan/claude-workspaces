@@ -7994,8 +7994,9 @@ class MainWindow(QMainWindow):
 
     def _console_open_targets(self, term: "TerminalWidget") -> list[tuple[str, str]]:
         """Pastas abríveis (label, path) do console: um alvo por repo. Em grupo
-        de worktrees, um por membro; em worktree único, o cwd + extras
-        traduzidos pro worktree irmão; senão, cwd + extra_dirs()."""
+        de worktrees, um por membro; senão, TODAS as pastas do workspace
+        (claude_cwd + extra_dirs) — e, se o console adotou um worktree em
+        runtime, cada repo é traduzido pro seu worktree-irmão na mesma branch."""
         from pathlib import Path as _Path
 
         from ..git_worktree import (
@@ -8011,10 +8012,19 @@ class MainWindow(QMainWindow):
                 (m.get("repo_name") or _Path(m["path"]).name, m["path"])
                 for m in worktree_group_members(cwd)
             ]
-        extras = list(term.extra_dirs())
-        if term.worktree_dir() and extras:
-            extras = [translate_dir_for_repo(cwd, e) or e for e in extras]
-        return [(_Path(p).name, p) for p in [cwd, *extras]]
+        # Conjunto original de repos do console (todas as pastas do workspace):
+        # claude_cwd (folders[0]) + extra_dirs (folders[1:]).
+        base = term.claude_cwd() or ""
+        repos = [base, *term.extra_dirs()] if base else list(term.extra_dirs())
+        wt = term.worktree_dir()
+        if wt:
+            # Console adotou um worktree em runtime: traduz CADA repo pro seu
+            # worktree-irmão na mesma branch (o repo do próprio worktree volta
+            # nele mesmo via translate_dir_for_repo). Assim nenhum repo é
+            # descartado e nenhum duplica — sem isso, o repo do claude_cwd
+            # original sumia e o repo do worktree adotado aparecia duas vezes.
+            repos = [translate_dir_for_repo(wt, r) or r for r in repos]
+        return [(_Path(p).name, p) for p in repos]
 
     def _open_targets_in_ide(
         self, ide_key: str, paths: list[str]

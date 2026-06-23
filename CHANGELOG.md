@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.16.1] — 2026-06-23
+
+### Correção: `map-web` duplicado no dropdown VS Code do console
+
+No menu do chip **VS Code** do header do console (workspace multi-repo), quando a
+sessão adotava um worktree em runtime (via `/criar-worktree` de grupo multi-repo),
+um repo aparecia duas vezes e o repo do `claude_cwd` original sumia (ex.: dois
+`map-web`, sem `map-api`).
+
+- `_console_open_targets` passa a montar os alvos a partir do conjunto **completo**
+  de pastas do workspace (`claude_cwd` + `extra_dirs`) e traduzir cada repo pro seu
+  worktree-irmão na mesma branch, em vez de prefixar o path cru do worktree adotado
+  e traduzir só os extras. Assim nenhum repo é descartado nem duplicado.
+
 ## [1.16.0] — 2026-06-23
 
 ### Otimização de performance guiada pelo perf.log
