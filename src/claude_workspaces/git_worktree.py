@@ -20,15 +20,20 @@ TIMEOUT_S = 60
 
 
 def _run(args: list[str], cwd: str) -> tuple[int, str]:
+    from . import perf
+    sub = args[1] if len(args) > 1 else "?"   # subcomando: worktree/rev-parse/...
+    perf.count("git.worktree.calls")
+    perf.count(f"git.worktree.{sub}")          # conjunto pequeno e fixo de subcmds
     try:
-        r = subprocess.run(
-            args,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_S,
-            env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
-        )
+        with perf.timed("git.worktree.subprocess"):
+            r = subprocess.run(
+                args,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_S,
+                env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+            )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         return 255, str(e)
     return r.returncode, (r.stdout + r.stderr).strip()

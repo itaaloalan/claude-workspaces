@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.16.2] — 2026-06-23
+
+### Instrumentação de performance da camada de worktree + menu IDE
+
+A camada de worktree (subprocessos git) não tinha medição nenhuma no `perf.log`,
+ao contrário de `git_status` e do tick de atividade. Sem mudar comportamento,
+adicionamos buckets pra apontar exatamente onde está o custo:
+
+- **`git_worktree._run` (gateway único de subprocesso git de worktree):**
+  - `T git.worktree.subprocess` — tempo/janela, avg, max.
+  - `C git.worktree.calls` — subprocessos git de worktree por segundo (rate alto
+    no idle indica chamada redundante, candidata a cache TTL como em `git_status`).
+  - `C git.worktree.<subcomando>` (`worktree`, `rev-parse`, `symbolic-ref`,
+    `branch`) — breakdown pra atacar o subcomando mais caro primeiro.
+- **`_console_open_targets` (build dos alvos do dropdown VS Code):**
+  - `T ide_targets.build` — custo de montar o menu (sob demanda, `aboutToShow`).
+  - `C ide_targets.repos` — largura do fan-out (nº de repos traduzidos), pra ver
+    se vale cachear `translate_dir_for_repo`/`list_worktrees`.
+
 ## [1.16.1] — 2026-06-23
 
 ### Correção: `map-web` duplicado no dropdown VS Code do console

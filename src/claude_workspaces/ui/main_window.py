@@ -7999,32 +7999,37 @@ class MainWindow(QMainWindow):
         runtime, cada repo é traduzido pro seu worktree-irmão na mesma branch."""
         from pathlib import Path as _Path
 
+        from .. import perf
         from ..git_worktree import (
             is_worktree_group,
             translate_dir_for_repo,
             worktree_group_members,
         )
-        cwd = term.worktree_dir() or term.claude_cwd() or ""
-        if not cwd:
-            return []
-        if is_worktree_group(cwd):
-            return [
-                (m.get("repo_name") or _Path(m["path"]).name, m["path"])
-                for m in worktree_group_members(cwd)
-            ]
-        # Conjunto original de repos do console (todas as pastas do workspace):
-        # claude_cwd (folders[0]) + extra_dirs (folders[1:]).
-        base = term.claude_cwd() or ""
-        repos = [base, *term.extra_dirs()] if base else list(term.extra_dirs())
-        wt = term.worktree_dir()
-        if wt:
-            # Console adotou um worktree em runtime: traduz CADA repo pro seu
-            # worktree-irmão na mesma branch (o repo do próprio worktree volta
-            # nele mesmo via translate_dir_for_repo). Assim nenhum repo é
-            # descartado e nenhum duplica — sem isso, o repo do claude_cwd
-            # original sumia e o repo do worktree adotado aparecia duas vezes.
-            repos = [translate_dir_for_repo(wt, r) or r for r in repos]
-        return [(_Path(p).name, p) for p in repos]
+        with perf.timed("ide_targets.build"):
+            cwd = term.worktree_dir() or term.claude_cwd() or ""
+            if not cwd:
+                return []
+            if is_worktree_group(cwd):
+                members = worktree_group_members(cwd)
+                perf.count("ide_targets.repos", len(members))
+                return [
+                    (m.get("repo_name") or _Path(m["path"]).name, m["path"])
+                    for m in members
+                ]
+            # Conjunto original de repos do console (todas as pastas do
+            # workspace): claude_cwd (folders[0]) + extra_dirs (folders[1:]).
+            base = term.claude_cwd() or ""
+            repos = [base, *term.extra_dirs()] if base else list(term.extra_dirs())
+            wt = term.worktree_dir()
+            if wt:
+                # Console adotou um worktree em runtime: traduz CADA repo pro seu
+                # worktree-irmão na mesma branch (o repo do próprio worktree volta
+                # nele mesmo via translate_dir_for_repo). Assim nenhum repo é
+                # descartado e nenhum duplica — sem isso, o repo do claude_cwd
+                # original sumia e o repo do worktree adotado aparecia duas vezes.
+                repos = [translate_dir_for_repo(wt, r) or r for r in repos]
+            perf.count("ide_targets.repos", len(repos))
+            return [(_Path(p).name, p) for p in repos]
 
     def _open_targets_in_ide(
         self, ide_key: str, paths: list[str]
