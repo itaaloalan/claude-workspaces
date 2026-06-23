@@ -101,16 +101,15 @@ def add_worktree(
 def is_worktree_path(path: str) -> bool:
     """True se `path` é uma git worktree linkada (não o repo principal).
 
-    Num repo normal `--git-dir == --git-common-dir`; numa worktree linkada o
-    `--git-dir` aponta pra `.git/worktrees/<nome>` e diferem do common-dir.
+    Num repo normal git_dir == common_dir; numa worktree linkada o git_dir
+    aponta pra `.git/worktrees/<nome>` e diferem do common-dir. Resolve isso
+    lendo o `.git` (resolve_git_dirs) — sem subprocesso, ao contrário do
+    `git rev-parse` que era chamado 2× por invocação e dominava o perf.log.
     """
-    rc1, gd = _run(["git", "rev-parse", "--git-dir"], path)
-    rc2, gc = _run(["git", "rev-parse", "--git-common-dir"], path)
-    if rc1 != 0 or rc2 != 0:
+    dirs = resolve_git_dirs(path)
+    if dirs is None:
         return False
-    a = (Path(path) / gd.strip()).resolve()
-    b = (Path(path) / gc.strip()).resolve()
-    return a != b
+    return dirs[0].resolve() != dirs[1].resolve()
 
 
 def resolve_git_dirs(folder: str) -> tuple[Path, Path] | None:

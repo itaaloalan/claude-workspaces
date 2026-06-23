@@ -595,12 +595,16 @@ class StateServer:
             return False
 
     def _branch_info(self, cwd: str) -> dict:
+        from .. import perf
         now = time.monotonic()
         with self._lock:
             hit = self._branch_cache.get(cwd)
             if hit and hit[0] > now:
+                perf.count("state.branch_info.cached")
                 return hit[1]
+        perf.count("state.branch_info.miss")
         info = {"branch": "", "worktree": False, "head_commit": "", "repo": ""}
+        _t0 = time.perf_counter()
         try:
             import subprocess
 
@@ -623,17 +627,22 @@ class StateServer:
             except Exception:
                 log.debug("repo-key falhou pra %s", cwd, exc_info=True)
             # HEAD curto pra Detecção B (carimbo de build vs commit atual).
+            # Subprocesso direto (fora do _run do git_worktree) — instrumentado
+            # à parte pra não ficar invisível no perf.log.
             try:
-                r = subprocess.run(  # noqa: S603
-                    ["git", "rev-parse", "--short", "HEAD"],
-                    cwd=cwd, capture_output=True, text=True, timeout=2,
-                )
+                perf.count("git.headshort.calls")
+                with perf.timed("git.headshort.subprocess"):
+                    r = subprocess.run(  # noqa: S603
+                        ["git", "rev-parse", "--short", "HEAD"],
+                        cwd=cwd, capture_output=True, text=True, timeout=2,
+                    )
                 if r.returncode == 0:
                     info["head_commit"] = r.stdout.strip()
             except (OSError, subprocess.TimeoutExpired):
                 pass
         except Exception:
             log.debug("branch_info falhou pra %s", cwd, exc_info=True)
+        perf.record("state.branch_info", (time.perf_counter() - _t0) * 1000.0)
         with self._lock:
             # Poda expiradas no insert — sem isso o dict acumula um key por
             # cwd já visitado pra sempre (sessões longas com muitos worktrees).

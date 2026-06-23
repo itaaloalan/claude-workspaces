@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.16.3] — 2026-06-23
+
+### Otimização guiada pelo perf.log: `is_worktree_path` sem subprocesso
+
+A 1ª janela de métricas da v1.16.2 apontou `git.worktree.rev-parse` rodando ~3,7×/s
+em idle — quase todo o custo da camada de worktree (6,2ms/s). Causa: `is_worktree_path`
+disparava **2 subprocessos** `git rev-parse --git-dir/--git-common-dir` por chamada,
+amplificados por `worktree_group_members` (1× por subdir) e pelo push de estado.
+
+- **`is_worktree_path` agora usa `resolve_git_dirs` (file-based, zero subprocesso)** —
+  mesma semântica, sem `git rev-parse`. Elimina os 2 subprocessos/chamada em todos os
+  callers, derrubando o `git.worktree.rev-parse`.
+
+### Mais cobertura no perf.log (pra próximas análises)
+
+- **`git.headshort.subprocess` / `git.headshort.calls`:** o `git rev-parse --short HEAD`
+  do `state_server` rodava direto (fora do `_run`) e ficava invisível no perf.log;
+  agora é medido.
+- **`state.branch_info` (T) + `state.branch_info.cached`/`.miss` (C):** atribui o custo
+  git ao push de estado e mede a eficácia do cache de branch (TTL 5s) — antes era um
+  total achatado em `git.worktree.calls`, sem dá pra saber o driver.
+
 ## [1.16.2] — 2026-06-23
 
 ### Instrumentação de performance da camada de worktree + menu IDE
