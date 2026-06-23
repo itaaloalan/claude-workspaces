@@ -14,6 +14,11 @@ def log_file() -> Path:
     return state_dir() / "app.log"
 
 
+def perf_log_file() -> Path:
+    """Log de métricas de performance (silo separado do app.log)."""
+    return state_dir() / "perf.log"
+
+
 def setup_logging(level: int = logging.INFO) -> None:
     state_dir().mkdir(parents=True, exist_ok=True)
 

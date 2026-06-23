@@ -176,7 +176,15 @@ class PtySession(QObject):
             self.finished_with_status.emit(self.last_exit_code if self.last_exit_code is not None else -1)
             return
 
-        self.output_received.emit(data)
+        # Métricas de throughput + custo total dos handlers downstream
+        # (record_output, filtro do bridge, detecção de URL…) que rodam
+        # síncronos neste emit. É o ponto único por onde TODO output de PTY
+        # (consoles + runners) passa.
+        from . import perf
+        perf.count("pty.reads")
+        perf.count("pty.bytes", len(data))
+        with perf.timed("pty.emit_handlers"):
+            self.output_received.emit(data)
 
     def write(self, data: bytes) -> None:
         if self.master_fd is None:

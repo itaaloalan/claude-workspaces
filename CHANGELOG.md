@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.15.0] — 2026-06-23
+
+### Instrumentação de performance (perf.log) pra diagnosticar gargalos
+
+- **Novo módulo `perf.py`:** acumula métricas AGREGADAS (não loga evento a
+  evento — isso seria gargalo próprio num hot path de 250ms) e despeja um
+  resumo a cada 30s no `~/.local/state/claude-workspaces/perf.log` (silo
+  separado do `app.log`, rotativo 2MB×3). Helpers `perf.timed()` /
+  `perf.count()` são no-op baratíssimo quando desligado.
+- **Pontos instrumentados** (os hotspots reais mapeados):
+  - `git.status.subprocess` — duração do `git status` (cobre o poller da
+    sidebar E o painel Git, que compartilham `get_status`);
+  - `pty.emit_handlers` / `pty.bytes` / `pty.reads` — throughput de PTY e
+    custo total dos handlers downstream, no ponto único por onde passa TODO
+    output (consoles + runners);
+  - `poll.tick` / `poll.parse_status` + contadores `poll.parsed`/`cached`/
+    `skipped` — quanto custa o tick de atividade (250ms/console) e quão
+    efetiva é a memoização;
+  - `resources.sample_totals` — walk de psutil a cada 8s;
+  - `browser_state.push` — montagem do mapa porta→runner a cada 3s.
+- **Setting `perf_logging_enabled` (default ligado).** Cada flush mostra,
+  por métrica, nº de chamadas, média/máx/total em ms e **ms gastos por
+  segundo de janela** (fração de 1 core) — o sinal mais direto de onde o
+  CPU foi. Flush também no fechamento do app.
+
 ## [1.14.0] — 2026-06-23
 
 ### Limite de scrollback por runner (exibir menos log)

@@ -325,6 +325,16 @@ class MainWindow(QMainWindow):
         self._resource_timer.start()
         QTimer.singleShot(800, self._sample_resources)
 
+        # Flush periódico das métricas de performance agregadas pro perf.log
+        # (no-op se perf_logging_enabled=False). 30s = boa granularidade sem
+        # inflar o log; cada flush resume a janela e zera os buckets.
+        from .. import perf as _perf
+        self._perf_flush_timer = QTimer(self)
+        self._perf_flush_timer.setInterval(30_000)
+        self._perf_flush_timer.timeout.connect(_perf.flush)
+        if _perf.is_enabled():
+            self._perf_flush_timer.start()
+
         # Endpoint local pro plugin de browser (badge/faixa de worktree):
         # serve porta → runner/workspace; a extensão Chrome consulta ao
         # ativar abas localhost. Snapshot empurrado a cada 3s (barato,
@@ -3534,8 +3544,10 @@ class MainWindow(QMainWindow):
         """Tick do monitor: amostra só os totais e atualiza o footer (caminho
         leve, sem cmdline/grupos). O gerenciador aberto usa o sample() completo
         e empurra os totais pra cá pelo seu próprio callback."""
+        from .. import perf
         try:
-            snap = self._process_monitor.sample_totals()
+            with perf.timed("resources.sample_totals"):
+                snap = self._process_monitor.sample_totals()
         except Exception:  # noqa: BLE001 — monitor nunca pode derrubar a UI
             log.exception("falha amostrando recursos")
             return
@@ -5597,11 +5609,16 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def _push_browser_state(self) -> None:
+        if self._state_server is None or not self._state_server.running:
+            return
+        from .. import perf
+        with perf.timed("browser_state.push"):
+            self._push_browser_state_impl()
+
+    def _push_browser_state_impl(self) -> None:
         """Empurra o mapa porta → runner pro StateServer (plugin de
         browser). Roda na UI thread; nada de git aqui — branch/worktree
         são resolvidos pelo server na thread do handler com cache."""
-        if self._state_server is None or not self._state_server.running:
-            return
         from ..services.runner_url_detect import url_port
         ports: dict[str, dict] = {}
         # port(str) → runner widget vivo, pra aplicar o aviso "deploy fora do
@@ -8245,6 +8262,9 @@ class MainWindow(QMainWindow):
         # o estado ainda vivo. Idempotente vs. o aboutToQuit.
         self._terminate_all_sessions()
         self.plugin_coord.shutdown()
+        # Despeja a última janela de métricas antes de sair (no-op se desligado).
+        from .. import perf
+        perf.flush()
         super().closeEvent(event)
 
     @log_exceptions(message="Falha ao encerrar sessões no shutdown")

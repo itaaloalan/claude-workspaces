@@ -165,6 +165,13 @@ class Settings:
     # Ajustável ao vivo (TerminalBridge.set_scrollback_lines empurra pro JS sem
     # reiniciar). Default 1000.
     console_scrollback_lines: int = 1000
+    # Instrumentação de performance: acumula métricas agregadas (tempo gasto
+    # em git status, parse de atividade, throughput de PTY, sample de
+    # recursos, push de estado) e despeja um resumo periódico no perf.log
+    # (~/.local/state/claude-workspaces/perf.log). Barato (agregado, sem log
+    # por evento); serve pra diagnosticar gargalos com dados reais. Default
+    # ligado — desligue aqui se quiser zero overhead.
+    perf_logging_enabled: bool = True
     # Mostra a barra de ações (Continuar / Ciclar modo / Effort / Modelo /
     # Encerrar) no topo de cada terminal. Toggle global controlado pelo
     # botão na top bar. Mesmo desligada, as ações continuam acessíveis

@@ -148,11 +148,14 @@ def _parse_porcelain_v2(stdout: str) -> tuple[str, int, int, list[GitFile]]:
 def get_status(folder: str) -> GitStatus:
     if not folder or not Path(folder).is_dir():
         return GitStatus(folder=folder, is_repo=False)
+    from . import perf
+    perf.count("git.status.calls")
     try:
-        r = _run(
-            ["git", "status", "--porcelain=v2", "--branch", "-z"],
-            folder,
-        )
+        with perf.timed("git.status.subprocess"):
+            r = _run(
+                ["git", "status", "--porcelain=v2", "--branch", "-z"],
+                folder,
+            )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         return GitStatus(folder=folder, is_repo=False, error=str(e))
     if r.returncode != 0:

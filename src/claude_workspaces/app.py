@@ -286,6 +286,12 @@ def main() -> int:
     from .backend_probe import run_probe
     from .settings import Settings
     settings = Settings.load()
+
+    # Instrumentação de performance (agregada → perf.log). No-op se desligada.
+    from . import perf
+    from .logging_setup import perf_log_file
+    perf.init(settings.perf_logging_enabled, perf_log_file())
+
     run_probe(backend=settings.ai_backend)
 
     app = QApplication(sys.argv)

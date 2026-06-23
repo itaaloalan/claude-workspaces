@@ -1083,6 +1083,15 @@ class TerminalWidget(QWidget):
         self._idle_marker_cache = None
 
     def _poll_activity(self) -> None:
+        # Wrapper só pra medir o custo total do tick (dispara a cada 250ms
+        # por console aberto). O corpo real está em _poll_activity_impl.
+        from .. import perf
+        perf.count("poll.ticks")
+        with perf.timed("poll.tick"):
+            self._poll_activity_impl()
+
+    def _poll_activity_impl(self) -> None:
+        from .. import perf
         from ..claude_activity import has_idle_marker, parse_status
         age = (
             time.monotonic() - self._last_output_time
@@ -1110,6 +1119,7 @@ class TerminalWidget(QWidget):
             # continuar parsando pra detectar se o Claude voltou a trabalhar
             # ou se os 5s estabilizaram.
             if self._pending_idle_since is None:
+                perf.count("poll.skipped")
                 return
         # Memo: com o buffer inalterado, parse_status só varia pelo bucket
         # `recent` (age<2.5s). Reusa o último Activity e pula o decode + os
@@ -1120,9 +1130,12 @@ class TerminalWidget(QWidget):
             and self._activity_cache is not None
             and self._activity_cache[0] == recent_bucket
         ):
+            perf.count("poll.cached")
             activity = self._activity_cache[1]  # type: ignore[assignment]
         else:
-            activity = parse_status(bytes(self._output_buffer), age)
+            perf.count("poll.parsed")
+            with perf.timed("poll.parse_status"):
+                activity = parse_status(bytes(self._output_buffer), age)
             self._activity_cache = (recent_bucket, activity)
         self._activity_dirty = False
 
