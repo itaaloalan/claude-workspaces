@@ -374,6 +374,11 @@ class TerminalWidget(QWidget):
         # renames externos (skill /criar-worktree etc.) escritos direto
         # no arquivo enquanto a sessão está aberta.
         self._marks_mtime_seen: float = 0.0
+        # Throttles (monotonic) de sub-etapas caras do _poll_activity, que de
+        # outra forma rodariam I/O/regex a cada tick (250ms). detect_pr decodi-
+        # fica 8KB + 4 regex; check_rename faz stat de session_marks.json.
+        self._pr_detect_last: float = 0.0
+        self._rename_check_last: float = 0.0
         # Sinaliza que esta sessão foi reaberta no startup (--resume após
         # fechar/abrir o app). Usado pra decidir se o botão ▶ continuar
         # faz sentido — em sessão nova/fresh não há nada pra continuar e
@@ -813,6 +818,12 @@ class TerminalWidget(QWidget):
         sid = self._claimed_session_id
         if not sid:
             return
+        # Throttle ~1.5s: o stat de session_marks.json a cada tick (250ms) era
+        # custo recorrente; rename externo é raro e 1.5s de latência é ok.
+        now = time.monotonic()
+        if now - self._rename_check_last < 1.5:
+            return
+        self._rename_check_last = now
         try:
             from ..session_marks import get_custom_name, marks_mtime
             mtime = marks_mtime()
@@ -1099,13 +1110,16 @@ class TerminalWidget(QWidget):
             else 999.0
         )
         # Tenta resolver o título da sessão (Claude grava JSONL ~1-3s após start)
-        self._try_resolve_session()
+        with perf.timed("poll.resolve_session"):
+            self._try_resolve_session()
         # Rename externo (skill escrevendo session_marks.json): aplica
         # antes dos early-returns abaixo pra sidebar atualizar mesmo idle.
-        self._check_external_rename()
+        with perf.timed("poll.check_rename"):
+            self._check_external_rename()
         # Worktrees criados pela sessão (skill /criar-worktree): scan
         # incremental do JSONL, throttled — antes dos early-returns abaixo.
-        self._scan_session_worktrees()
+        with perf.timed("poll.scan_worktrees"):
+            self._scan_session_worktrees()
         # Verifica callback de "pronto" independente do dirty check —
         # depende do buffer corrente, não do diff de status. Memoiza o scan
         # (mesmo decode+strip caro do parse) enquanto o buffer não muda.
@@ -1207,14 +1221,21 @@ class TerminalWidget(QWidget):
 
         # Detecção de PR: escaneia o buffer inteiro (não só a última linha)
         # pra capturar a URL mesmo que ela tenha rolado para fora das 8k.
-        from ..services.runner_url_detect import detect_pr_url
-        buf_text = bytes(self._output_buffer).decode("utf-8", errors="replace")
-        pr = detect_pr_url(buf_text)
-        if pr and pr not in self._pr_urls:
-            self._pr_urls.append(pr)
-            del self._pr_urls[:-_PR_URLS_CAP]
-            self._show_pr_banner(pr)
-            self.pr_detected.emit(pr)
+        # Throttled a ~2s: decodificar 8KB + 4 regex a cada tick dirty
+        # (~3-14Hz) era um dos maiores custos do tick e a latência de 2s pra
+        # um PR aparecer no banner é irrelevante.
+        now_pr = time.monotonic()
+        if now_pr - self._pr_detect_last >= 2.0:
+            self._pr_detect_last = now_pr
+            with perf.timed("poll.detect_pr"):
+                from ..services.runner_url_detect import detect_pr_url
+                buf_text = bytes(self._output_buffer).decode("utf-8", errors="replace")
+                pr = detect_pr_url(buf_text)
+            if pr and pr not in self._pr_urls:
+                self._pr_urls.append(pr)
+                del self._pr_urls[:-_PR_URLS_CAP]
+                self._show_pr_banner(pr)
+                self.pr_detected.emit(pr)
 
     def set_detected_pr_url(self, url: str) -> None:
         """Injeta URL de PR/MR detectado externamente (PrStatusPoller).

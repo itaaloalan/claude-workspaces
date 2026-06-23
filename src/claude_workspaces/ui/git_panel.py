@@ -59,7 +59,7 @@ from ..git_actions import (
 from ..git_actions import (
     fetch as git_fetch,
 )
-from ..git_status import GitFile, GitStatus, get_diff, get_status
+from ..git_status import GitFile, GitStatus, get_diff, get_status_fresh
 from ..git_worktree import resolve_git_dirs
 from ..models import Workspace
 from . import theme
@@ -147,11 +147,15 @@ class _StatusScanTask(QRunnable):
         self.signals = signals
 
     def run(self) -> None:
+        from .. import perf
         statuses: dict[str, GitStatus] = {}
         numstats: dict[str, dict[str, tuple[int, int]]] = {}
         for folder in self.folders:
+            perf.count("git.status.git_panel")
             try:
-                statuses[folder] = get_status(folder)
+                # Sempre fresco (o painel reflete ações do usuário na hora),
+                # mas publica no cache compartilhado pra sidebar reusar.
+                statuses[folder] = get_status_fresh(folder)
             except Exception:
                 log.exception("git_panel: get_status falhou em %s", folder)
                 statuses[folder] = GitStatus(folder=folder, is_repo=False)

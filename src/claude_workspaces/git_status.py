@@ -7,6 +7,8 @@ um repo grande ou um diretório montado lento atrapalhar.
 import logging
 import os
 import subprocess
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -176,6 +178,58 @@ def get_status(folder: str) -> GitStatus:
     except Exception as e:
         log.exception("parse porcelain v2 falhou em %s", folder)
         return GitStatus(folder=folder, is_repo=True, error=str(e))
+
+
+# --- Cache TTL compartilhado de git status --------------------------------
+# Why: `repo_status_poller` (chip da sidebar) e `git_panel` rodam `git status`
+# nas MESMAS pastas (cwd/worktree dos consoles) sem coordenação — o perf.log
+# mostrou git status como ~o 2º maior custo (1.2 subprocess/s). Um cache único
+# por pasta evita o subprocess duplicado dentro da janela do TTL. Thread-safe
+# porque os dois pollers chamam de QRunnables (QThreadPool).
+_cache_lock = threading.Lock()
+# folder -> (monotonic_ts, GitStatus)
+_status_cache: dict[str, tuple[float, GitStatus]] = {}
+
+
+def get_status_cached(folder: str, ttl: float = 8.0) -> GitStatus:
+    """Como `get_status`, mas serve um resultado recente (< `ttl` s) do cache
+    compartilhado em vez de respawnar o subprocess. Fonte única da verdade pros
+    pollers de status. Após uma ação de git (commit/pull/checkout/stage),
+    chame `invalidate(folder)` antes pra forçar leitura fresca."""
+    if not folder:
+        return GitStatus(folder=folder, is_repo=False)
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _status_cache.get(folder)
+        if hit and (now - hit[0]) < ttl:
+            return hit[1]
+    st = get_status(folder)
+    with _cache_lock:
+        _status_cache[folder] = (time.monotonic(), st)
+    return st
+
+
+def get_status_fresh(folder: str) -> GitStatus:
+    """SEMPRE roda o subprocess (status fresco) e publica o resultado no cache
+    compartilhado pra que o poller da sidebar (`get_status_cached`) reuse.
+
+    Usado pelo `git_panel`, que é a view crítica de correção: precisa refletir
+    ações do usuário (commit/stage/checkout) na hora, sem servir cache stale.
+    Como ele publica, ainda elimina o subprocess duplicado — quando o painel
+    acabou de varrer uma pasta, a sidebar reaproveita em vez de respawnar."""
+    if not folder:
+        return GitStatus(folder=folder, is_repo=False)
+    st = get_status(folder)
+    with _cache_lock:
+        _status_cache[folder] = (time.monotonic(), st)
+    return st
+
+
+def invalidate(folder: str) -> None:
+    """Remove `folder` do cache compartilhado — a próxima `get_status_cached`
+    refaz o subprocess. Use após ações que mudam o working tree."""
+    with _cache_lock:
+        _status_cache.pop(folder, None)
 
 
 def get_diff(

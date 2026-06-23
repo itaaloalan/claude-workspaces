@@ -13,7 +13,7 @@ import time
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
-from .git_status import GitStatus, get_status
+from .git_status import GitStatus, get_status_cached
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +29,10 @@ class _StatusRunner(QRunnable):
         self._signals = signals
 
     def run(self) -> None:
+        from . import perf
+        perf.count("git.status.repo_poller")
         try:
-            st = get_status(self._folder)
+            st = get_status_cached(self._folder)
         except Exception:
             log.exception("repo status poller falhou em %s", self._folder)
             st = None

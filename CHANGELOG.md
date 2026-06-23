@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.16.0] — 2026-06-23
+
+### Otimização de performance guiada pelo perf.log
+
+Com base na 1ª janela real de métricas (v1.15.0), atacamos os dois maiores
+custos e afiamos a instrumentação onde ainda estava cega.
+
+- **Tick de atividade mais barato (`_poll_activity`):**
+  - `detect_pr_url` (decodificava 8KB + 4 regex **a cada tick dirty**, ~3-14Hz)
+    agora roda no máx. a cada ~2s. Era um dos maiores custos do tick; a
+    latência de 2s pro banner de PR é irrelevante.
+  - `_check_external_rename` (fazia `stat` de session_marks.json a cada tick)
+    passa a checar a cada ~1.5s.
+  - Drill-down: o tempo do tick agora é quebrado em `poll.resolve_session`,
+    `poll.check_rename`, `poll.scan_worktrees` e `poll.detect_pr` no perf.log.
+- **Git status com cache compartilhado:** `repo_status_poller` (chip da
+  sidebar) e o painel Git rodavam `git status` nas mesmas pastas sem
+  coordenação (~1.2 subprocess/s). Novo cache TTL thread-safe em `git_status`:
+  - sidebar usa `get_status_cached` (reaproveita resultado recente);
+  - painel Git usa `get_status_fresh` — sempre fresco (reflete ações do
+    usuário na hora) **mas publica no cache**, então a sidebar reusa em vez de
+    respawnar o subprocess. Sem risco de status stale no painel.
+  - `git.status` agora é rotulado por origem (`repo_poller`/`git_panel`) no
+    perf.log.
+
 ## [1.15.0] — 2026-06-23
 
 ### Instrumentação de performance (perf.log) pra diagnosticar gargalos
