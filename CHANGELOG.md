@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.17.0] — 2026-06-24
+
+### Branch originária da worktree no header do console
+
+Ao criar uma worktree, o app sabia o path e a branch dela, mas **descartava a branch
+base** de onde ela nasceu. Agora essa origem é persistida e exibida no header do console.
+
+- **Novo `worktree_meta.py`:** persiste `{worktree_path → base_branch}` em
+  `config_dir()/worktree_bases.json` (o git não registra de onde uma branch nasceu).
+- **Captura na criação:** `git_worktree.add_worktree` grava a base quando cria branch
+  nova (cobre o dialog "Criar worktree…" e o launch). Worktrees criadas pela skill
+  `/criar-worktree` são capturadas via `scan_worktree_adds` (agora devolve
+  `(path, branch, base)`) e registradas em `adopt_worktree`.
+- **Exibição:** a 2ª linha do header do terminal ganha o segmento `origem 🌱 <base>`
+  ao lado de `branch`/`worktree`/`modelo`, quando a base é conhecida.
+- **Cleanup:** `remove_worktree` apaga o registro da worktree removida.
+
 ## [1.16.4] — 2026-06-24
 
 ### Atribuição de git status lento por pasta (perf observability)

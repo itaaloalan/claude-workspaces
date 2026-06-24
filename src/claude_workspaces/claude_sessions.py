@@ -190,13 +190,16 @@ _ENTER_WORKTREE_RE = re.compile(
 
 def scan_worktree_adds(
     jsonl_path: Path, offset: int
-) -> tuple[list[tuple[str, str]], int]:
+) -> tuple[list[tuple[str, str, str]], int]:
     """Lê linhas novas do JSONL a partir de `offset` (bytes) procurando o
     console mudando para um worktree: comandos Bash `git worktree add ...`
     (ex.: skill /criar-worktree), `git worktree move <old> <new>` (renomeio
     do worktree adotado — o hit aponta pro destino) ou o resultado da tool
     nativa EnterWorktree ("Entered worktree at <path> on branch <branch>.").
-    Devolve ([(worktree_path, branch_ou_vazio), ...], novo_offset).
+    Devolve ([(worktree_path, branch_ou_vazio, base_ou_vazio), ...], novo_offset).
+
+    `base` só vem preenchida no `git worktree add <path> -b <branch> <base>`
+    (a branch originária); move e EnterWorktree devolvem base "".
 
     Detectar EnterWorktree pelo tool_result (e não pelo tool_use) cobre as
     variantes name/path e garante que a troca foi bem-sucedida. O Bash com
@@ -221,7 +224,7 @@ def scan_worktree_adds(
     if end < 0:
         return [], offset
     new_offset = offset + end + 1
-    hits: list[tuple[str, str]] = []
+    hits: list[tuple[str, str, str]] = []
     for raw in data[: end + 1].splitlines():
         if (
             b"worktree add" not in raw
@@ -254,7 +257,7 @@ def scan_worktree_adds(
                     )
                 m = _ENTER_WORKTREE_RE.search(str(text or ""))
                 if m:
-                    hits.append((m.group("path"), m.group("branch")))
+                    hits.append((m.group("path"), m.group("branch"), ""))
                 continue
             if block.get("type") != "tool_use" or block.get("name") != "Bash":
                 continue
@@ -290,9 +293,10 @@ def scan_worktree_adds(
                     j += 1
                 if sub == "move":
                     if len(positional) >= 2:
-                        hits.append((positional[1], ""))
+                        hits.append((positional[1], "", ""))
                 elif positional:
-                    hits.append((positional[0], branch))
+                    base = positional[1] if len(positional) >= 2 else ""
+                    hits.append((positional[0], branch, base))
                 break
     return hits, new_offset
 

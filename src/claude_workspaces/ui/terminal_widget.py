@@ -1023,18 +1023,26 @@ class TerminalWidget(QWidget):
         except Exception:
             log.debug("scan de worktree no JSONL falhou", exc_info=True)
             return
-        for wt_path, branch in hits:
+        for wt_path, branch, base in hits:
             p = Path(wt_path)
             if not p.is_absolute() and self._claude_cwd:
                 p = Path(self._claude_cwd) / p
-            self.adopt_worktree(str(p), branch)
+            self.adopt_worktree(str(p), branch, base)
 
-    def adopt_worktree(self, path: str, branch: str = "") -> None:
+    def adopt_worktree(self, path: str, branch: str = "", base: str = "") -> None:
         """Associa o console a um git worktree criado durante a sessão.
-        Valida que o path é mesmo uma worktree linkada antes de adotar."""
+        Valida que o path é mesmo uma worktree linkada antes de adotar.
+        `base`, quando informada (skill /criar-worktree), registra a branch
+        originária pra exibir no header."""
         from ..git_worktree import current_branch, is_worktree_path
         if not Path(path).is_dir() or not is_worktree_path(path):
             return
+        if base:
+            try:
+                from ..worktree_meta import set_base_branch
+                set_base_branch(path, base)
+            except Exception:
+                log.debug("falha ao registrar base da worktree adotada", exc_info=True)
         if path == self._worktree_dir:
             return
         if not branch:

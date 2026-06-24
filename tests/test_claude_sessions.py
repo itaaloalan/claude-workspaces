@@ -249,7 +249,7 @@ def test_scan_worktree_adds_detects_skill_style(tmp_path: Path):
         encoding="utf-8",
     )
     hits, offset = scan_worktree_adds(f, 0)
-    assert hits == [("/repo.claude/ws_feat_x", "feat/x")]
+    assert hits == [("/repo.claude/ws_feat_x", "feat/x", "origin/develop")]
     assert offset == f.stat().st_size
 
 
@@ -262,7 +262,7 @@ def test_scan_worktree_adds_detects_b_before_path(tmp_path: Path):
         encoding="utf-8",
     )
     hits, _ = scan_worktree_adds(f, 0)
-    assert hits == [("/tmp/wt", "claude/123")]
+    assert hits == [("/tmp/wt", "claude/123", "main")]
 
 
 def test_scan_worktree_adds_detects_move(tmp_path: Path):
@@ -276,7 +276,7 @@ def test_scan_worktree_adds_detects_move(tmp_path: Path):
         encoding="utf-8",
     )
     hits, offset = scan_worktree_adds(f, 0)
-    assert hits == [("/repo.claude/ws_fix_new", "")]
+    assert hits == [("/repo.claude/ws_fix_new", "", "")]
     assert offset == f.stat().st_size
 
 
@@ -317,7 +317,7 @@ def test_scan_worktree_adds_detects_enter_worktree_result(tmp_path: Path):
         encoding="utf-8",
     )
     hits, offset = scan_worktree_adds(f, 0)
-    assert hits == [("/repo.claude/ws_feat_x", "feat/x")]
+    assert hits == [("/repo.claude/ws_feat_x", "feat/x", "")]
     assert offset == f.stat().st_size
 
 
@@ -341,7 +341,7 @@ def test_scan_worktree_adds_enter_worktree_result_em_lista(tmp_path: Path):
     })
     f.write_text(line + "\n", encoding="utf-8")
     hits, _ = scan_worktree_adds(f, 0)
-    assert hits == [("/tmp/wt3", "fix/z")]
+    assert hits == [("/tmp/wt3", "fix/z", "")]
 
 
 def test_scan_worktree_adds_bash_com_variavel_nao_explode(tmp_path: Path):
@@ -352,8 +352,9 @@ def test_scan_worktree_adds_bash_com_variavel_nao_explode(tmp_path: Path):
         _bash_line('git worktree add "$WT" "italo/api_dados_xml"') + "\n",
         encoding="utf-8",
     )
+    # Sem -b, o 2º posicional cai em base; o caller descarta o hit (path "$WT").
     hits, _ = scan_worktree_adds(f, 0)
-    assert hits == [("$WT", "")]
+    assert hits == [("$WT", "", "italo/api_dados_xml")]
 
 
 def test_scan_worktree_adds_incremental_offset(tmp_path: Path):
@@ -366,7 +367,7 @@ def test_scan_worktree_adds_incremental_offset(tmp_path: Path):
     with f.open("a", encoding="utf-8") as fp:
         fp.write(_bash_line('git worktree add "/tmp/wt2" -b "fix/y"') + "\n")
     hits, offset2 = scan_worktree_adds(f, offset)
-    assert hits == [("/tmp/wt2", "fix/y")]
+    assert hits == [("/tmp/wt2", "fix/y", "")]
     assert offset2 > offset
     # Re-scan no offset final: nada novo.
     hits, _ = scan_worktree_adds(f, offset2)
@@ -384,7 +385,7 @@ def test_scan_worktree_adds_ignores_partial_line(tmp_path: Path):
     # Completa a linha → próximo scan pega.
     f.write_text(full, encoding="utf-8")
     hits, _ = scan_worktree_adds(f, 0)
-    assert hits == [("/tmp/wt3", "")]
+    assert hits == [("/tmp/wt3", "", "")]
 
 
 def test_scan_worktree_adds_ignores_non_bash_mentions(tmp_path: Path):

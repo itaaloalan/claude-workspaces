@@ -95,6 +95,14 @@ def add_worktree(
     rc, out = _run(args, repo_path)
     if rc != 0:
         return False, out, dest
+    # Registra a branch originária pra exibir no header do console. Só faz
+    # sentido quando criamos branch nova a partir de uma base.
+    if create_branch and base_branch:
+        try:
+            from .worktree_meta import set_base_branch
+            set_base_branch(str(dest), base_branch)
+        except Exception:  # noqa: BLE001 — metadado opcional, não falha o add
+            log.debug("falha ao registrar base da worktree", exc_info=True)
     return True, "", dest
 
 
@@ -190,6 +198,12 @@ def remove_worktree(worktree_path: str) -> tuple[bool, str]:
     rc, out = _run(
         ["git", "worktree", "remove", "--force", worktree_path], main_repo
     )
+    if rc == 0:
+        try:
+            from .worktree_meta import forget_base_branch
+            forget_base_branch(worktree_path)
+        except Exception:  # noqa: BLE001 — cleanup best-effort
+            log.debug("falha ao limpar base da worktree removida", exc_info=True)
     return rc == 0, out
 
 
