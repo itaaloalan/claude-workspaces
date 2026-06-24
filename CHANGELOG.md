@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.18.2] — 2026-06-24
+
+### Tooltip completo no header do console
+
+Os campos do header do console (título, branch, worktree, origem) são cortados com
+reticências pra não forçar scroll horizontal. Agora, ao passar o mouse sobre o header,
+um tooltip exibe **todos os campos por inteiro** — workspace, console, branch (com
+↑/↓/●), worktree, origem e modelo — além dos MCPs que já apareciam. Hover em qualquer
+parte da barra revela o texto sem truncamento.
+
 ## [1.18.1] — 2026-06-24
 
 ### Fix: Reload falhava com "No conversation found" ao adotar worktree em runtime

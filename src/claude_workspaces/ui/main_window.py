@@ -5237,7 +5237,9 @@ class MainWindow(QMainWindow):
         except Exception:
             display = term.effective_title() or "console"
         # Trunca o título do console pra evitar que empurre o sizeHint do
-        # label e force scroll horizontal na janela.
+        # label e force scroll horizontal na janela. `display_full` guarda o
+        # valor inteiro pro tooltip (que mostra tudo sem reticências).
+        display_full = display
         if len(display) > 48:
             display = display[:47] + "…"
         ws_html = (
@@ -5251,6 +5253,9 @@ class MainWindow(QMainWindow):
         # lógica de extrair branch do git/model do JSONL.
         branch_html = ""
         model_html = ""
+        # Valores inteiros (sem truncar) pro tooltip do header.
+        branch_tip = ""
+        model_full = ""
         try:
             tab_id = tab_uid_of(term)
             tree_item = self.terminals_coord.state.tree_items.get(tab_id)
@@ -5280,6 +5285,14 @@ class MainWindow(QMainWindow):
                             f"<span style='color:#e5b53b;font-weight:600'>"
                             f"⎇ {short}</span>{sync_html}{mod_html}"
                         )
+                        sync_tip = ""
+                        if ahead > 0:
+                            sync_tip += f" ↑{ahead}"
+                        if behind > 0:
+                            sync_tip += f" ↓{behind}"
+                        if modified > 0:
+                            sync_tip += f" ●{modified}"
+                        branch_tip = f"⎇ {branch}{sync_tip}"
                     if model:
                         model_html = (
                             f" <span style='color:#555'>·</span> "
@@ -5287,15 +5300,18 @@ class MainWindow(QMainWindow):
                             f"<span style='color:#6aa9e0;font-weight:600'>"
                             f"{model}</span>"
                         )
+                        model_full = model
         except Exception:
             pass
         # Worktree: badge destacado quando o console roda numa git worktree
         # isolada. `worktree_label()` vem como " · <branch>" — extrai o nome.
         worktree_html = ""
+        wt_full = ""
         if term.is_worktree():
             from html import escape
             wt = term.worktree_label().strip().lstrip("·").strip()
             label = wt or "isolado"
+            wt_full = label
             if len(label) > 30:
                 label = label[:29] + "…"
             worktree_html = (
@@ -5306,11 +5322,13 @@ class MainWindow(QMainWindow):
         # Branch originária: a base de onde a worktree foi criada (registrada
         # em worktree_meta na criação). Só aparece se conhecida.
         origem_html = ""
+        base_full = ""
         if term.is_worktree():
             from html import escape
             from ..worktree_meta import get_base_branch
             base = get_base_branch(term.worktree_dir())
             if base:
+                base_full = base
                 b = base if len(base) <= 25 else base[:24] + "…"
                 origem_html = (
                     f" <span style='color:#555'>·</span> "
@@ -5356,9 +5374,21 @@ class MainWindow(QMainWindow):
         if getattr(self, "_terminal_pane_title_last", None) == new_text:
             return
         self._terminal_pane_title.setText(new_text)
-        self._terminal_pane_title.setToolTip(
-            "MCPs ativos:\n• " + "\n• ".join(mcp_names) if mcp_names else ""
-        )
+        # Tooltip com TODOS os campos por inteiro (sem o truncamento que o
+        # header faz pra não forçar scroll): hover em qualquer parte revela
+        # console/branch/worktree/origem/modelo/MCPs completos.
+        tip_parts = [f"workspace: {ws.name}", f"console: {display_full}"]
+        if branch_tip:
+            tip_parts.append(f"branch: {branch_tip}")
+        if wt_full:
+            tip_parts.append(f"worktree: 🌿 {wt_full}")
+        if base_full:
+            tip_parts.append(f"origem: 🌱 {base_full}")
+        if model_full:
+            tip_parts.append(f"modelo: {model_full}")
+        if mcp_names:
+            tip_parts.append("MCPs: " + ", ".join(mcp_names))
+        self._terminal_pane_title.setToolTip("\n".join(tip_parts))
         self._terminal_pane_title_last = new_text
 
     def _sync_console_runner_host(self) -> None:
