@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.17.1] — 2026-06-24
+
+### Console aberto/restaurado dentro de um worktree abre o worktree errado nas IDEs
+
+Em workspace multi-repo, quando o console nasce dentro de um worktree (restore de
+sessão com `origin_cwd` no worktree, ou menu que passa um worktree de repo único como
+`cwd_override`), o `launch_coordinator` montava os `extras` filtrando
+`workspace.folders` por `f != cwd_override`. Como `cwd_override` é o **path do
+worktree** e as pastas do workspace são os repos **principais**, o filtro era no-op:
+todos os principais entravam, **duplicando** o repo do `cwd` (ex.: dois `map-api`) e
+abrindo os repos-irmãos no **checkout principal** em vez do worktree-irmão na mesma
+branch.
+
+- Agora cada pasta do workspace é traduzida pro worktree-irmão na mesma branch via
+  `translate_dir_for_repo` (quando existir; senão cai no principal), e o repo do
+  próprio `cwd` é excluído pra não duplicar.
+- Mesma tradução aplicada ao branch `existing_wt` do diálogo de launch.
+- Corrige `--add-dir`, barra de contexto (chip `+N dir`), dropdown de IDE e painel Git
+  de uma só vez — todos consomem `extras`.
+
 ## [1.17.0] — 2026-06-24
 
 ### Branch originária da worktree no header do console

@@ -80,11 +80,24 @@ class LaunchCoordinator(QObject):
                 current_branch,
                 is_worktree_group,
                 is_worktree_path,
+                translate_dir_for_repo,
                 worktree_group_members,
             )
             if is_worktree_path(cwd):
                 is_worktree = True
-                extras = [f for f in workspace.folders if f != cwd_override]
+                # cwd é o worktree de UM repo. As pastas do workspace são os
+                # repos PRINCIPAIS; cada uma vira seu worktree-irmão na mesma
+                # branch (quando existir) e o repo do próprio cwd é excluído
+                # pra não duplicar. Sem isso o filtro `f != cwd_override` era
+                # no-op (worktree != path do principal) → todos os principais
+                # entravam, duplicando o repo do cwd e abrindo os irmãos no
+                # checkout principal em vez do worktree-irmão.
+                extras = []
+                for f in workspace.folders:
+                    tr = translate_dir_for_repo(cwd, f)
+                    if tr == cwd:            # mesmo repo do cwd → não duplica
+                        continue
+                    extras.append(tr or f)   # irmão-worktree, ou principal
                 if not worktree_label:
                     br = current_branch(cwd)
                     worktree_label = f" · {br}" if br else " · isolado"
@@ -112,8 +125,12 @@ class LaunchCoordinator(QObject):
             if existing_wt is not None:
                 repo_folder, wt_path, wt_branch = existing_wt
                 cwd = wt_path
+                from ...git_worktree import translate_dir_for_repo
+                # Irmãos traduzidos pro worktree na mesma branch (quando
+                # existir); senão caem no principal. repo_folder já é excluído.
                 extras = [
-                    f for f in dialog.result_folders() if f != repo_folder
+                    translate_dir_for_repo(wt_path, f) or f
+                    for f in dialog.result_folders() if f != repo_folder
                 ]
                 worktree_label = f" · {wt_branch}" if wt_branch else " · isolado"
                 is_worktree = True
