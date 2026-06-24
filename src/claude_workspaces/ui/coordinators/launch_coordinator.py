@@ -283,9 +283,16 @@ class LaunchCoordinator(QObject):
         backend = terminal.backend() or self.settings.ai_backend
         argv, backend = self._build_ai_args(workspace, extras, sid, backend)
         backend_short = "opencode" if backend == "opencode" else "claude"
-        # Solta o claim antigo: ao resumir num cwd diferente o Claude cria um
-        # JSONL novo (id novo) e o _try_resolve_session re-vincula migrando o
-        # custom_name. Sem soltar, o widget ficaria preso no id antigo.
+        # O Claude indexa sessões por cwd: `--resume <sid>` só acha o JSONL no
+        # projeto do cwd atual. Se o reload muda o cwd (worktree adotado em
+        # runtime), o arquivo da sessão fica no projeto do cwd antigo e o
+        # resume falha com "No conversation found with session ID". Copiamos o
+        # JSONL pro projeto do novo cwd antes de subir, preservando o contexto.
+        if backend != "opencode":
+            self._ensure_session_in_cwd(terminal, sid, cwd)
+        # Solta o claim antigo: o _try_resolve_session re-vincula o id (agora
+        # presente no novo cwd) migrando o custom_name. Sem soltar, o widget
+        # ficaria preso no claim anterior.
         terminal.release_session_claim()
         terminal.configure_claude(cwd, sid, backend=backend)
         terminal.set_context_info(
@@ -319,6 +326,38 @@ class LaunchCoordinator(QObject):
         )
         self.sessions_refresh_requested.emit()
         return True
+
+    @staticmethod
+    def _ensure_session_in_cwd(
+        terminal: TerminalWidget, session_id: str, new_cwd: str
+    ) -> None:
+        """Garante que o JSONL da sessão exista no projeto do `new_cwd`, pra que
+        `claude --resume <session_id>` o encontre. Procura o arquivo onde ele
+        está hoje (cwd antigo do terminal, ou varrendo ~/.claude/projects) e o
+        copia pro diretório do novo cwd. No-op se o arquivo já estiver lá ou se
+        a origem não for localizável."""
+        import shutil
+
+        from ...claude_sessions import find_session_file, project_sessions_dir
+
+        dest_dir = project_sessions_dir(new_cwd)
+        dest = dest_dir / f"{session_id}.jsonl"
+        if dest.is_file():
+            return
+        src = terminal.claimed_session_path()
+        if src is None or not src.is_file() or src.suffix != ".jsonl":
+            src = find_session_file(session_id)
+        if src is None or src == dest:
+            return
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            log.info("sessão %s copiada de %s para %s", session_id, src, dest)
+        except OSError:
+            log.warning(
+                "não consegui copiar a sessão %s para %s — resume pode falhar",
+                session_id, dest, exc_info=True,
+            )
 
     @staticmethod
     def _reload_confirmation_message(

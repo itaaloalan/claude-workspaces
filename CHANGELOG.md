@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.18.1] — 2026-06-24
+
+### Fix: Reload falhava com "No conversation found" ao adotar worktree em runtime
+
+O botão **🔄 Reload** quebrava quando o console tinha adotado um worktree diferente do
+cwd em que o Claude subiu: o relaunch rodava `claude --resume <session_id>` no novo cwd,
+mas o Claude indexa sessões por diretório (cada projeto tem sua pasta em
+`~/.claude/projects/`), então o JSONL da conversa ficava no projeto do cwd antigo e o
+resume estourava `No conversation found with session ID`.
+
+- **Copia o JSONL da sessão pro projeto do novo cwd antes de resumir**, preservando o
+  contexto. Localiza o arquivo onde ele está hoje (cwd vigente do terminal ou varrendo
+  `~/.claude/projects/`) via novo helper `find_session_file`.
+- No-op quando o arquivo já está no destino ou a origem não é localizável; só atua no
+  backend `claude` (opencode usa DB).
+
 ## [1.18.0] — 2026-06-24
 
 ### Botão "🔄 Reload" da sessão no header do console

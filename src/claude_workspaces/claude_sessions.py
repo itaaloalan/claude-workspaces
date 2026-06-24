@@ -87,6 +87,27 @@ def project_sessions_dir(project_path: str) -> Path:
     return Path.home() / ".claude" / "projects" / _encode_project_path(project_path)
 
 
+def find_session_file(session_id: str) -> Path | None:
+    """Localiza o JSONL de uma sessão pelo id, varrendo todos os projetos em
+    ~/.claude/projects. O Claude indexa sessões por cwd (cada projeto tem sua
+    pasta), então um `--resume <id>` só acha o arquivo no projeto do cwd atual;
+    pra resumir num cwd diferente (ex.: worktree adotado) precisamos achar o
+    arquivo onde ele realmente está. Devolve None se não existir."""
+    if not session_id:
+        return None
+    base = Path.home() / ".claude" / "projects"
+    if not base.is_dir():
+        return None
+    try:
+        for proj in base.iterdir():
+            f = proj / f"{session_id}.jsonl"
+            if f.is_file():
+                return f
+    except OSError:
+        log.debug("varredura de projetos falhou", exc_info=True)
+    return None
+
+
 def _extract_text(content) -> str:
     """Normaliza o campo `content` (str ou lista de blocos) pra um texto único.
     Pula blocos não-textuais (tool_use, tool_result, image)."""

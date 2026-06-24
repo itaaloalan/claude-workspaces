@@ -16,6 +16,7 @@ from claude_workspaces.claude_sessions import (
     _encode_project_path,
     _extract_text,
     _read_first_user_message,
+    find_session_file,
     list_sessions,
     list_sessions_for_paths,
     project_sessions_dir,
@@ -161,6 +162,29 @@ def test_list_sessions_for_paths_dedups_and_orders(tmp_path, monkeypatch):
     # Mais recente primeiro
     assert out[0].path == new
     assert out[1].path == old
+
+
+def test_find_session_file_locates_across_projects(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    dir_a = project_sessions_dir("/repo/a")
+    dir_b = project_sessions_dir("/repo/b")
+    dir_a.mkdir(parents=True)
+    dir_b.mkdir(parents=True)
+    target = dir_b / "abc-123.jsonl"
+    _write_session(target, [{"type": "user", "message": {"content": "oi"}}])
+
+    assert find_session_file("abc-123") == target
+
+
+def test_find_session_file_returns_none_when_missing(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    assert find_session_file("nope") is None
+    assert find_session_file("") is None
 
 
 def test_claude_session_label_today_includes_hour():
