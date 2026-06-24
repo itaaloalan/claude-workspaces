@@ -1611,6 +1611,24 @@ class MainWindow(QMainWindow):
         self._worktree_chip_btn.clicked.connect(self._open_pane_worktree_menu)
         self._worktree_chip_btn.setVisible(False)
         th_layout.addWidget(self._worktree_chip_btn)
+        # Chip "🔄 Reload" — reinicia o processo do console mantendo o contexto
+        # (claude --resume), pegando o worktree recém-criado e a config MCP/banco
+        # atual. Evita ter que fechar e reabrir a sessão na mão.
+        self._reload_chip_btn = _QPB2("🔄 Reload")
+        self._reload_chip_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #9aa0a6; "
+            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "padding: 1px 8px; font-size: 11px; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+        )
+        self._reload_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._reload_chip_btn.setToolTip(
+            "Recarregar a sessão: reinicia o processo mantendo o contexto "
+            "(claude --resume) pra pegar o worktree criado ou o banco trocado"
+        )
+        self._reload_chip_btn.clicked.connect(self._reload_active_session)
+        self._reload_chip_btn.setVisible(False)
+        th_layout.addWidget(self._reload_chip_btn)
         # Chip "VS Code" — abre o worktree (ou a pasta do console) no editor
         # configurado (settings.vscode_command, default "code").
         self._vscode_chip_btn = _QPB2(" VS Code")
@@ -2891,6 +2909,36 @@ class MainWindow(QMainWindow):
                 if synced else ""
             )
             flash_toast(f"Worktree criado: 🌿 {branch} — {path}{extra}")
+
+    def _reload_active_session(self) -> None:
+        """Chip 🔄 Reload: reinicia o processo do console ativo mantendo o
+        contexto (claude --resume). Pega o worktree recém-criado/adotado e
+        regenera a config MCP (banco trocado). Confirma quando a sessão está
+        ocupada pra não interromper uma tarefa em andamento."""
+        from .persistent_toast import flash_toast
+
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        ws = None
+        if area is not None:
+            for ws_id, a in self.terminals_coord._areas.items():
+                if a is area:
+                    ws = self.workspaces_coord.find_by_id(ws_id)
+                    break
+        if ws is None or not isinstance(term, TerminalWidget):
+            return
+        if term.is_running() and getattr(term, "_last_working", False):
+            resp = QMessageBox.question(
+                self,
+                "Recarregar sessão",
+                "A sessão parece estar processando algo agora. Recarregar "
+                "vai reiniciar o processo (o contexto é preservado via "
+                "--resume). Continuar?",
+            )
+            if resp != QMessageBox.StandardButton.Yes:
+                return
+        if self.launch_coord.reload_session(term, ws):
+            flash_toast("Sessão recarregada 🔄 — contexto preservado")
 
     def _open_pane_worktree_menu(self) -> None:
         """Menu do chip 🌿 no header do terminal pane: alternar a sessão
@@ -5168,6 +5216,8 @@ class MainWindow(QMainWindow):
             )
             if hasattr(self, "_worktree_chip_btn"):
                 self._worktree_chip_btn.setVisible(False)
+            if hasattr(self, "_reload_chip_btn"):
+                self._reload_chip_btn.setVisible(False)
             if hasattr(self, "_vscode_chip_btn"):
                 self._vscode_chip_btn.setVisible(False)
             if getattr(self, "_terminal_pane_title_last", None) != placeholder:
@@ -5177,6 +5227,8 @@ class MainWindow(QMainWindow):
             return
         if hasattr(self, "_worktree_chip_btn"):
             self._worktree_chip_btn.setVisible(True)
+        if hasattr(self, "_reload_chip_btn"):
+            self._reload_chip_btn.setVisible(True)
         if hasattr(self, "_vscode_chip_btn"):
             self._vscode_chip_btn.setVisible(True)
         # `#N título` no mesmo formato usado pelo sidebar/área.

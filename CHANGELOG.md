@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.18.0] — 2026-06-24
+
+### Botão "🔄 Reload" da sessão no header do console
+
+Depois de **criar uma worktree** (o processo do Claude continuava no cwd antigo) ou
+**trocar o banco** (MCP com a conexão velha), era preciso fechar e reabrir a sessão na
+mão. Agora há um botão **🔄 Reload** ao lado de Worktree/VS Code no header do terminal.
+
+- **Reinício preservando contexto:** mata o processo atual e relança com
+  `claude --resume <session_id>`, então a conversa continua de onde parou.
+- **Pega o cwd vigente:** se o console adotou um worktree em runtime, o reload reinicia
+  já dentro dele (com os repos-irmãos como `--add-dir`).
+- **Regenera a config MCP** do workspace no relaunch, então `/trocar-banco` (que reescreve
+  o MCP) passa a valer sem reabrir tudo.
+- **Mensagem automática pro Claude:** quando ele volta a ficar pronto, o app injeta uma
+  confirmação do reload com o worktree atual e os MCPs disponíveis no contexto.
+- **Guarda contra interrupção:** se a sessão está processando algo, pede confirmação antes.
+- Refatora o `launch_coordinator` extraindo `_cwd_context_from_override` e `_build_ai_args`
+  como fonte única compartilhada entre launch e reload.
+
 ## [1.17.1] — 2026-06-24
 
 ### Console aberto/restaurado dentro de um worktree abre o worktree errado nas IDEs

@@ -75,45 +75,9 @@ class LaunchCoordinator(QObject):
         initial_prompt = ""
         submit_initial_prompt = False
         if cwd_override:
-            cwd = cwd_override
-            from ...git_worktree import (
-                current_branch,
-                is_worktree_group,
-                is_worktree_path,
-                translate_dir_for_repo,
-                worktree_group_members,
+            cwd, extras, worktree_label, is_worktree = self._cwd_context_from_override(
+                workspace, cwd_override
             )
-            if is_worktree_path(cwd):
-                is_worktree = True
-                # cwd é o worktree de UM repo. As pastas do workspace são os
-                # repos PRINCIPAIS; cada uma vira seu worktree-irmão na mesma
-                # branch (quando existir) e o repo do próprio cwd é excluído
-                # pra não duplicar. Sem isso o filtro `f != cwd_override` era
-                # no-op (worktree != path do principal) → todos os principais
-                # entravam, duplicando o repo do cwd e abrindo os irmãos no
-                # checkout principal em vez do worktree-irmão.
-                extras = []
-                for f in workspace.folders:
-                    tr = translate_dir_for_repo(cwd, f)
-                    if tr == cwd:            # mesmo repo do cwd → não duplica
-                        continue
-                    extras.append(tr or f)   # irmão-worktree, ou principal
-                if not worktree_label:
-                    br = current_branch(cwd)
-                    worktree_label = f" · {br}" if br else " · isolado"
-            elif is_worktree_group(cwd):
-                is_worktree = True
-                # Pasta-pai do grupo: cada membro é o worktree de UM repo.
-                # Sem popular extras, o console não recebia as pastas-irmãs
-                # (--add-dir do Claude, painel Git, abrir no editor) e tudo a
-                # jusante enxergava só uma pasta.
-                members = worktree_group_members(cwd)
-                extras = [m["path"] for m in members]
-                if not worktree_label:
-                    br = members[0]["branch"] if members else ""
-                    worktree_label = f" · {br}" if br else " · grupo"
-            else:
-                extras = [f for f in workspace.folders if f != cwd_override]
         elif not resume_session_id and not skip_dialog:
             # Importa local pra evitar circular import e custo de
             # importar Qt widgets pesados em testes
@@ -156,17 +120,9 @@ class LaunchCoordinator(QObject):
             initial_prompt = dialog.result_initial_prompt()
             submit_initial_prompt = bool(initial_prompt.strip())
 
-        backend = backend_override or self.settings.ai_backend
-        if backend == "opencode":
-            command = self.settings.opencode_command or "opencode"
-            launch_args = [
-                *self.settings.opencode_extra_args,
-                *self.settings.opencode_session_flags(),
-            ]
-        else:
-            command = self.settings.claude_command or "claude"
-            launch_args = self.settings.claude_launch_args()
-
+        argv, backend = self._build_ai_args(
+            workspace, extras, resume_session_id, backend_override
+        )
         if backend == "opencode" and extras:
             extra_context = _opencode_extra_dirs_prompt(extras)
             initial_prompt = (
@@ -174,26 +130,6 @@ class LaunchCoordinator(QObject):
                 if initial_prompt.strip()
                 else extra_context
             )
-        # Escopo de MCP por workspace: gera um arquivo de config só com os MCP
-        # que este workspace precisa e passa --mcp-config --strict-mcp-config.
-        # Evita que toda sessão suba TODOS os MCP globais (gargalo de memória).
-        # Só pro backend claude e quando a feature está ligada.
-        mcp_config_path = ""
-        if backend != "opencode" and self.settings.mcp_scope_per_workspace:
-            try:
-                from ...services.mcp_scope import write_workspace_mcp_config
-                mcp_config_path = write_workspace_mcp_config(workspace) or ""
-            except Exception:
-                log.debug("Falha gerando config MCP do workspace", exc_info=True)
-
-        argv = build_ai_argv(
-            backend,
-            command,
-            launch_args,
-            extras,
-            resume_session_id,
-            mcp_config_path,
-        )
 
         area = self.terminals.get_or_create_area(workspace)
         backend_short = "opencode" if backend == "opencode" else "claude"
@@ -233,6 +169,185 @@ class LaunchCoordinator(QObject):
             )
         self.sessions_refresh_requested.emit()
         return terminal
+
+    def _cwd_context_from_override(
+        self, workspace: Workspace, cwd_override: str
+    ) -> tuple[str, list[str], str, bool]:
+        """Resolve (cwd, extras, worktree_label, is_worktree) a partir de um
+        cwd explícito — worktree de um repo, pasta-pai de grupo, ou pasta
+        comum. Usado pelo launch com cwd_override e pelo reload da sessão."""
+        cwd = cwd_override
+        from ...git_worktree import (
+            current_branch,
+            is_worktree_group,
+            is_worktree_path,
+            translate_dir_for_repo,
+            worktree_group_members,
+        )
+        if is_worktree_path(cwd):
+            # cwd é o worktree de UM repo. As pastas do workspace são os
+            # repos PRINCIPAIS; cada uma vira seu worktree-irmão na mesma
+            # branch (quando existir) e o repo do próprio cwd é excluído
+            # pra não duplicar. Sem isso o filtro `f != cwd_override` era
+            # no-op (worktree != path do principal) → todos os principais
+            # entravam, duplicando o repo do cwd e abrindo os irmãos no
+            # checkout principal em vez do worktree-irmão.
+            extras = []
+            for f in workspace.folders:
+                tr = translate_dir_for_repo(cwd, f)
+                if tr == cwd:            # mesmo repo do cwd → não duplica
+                    continue
+                extras.append(tr or f)   # irmão-worktree, ou principal
+            br = current_branch(cwd)
+            worktree_label = f" · {br}" if br else " · isolado"
+            return cwd, extras, worktree_label, True
+        if is_worktree_group(cwd):
+            # Pasta-pai do grupo: cada membro é o worktree de UM repo.
+            # Sem popular extras, o console não recebia as pastas-irmãs
+            # (--add-dir do Claude, painel Git, abrir no editor) e tudo a
+            # jusante enxergava só uma pasta.
+            members = worktree_group_members(cwd)
+            extras = [m["path"] for m in members]
+            br = members[0]["branch"] if members else ""
+            worktree_label = f" · {br}" if br else " · grupo"
+            return cwd, extras, worktree_label, True
+        extras = [f for f in workspace.folders if f != cwd_override]
+        return cwd, extras, "", False
+
+    def _build_ai_args(
+        self,
+        workspace: Workspace,
+        extras: list[str],
+        resume_session_id: str,
+        backend_override: str,
+    ) -> tuple[list[str], str]:
+        """Monta o argv do backend (claude/opencode) + regenera a config MCP
+        do workspace. Devolve (argv, backend). Fonte única usada pelo launch
+        e pelo reload."""
+        backend = backend_override or self.settings.ai_backend
+        if backend == "opencode":
+            command = self.settings.opencode_command or "opencode"
+            launch_args = [
+                *self.settings.opencode_extra_args,
+                *self.settings.opencode_session_flags(),
+            ]
+        else:
+            command = self.settings.claude_command or "claude"
+            launch_args = self.settings.claude_launch_args()
+        # Escopo de MCP por workspace: gera um arquivo de config só com os MCP
+        # que este workspace precisa e passa --mcp-config --strict-mcp-config.
+        # Regerar aqui faz o reload pegar mudanças de MCP/banco feitas após o
+        # launch (ex.: /trocar-banco que reescreveu o MCP no ~/.claude.json).
+        mcp_config_path = ""
+        if backend != "opencode" and self.settings.mcp_scope_per_workspace:
+            try:
+                from ...services.mcp_scope import write_workspace_mcp_config
+                mcp_config_path = write_workspace_mcp_config(workspace) or ""
+            except Exception:
+                log.debug("Falha gerando config MCP do workspace", exc_info=True)
+        argv = build_ai_argv(
+            backend,
+            command,
+            launch_args,
+            extras,
+            resume_session_id,
+            mcp_config_path,
+        )
+        return argv, backend
+
+    def reload_session(
+        self, terminal: TerminalWidget, workspace: Workspace
+    ) -> bool:
+        """Reinicia o processo do console mantendo o contexto: mata o backend
+        atual e relança com `--resume <session_id>`, no cwd vigente (worktree
+        adotado em runtime, se houver) e regerando a config MCP. Resolve os
+        dois casos onde hoje é preciso reabrir a sessão na mão: criar uma
+        worktree (o processo continuava no cwd antigo) e trocar o banco (MCP
+        com a conexão velha). Devolve True se reiniciou."""
+        sid = terminal.claimed_session_id()
+        if not sid:
+            QMessageBox.information(
+                self._parent_window,
+                "Recarregar sessão",
+                "A sessão ainda não foi identificada — aguarde alguns "
+                "segundos após o Claude subir e tente de novo.",
+            )
+            return False
+        # Worktree adotado em runtime vira o novo cwd; senão mantém o cwd atual.
+        new_cwd = terminal.worktree_dir() or terminal.claude_cwd() or ""
+        if not new_cwd:
+            return False
+        cwd, extras, worktree_label, is_worktree = self._cwd_context_from_override(
+            workspace, new_cwd
+        )
+        backend = terminal.backend() or self.settings.ai_backend
+        argv, backend = self._build_ai_args(workspace, extras, sid, backend)
+        backend_short = "opencode" if backend == "opencode" else "claude"
+        # Solta o claim antigo: ao resumir num cwd diferente o Claude cria um
+        # JSONL novo (id novo) e o _try_resolve_session re-vincula migrando o
+        # custom_name. Sem soltar, o widget ficaria preso no id antigo.
+        terminal.release_session_claim()
+        terminal.configure_claude(cwd, sid, backend=backend)
+        terminal.set_context_info(
+            cwd, extras,
+            worktree_label=worktree_label,
+            is_worktree=is_worktree,
+            workspace_folders=list(workspace.folders),
+        )
+        label = f"{backend_short} — {workspace.name}{worktree_label}"
+        try:
+            # start_shell_command → _start_now mata o PTY atual antes de subir.
+            terminal.start_shell_command(
+                argv,
+                cwd,
+                label=label,
+                shell=self.settings.shell_command or None,
+            )
+        except Exception as e:
+            log.exception("Falha ao recarregar sessão")
+            QMessageBox.warning(self._parent_window, "Falha", str(e))
+            return False
+        # Quando o Claude voltar a ficar pronto (idle), injeta uma mensagem
+        # confirmando o reload + o contexto vigente (worktree + MCPs), pra ele
+        # saber em que diretório/ferramentas está operando agora.
+        msg = self._reload_confirmation_message(
+            cwd, worktree_label, is_worktree, workspace
+        )
+        terminal.when_claude_ready(
+            lambda ok, t=terminal, m=msg: t.send_text(m, submit=True) if ok else None,
+            timeout_ms=30000,
+        )
+        self.sessions_refresh_requested.emit()
+        return True
+
+    @staticmethod
+    def _reload_confirmation_message(
+        cwd: str, worktree_label: str, is_worktree: bool, workspace: Workspace
+    ) -> str:
+        """Mensagem injetada no console após o reload, confirmando o estado
+        do contexto pro Claude (worktree atual + MCPs disponíveis)."""
+        branch = worktree_label.strip().lstrip("·").strip()
+        if is_worktree:
+            wt_line = f"🌿 Worktree: {branch or '(isolado)'} — `{cwd}`"
+        else:
+            wt_line = f"📁 Diretório: `{cwd}` (sem worktree isolado)"
+        try:
+            from ...services.mcp_inspector import list_project_server_names_cached
+            mcps = list_project_server_names_cached(list(workspace.folders))
+        except Exception:
+            mcps = []
+        mcp_line = (
+            "🔌 MCPs neste contexto: " + ", ".join(mcps)
+            if mcps else "🔌 MCPs neste contexto: nenhum"
+        )
+        return (
+            "[reload automático] A sessão foi recarregada — o processo "
+            "reiniciou e o contexto foi preservado via --resume. "
+            "Contexto atual:\n"
+            f"- {wt_line}\n"
+            f"- {mcp_line}\n"
+            "Pode continuar de onde paramos."
+        )
 
     def launch_shell(
         self, workspace: Workspace, cwd_override: str | None = None
