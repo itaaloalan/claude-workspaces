@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.18.3] — 2026-06-24
+
+### Limpa runners de console órfãos automaticamente
+
+Cópias de runners criadas pelo "⬇ Subir stack" ficavam taggeadas pelo `session_id`
+do console dono. Quando o console era fechado/morria, a cópia virava lixo permanente
+(um resume gera id novo, então a cópia antiga nunca reataca) — elas se acumulavam
+indefinidamente (no sipepro havia 48 runners, 44 órfãos de 20+ consoles fechados),
+poluindo a sidebar e fazendo a remoção por escopo parecer quebrada ("não apaga").
+
+- **GC no startup**: logo após o restore das sessões, remove as cópias console-scoped
+  cujo `console_session_id` não corresponde a nenhuma sessão viva/restaurável (sessão
+  salva com JSONL existente ou console já aberto). Chaves `pending:` (por-processo) e
+  sids de consoles que não voltaram são removidos. Cópias de consoles restaurados são
+  preservadas.
+- **Remoção por escopo não é mais beco sem saída**: ao clicar "✕ Remover todos" num
+  painel cujo escopo está vazio mas que tem runners de OUTROS consoles, abre o
+  gerenciador "Runners de consoles…" (remover por grupo / limpar órfãos) em vez do
+  antigo "Não há runners para remover neste escopo".
+
 ## [1.18.2] — 2026-06-24
 
 ### Tooltip completo no header do console

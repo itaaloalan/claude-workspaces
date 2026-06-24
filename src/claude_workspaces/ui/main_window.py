@@ -425,6 +425,9 @@ class MainWindow(QMainWindow):
             lambda: (
                 self._restore_sessions(),
                 setattr(self, "_restoring_sessions", False),
+                # Limpa cópias console-scoped de consoles que não voltaram
+                # (fechados/mortos) — senão acumulam indefinidamente.
+                self._gc_orphan_console_runners(),
                 # Seed do payload logo após o restore: o timer só escreve quando
                 # algo mudar em relação a este estado inicial, evitando que o
                 # primeiro tick sobrescreva sessões recém-restauradas que ainda
@@ -5670,6 +5673,57 @@ class MainWindow(QMainWindow):
                 area._refresh_from_workspace()
         self._refresh_runner_children(ws.id)
         self._refresh_console_runners_footer()
+
+    def _gc_orphan_console_runners(self) -> None:
+        """Remove cópias console-scoped órfãs — runners cujo
+        console_session_id não corresponde a nenhuma sessão viva/restaurável.
+
+        Roda no startup (logo após o restore). Cópias de "⬇ Subir stack"
+        ficam em workspace.runners taggeadas pelo session_id do console dono;
+        quando o console é fechado/morre, a cópia vira lixo permanente (um
+        resume gera id novo, então a cópia antiga nunca reataca). Sem isto
+        elas se acumulam indefinidamente (dezenas de grupos), poluem a
+        sidebar e confundem a remoção por escopo.
+
+        Mantém só cópias de consoles que ESTÃO abertos agora ou que serão
+        restaurados (sessões salvas com JSONL existente). Chaves `pending:`
+        são por-processo (baseadas no tab_uid) — nunca sobrevivem a um
+        restart, então sempre caem aqui.
+        """
+        keep: set[str] = set()
+        try:
+            for entry in load_saved_sessions():
+                try:
+                    if entry.session_file().exists():
+                        keep.add(entry.session_id)
+                except Exception:
+                    continue
+        except Exception:
+            log.debug("GC de runners órfãos: load_saved_sessions falhou", exc_info=True)
+            return
+        # Sessões já abertas nesta execução (cobre consoles criados antes do GC).
+        for ws_id in list(self._console_runner_areas.keys()):
+            keep |= self._open_console_sids(ws_id)
+        total_removed = 0
+        for ws in list(self.workspaces):
+            orphans = {
+                r.id for r in ws.runners
+                if (sid := (r.console_session_id or "")) and sid not in keep
+            }
+            if not orphans:
+                continue
+            ws.runners = [r for r in ws.runners if r.id not in orphans]
+            total_removed += len(orphans)
+            self._persist_workspace(ws)
+            for area in self._console_runner_areas.get(ws.id, {}).values():
+                area._refresh_from_workspace()
+            self._refresh_runner_children(ws.id)
+        if total_removed:
+            log.info(
+                "GC de runners de console: %d cópia(s) órfã(s) removida(s)",
+                total_removed,
+            )
+            self._refresh_console_runners_footer()
 
     def _open_console_runners_manager(self, workspace: Workspace) -> None:
         """Dialog "Runners de consoles": quantos consoles têm runners e

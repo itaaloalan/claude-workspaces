@@ -307,6 +307,33 @@ def test_persist_active_sessions_skips_rewrite_when_unchanged(main_window):
     assert len(calls) == 1
 
 
+def test_gc_orphan_console_runners(main_window):
+    """O GC remove cópias console-scoped de consoles mortos, preserva runners
+    workspace-scoped e cópias de sessões vivas/restauráveis."""
+    from types import SimpleNamespace
+
+    from claude_workspaces.models import RunnerConfig
+    from claude_workspaces.ui import main_window as mw
+
+    ws = _add_ws(main_window, "gctest")
+    ws.runners = [
+        RunnerConfig(name="api"),                                   # workspace-scope
+        RunnerConfig(name="api", console_session_id="live-sid"),    # console vivo
+        RunnerConfig(name="api", console_session_id="dead-sid"),    # console morto
+        RunnerConfig(name="web", console_session_id="pending:7f"),  # pending órfão
+    ]
+
+    live = SimpleNamespace(
+        session_id="live-sid",
+        session_file=lambda: SimpleNamespace(exists=lambda: True),
+    )
+    with patch.object(mw, "load_saved_sessions", return_value=[live]):
+        main_window._gc_orphan_console_runners()
+
+    remaining = {(r.name, r.console_session_id) for r in ws.runners}
+    assert remaining == {("api", ""), ("api", "live-sid")}
+
+
 def test_persist_on_shutdown_is_idempotent(main_window):
     """closeEvent + aboutToQuit podem ambos chamar _persist_on_shutdown; só o
     primeiro grava, o segundo vira no-op (não clobbera com lista vazia)."""

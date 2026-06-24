@@ -716,6 +716,24 @@ class RunnerArea(QWidget):
         e pelo menu de contexto do console."""
         in_scope = [r for r in self._ws.runners if self._matches_scope(r)]
         if not in_scope:
+            # Nada NESTE escopo, mas pode haver cópias console-scoped de
+            # OUTROS consoles (órfãos de consoles fechados, ou de um console
+            # cujo session_id divergiu deste painel). Em vez do beco sem
+            # saída "Não há runners", manda pro gerenciador, onde dá pra
+            # remover por grupo / limpar os órfãos de uma vez.
+            other_console_runners = any(
+                (r.console_session_id or "") for r in self._ws.runners
+            )
+            if other_console_runners and self._manage_console_runners_handler:
+                QMessageBox.information(
+                    self,
+                    "Sem runners neste escopo",
+                    "Não há runners para remover neste console, mas existem "
+                    "runners de outros consoles no workspace. Abrindo o "
+                    "gerenciador para remover por console / limpar órfãos.",
+                )
+                self._manage_console_runners_handler()
+                return
             QMessageBox.information(
                 self,
                 "Sem runners",
