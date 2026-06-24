@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.16.4] — 2026-06-24
+
+### Atribuição de git status lento por pasta (perf observability)
+
+Depois da v1.16.3, o `git.status.subprocess` virou o gargalo nº1 no perf.log
+(~47ms/s, max ~290ms), mas os buckets agregados não diziam QUAL pasta. O diagnóstico
+mostrou a causa: um console que adotou um worktree com **build ativo**
+(`mvnw spring-boot:run` churnando `target/`) era pollado a cada ciclo, e o `git status`
+desse worktree custava ~290ms por causa dos milhares de arquivos não-rastreados.
+
+- **`git_status.get_status` agora nomeia a pasta lenta:** quando um `git status`
+  passa de 100ms, conta `git.status.slow` no perf.log (quantos por janela) e loga um
+  `WARNING` no app.log com a pasta e o tempo (throttled a 1×/30s por pasta, pra não
+  poluir durante um build inteiro). Fecha o ponto cego de atribuição por repo.
+
 ## [1.16.3] — 2026-06-23
 
 ### Otimização guiada pelo perf.log: `is_worktree_path` sem subprocesso

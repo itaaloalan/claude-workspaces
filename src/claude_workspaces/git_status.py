@@ -147,19 +147,49 @@ def _parse_porcelain_v2(stdout: str) -> tuple[str, int, int, list[GitFile]]:
     return branch, ahead, behind, files
 
 
+# Acima disso, um `git status` é "lento" o bastante pra valer um aviso nomeado
+# no app.log (qual pasta) + um contador agregado no perf.log (quantos por janela).
+# Caso típico: worktree com build ativo (target/, node_modules) churnando arquivos
+# não-rastreados, pollado a cada ciclo.
+_SLOW_STATUS_MS = 100.0
+_slow_warn_lock = threading.Lock()
+_slow_warn_last: dict[str, float] = {}  # folder -> monotonic do último aviso
+
+
+def _maybe_warn_slow_status(folder: str, dt_ms: float) -> None:
+    """Conta no perf.log e loga (throttled 30s/pasta) qual pasta tem git status
+    lento — perf.log agrega 'git.status.slow', app.log nomeia a pasta."""
+    if dt_ms < _SLOW_STATUS_MS:
+        return
+    from . import perf
+    perf.count("git.status.slow")
+    now = time.monotonic()
+    with _slow_warn_lock:
+        if now - _slow_warn_last.get(folder, 0.0) < 30.0:
+            return
+        _slow_warn_last[folder] = now
+    log.warning(
+        "git status LENTO: %.0fms em %s (build ativo? target/node_modules "
+        "churnando arquivos não-rastreados?)", dt_ms, folder,
+    )
+
+
 def get_status(folder: str) -> GitStatus:
     if not folder or not Path(folder).is_dir():
         return GitStatus(folder=folder, is_repo=False)
     from . import perf
     perf.count("git.status.calls")
+    t0 = time.perf_counter()
     try:
-        with perf.timed("git.status.subprocess"):
-            r = _run(
-                ["git", "status", "--porcelain=v2", "--branch", "-z"],
-                folder,
-            )
+        r = _run(
+            ["git", "status", "--porcelain=v2", "--branch", "-z"],
+            folder,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         return GitStatus(folder=folder, is_repo=False, error=str(e))
+    dt_ms = (time.perf_counter() - t0) * 1000.0
+    perf.record("git.status.subprocess", dt_ms)
+    _maybe_warn_slow_status(folder, dt_ms)
     if r.returncode != 0:
         # Não é repo (ou git falhou): exit 128 é o caso comum de
         # "not a git repository". Mantemos compat: is_repo=False sem erro.
