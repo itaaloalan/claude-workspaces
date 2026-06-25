@@ -2940,8 +2940,16 @@ class MainWindow(QMainWindow):
             )
             if resp != QMessageBox.StandardButton.Yes:
                 return
-        if self.launch_coord.reload_session(term, ws):
-            flash_toast("Sessão recarregada 🔄 — contexto preservado")
+        res = self.launch_coord.reload_session(term, ws)
+        if not res.ok:
+            # no_session já mostrou o QMessageBox dentro do reload_session;
+            # noop/error só não dão toast de sucesso.
+            return
+        self._clear_worktree_pending(term)
+        if res.reason == "worktree":
+            flash_toast(f"🌿 Sessão movida pra worktree{res.worktree_label} e recarregada")
+        else:
+            flash_toast("🔄 Recarregado no mesmo diretório (MCP/banco atualizado)")
 
     def _open_pane_worktree_menu(self) -> None:
         """Menu do chip 🌿 no header do terminal pane: alternar a sessão
@@ -5237,6 +5245,8 @@ class MainWindow(QMainWindow):
             self._worktree_chip_btn.setVisible(True)
         if hasattr(self, "_reload_chip_btn"):
             self._reload_chip_btn.setVisible(True)
+            # Reflete o estado da aba ativa (destaque "worktree pendente").
+            self._update_reload_chip_style()
         if hasattr(self, "_vscode_chip_btn"):
             self._vscode_chip_btn.setVisible(True)
         # `#N título` no mesmo formato usado pelo sidebar/área.
@@ -7157,12 +7167,32 @@ class MainWindow(QMainWindow):
                     cur_ws_id = self.terminals_coord.state.tab_workspaces.get(tab_id)
                     if cur_ws_id and cur_ws_id != target_ws.id:
                         self._move_terminal_to_workspace(term, target_ws)
+            # Auto-reload: mover o processo do claude pra DENTRO da worktree.
+            # Sem isso o cwd físico continua no repo principal e os edits caem
+            # no lugar errado até o usuário clicar Reload. Só backend claude
+            # (resume) e fora do restore (o cwd restaurado já é o certo). O
+            # chip fica destacado já; o reload em si só dispara quando a
+            # sessão ficar idle (a skill /criar-worktree terminou) — ver
+            # _schedule_auto_reload — pra não matar a skill no meio.
+            import os as _os
+            if (
+                isinstance(term, TerminalWidget)
+                and not self._restoring_sessions
+                and term.backend() == "claude"
+                and _os.path.realpath(term.claude_cwd() or "")
+                != _os.path.realpath(path)
+            ):
+                self._arm_worktree_pending(term, path)
+                if self.settings.auto_reload_on_worktree:
+                    self._schedule_auto_reload(term, path)
         else:
             # Associação desfeita (worktree removido) — re-polla o cwd pra
             # voltar o chip ao repo principal.
             cwd = term.claude_cwd() if isinstance(term, TerminalWidget) else ""
             if cwd:
                 self._repo_poller.request(cwd)
+            if isinstance(term, TerminalWidget):
+                self._clear_worktree_pending(term)
         # O painel "Runners console" desse console segue o worktree: o cwd
         # padrão dos runners dele passa a ser o worktree adotado (ou volta
         # ao cwd do console quando desfeito).
@@ -7175,6 +7205,133 @@ class MainWindow(QMainWindow):
         # Painel Git (Ferramentas) passa a inspecionar o worktree do console
         # ativo — sem isso mostrava a branch do repo principal.
         self._sync_git_panel_to_active_console()
+
+    # ----- Auto-reload de worktree + chip Reload destacado -----
+
+    def _workspace_for_terminal(self, term: "TerminalWidget") -> Workspace | None:
+        """Workspace ATUAL de um console (resolve por tab→ws_id). Usado no
+        auto-reload, onde o term pode não ser a aba ativa e pode ter migrado
+        de workspace na adoção."""
+        ws_id = self.terminals_coord.state.tab_workspaces.get(tab_uid_of(term))
+        return self.workspaces_coord.find_by_id(ws_id) if ws_id else None
+
+    def _arm_worktree_pending(self, term: "TerminalWidget", path: str) -> None:
+        """Marca que o console tem uma worktree adotada cujo processo ainda
+        não foi movido pra dentro dela — destaca o chip 🔄."""
+        term._pending_auto_reload = path
+        self._update_reload_chip_style()
+
+    def _clear_worktree_pending(self, term: "TerminalWidget") -> None:
+        """Limpa a pendência de troca pra worktree (já trocou, ou desfeito) e
+        cancela qualquer auto-reload agendado."""
+        term._pending_auto_reload = ""
+        term._auto_reload_retries = 0
+        self._disconnect_auto_reload(term)
+        self._update_reload_chip_style()
+
+    def _update_reload_chip_style(self) -> None:
+        """Reflete no chip 🔄 o estado da ABA ATIVA: destacado quando há uma
+        worktree adotada esperando o processo migrar; normal caso contrário."""
+        if not hasattr(self, "_reload_chip_btn"):
+            return
+        area = self._active_terminal_area()
+        term = area.tabs.currentWidget() if area is not None else None
+        pending = isinstance(term, TerminalWidget) and bool(
+            getattr(term, "_pending_auto_reload", "")
+        )
+        if pending:
+            self._reload_chip_btn.setText("🔄 Reload › worktree")
+            self._reload_chip_btn.setStyleSheet(
+                "QPushButton { background: rgba(61,138,95,0.18); color: #e6e6e6; "
+                "border: 1px solid #3d8a5f; border-radius: 9px; "
+                "padding: 1px 8px; font-size: 11px; }"
+                "QPushButton:hover { border-color: #4fae77; }"
+            )
+            self._reload_chip_btn.setToolTip(
+                "Worktree adotada — clique pra mover a sessão pra dentro dela "
+                "(ou aguarde o auto-reload quando a sessão ficar ociosa)."
+            )
+        else:
+            self._reload_chip_btn.setText("🔄 Reload")
+            self._reload_chip_btn.setStyleSheet(
+                "QPushButton { background: transparent; color: #9aa0a6; "
+                "border: 1px solid #2c2c2c; border-radius: 9px; "
+                "padding: 1px 8px; font-size: 11px; }"
+                "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+            )
+            self._reload_chip_btn.setToolTip(
+                "Recarregar a sessão: reinicia o processo mantendo o contexto "
+                "(claude --resume) pra pegar o worktree criado ou o banco trocado"
+            )
+
+    def _schedule_auto_reload(self, term: "TerminalWidget", path: str) -> None:
+        """Agenda o auto-reload pra disparar quando a sessão ficar OCIOSA (a
+        skill /criar-worktree terminou). Escuta `activity_changed` em vez de
+        `when_claude_ready` — este só aceita 1 callback e o reload já o usa
+        internamente. Idempotente: não duplica conexão."""
+        if getattr(term, "_auto_reload_slot", None) is not None:
+            return
+
+        def _on_activity(status, is_working, needs_decision, t=term, p=path):
+            # Cancelado (clique manual / worktree desfeita)?
+            if getattr(t, "_pending_auto_reload", "") != p:
+                self._disconnect_auto_reload(t)
+                return
+            # Ainda ocupado (skill rodando os passos pós-worktree) — espera.
+            if is_working or needs_decision:
+                return
+            # Ocioso: dispara uma vez.
+            self._disconnect_auto_reload(t)
+            self._fire_auto_reload(t, p)
+
+        term._auto_reload_slot = _on_activity
+        term.activity_changed.connect(_on_activity)
+
+    def _disconnect_auto_reload(self, term: "TerminalWidget") -> None:
+        slot = getattr(term, "_auto_reload_slot", None)
+        if slot is not None:
+            try:
+                term.activity_changed.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+            term._auto_reload_slot = None
+
+    def _fire_auto_reload(self, term: "TerminalWidget", path: str) -> None:
+        """Dispara o reload silencioso movendo o console pra dentro da worktree
+        adotada. Revalida a pendência (guarda contra duplo disparo / clique
+        manual) e resolve o workspace atual no momento do disparo."""
+        import os as _os
+
+        from .persistent_toast import flash_toast
+
+        if getattr(term, "_pending_auto_reload", "") != path:
+            return
+        # Já está fisicamente na worktree (ex.: reload manual no meio)? nada a
+        # fazer além de limpar o destaque.
+        if _os.path.realpath(term.claude_cwd() or "") == _os.path.realpath(path):
+            self._clear_worktree_pending(term)
+            return
+        ws = self._workspace_for_terminal(term)
+        if ws is None:
+            self._clear_worktree_pending(term)
+            return
+        res = self.launch_coord.reload_session(term, ws, silent=True)
+        if res.reason == "no_session":
+            # session_id ainda não resolvido (raro aqui) — re-tenta em 2s,
+            # mantendo o chip destacado. Limita a tentativas pra não loopar.
+            n = getattr(term, "_auto_reload_retries", 0)
+            if n < 3:
+                term._auto_reload_retries = n + 1
+                QTimer.singleShot(
+                    2000,
+                    lambda t=term, p=path: self._fire_auto_reload(t, p)
+                    if getattr(t, "_pending_auto_reload", "") == p
+                    else None,
+                )
+            return
+        self._clear_worktree_pending(term)
+        if res.ok and res.reason == "worktree":
+            flash_toast("🌿 Worktree adotada — sessão recarregada automaticamente")
 
     def _on_notif_open_target(self, notification) -> None:
         """Click em 'Abrir' num card do NotificationCenter."""

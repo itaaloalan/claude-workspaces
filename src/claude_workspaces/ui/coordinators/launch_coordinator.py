@@ -8,6 +8,8 @@ Não toca QTreeWidget nem dock — só TerminalCoordinator + dialogs.
 """
 
 import logging
+import os
+from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QGuiApplication
@@ -22,6 +24,23 @@ from ..terminal_widget import TerminalWidget
 from .terminal_coordinator import TerminalCoordinator
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class ReloadResult:
+    """Resultado de `reload_session` — feedback honesto pro caller decidir
+    o toast/aviso. `reason` resume o que de fato aconteceu:
+    - "worktree": o processo migrou pra uma worktree adotada (cwd mudou).
+    - "same_dir": recarregou no mesmo cwd (ex.: /trocar-banco regenerou MCP).
+    - "no_session": session_id ainda não resolvido — nada feito.
+    - "error": exceção ao subir o processo.
+    """
+    ok: bool
+    reason: str
+    cwd_changed: bool = False
+    is_worktree: bool = False
+    cwd: str = ""
+    worktree_label: str = ""
 
 
 def _opencode_extra_dirs_prompt(extras: list[str]) -> str:
@@ -256,30 +275,37 @@ class LaunchCoordinator(QObject):
         return argv, backend
 
     def reload_session(
-        self, terminal: TerminalWidget, workspace: Workspace
-    ) -> bool:
+        self, terminal: TerminalWidget, workspace: Workspace, *, silent: bool = False
+    ) -> ReloadResult:
         """Reinicia o processo do console mantendo o contexto: mata o backend
         atual e relança com `--resume <session_id>`, no cwd vigente (worktree
         adotado em runtime, se houver) e regerando a config MCP. Resolve os
         dois casos onde hoje é preciso reabrir a sessão na mão: criar uma
         worktree (o processo continuava no cwd antigo) e trocar o banco (MCP
-        com a conexão velha). Devolve True se reiniciou."""
+        com a conexão velha).
+
+        Com `silent=True` (auto-reload por adoção de worktree) NUNCA mostra
+        QMessageBox — devolve o motivo no ReloadResult pro caller decidir.
+        """
+        old_cwd = terminal.claude_cwd() or ""
         sid = terminal.claimed_session_id()
         if not sid:
-            QMessageBox.information(
-                self._parent_window,
-                "Recarregar sessão",
-                "A sessão ainda não foi identificada — aguarde alguns "
-                "segundos após o Claude subir e tente de novo.",
-            )
-            return False
+            if not silent:
+                QMessageBox.information(
+                    self._parent_window,
+                    "Recarregar sessão",
+                    "A sessão ainda não foi identificada — aguarde alguns "
+                    "segundos após o Claude subir e tente de novo.",
+                )
+            return ReloadResult(ok=False, reason="no_session")
         # Worktree adotado em runtime vira o novo cwd; senão mantém o cwd atual.
         new_cwd = terminal.worktree_dir() or terminal.claude_cwd() or ""
         if not new_cwd:
-            return False
+            return ReloadResult(ok=False, reason="noop")
         cwd, extras, worktree_label, is_worktree = self._cwd_context_from_override(
             workspace, new_cwd
         )
+        cwd_changed = os.path.realpath(cwd) != os.path.realpath(old_cwd)
         backend = terminal.backend() or self.settings.ai_backend
         argv, backend = self._build_ai_args(workspace, extras, sid, backend)
         backend_short = "opencode" if backend == "opencode" else "claude"
@@ -312,8 +338,9 @@ class LaunchCoordinator(QObject):
             )
         except Exception as e:
             log.exception("Falha ao recarregar sessão")
-            QMessageBox.warning(self._parent_window, "Falha", str(e))
-            return False
+            if not silent:
+                QMessageBox.warning(self._parent_window, "Falha", str(e))
+            return ReloadResult(ok=False, reason="error", cwd=cwd)
         # Quando o Claude voltar a ficar pronto (idle), injeta uma mensagem
         # confirmando o reload + o contexto vigente (worktree + MCPs), pra ele
         # saber em que diretório/ferramentas está operando agora.
@@ -325,7 +352,14 @@ class LaunchCoordinator(QObject):
             timeout_ms=30000,
         )
         self.sessions_refresh_requested.emit()
-        return True
+        return ReloadResult(
+            ok=True,
+            reason="worktree" if (is_worktree and cwd_changed) else "same_dir",
+            cwd_changed=cwd_changed,
+            is_worktree=is_worktree,
+            cwd=cwd,
+            worktree_label=worktree_label,
+        )
 
     @staticmethod
     def _ensure_session_in_cwd(

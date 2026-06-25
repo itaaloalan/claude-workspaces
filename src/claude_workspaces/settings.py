@@ -200,6 +200,11 @@ class Settings:
     # toda sessão carregue TODOS os MCP globais (grande economia de memória).
     # Desligado = comportamento antigo (Claude usa o global ~/.claude.json).
     mcp_scope_per_workspace: bool = True
+    # Auto-reload da sessão quando ela adota uma worktree criada em runtime
+    # (skill /criar-worktree): quando a sessão fica idle (a skill terminou),
+    # a app reinicia o claude com --resume DENTRO da worktree, sem o usuário
+    # precisar clicar no chip 🔄 Reload. Desligado = só o reload manual.
+    auto_reload_on_worktree: bool = True
 
     @classmethod
     def load(cls) -> "Settings":

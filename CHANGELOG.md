@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.18.4] — 2026-06-25
+
+### Auto-reload na worktree + Reload manual honesto
+
+Criar uma worktree pela skill `/criar-worktree` só trocava runners/painel Git/chip 🌿 —
+o **processo do `claude` continuava fisicamente no repo principal**. Quem mandasse
+implementar antes de clicar no 🔄 Reload via os edits caírem no repo principal. E o
+Reload manual ainda mostrava "Sessão recarregada — contexto preservado" mesmo quando
+não havia worktree pra trocar (recarregava no mesmo lugar), parecendo que "não fez nada".
+
+- **Auto-reload ao adotar worktree**: quando a sessão adota uma worktree e fica ociosa
+  (a skill terminou), a app reinicia o `claude --resume` **dentro da worktree**
+  automaticamente, sem clique. Espera o idle via `activity_changed` pra não matar a
+  skill no meio. Controlado pela flag `auto_reload_on_worktree` (default ligado).
+- **Reload manual honesto**: o toast agora diz o que de fato aconteceu — "🌿 Sessão
+  movida pra worktree … e recarregada" quando o cwd mudou, ou "🔄 Recarregado no mesmo
+  diretório (MCP/banco atualizado)" quando não havia worktree (ex.: `/trocar-banco`).
+  `reload_session` passou a devolver um `ReloadResult` com o motivo.
+- **Chip Reload destacado**: enquanto há uma worktree adotada cujo processo ainda não
+  migrou, o chip vira "🔄 Reload › worktree" com borda verde — óbvio que há uma troca
+  pendente (fallback caso o auto-reload esteja desligado).
+- Skill `/criar-worktree` atualizada explicando o auto-reload (mantendo a regra de usar
+  caminhos absolutos da worktree como cinto-e-suspensório até o reload disparar).
+
 ## [1.18.3] — 2026-06-24
 
 ### Limpa runners de console órfãos automaticamente

@@ -82,11 +82,19 @@ After the user answers, compute:
 ```
 If either exists, STOP and report. Never `--force` on creation.
 
-**Fetch base (if `HAS_REMOTE`):**
-```bash
-git fetch origin "<BASE>"
-```
-Prefer `origin/<BASE>` as the start point in Step 4; fall back to local `<BASE>` if `origin/<BASE>` doesn't exist.
+**ALWAYS pull the base before creating (if `HAS_REMOTE`):** the worktree must be born from the LATEST remote tip — never from a stale local base. Always `git fetch` the base first, in EVERY repo involved.
+
+- **Single-repo:**
+  ```bash
+  git fetch origin "<BASE>"
+  ```
+- **Multi-repo:** fetch the base in each selected repo (own Bash call each, so a failure in one is isolated):
+  ```bash
+  git -C "<REPO_A>" fetch origin "<BASE>"
+  git -C "<REPO_B>" fetch origin "<BASE>"
+  ```
+
+ALWAYS use `origin/<BASE>` as the start point in Step 4 — that is the freshly-fetched remote tip, which guarantees the new branch has the most up-to-date code (equivalent to a pull). Only fall back to local `<BASE>` if `HAS_REMOTE` is false or `origin/<BASE>` genuinely doesn't exist; if you fall back, warn the user the worktree is based on a possibly-stale local branch.
 
 ### Step 4 — Create (literal paths, each as own Bash call)
 
@@ -183,9 +191,9 @@ EOF
 
 For multi-repo: note that both repos live under the shared parent `<WS_ROOT>/.worktrees/<type>_<name>/` and can be opened together via **"🌿 Abrir console no grupo"** in the claude-workspaces context menu — cwd = parent folder, `@map-api/...` / `@map-web/...` autocomplete works natively without `--add-dir`.
 
-When claude-workspaces is running: it detects the `git worktree add` from this session's JSONL and makes THIS session adopt the worktree — 🌿 chip + branch appear, runners switch cwd to the worktree, Git panel inspects the worktree's branch. The CLI process keeps the main repo as physical cwd, but for runners/git/chip this session IS the worktree.
+When claude-workspaces is running: it detects the `git worktree add` from this session's JSONL and makes THIS session adopt the worktree — 🌿 chip + branch appear, runners switch cwd to the worktree, Git panel inspects the worktree's branch. **Auto-reload:** once this skill finishes and the session goes idle, the app automatically reloads the CLI process (`claude --resume`) INSIDE the worktree, so the physical cwd becomes the worktree with no manual step. While the switch is pending the 🔄 Reload chip lights up ("Reload › worktree"); if auto-reload is disabled (`auto_reload_on_worktree`), click that highlighted chip to move the session in.
 
-**CRITICAL — editing files after worktree creation:** All Read/Edit/Write calls must use absolute **worktree** paths — single-repo: `<REPO>.claude/<WS>_<type>_<name>/...`; multi-repo: `<WS_ROOT>/.worktrees/<type>_<name>/<repo>/...` — NOT the main repo path. Every code change must land in the worktree; the running server won't see changes in the main repo.
+**CRITICAL — editing files after worktree creation:** Until the auto-reload fires (i.e. while THIS skill is still running its remaining steps), the CLI's physical cwd is still the main repo. So every Read/Edit/Write in this skill must use absolute **worktree** paths — single-repo: `<REPO>.claude/<WS>_<type>_<name>/...`; multi-repo: `<WS_ROOT>/.worktrees/<type>_<name>/<repo>/...` — NOT the main repo path. Every code change must land in the worktree; the running server won't see changes in the main repo.
 
 ---
 
