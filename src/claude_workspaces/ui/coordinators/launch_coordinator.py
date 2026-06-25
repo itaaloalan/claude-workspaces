@@ -371,8 +371,12 @@ class LaunchCoordinator(QObject):
         else:
             wt_line = f"📁 Diretório: `{cwd}` (sem worktree isolado)"
         try:
-            from ...services.mcp_inspector import list_project_server_names_cached
-            mcps = list_project_server_names_cached(list(workspace.folders))
+            # Mesma resolução que o launcher usa pra --mcp-config
+            # --strict-mcp-config: os MCP de fato ativos na sessão (override
+            # explícito ou auto-inferido pelo nome/pastas do workspace),
+            # não os globais crus do ~/.claude.json.
+            from ...services.mcp_scope import resolve_mcp_servers
+            mcps = sorted(resolve_mcp_servers(workspace))
         except Exception:
             mcps = []
         mcp_line = (

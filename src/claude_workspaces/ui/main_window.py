@@ -3744,11 +3744,16 @@ class MainWindow(QMainWindow):
         stacks = detect_stacks_cached(ws.folders)
         stack_label = ", ".join(sorted(STACK_LABEL.get(s, s) for s in stacks))
         self.status_widgets.set_stack(stack_label)
-        # MCP — lista real (user globais + .mcp.json do projeto), igual ao
-        # que o Claude enxerga e à barra de contexto do console. Passa os
-        # nomes pro footer mostrar inline + tooltip.
-        from ..services.mcp_inspector import list_project_server_names_cached
-        mcp_names = list_project_server_names_cached(list(ws.folders))
+        # MCP — lista real que o Claude enxerga na sessão: a mesma resolução
+        # usada no launch (--mcp-config --strict-mcp-config), ou seja os MCP
+        # escopados do workspace (override explícito ou auto-inferido), não os
+        # globais crus do ~/.claude.json. Passa os nomes pro footer mostrar
+        # inline + tooltip.
+        try:
+            from ..services.mcp_scope import resolve_mcp_servers
+            mcp_names = sorted(resolve_mcp_servers(ws))
+        except Exception:
+            mcp_names = []
         self.status_widgets.set_mcp(len(mcp_names), mcp_names)
         # Runners
         active = self.terminals_coord.state.running_counts.get(ws.id, 0)
