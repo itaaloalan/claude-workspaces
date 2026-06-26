@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.18.5] — 2026-06-26
+
+### Fix: `/criar-worktree` renomeava o console errado
+
+Criar uma worktree renomeava a sessão de **outro** console (o título de um console
+ativo era sobrescrito com o nome da nova branch), embora o chip 🌿 continuasse certo.
+
+Causa: o Step 8 da skill `/criar-worktree` identificava "a sessão atual" pegando o
+**JSONL mais fresco entre todos os projetos** (`max(mtime)`). Com vários consoles
+ativos, se outro console estava gravando o transcript naquele instante (ex.: console
+"Synthesizing"), a skill pegava o `session_id` errado e gravava o `custom_name` nele
+em `session_marks.json` — e o `_check_external_rename` do app propagava o rename pro
+console errado.
+
+- A skill agora identifica a sessão pela **branch recém-criada** no transcript (a
+  única que contém `git worktree add -b "<branch>"`), em vez do mtime global. Passa
+  `<type>/<name>` como 2º argumento; fallback pro mais fresco só se nenhum transcript
+  citar a branch. Robusto contra consoles concorrentes escrevendo JSONL ao mesmo tempo.
+
 ## [1.18.4] — 2026-06-25
 
 ### Auto-reload na worktree + Reload manual honesto

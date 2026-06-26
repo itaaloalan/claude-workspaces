@@ -146,26 +146,38 @@ The worktree checks out the COMMITTED config, which may point to a different dat
 
 Display name format: `<type>: <name with separators as spaces>` (e.g. `fix/extrair-informacoes-lacres` → `fix: extrair informacoes lacres`). Skip silently if `~/.config/claude-workspaces/` doesn't exist.
 
-The script is cwd-agnostic — it finds the active session by scanning for the freshest JSONL across all projects (mtime < 120s = this turn), so it works regardless of where the session transcript lives relative to `REPO`:
+The script is cwd-agnostic. It identifies the session that ran THIS skill by the branch we just created (`git worktree add -b <BRANCH>` is recorded in that session's transcript), NOT by the freshest JSONL globally. Pass `<type>/<name>` (the BRANCH) as the 2nd argument. Picking the globally-freshest JSONL is wrong when another console is actively writing its transcript at the same moment — the rename would land on the WRONG session. It falls back to the freshest only if no transcript mentions the branch.
 
 ```bash
-python3 - "<type>: <name with spaces>" <<'EOF'
+python3 - "<type>: <name with spaces>" "<type>/<name>" <<'EOF'
 import json, re, sys, time
 from pathlib import Path
 
 new_name = sys.argv[1]
+branch = sys.argv[2] if len(sys.argv) > 2 else ""
 cfg = Path.home() / ".config/claude-workspaces"
 if not cfg.is_dir():
     sys.exit(0)
 projects = Path.home() / ".claude/projects"
 uuid_re = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$", re.I)
-cands = [p for p in projects.glob("*/*.jsonl") if uuid_re.match(p.name)]
+# Só transcripts deste turno (mtime < 120s).
+cands = [p for p in projects.glob("*/*.jsonl")
+         if uuid_re.match(p.name) and time.time() - p.stat().st_mtime < 120]
 if not cands:
-    sys.exit(0)
-cur = max(cands, key=lambda p: p.stat().st_mtime)
-if time.time() - cur.stat().st_mtime > 120:
     print("transcript antigo; rename pulado", file=sys.stderr)
     sys.exit(0)
+# A sessão que criou o worktree é a ÚNICA cujo transcript cita a branch
+# (`git worktree add -b "<branch>"`). Selecionar por CONTEÚDO evita renomear
+# o console errado quando há outro console escrevendo JSONL ao mesmo tempo.
+def mentions_branch(p):
+    if not branch:
+        return False
+    try:
+        return branch in p.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+matches = [p for p in cands if mentions_branch(p)]
+cur = max(matches or cands, key=lambda p: p.stat().st_mtime)
 sid = cur.stem
 cwd = "/" + cur.parent.name.lstrip("-").replace("-", "/")
 marks_path = cfg / "session_marks.json"
