@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.20.0] — 2026-07-02
+
+### Fluidez + logs úteis (auditoria do app.log/perf.log)
+
+Achados da auditoria e o que mudou:
+
+- **Amostragem de RAM/CPU fora da UI thread** (`ResourceSampler`): o walk do
+  psutil (~10-13ms por tick, medido no perf.log) rodava síncrono na thread da
+  UI a cada 8s — micro-engasgo periódico em animação/scroll. Agora roda em
+  QThreadPool e o footer recebe o resultado via signal.
+- **Fix do crash na troca de workspace**: o passo "footers" (deferido em
+  QTimer) usava um `QTreeWidgetItem` capturado ticks antes; se a árvore
+  rebuildava no meio, estourava `RuntimeError: Internal C++ object already
+  deleted` (1 ocorrência no log). O passo re-busca o item atual e
+  `_workspace_of_item` ficou defensivo.
+- **SWITCH-PERF agora mede o que importa**: o log mostrava `total=3902ms` com
+  passos somando 20ms — o tempo real estava no event loop entre os ticks e a
+  instrumentação não via. Cada passo agora loga `gap=` (espera pelo tick) e o
+  total fecha com `(passos=Xms, event-loop=Yms)`.
+- **Warnings do Qt deduplicados**: "Could not parse stylesheet" repetia 330×
+  por sessão (~43% do app.log junto com GHOST-DIAG). Warnings idênticos logam
+  3× e depois só um resumo a cada 100; os de stylesheet ganham o **stack
+  Python** da origem — o próximo log nomeia o arquivo:linha da QSS quebrada.
+- **GHOST-DIAG virou opt-in** (`CW_GHOST_DIAG=1`): o diagnóstico de janelas
+  fantasmas rodava em todo boot e era ~40% das linhas do app.log.
+
 ## [1.19.1] — 2026-07-02
 
 ### Fix: clique na memória do footer não abria o gerenciador

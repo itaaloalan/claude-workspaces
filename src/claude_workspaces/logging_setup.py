@@ -73,7 +73,36 @@ def _install_qt_handler() -> None:
     }
     qt_logger = logging.getLogger("qt")
 
+    # Dedup: warnings do Qt repetem a MESMA mensagem centenas de vezes por
+    # sessão (ex.: "Could not parse stylesheet of object QPushButton(0x...)"
+    # a cada re-polish do widget). Normalizamos o ponteiro pra agrupar e
+    # logamos as N primeiras ocorrências; depois, só um resumo a cada 100.
+    _seen: dict[str, int] = {}
+    _MAX_REPEATS = 3
+
+    def _norm(message: str) -> str:
+        import re
+        return re.sub(r"0x[0-9a-fA-F]+", "0x…", message)
+
     def handler(mode, _context, message: str) -> None:
-        qt_logger.log(qt_level.get(mode, logging.INFO), message)
+        level = qt_level.get(mode, logging.INFO)
+        if level < logging.WARNING:
+            qt_logger.log(level, message)
+            return
+        key = _norm(message)
+        n = _seen[key] = _seen.get(key, 0) + 1
+        if n > _MAX_REPEATS:
+            if n % 100 == 0:
+                qt_logger.log(level, "%s (repetida %dx — suprimida)", key, n)
+            return
+        # Stylesheet inválida: o Qt só dá o ponteiro do widget, inútil pra
+        # achar o culpado. O parse acontece dentro do setStyleSheet/polish,
+        # então o stack Python aponta a linha que setou a QSS quebrada.
+        if "parse stylesheet" in message.lower():
+            import traceback
+            stack = "".join(traceback.format_stack(limit=8)[:-1])
+            qt_logger.log(level, "%s\nstack (origem provável):\n%s", message, stack)
+            return
+        qt_logger.log(level, message)
 
     qInstallMessageHandler(handler)

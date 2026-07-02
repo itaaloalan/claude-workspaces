@@ -322,7 +322,12 @@ class MainWindow(QMainWindow):
         # o click abre o gerenciador. Tick contínuo porque %CPU é delta entre
         # amostras — sem o tick periódico a leitura ficaria sempre zerada.
         from ..process_monitor import ProcessMonitor
+        from ..services.resource_sampler import ResourceSampler
         self._process_monitor = ProcessMonitor()
+        # Amostragem fora da UI thread — o walk do psutil custa ~10ms+ e
+        # rodava síncrono no tick, engasgando animações a cada 8s.
+        self._resource_sampler = ResourceSampler(self._process_monitor, parent=self)
+        self._resource_sampler.sample_ready.connect(self._on_resource_sample)
         self._resource_timer = QTimer(self)
         self._resource_timer.setInterval(8_000)
         self._resource_timer.timeout.connect(self._sample_resources)
@@ -3608,16 +3613,13 @@ class MainWindow(QMainWindow):
         return leaders
 
     def _sample_resources(self) -> None:
-        """Tick do monitor: amostra só os totais e atualiza o footer (caminho
-        leve, sem cmdline/grupos). O gerenciador aberto usa o sample() completo
-        e empurra os totais pra cá pelo seu próprio callback."""
-        from .. import perf
-        try:
-            with perf.timed("resources.sample_totals"):
-                snap = self._process_monitor.sample_totals()
-        except Exception:  # noqa: BLE001 — monitor nunca pode derrubar a UI
-            log.exception("falha amostrando recursos")
-            return
+        """Tick do monitor: agenda a amostra dos totais no thread pool do
+        ResourceSampler (o walk do psutil não roda mais na UI thread) — o
+        resultado volta em `_on_resource_sample`. O gerenciador aberto usa o
+        sample() completo e empurra os totais pelo seu próprio callback."""
+        self._resource_sampler.request()
+
+    def _on_resource_sample(self, snap) -> None:
         self.status_widgets.set_resources(
             snap.total_rss, snap.total_cpu, snap.n_zombies
         )
@@ -4493,7 +4495,13 @@ class MainWindow(QMainWindow):
         Sessões Claude que fica entre o terminal e o workspace."""
         node = item
         while node is not None:
-            data = node.data(0, Qt.ItemDataRole.UserRole)
+            try:
+                data = node.data(0, Qt.ItemDataRole.UserRole)
+            except RuntimeError:
+                # Item capturado antes duma rebuild da árvore: o C++ já foi
+                # deletado (shiboken). Acontece em passos deferidos (troca de
+                # workspace encadeada em QTimer) — trata como "sem workspace".
+                return None
             if isinstance(data, Workspace):
                 return data
             node = node.parent()
@@ -4615,14 +4623,22 @@ class MainWindow(QMainWindow):
                 ws, skip_runner_children=True
             )),
             ("runner_children", lambda: self._refresh_runner_children(ws.id)),
+            # `current` NÃO é capturado aqui: esse passo roda vários ticks
+            # depois e a árvore pode ter sido rebuildada no meio (item C++
+            # deletado). Sem argumento, o refresh re-busca o currentItem.
             ("footers", lambda: (
                 self._refresh_status_bar_console(),
-                self._refresh_console_runners_footer(current),
+                self._refresh_console_runners_footer(),
                 self._dispatch_runner_safety_net(ws, current_data),
             )),
         ]
         import time
         self._switch_t0 = time.perf_counter()
+        # Acumuladores pro resumo: tempo DENTRO dos passos vs tempo de espera
+        # entre ticks do event loop (paint, WebEngine, outros timers). É o gap
+        # que explica um total alto com passos rápidos.
+        self._switch_steps_ms = 0.0
+        self._switch_prev_end = self._switch_t0
         self._run_switch_step(epoch, steps)
 
     def _run_switch_step(self, epoch: int, steps: list) -> None:
@@ -4638,23 +4654,33 @@ class MainWindow(QMainWindow):
         self._loading_overlay.tick()
         name, step = steps[0]
         t0 = time.perf_counter()
+        # Gap = quanto o event loop demorou pra nos dar o tick desde o fim do
+        # passo anterior. Gap alto = loop ocupado com OUTRA coisa (paint,
+        # WebEngine carregando, timers) — não é culpa do passo em si.
+        gap_ms = (t0 - getattr(self, "_switch_prev_end", t0)) * 1000
         try:
             step()
         except Exception:
             # Um passo falhando não pode deixar o overlay preso — o fallback
             # de 1200ms (_loading_hide_timer) cobre o resto.
             log.exception("passo da troca de workspace falhou: %s", name)
+        end = time.perf_counter()
+        dt_ms = (end - t0) * 1000
+        self._switch_prev_end = end
+        self._switch_steps_ms = getattr(self, "_switch_steps_ms", 0.0) + dt_ms
         log.info(
-            "[SWITCH-PERF] step=%s dt=%.1fms",
-            name, (time.perf_counter() - t0) * 1000,
+            "[SWITCH-PERF] step=%s dt=%.1fms gap=%.1fms",
+            name, dt_ms, gap_ms,
         )
         rest = steps[1:]
         if rest:
             QTimer.singleShot(0, lambda: self._run_switch_step(epoch, rest))
         else:
+            total_ms = (end - getattr(self, "_switch_t0", t0)) * 1000
+            steps_ms = getattr(self, "_switch_steps_ms", dt_ms)
             log.info(
-                "[SWITCH-PERF] total=%.1fms",
-                (time.perf_counter() - getattr(self, "_switch_t0", t0)) * 1000,
+                "[SWITCH-PERF] total=%.1fms (passos=%.1fms, event-loop=%.1fms)",
+                total_ms, steps_ms, max(0.0, total_ms - steps_ms),
             )
             # Esconde o overlay agora que está tudo pronto — sem hold extra.
             self._finish_switch_loading()

@@ -319,10 +319,13 @@ def main() -> int:
     window.show()
 
     # Diagnóstico das janelas fantasmas em 3 fases — alguns surfaces
-    # do Chromium só aparecem depois que os renderers iniciam.
-    QTimer.singleShot(0, lambda: _log_ghost_window_diagnostics(log))
-    QTimer.singleShot(500, lambda: _log_ghost_window_diagnostics(log))
-    QTimer.singleShot(2000, lambda: _log_ghost_window_diagnostics(log))
+    # do Chromium só aparecem depois que os renderers iniciam. Opt-in via
+    # env: era ~40% das linhas do app.log em TODO boot, enterrando o que
+    # importa; liga com CW_GHOST_DIAG=1 quando o sintoma reaparecer.
+    if os.environ.get("CW_GHOST_DIAG"):
+        QTimer.singleShot(0, lambda: _log_ghost_window_diagnostics(log))
+        QTimer.singleShot(500, lambda: _log_ghost_window_diagnostics(log))
+        QTimer.singleShot(2000, lambda: _log_ghost_window_diagnostics(log))
 
     return app.exec()
 
