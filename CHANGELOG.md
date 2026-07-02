@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.19.0] — 2026-07-02
+
+### Notificações reorganizadas: menos interrupção, mesma central
+
+Diagnóstico no histórico real (500 entradas): `cost_warning` com ~108 mil
+ocorrências (popup por minuto acima de 80% de uso), lembrete de pendência a cada
+2 min por console (154/500 entradas eram re-lembretes), e popups de baixo valor
+(Trabalhando/Concluído/Execução-longa) somando centenas de banners.
+
+- **Popup nativo só pro que importa**: `agent_working`, `task_completed` e
+  `long_running` não geram mais popup do S.O. — continuam na central in-app,
+  no sino e nos badges. Aguardando, Decisão, Falha, Erro e Custo seguem popando.
+- **cost_warning notifica só na transição de nível** (cruzou 80% ou subiu pra
+  95%); no mesmo nível fica em silêncio e rearma quando o uso cai abaixo de 80%.
+  Antes, cada poll do plano re-notificava após o cooldown de 60s.
+- **Re-lembrete de pendência: 10 min (era 2) e no máximo 2 lembretes** por
+  console aguardando; depois disso o badge laranja continua marcando, sem popup.
+  Migração automática pra quem estava no default antigo de 120s.
+- **Fix**: o `kind` da entrada era descartado no inbox — alerta de **decisão**
+  (picker/permissão) aparecia como "⏳ Aguardando" e nunca virava
+  `permission_required` na central (0 ocorrências em 500 no histórico).
+
 ## [1.18.5] — 2026-06-26
 
 ### Fix: `/criar-worktree` renomeava o console errado

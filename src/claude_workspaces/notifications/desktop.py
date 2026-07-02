@@ -28,14 +28,25 @@ log = logging.getLogger(__name__)
 # Kinds "fixos": entregues como resident + sem timeout — ficam na tela até o
 # usuário voltar ao console (fecha automático via _on_inbox_entry_removed →
 # mark_seen) ou fechar o banner na mão. São os estados que exigem ATENÇÃO:
-# Trabalhando (em curso), Aguardando/Ocioso (parou) e Decisão (pediu
-# permissão). Demais avisos (tarefa concluída/erro/custo) seguem auto-dismiss
-# pra não poluir o Plasma com banners grudados.
+# Aguardando/Ocioso (parou) e Decisão (pediu permissão). Demais avisos
+# (tarefa concluída/erro/custo) seguem auto-dismiss pra não poluir o Plasma
+# com banners grudados.
 _STICKY_KINDS = frozenset({
-    NotificationKind.AGENT_WORKING,
     NotificationKind.AGENT_WAITING,
     NotificationKind.AGENT_IDLE,
     NotificationKind.PERMISSION_REQUIRED,
+})
+
+# Kinds informativos que NUNCA viram popup nativo — continuam na central
+# in-app (sino, badges, histórico), mas não interrompem. Popup do S.O. fica
+# reservado pra estados que pedem atenção/ação do usuário: "comecei a
+# trabalhar" (você acabou de mandar), "sessão encerrou ok" e "tá rodando há
+# X min" só tiram o foco sem pedir nada — no histórico real eram centenas
+# de popups por semana.
+_POPUP_MUTED_KINDS = frozenset({
+    NotificationKind.AGENT_WORKING,
+    NotificationKind.TASK_COMPLETED,
+    NotificationKind.LONG_RUNNING,
 })
 
 
@@ -107,6 +118,8 @@ class DesktopNotifierAdapter(QObject):
         self, n: Notification, *, allow_when_focused: bool, is_update: bool = False
     ) -> None:
         if not self._desktop.available:
+            return
+        if n.kind in _POPUP_MUTED_KINDS:
             return
         prefs = self._service.preferences
         if not prefs.get("desktop_enabled", True):

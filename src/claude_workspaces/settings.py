@@ -107,8 +107,10 @@ class Settings:
     apps: list[dict] = field(default_factory=list)
     # Notificações: re-aviso para tabs que ficaram aguardando sem ser focadas.
     # 0 desliga; valor mínimo prático é 15s (clamped no coordinator).
+    # Default 10min — o coordinator ainda limita a MAX_REMINDERS re-avisos
+    # por pendência; depois disso só o badge laranja continua marcando.
     notify_reminder_enabled: bool = True
-    notify_reminder_seconds: int = 120
+    notify_reminder_seconds: int = 600
     # Liga notificações nativas do sistema (QSystemTrayIcon.showMessage).
     # Quando False, a inbox/badge ainda funcionam, mas sem toast.
     notify_native_enabled: bool = True
@@ -222,6 +224,11 @@ class Settings:
         # próxima instrução, não tarefa concluída).
         if data.get("notify_ready_prefix") == "✅ Pronto":
             data["notify_ready_prefix"] = "⏳ Aguardando"
+        # Migração: quem ficou no default antigo de 2min do re-lembrete sobe
+        # pro novo default de 10min — 2min gerava popup atrás de popup com
+        # vários consoles aguardando. Valor customizado é respeitado.
+        if data.get("notify_reminder_seconds") == 120:
+            data["notify_reminder_seconds"] = 600
         return cls(**{k: v for k, v in data.items() if k in valid})
 
     def save(self) -> None:

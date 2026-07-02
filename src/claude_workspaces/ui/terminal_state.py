@@ -92,8 +92,12 @@ class TerminalState:
             "workspace_id": info.get("workspace_id", existing.get("workspace_id", "")),
             "title": info.get("title", existing.get("title", "")),
             "status": info.get("status", existing.get("status", "")),
+            # Sem propagar o kind, "decision" virava "ready" no alerta — o
+            # prefixo "❓ Decisão" nunca aparecia e a notif perdia a urgência.
+            "kind": info.get("kind", existing.get("kind", "ready")),
             "added_at": existing.get("added_at", now),
             "last_reminded_at": existing.get("last_reminded_at", 0.0),
+            "reminder_count": existing.get("reminder_count", 0),
             "snooze_until": existing.get("snooze_until", 0.0),
             "dismissed": existing.get("dismissed", False),
         }

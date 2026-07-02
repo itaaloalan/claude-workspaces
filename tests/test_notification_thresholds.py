@@ -7,6 +7,7 @@ execução longa (extraído de _scan_long_running) do main_window.py.
 
 from claude_workspaces.notifications.thresholds import (
     cost_warning_levels,
+    cost_warning_transitions,
     long_running_minutes,
 )
 
@@ -47,6 +48,54 @@ def test_cost_warning_mixed_filters_and_labels():
 def test_cost_warning_custom_thresholds():
     out = cost_warning_levels([("x", 60.0)], warn=50.0, crit=70.0)
     assert out == [("x", 60.0, "alto")]
+
+
+# ---------- cost_warning_transitions ----------
+
+def test_transitions_first_crossing_notifies():
+    out, state = cost_warning_transitions([("5h", 85.0)], {})
+    assert out == [("5h", 85.0, "alto")]
+    assert state == {"5h": "alto"}
+
+
+def test_transitions_same_level_stays_silent():
+    # Poll seguinte com a janela ainda em "alto" — nada de re-notificar,
+    # mesmo com o pct variando (era a fonte do popup-por-minuto).
+    out, state = cost_warning_transitions([("5h", 87.0)], {"5h": "alto"})
+    assert out == []
+    assert state == {"5h": "alto"}
+
+
+def test_transitions_escalation_alto_para_critico_notifies():
+    out, state = cost_warning_transitions([("5h", 96.0)], {"5h": "alto"})
+    assert out == [("5h", 96.0, "crítico")]
+    assert state == {"5h": "crítico"}
+
+
+def test_transitions_downgrade_critico_para_alto_stays_silent():
+    out, state = cost_warning_transitions([("5h", 90.0)], {"5h": "crítico"})
+    assert out == []
+    # estado acompanha o nível atual — se subir de novo pra crítico, notifica.
+    assert state == {"5h": "alto"}
+
+
+def test_transitions_drop_below_warn_rearms():
+    out, state = cost_warning_transitions([("5h", 40.0)], {"5h": "alto"})
+    assert out == []
+    assert state == {}
+    # cruzou de novo depois de rearmado → notifica de novo
+    out2, state2 = cost_warning_transitions([("5h", 82.0)], state)
+    assert out2 == [("5h", 82.0, "alto")]
+    assert state2 == {"5h": "alto"}
+
+
+def test_transitions_multiple_windows_independent():
+    prev = {"7d": "alto"}
+    out, state = cost_warning_transitions(
+        [("5h", 85.0), ("7d", 86.0), ("7d-sonnet", 10.0)], prev
+    )
+    assert out == [("5h", 85.0, "alto")]
+    assert state == {"5h": "alto", "7d": "alto"}
 
 
 # ---------- long_running_minutes ----------

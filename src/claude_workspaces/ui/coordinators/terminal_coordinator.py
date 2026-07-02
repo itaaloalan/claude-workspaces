@@ -38,8 +38,12 @@ __all__ = ["SPINNER_FRAMES", "SPINNER_INTERVAL_MS", "TerminalCoordinator"]
 # Intervalo entre re-lembretes (default — configurável via setting).
 # Cada entrada do inbox que está parada há mais que isso, e não foi
 # dismissada/snoozed, dispara um inbox_alert(is_reminder=True).
-DEFAULT_REMINDER_INTERVAL_S = 120  # 2 min
+DEFAULT_REMINDER_INTERVAL_S = 600  # 10 min
 REMINDER_TICK_MS = 5000  # checa a cada 5s — barato e responsivo
+# Teto de re-lembretes por pendência: depois disso a entrada continua no
+# inbox/badge, mas para de gerar popup — evita a metralhadora de alertas
+# quando vários consoles ficam aguardando ao mesmo tempo.
+MAX_REMINDERS = 2
 
 
 class TerminalCoordinator(QObject):
@@ -345,6 +349,8 @@ class TerminalCoordinator(QObject):
                 continue
             if info.get("snooze_until", 0.0) > now:
                 continue
+            if int(info.get("reminder_count", 0)) >= MAX_REMINDERS:
+                continue
             # Aguarda o intervalo desde o último toque (added_at ou último
             # reminder), o que for mais recente.
             last_event = max(
@@ -354,6 +360,7 @@ class TerminalCoordinator(QObject):
             if now - last_event < self._reminder_interval_s:
                 continue
             info["last_reminded_at"] = now
+            info["reminder_count"] = int(info.get("reminder_count", 0)) + 1
             self.inbox_alert.emit(tab_id, dict(info), True)
 
     # ---------- Spinner ----------

@@ -232,6 +232,10 @@ class MainWindow(QMainWindow):
         # 30s e emite `long_running` ao passar do threshold (5 min).
         self._working_since: dict[int, float] = {}
         self._long_running_notified: set[int] = set()
+        # cost_warning: window_label → nível já notificado ("alto"/"crítico").
+        # Só re-notifica quando o nível SOBE; rearma quando a janela cai
+        # abaixo de 80% (ver thresholds.cost_warning_transitions).
+        self._cost_warn_levels: dict[str, str] = {}
         # Plano (plan mode) da sessão do console ativo. O scan do
         # transcript roda no QThreadPool; epoch descarta resultados
         # obsoletos e `_plan_scan_last_key` (path+mtime+size) curto-
@@ -3336,10 +3340,11 @@ class MainWindow(QMainWindow):
 
     def _maybe_emit_cost_warning(self, snap) -> None:
         """Olha o snapshot do plan_usage_api e emite cost_warning quando
-        uma janela cruza 80% (high) ou 95% (critical). Dedup por janela —
-        a mesma janela só re-notifica depois do cooldown do service ou
-        quando passa de high pra critical."""
-        from ..notifications.thresholds import cost_warning_levels
+        uma janela CRUZA 80% (high) ou 95% (critical). Notifica só na
+        transição de nível (_cost_warn_levels lembra o que já avisou);
+        enquanto a janela seguir no mesmo nível, silêncio — antes, cada
+        poll re-notificava após o cooldown e virava um popup por minuto."""
+        from ..notifications.thresholds import cost_warning_transitions
 
         windows = [
             ("5h", getattr(snap, "five_hour", None)),
@@ -3351,7 +3356,10 @@ class MainWindow(QMainWindow):
             for label, window in windows
             if window is not None
         ]
-        for window_label, pct, level in cost_warning_levels(pairs):
+        to_notify, self._cost_warn_levels = cost_warning_transitions(
+            pairs, self._cost_warn_levels
+        )
+        for window_label, pct, level in to_notify:
             priority = (
                 NotificationPriority.CRITICAL if level == "crítico"
                 else NotificationPriority.HIGH
