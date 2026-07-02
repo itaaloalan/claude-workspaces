@@ -171,7 +171,33 @@ class DesktopNotifierAdapter(QObject):
         _os_sound: str | None = None  # sem som no popup nativo
         _os_suppress_sound = True
 
-        prev = self._active.get(key, 0)
+        # replaces_id resolvido na execução do job (não aqui): com o notify
+        # assíncrono, um notify anterior do mesmo banner pode registrar o
+        # note_id entre o enqueue e o run — o provider garante replace
+        # in-place mesmo nesse caso.
+        def _replaces_id() -> int:
+            return self._active.get(key, 0)
+
+        def _on_posted(
+            nid: int | None, *, _n=n, _key=key, _snapshot=snapshot
+        ) -> None:
+            # Roda no main thread quando o servidor respondeu.
+            if not nid:
+                log.info("DesktopNotifier.notify não retornou id; usando fallback")
+                self._fallback(_n)
+                return
+            # A entrada pode ter sido vista/dispensada enquanto o gdbus
+            # rodava (usuário focou o console) — fecha em vez de registrar
+            # um banner que já não deve existir.
+            cur = self._service.get(_n.id)
+            if cur is None or cur.seen or cur.dismissed:
+                try:
+                    self._desktop.close(nid)
+                except Exception:
+                    log.debug("close pós-posted falhou", exc_info=True)
+                return
+            self._active[_key] = nid
+            self._last_delivered[_key] = _snapshot
         # Estados de atenção (Trabalhando/Aguardando/Ocioso/Decisão) são FIXOS:
         # resident + sem timeout. Ficam na tela até o usuário voltar ao console
         # (fechados via _on_inbox_entry_removed → mark_seen → _close_for) ou
@@ -195,13 +221,14 @@ class DesktopNotifierAdapter(QObject):
             if timeout_ms <= 0:
                 timeout_ms = 10000
         try:
-            nid = self._desktop.notify(
+            self._desktop.notify(
                 title=n.title,
                 body=n.body or "",
                 actions=actions,
                 on_action=lambda action_key, _n=n: self._handle_action(_n, action_key),
                 timeout_ms=timeout_ms,
-                replaces_id=prev,
+                replaces_id_provider=_replaces_id,
+                on_posted=_on_posted,
                 urgency=urgency,
                 desktop_entry="claude-workspaces",
                 sound_name=_os_sound,
@@ -211,13 +238,6 @@ class DesktopNotifierAdapter(QObject):
             )
         except Exception:
             log.exception("DesktopNotifier.notify falhou")
-            self._fallback(n)
-            return
-        if nid:
-            self._active[key] = nid
-            self._last_delivered[key] = snapshot
-        else:
-            log.info("DesktopNotifier.notify não retornou id; usando fallback")
             self._fallback(n)
 
     def _fallback(self, n: Notification) -> None:

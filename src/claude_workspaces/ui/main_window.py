@@ -4507,6 +4507,19 @@ class MainWindow(QMainWindow):
             node = node.parent()
         return None
 
+    @staticmethod
+    def _sidebar_data_summary(data) -> str:
+        """Resumo curto do UserRole de um item da sidebar pra log. O `%r` de
+        um Workspace serializa runners/env/configs (~10KB por linha) e era o
+        que enchia o app.log a ponto de rotacionar 2MB a cada ~10min."""
+        if isinstance(data, Workspace):
+            return f"Workspace({data.name})"
+        if isinstance(data, tuple):
+            return f"tuple({', '.join(str(x)[:24] for x in data)})"
+        if data is None or isinstance(data, (str, int)):
+            return repr(data)
+        return type(data).__name__
+
     def _on_selection_changed(self, current, _previous) -> None:
         # Atualiza a barra branca de seleção dos consoles: zera a do
         # item anterior, liga a do novo. Só TerminalChildWidget tem
@@ -4519,8 +4532,9 @@ class MainWindow(QMainWindow):
             _previous.data(0, Qt.ItemDataRole.UserRole) if _previous is not None else None
         )
         log.info(
-            "[SIDEBAR] _on_selection_changed prev=%r current=%r",
-            previous_data, current_data,
+            "[SIDEBAR] _on_selection_changed prev=%s current=%s",
+            self._sidebar_data_summary(previous_data),
+            self._sidebar_data_summary(current_data),
         )
         for item in (_previous, current):
             if item is None:
@@ -4828,8 +4842,8 @@ class MainWindow(QMainWindow):
         raw_data = item.data(0, Qt.ItemDataRole.UserRole) if item else None
         has_parent = item.parent() is not None if item else False
         log.info(
-            "[SIDEBAR] _on_tree_item_clicked ENTRY has_parent=%s data=%r",
-            has_parent, raw_data,
+            "[SIDEBAR] _on_tree_item_clicked ENTRY has_parent=%s data=%s",
+            has_parent, self._sidebar_data_summary(raw_data),
         )
         # Clique no header de seção (FIXADOS / WORKSPACES) → toggle.
         if raw_data == self._SECTION_HEADER_ROLE:

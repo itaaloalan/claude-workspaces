@@ -1133,7 +1133,8 @@ class TerminalWidget(QWidget):
         # (mesmo decode+strip caro do parse) enquanto o buffer não muda.
         if self._ready_callback is not None:
             if self._idle_marker_cache is None:
-                self._idle_marker_cache = has_idle_marker(bytes(self._output_buffer))
+                with perf.timed("poll.idle_marker"):
+                    self._idle_marker_cache = has_idle_marker(bytes(self._output_buffer))
             if self._idle_marker_cache:
                 self._fire_ready_callback(True)
         if not self._activity_dirty and self._last_working and age <= 2.5:
@@ -1222,10 +1223,14 @@ class TerminalWidget(QWidget):
             self._last_status = activity.status
             self._last_working = activity.is_working
             self._last_needs_decision = effective_needs_decision
-            self.activity_changed.emit(
-                activity.status, activity.is_working, effective_needs_decision
-            )
-            self._refresh_continue_visibility()
+            # Timed porque o emit é síncrono e encadeia sidebar, inbox e
+            # notificações — historicamente era o custo escondido do tick
+            # (poll.tick max ~800ms sem nenhum sub-timer acusando).
+            with perf.timed("poll.emit_activity"):
+                self.activity_changed.emit(
+                    activity.status, activity.is_working, effective_needs_decision
+                )
+                self._refresh_continue_visibility()
 
         # Detecção de PR: escaneia o buffer inteiro (não só a última linha)
         # pra capturar a URL mesmo que ela tenha rolado para fora das 8k.

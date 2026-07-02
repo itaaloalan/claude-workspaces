@@ -206,7 +206,10 @@ class SessionCard(QFrame):
             )
             self._star_btn.setStyleSheet(
                 f"QPushButton {{ background: transparent; color: {theme.TEXT_FAINT}; "
-                "border: 0; font-size: 13px; padding: 0; }}"
+                # String normal (não f-string): `}}` aqui ia literal pro QSS e
+                # invalidava a folha inteira — era a origem dos warnings
+                # "Could not parse stylesheet" re-emitidos em todo hover.
+                "border: 0; font-size: 13px; padding: 0; }"
                 "QPushButton:hover { color: #f0c040; }"
             )
 

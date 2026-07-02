@@ -21,6 +21,10 @@ from claude_workspaces.notifications.desktop import DesktopNotifierAdapter
 
 
 class _FakeDesktop:
+    """Espelha a API assíncrona do DesktopNotifier: resolve o
+    replaces_id_provider no "run" e entrega o note_id via on_posted inline
+    (síncrono — nos testes não há pool)."""
+
     def __init__(self):
         self.notify_calls: list[dict] = []
         self.close_calls: list[int] = []
@@ -30,10 +34,14 @@ class _FakeDesktop:
     def available(self) -> bool:
         return True
 
-    def notify(self, **kw) -> int:
+    def notify(self, **kw) -> None:
         self._next += 1
+        provider = kw.pop("replaces_id_provider", None)
+        kw["replaces_id"] = int(provider()) if provider else int(kw.get("replaces_id", 0))
+        on_posted = kw.pop("on_posted", None)
         self.notify_calls.append(kw)
-        return self._next
+        if on_posted is not None:
+            on_posted(self._next)
 
     def close(self, note_id: int) -> None:
         self.close_calls.append(note_id)
@@ -133,6 +141,49 @@ def test_mark_seen_closes_popup(setup):
     assert n is not None
     svc.mark_seen(n.id)
     assert fake.close_calls == [1]
+
+
+def test_transition_replaces_same_banner(setup):
+    svc, fake, _ = setup
+    svc.notify(NotificationKind.AGENT_WAITING, "⏳ Aguardando — w",
+               dedup_key=KEY, tab_id=1)
+    # Aguardando → Decisão no mesmo console: precisa REUSAR o banner
+    # (replaces_id do primeiro), não empilhar um segundo.
+    svc.notify(NotificationKind.PERMISSION_REQUIRED, "❓ Decisão — w",
+               dedup_key=KEY, tab_id=1)
+    assert len(fake.notify_calls) == 2
+    assert fake.notify_calls[0]["replaces_id"] == 0
+    assert fake.notify_calls[1]["replaces_id"] == 1
+
+
+def test_posted_after_seen_closes_banner(tmp_path: Path):
+    """Corrida do notify assíncrono: o usuário foca o console (mark_seen)
+    enquanto o gdbus ainda roda. Quando o note_id chega, o adapter deve
+    FECHAR o banner em vez de registrá-lo como ativo."""
+    svc = NotificationService(tmp_path / "n.json")
+    svc.set_preferences(cooldown_seconds=60, desktop_enabled=True)
+
+    class _DeferredDesktop(_FakeDesktop):
+        def __init__(self):
+            super().__init__()
+            self.pending_posted = []
+
+        def notify(self, **kw) -> None:
+            self._next += 1
+            kw.pop("replaces_id_provider", None)
+            self.pending_posted.append((kw.pop("on_posted", None), self._next))
+            self.notify_calls.append(kw)
+
+    fake = _DeferredDesktop()
+    adapter = DesktopNotifierAdapter(svc, fake, is_app_focused=lambda: False)
+    n = svc.notify(NotificationKind.AGENT_WAITING, "⏳ Aguardando — w",
+                   dedup_key=KEY, tab_id=1)
+    assert n is not None and fake.pending_posted
+    svc.mark_seen(n.id)  # usuário viu antes do servidor responder
+    on_posted, nid = fake.pending_posted.pop()
+    on_posted(nid)
+    assert fake.close_calls == [nid]
+    assert adapter._active == {}
 
 
 def test_waiting_suppressed_when_target_visible(tmp_path: Path):

@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.21.0] — 2026-07-02
+
+### Auditoria de logs round 2 — os logs novos entregaram os culpados
+
+A instrumentação da 1.20.0 apontou direto:
+
+- **Popup não congela mais a UI**: `DesktopNotifier.notify()`/`close()` rodavam
+  `gdbus call` (subprocess + D-Bus, até 3s) **síncronos na UI thread** — era o
+  `poll.tick max=806ms` do perf.log e jank de clique ao focar console (o close
+  roda nesse caminho). Agora rodam num QThreadPool de 1 thread (ordem
+  preservada); o note_id volta via `on_posted` no main thread e o
+  `replaces_id` é resolvido na execução do job (transições continuam
+  substituindo o mesmo banner). Medido: notify() retornava em ~20ms+ no melhor
+  caso; agora 0,1ms. Corrida coberta: se o usuário foca o console enquanto o
+  gdbus roda, o banner é fechado ao postar em vez de ficar órfão (com teste).
+- **QSS quebrada do botão ☆ corrigida** (session_card.py): a string do meio da
+  concatenação não era f-string e o `}}` ia literal pro Qt — TODA sessão
+  não-favoritada re-parseava a folha inválida em cada hover (791 warnings no
+  app.log; o stack do handler novo apontou a linha exata). Teste de regressão
+  garante card sem warnings de parse.
+- **app.log parou de rotacionar 2MB a cada ~10min**: `[SIDEBAR]
+  _on_selection_changed`/`_on_tree_item_clicked` logavam o `%r` do Workspace
+  inteiro (runners+env+configs, ~10KB por linha, ~20KB por clique). Agora
+  logam resumo curto (`Workspace(nome)`).
+- **poll.tick sem buracos de instrumentação**: `poll.emit_activity` (a cascata
+  síncrona sidebar/inbox/notificações) e `poll.idle_marker` agora aparecem no
+  perf.log — dá pra confirmar o ganho do gdbus assíncrono no próximo log.
+
+Registrado pra depois (fora de escopo): os 5,9s da primeira troca no boot são
+a restauração (PTYs + WebEngine) atropelando o event loop — pede lazy-load.
+
 ## [1.20.1] — 2026-07-02
 
 ### Chip 🕐 "desde HH:MM" na toolbar do runner

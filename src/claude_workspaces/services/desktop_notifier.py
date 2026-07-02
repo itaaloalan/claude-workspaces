@@ -29,7 +29,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import SLOT, QObject, Signal, Slot
+from PySide6.QtCore import SLOT, QObject, QRunnable, QThreadPool, Signal, Slot
 
 # Mapa reason → nome legível pro log (spec FDO §Signals.NotificationClosed).
 # 1=expired (timeout do servidor), 2=dismissed (usuário fechou), 3=closed
@@ -128,8 +128,40 @@ def _play_sound_async(sound_name: str) -> None:
     threading.Thread(target=_worker, daemon=True).start()
 
 
+class _GdbusJobSignals(QObject):
+    # payload: dict com note_id (int|None) + callbacks/meta pro registro no
+    # main thread. Signal de worker → conexão queued automática.
+    done = Signal(object)
+
+
+class _GdbusJob(QRunnable):
+    """Roda um callable (subprocess gdbus) no pool e emite o resultado."""
+
+    def __init__(self, fn: Callable[[], dict], signals: _GdbusJobSignals) -> None:
+        super().__init__()
+        self._fn = fn
+        self._signals = signals
+
+    def run(self) -> None:
+        try:
+            payload = self._fn()
+        except Exception:  # noqa: BLE001 — notificação nunca derruba nada
+            log.exception("job gdbus falhou")
+            payload = None
+        if payload is not None:
+            self._signals.done.emit(payload)
+
+
 class DesktopNotifier(QObject):
-    """Wrapper sobre o serviço FDO Notifications com suporte a ações."""
+    """Wrapper sobre o serviço FDO Notifications com suporte a ações.
+
+    `notify()`/`close()` são NÃO-bloqueantes: o `gdbus call` (subprocess +
+    roundtrip D-Bus, até 3s no pior caso) roda num QThreadPool de 1 thread —
+    rodava síncrono na UI thread e congelava o app a cada popup (medido
+    poll.tick max ~800ms no perf.log). Pool de 1 thread preserva a ordem
+    dos jobs (notify → close, notifies sucessivos do mesmo banner).
+    O note_id volta pelo callback `on_posted` no main thread.
+    """
 
     action_invoked = Signal(int, str)
     notification_closed = Signal(int, int)
@@ -142,6 +174,10 @@ class DesktopNotifier(QObject):
         self._pending: dict[int, dict[str, Any]] = {}
         self._connected: bool = False
         self._gdbus_path: str | None = shutil.which("gdbus")
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(1)
+        self._job_signals = _GdbusJobSignals()
+        self._job_signals.done.connect(self._on_notify_posted)
         # Timestamp (monotonic) de quando cada nota foi criada — usado pra
         # logar quanto tempo o popup ficou vivo ao receber NotificationClosed.
         self._created_at: dict[int, float] = {}
@@ -239,8 +275,18 @@ class DesktopNotifier(QObject):
         resident: bool = False,
         transient: bool | None = None,
         suppress_sound: bool = False,
-    ) -> int | None:
-        """Dispara notificação. Retorna o id (int) ou None em falha.
+        on_posted: Callable[[int | None], None] | None = None,
+        replaces_id_provider: Callable[[], int] | None = None,
+    ) -> None:
+        """Dispara notificação de forma assíncrona (não bloqueia a UI).
+
+        O `gdbus call` roda no pool; quando o servidor responde, `on_posted`
+        é chamado NO MAIN THREAD com o note_id (ou None em falha — é o
+        gancho pro fallback do chamador). `replaces_id_provider`, quando
+        fornecido, é resolvido no momento em que o job executa (não no
+        enqueue) — dois notifies enfileirados do mesmo banner fazem o 2º
+        enxergar o note_id que o 1º acabou de registrar, mantendo o
+        replace in-place.
 
         `urgency`: 0=low, 1=normal (default), 2=critical. Critical é
         sticky por padrão em GNOME/KDE — útil pra alertas de
@@ -250,7 +296,9 @@ class DesktopNotifier(QObject):
         System Settings → Notifications → Applications.
         """
         if not self.available:
-            return None
+            if on_posted is not None:
+                on_posted(None)
+            return
         actions = actions or []
         action_list: list[str] = []
         for key, label in actions:
@@ -294,61 +342,96 @@ class DesktopNotifier(QObject):
             # transient e persistente.
             hint_parts.append("'transient': <" + ("true" if transient else "false") + ">")
         hints_arg = "{" + ", ".join(hint_parts) + "}" if hint_parts else "{}"
-        # Log da chamada completa + estado do DND. Se o popup sumir cedo, esse
-        # log é o ponto de partida pra investigar: confere se a hint chegou,
-        # se DND não está ativo, e cruza com o NotificationClosed mais à frente
-        # (pelo note_id) pra medir o tempo de vida real do banner.
         action_keys = [a[0] for a in actions]
-        log.info(
-            "notify enviado: title=%r urgency=%s timeout_ms=%s hints=%s "
-            "replaces_id=%s actions=%s server=%s caps=%s dnd=%s",
-            title, urgency, timeout_ms, hints_arg, replaces_id,
-            action_keys, self._server_info.get("name", "?"),
-            sorted(self._caps), self.inhibited(),
-        )
-        try:
-            proc = subprocess.run(
-                [
-                    self._gdbus_path or "gdbus", "call",
-                    "--session",
-                    "--dest", _BUS_SERVICE,
-                    "--object-path", _BUS_PATH,
-                    "--method", f"{_BUS_IFACE}.Notify",
-                    self._app_name,
-                    str(int(replaces_id)),
-                    icon,
-                    title,
-                    body,
-                    actions_arg,
-                    hints_arg,
-                    str(int(timeout_ms)),
-                ],
-                capture_output=True, text=True, timeout=3,
+        gdbus_path = self._gdbus_path or "gdbus"
+        app_name = self._app_name
+        server_name = self._server_info.get("name", "?")
+        caps = sorted(self._caps)
+
+        def _job() -> dict:
+            # Roda NO WORKER: resolve replaces_id na hora (um notify anterior
+            # do mesmo banner já pode ter registrado o note_id), consulta o
+            # DND (outro gdbus, até 2s) e faz a chamada Notify em si.
+            rid = int(replaces_id_provider() if replaces_id_provider else replaces_id)
+            # Log da chamada completa + estado do DND. Se o popup sumir cedo,
+            # esse log é o ponto de partida pra investigar: confere se a hint
+            # chegou, se DND não está ativo, e cruza com o NotificationClosed
+            # mais à frente (pelo note_id) pra medir a vida real do banner.
+            log.info(
+                "notify enviado: title=%r urgency=%s timeout_ms=%s hints=%s "
+                "replaces_id=%s actions=%s server=%s caps=%s dnd=%s",
+                title, urgency, timeout_ms, hints_arg, rid,
+                action_keys, server_name, caps, self.inhibited(),
             )
-        except (subprocess.TimeoutExpired, OSError):
-            log.debug("gdbus call timeout/erro", exc_info=True)
-            return None
-        if proc.returncode != 0:
-            log.debug("gdbus Notify falhou: %s", proc.stderr.strip())
-            return None
-        m = _GDBUS_ID_RE.search(proc.stdout)
-        if not m:
-            log.debug("Não consegui parsear id em: %r", proc.stdout)
-            return None
-        note_id = int(m.group(1))
-        self._pending[note_id] = {
-            "on_action": on_action,
-            "on_closed": on_closed,
-        }
-        self._created_at[note_id] = time.monotonic()
-        log.info("notify aceito pelo servidor: note_id=%s title=%r", note_id, title)
-        # Cap simples FIFO — entradas antigas que nunca chegaram a fechamento
-        # explícito (Plasma só emite reason=1) não devem ficar pendurando.
-        while len(self._pending) > _PENDING_MAX:
-            oldest = next(iter(self._pending))
-            self._pending.pop(oldest, None)
-            self._created_at.pop(oldest, None)
-        return note_id
+            note_id: int | None = None
+            try:
+                proc = subprocess.run(
+                    [
+                        gdbus_path, "call",
+                        "--session",
+                        "--dest", _BUS_SERVICE,
+                        "--object-path", _BUS_PATH,
+                        "--method", f"{_BUS_IFACE}.Notify",
+                        app_name,
+                        str(rid),
+                        icon,
+                        title,
+                        body,
+                        actions_arg,
+                        hints_arg,
+                        str(int(timeout_ms)),
+                    ],
+                    capture_output=True, text=True, timeout=3,
+                )
+            except (subprocess.TimeoutExpired, OSError):
+                log.debug("gdbus call timeout/erro", exc_info=True)
+                proc = None
+            if proc is not None:
+                if proc.returncode != 0:
+                    log.debug("gdbus Notify falhou: %s", proc.stderr.strip())
+                else:
+                    m = _GDBUS_ID_RE.search(proc.stdout)
+                    if m:
+                        note_id = int(m.group(1))
+                    else:
+                        log.debug("Não consegui parsear id em: %r", proc.stdout)
+            return {
+                "note_id": note_id,
+                "title": title,
+                "on_action": on_action,
+                "on_closed": on_closed,
+                "on_posted": on_posted,
+            }
+
+        self._pool.start(_GdbusJob(_job, self._job_signals))
+
+    def _on_notify_posted(self, payload: dict) -> None:
+        """Completion do Notify — roda no main thread (signal queued).
+        Registra callbacks/timestamps e avisa o chamador via on_posted."""
+        note_id = payload.get("note_id")
+        if note_id:
+            self._pending[note_id] = {
+                "on_action": payload.get("on_action"),
+                "on_closed": payload.get("on_closed"),
+            }
+            self._created_at[note_id] = time.monotonic()
+            log.info(
+                "notify aceito pelo servidor: note_id=%s title=%r",
+                note_id, payload.get("title"),
+            )
+            # Cap simples FIFO — entradas antigas que nunca chegaram a
+            # fechamento explícito (Plasma só emite reason=1) não devem
+            # ficar pendurando.
+            while len(self._pending) > _PENDING_MAX:
+                oldest = next(iter(self._pending))
+                self._pending.pop(oldest, None)
+                self._created_at.pop(oldest, None)
+        on_posted = payload.get("on_posted")
+        if on_posted is not None:
+            try:
+                on_posted(note_id)
+            except Exception:
+                log.debug("on_posted callback falhou", exc_info=True)
 
     def inhibited(self) -> bool:
         """True se "Não perturbe" (DND) está ativo no servidor de notificações.
@@ -380,22 +463,31 @@ class DesktopNotifier(QObject):
         return "true" in proc.stdout.lower()
 
     def close(self, note_id: int) -> None:
+        """Fecha o banner de forma assíncrona (fire-and-forget no pool).
+        Roda em caminho de clique (focar console → mark_seen) — o subprocess
+        síncrono aqui era jank de clique."""
         if not self.available or note_id <= 0:
             return
-        try:
-            subprocess.run(
-                [
-                    self._gdbus_path or "gdbus", "call",
-                    "--session",
-                    "--dest", _BUS_SERVICE,
-                    "--object-path", _BUS_PATH,
-                    "--method", f"{_BUS_IFACE}.CloseNotification",
-                    str(int(note_id)),
-                ],
-                capture_output=True, timeout=2,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            log.debug("CloseNotification falhou", exc_info=True)
+        gdbus_path = self._gdbus_path or "gdbus"
+
+        def _job() -> None:
+            try:
+                subprocess.run(
+                    [
+                        gdbus_path, "call",
+                        "--session",
+                        "--dest", _BUS_SERVICE,
+                        "--object-path", _BUS_PATH,
+                        "--method", f"{_BUS_IFACE}.CloseNotification",
+                        str(int(note_id)),
+                    ],
+                    capture_output=True, timeout=2,
+                )
+            except (subprocess.TimeoutExpired, OSError):
+                log.debug("CloseNotification falhou", exc_info=True)
+            return None  # fire-and-forget: sem payload, sem signal
+
+        self._pool.start(_GdbusJob(_job, self._job_signals))
 
     @Slot("uint", str)
     def _on_action_invoked(self, note_id: int, action_key: str) -> None:
