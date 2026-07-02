@@ -350,3 +350,22 @@ def test_persist_on_shutdown_is_idempotent(main_window):
     assert len(calls) == 1
     # timer periódico é parado no shutdown
     assert not main_window._sessions_persist_timer.isActive()
+
+
+def test_copy_branch_link_copies_to_clipboard(main_window):
+    """⧉ no header do console (href=copy-branch) copia a branch ativa."""
+    from PySide6.QtGui import QGuiApplication
+
+    main_window._pane_branch_full = "italo/melhoria_perdas_testes"
+    main_window._on_pane_title_link("copy-branch")
+    assert QGuiApplication.clipboard().text() == "italo/melhoria_perdas_testes"
+
+
+def test_copy_branch_link_noop_without_branch(main_window):
+    """Sem branch conhecida, o link não sobrescreve o clipboard."""
+    from PySide6.QtGui import QGuiApplication
+
+    QGuiApplication.clipboard().setText("conteudo-preservado")
+    main_window._pane_branch_full = ""
+    main_window._on_pane_title_link("copy-branch")
+    assert QGuiApplication.clipboard().text() == "conteudo-preservado"

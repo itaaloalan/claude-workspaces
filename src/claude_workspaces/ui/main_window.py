@@ -1585,6 +1585,11 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
         self._terminal_pane_title.setMinimumWidth(0)
+        # Link ⧉ embutido no rich-text (href=copy-branch) — copia o nome da
+        # branch do console ativo. Botão inline em vez de chip: fica colado
+        # na branch e não disputa espaço com Plano/Worktree/Reload/VS Code.
+        self._pane_branch_full = ""
+        self._terminal_pane_title.linkActivated.connect(self._on_pane_title_link)
         th_layout.addWidget(self._terminal_pane_title, stretch=1)
         from PySide6.QtCore import QSize as _QS
         from PySide6.QtWidgets import QPushButton as _QPB2
@@ -5262,6 +5267,23 @@ class MainWindow(QMainWindow):
         if hasattr(self, "hooks_view") and self.main_stack.currentWidget() is self.hooks_view:
             self.hooks_view.set_workspace(workspace)
 
+    def _on_pane_title_link(self, href: str) -> None:
+        """Links embutidos no header do console. Hoje só ⧉ (copy-branch):
+        copia o nome da branch do console ativo pro clipboard, com feedback
+        em tooltip no cursor."""
+        if href != "copy-branch":
+            return
+        branch = getattr(self, "_pane_branch_full", "") or ""
+        if not branch:
+            return
+        from PySide6.QtGui import QCursor, QGuiApplication
+        from PySide6.QtWidgets import QToolTip
+        QGuiApplication.clipboard().setText(branch)
+        QToolTip.showText(
+            QCursor.pos(), f"✓ Branch copiada: {branch}",
+            self._terminal_pane_title,
+        )
+
     def _refresh_terminal_pane_title(self) -> None:
         """Atualiza o header do terminal pane com workspace + console
         atualmente selecionados, em destaque. Substitui a tab bar interna
@@ -5330,6 +5352,8 @@ class MainWindow(QMainWindow):
         # Valores inteiros (sem truncar) pro tooltip do header.
         branch_tip = ""
         model_full = ""
+        # Alvo do ⧉ copiar — vazio quando o console não tem branch.
+        self._pane_branch_full = ""
         try:
             tab_id = tab_uid_of(term)
             tree_item = self.terminals_coord.state.tree_items.get(tab_id)
@@ -5341,6 +5365,7 @@ class MainWindow(QMainWindow):
                     modified = int(info.get("modified") or 0)
                     model = (info.get("model") or "").strip()
                     if branch:
+                        self._pane_branch_full = branch
                         short = branch if len(branch) <= 35 else branch[:34] + "…"
                         ahead = int(info.get("ahead") or 0)
                         behind = int(info.get("behind") or 0)
@@ -5357,7 +5382,13 @@ class MainWindow(QMainWindow):
                             f" <span style='color:#555'>·</span> "
                             f"<span style='color:#9aa0a6'>branch</span> "
                             f"<span style='color:#e5b53b;font-weight:600'>"
-                            f"⎇ {short}</span>{sync_html}{mod_html}"
+                            f"⎇ {short}</span>"
+                            # ⧉ = copiar a branch (linkActivated →
+                            # _on_pane_title_link). Inline pra ficar colado
+                            # no nome, mesmo com o header quebrando linha.
+                            f" <a href='copy-branch' style='color:#9aa0a6;"
+                            f"text-decoration:none'>⧉</a>"
+                            f"{sync_html}{mod_html}"
                         )
                         sync_tip = ""
                         if ahead > 0:
@@ -5453,7 +5484,7 @@ class MainWindow(QMainWindow):
         # console/branch/worktree/origem/modelo/MCPs completos.
         tip_parts = [f"workspace: {ws.name}", f"console: {display_full}"]
         if branch_tip:
-            tip_parts.append(f"branch: {branch_tip}")
+            tip_parts.append(f"branch: {branch_tip} (⧉ copia o nome)")
         if wt_full:
             tip_parts.append(f"worktree: 🌿 {wt_full}")
         if base_full:

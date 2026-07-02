@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.23.0] — 2026-07-02
+
+### Botão ⧉ de copiar a branch no header do console
+
+O header do console (workspace · console · branch · worktree · modelo) ganhou
+um ⧉ colado no nome da branch: clique copia o nome completo pro clipboard
+(mesmo quando truncado no display), com tooltip de confirmação
+"✓ Branch copiada: <nome>". Inline no rich-text — não disputa espaço com os
+chips Plano/Worktree/Reload/VS Code, e acompanha a quebra de linha do header.
+
 ## [1.22.0] — 2026-07-02
 
 ### Instrumentação de fluidez — qualquer travada futura se nomeia sozinha
