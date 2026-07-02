@@ -241,7 +241,14 @@ class StatusBarWidgets(QWidget):
         tip = f"RAM {ram} · CPU {cpu_percent:.0f}%"
         if zombies:
             tip += f" · {zombies} processo(s) moribundo(s)"
-        tip += "\nClique pra abrir o gerenciador de recursos"
+        # Honestidade da métrica: soma de RSS conta páginas compartilhadas
+        # (QtWebEngine, consoles claude) mais de uma vez — o footprint físico
+        # real é ~10-15% menor (PSS custa caro demais pro tick de 8s).
+        tip += (
+            "\nSoma do RSS do app + processos filhos — memória compartilhada"
+            "\nconta mais de uma vez; o uso físico real é um pouco menor."
+            "\nClique pra abrir o gerenciador de recursos"
+        )
         self.resources.setToolTip(tip)
 
     def _set_console_visible(self, visible: bool) -> None:

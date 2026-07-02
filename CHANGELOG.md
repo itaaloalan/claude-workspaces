@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.19.1] — 2026-07-02
+
+### Fix: clique na memória do footer não abria o gerenciador
+
+O segmento "4.4 GB · 67%" disparava o clique, mas o `ResourceDialog` morria com
+`OverflowError` **antes do `show()`**: `QProgressBar.setMaximum` recebe int de
+32 bits e as barras eram alimentadas com RSS em **bytes** — qualquer grupo acima
+de ~2 GiB estourava. O timer de refresh (já iniciado no `__init__`) continuava
+vivo e enchia o log de exceções a cada 3s.
+
+- Barras do gerenciador agora trabalham em **MB** (regressão coberta por teste).
+- Tooltip do footer explica a métrica: soma do **RSS** do app + filhos, onde
+  memória compartilhada (QtWebEngine, consoles) conta mais de uma vez — o uso
+  físico real é ~10-15% menor (medido: 3,57 GB RSS vs 3,13 GB PSS). PSS ficou
+  de fora do tick de 8s por custar ~134ms de walk na árvore.
+
 ## [1.19.0] — 2026-07-02
 
 ### Notificações reorganizadas: menos interrupção, mesma central

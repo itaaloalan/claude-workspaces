@@ -290,8 +290,11 @@ class ResourceDialog(QDialog):
             h["title_txt"] = title_txt
 
         bar = h["bar"]
-        bar.setMaximum(self._max_rss)
-        bar.setValue(g.rss)
+        # QProgressBar trabalha com int de 32 bits: máximo em BYTES estoura
+        # em grupos >2 GiB (OverflowError matava o diálogo antes do show(),
+        # deixando o clique do footer "morto"). Escala em MB.
+        bar.setMaximum(max(1, int(self._max_rss // (1024 * 1024))))
+        bar.setValue(min(int(g.rss // (1024 * 1024)), bar.maximum()))
         color = _bar_color(g.rss)
         if color != h["color"]:
             bar.setStyleSheet(
