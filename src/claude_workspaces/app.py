@@ -2,6 +2,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Sob KDE Plasma 6 Wayland, cada subprocesso do QtWebEngineProcess
@@ -278,7 +279,59 @@ def _log_ghost_window_diagnostics(log: logging.Logger) -> None:
         log.exception("[GHOST-DIAG] falhou")
 
 
+class _PerfApplication(QApplication):
+    """QApplication que cronometra o dispatch de eventos de INPUT.
+
+    `notify()` é o funil de todo evento Qt; aqui medimos só os de interação
+    (mouse/tecla/scroll — comparação de tipo barata antes de qualquer
+    relógio). O tempo medido é o custo do handler síncrono inteiro — é o
+    "clique travou" visto da fonte, sem instrumentar handler por handler.
+    Alimenta `ui.input_dispatch` no perf.log; acima de 100ms loga
+    [INPUT-PERF] no app.log com o widget alvo.
+    """
+
+    _INPUT_TYPES = None  # preenchido no 1º notify (QEvent já importável)
+    _SLOW_MS = 100.0
+
+    def notify(self, receiver, event):  # type: ignore[override]
+        from . import perf
+        if not perf.is_enabled():
+            return super().notify(receiver, event)
+        if type(self)._INPUT_TYPES is None:
+            from PySide6.QtCore import QEvent
+            type(self)._INPUT_TYPES = frozenset({
+                QEvent.Type.MouseButtonPress,
+                QEvent.Type.MouseButtonRelease,
+                QEvent.Type.MouseButtonDblClick,
+                QEvent.Type.KeyPress,
+                QEvent.Type.Wheel,
+            })
+        etype = event.type()
+        if etype not in type(self)._INPUT_TYPES:
+            return super().notify(receiver, event)
+        t0 = time.perf_counter()
+        try:
+            return super().notify(receiver, event)
+        finally:
+            dt_ms = (time.perf_counter() - t0) * 1000
+            from . import perf as _p
+            _p.record("ui.input_dispatch", dt_ms)
+            if dt_ms >= self._SLOW_MS:
+                name = type(receiver).__name__
+                obj_name = ""
+                try:
+                    obj_name = receiver.objectName()
+                except Exception:  # noqa: BLE001
+                    pass
+                target = f"{name}#{obj_name}" if obj_name else name
+                logging.getLogger(__name__).info(
+                    "[INPUT-PERF] dispatch lento: %s em %s dt=%.0fms",
+                    etype.name, target, dt_ms,
+                )
+
+
 def main() -> int:
+    boot_t0 = time.perf_counter()
     setup_logging()
     log = logging.getLogger(__name__)
     log.info("Iniciando Claude Workspaces")
@@ -294,7 +347,7 @@ def main() -> int:
 
     run_probe(backend=settings.ai_backend)
 
-    app = QApplication(sys.argv)
+    app = _PerfApplication(sys.argv)
     app.setApplicationName("Claude Workspaces")
     app.setApplicationDisplayName("Claude Workspaces")
     app.setOrganizationName("claude-workspaces")
@@ -317,6 +370,16 @@ def main() -> int:
 
     window = MainWindow()
     window.show()
+    log.info(
+        "[BOOT-PERF] janela visível em %.0fms",
+        (time.perf_counter() - boot_t0) * 1000,
+    )
+
+    # Watchdog de stalls do main thread — só com perf ligado, e armado
+    # DEPOIS do show() pra não reportar o boot inteiro como stall.
+    if settings.perf_logging_enabled:
+        from . import perf_watchdog
+        QTimer.singleShot(0, perf_watchdog.install)
 
     # Diagnóstico das janelas fantasmas em 3 fases — alguns surfaces
     # do Chromium só aparecem depois que os renderers iniciam. Opt-in via

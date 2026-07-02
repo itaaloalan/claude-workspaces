@@ -1014,6 +1014,17 @@ class RunnerWidget(QWidget):
         # Aviso de descompasso compara a porta REAL (detectada) — a url
         # acima pode já ter sido corrigida pro swap e mascararia o caso.
         self._warn_port_mismatch(detected or url)
+        # Tempo de "loading" do runner: Start → ready/URL detectado. Usa o
+        # _started_at do chip 🕐 — mesma origem que o usuário vê na toolbar.
+        if self._started_at is not None:
+            import time as _t
+            ready_s = max(0.0, _t.time() - self._started_at)
+            log.info(
+                "[RUNNER-PERF] %s start→ready dt=%.1fs",
+                self._runner.name, ready_s,
+            )
+            from .. import perf
+            perf.record("runner.start_to_ready_s", ready_s)
         # Sai do label "startando" → "rodando" agora que detectamos o
         # ready/URL e vamos abrir o browser. State continua "running".
         self._emit_status_label("rodando")

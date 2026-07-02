@@ -3703,12 +3703,20 @@ class MainWindow(QMainWindow):
 
         # Pausa o tick de fundo: o diálogo passa a ser a única fonte de amostra.
         self._resource_timer.stop()
+        import time as _t
+        dlg_t0 = _t.perf_counter()
         dlg = ResourceDialog(
             snapshot_provider=_provider,
             on_free=self._process_monitor.free_memory,
             on_stop=self._stop_process_by_pid,
             on_kill=self._kill_pid,
             parent=self,
+        )
+        # Construção + primeiro _render (sample completo da árvore) — é a
+        # espera percebida entre o clique no footer e o diálogo na tela.
+        log.info(
+            "[DIALOG-PERF] ResourceDialog dt=%.0fms",
+            (_t.perf_counter() - dlg_t0) * 1000,
         )
         self._resource_dialog = dlg
 
@@ -8710,6 +8718,8 @@ class MainWindow(QMainWindow):
         saved = load_saved_sessions()
         if not saved:
             return
+        import time as _t
+        restore_t0 = _t.perf_counter()
         log.info("Restaurando %d sessão(ões) do estado anterior", len(saved))
         restored = 0
         skipped = 0
@@ -8758,8 +8768,9 @@ class MainWindow(QMainWindow):
                 log.exception("Falha ao restaurar sessão %s", entry.session_id)
                 skipped += 1
         log.info(
-            "Restauração concluída: %d lançadas, %d ignoradas (de %d salvas)",
-            restored, skipped, len(saved),
+            "[BOOT-PERF] Restauração concluída em %.0fms: %d lançadas, "
+            "%d ignoradas (de %d salvas)",
+            (_t.perf_counter() - restore_t0) * 1000, restored, skipped, len(saved),
         )
 
     def _open_plugin_palette(self) -> None:

@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.22.0] — 2026-07-02
+
+### Instrumentação de fluidez — qualquer travada futura se nomeia sozinha
+
+Os rounds anteriores caçaram culpados um a um; agora a instrumentação captura
+o que vier, sem precisar adivinhar onde colocar `perf.timed`:
+
+- **StallWatchdog** (`perf_watchdog.py`): heartbeat de 50ms no main thread +
+  thread vigia. Event loop bloqueado >200ms → loga `[STALL] main thread
+  bloqueado ~Xms` **com o stack Python capturado no momento do stall**
+  (`sys._current_frames`) — o log aponta a linha que travou. Throttle de 1
+  stack/5s; todo stall alimenta `ui.stall_ms` no perf.log (n/avg/max por
+  janela). Armado após o show() pra não contar o boot; segue o
+  `perf_logging_enabled`.
+- **Medidor de dispatch de input** (`_PerfApplication.notify`): cronometra o
+  custo do handler síncrono de cada clique/tecla/scroll na fonte. Alimenta
+  `ui.input_dispatch` no perf.log; acima de 100ms loga `[INPUT-PERF]
+  dispatch lento: MouseButtonRelease em Classe#objectName dt=Xms`.
+- **Loadings nomeados** no app.log: `[BOOT-PERF] janela visível em Xms` e
+  `[BOOT-PERF] Restauração concluída em Xms`; `[LOAD-PERF] Terminal bridge
+  pronto dt=Xms` (criação do console → xterm.js interativo, + bucket
+  `ui.bridge_ready_ms`); `[RUNNER-PERF] <nome> start→ready dt=Xs` (usa o
+  mesmo relógio do chip 🕐, + bucket `runner.start_to_ready_s`);
+  `[DIALOG-PERF] ResourceDialog dt=Xms`.
+
+Testes: stall real detectado com stack apontando o culpado; clique lento
+gera [INPUT-PERF] (subprocess com QApplication próprio); suíte inteira verde.
+
 ## [1.21.0] — 2026-07-02
 
 ### Auditoria de logs round 2 — os logs novos entregaram os culpados
