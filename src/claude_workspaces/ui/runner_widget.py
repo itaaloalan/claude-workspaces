@@ -155,6 +155,21 @@ class RunnerWidget(QWidget):
         self._status.setMinimumWidth(0)
         toolbar.addWidget(self._status)
 
+        # Chip 🕐 — hora do último Start e há quanto tempo roda. Responde
+        # "desde quando esse runner está de pé?" sem precisar caçar no log.
+        # Visível só com processo vivo; o relógio re-renderiza a cada minuto.
+        self._since_label = QLabel()
+        self._since_label.setStyleSheet(
+            "QLabel { color: #9aa0a6; border: 1px solid #2c2c2c; "
+            "border-radius: 9px; padding: 1px 8px; font-size: 11px; }"
+        )
+        self._since_label.setVisible(False)
+        toolbar.addWidget(self._since_label)
+        self._started_at: float | None = None
+        self._since_timer = QTimer(self)
+        self._since_timer.setInterval(60_000)
+        self._since_timer.timeout.connect(self._refresh_since_chip)
+
         # Chip 📁 com o cwd EFETIVO do runner — com vários consoles (cada um
         # podendo estar num worktree), mostra pra onde o runner aponta e
         # permite redirecioná-lo pro diretório de um console específico.
@@ -826,6 +841,7 @@ class RunnerWidget(QWidget):
             )
         except OSError as e:
             log.exception("Falha ao iniciar runner")
+            self._clear_started()
             self._set_state("error", f"(erro) {e}")
             return
         # Para runners que abrem browser quando pronto: mostra "startando"
@@ -833,11 +849,47 @@ class RunnerWidget(QWidget):
         # detectado e o browser efetivamente abrir — aí vira "rodando" verde.
         if intent in ("start", "restart"):
             label = "startando"
+            self._mark_started()
         else:
             label = {"stop": "parando"}.get(intent, intent)
         self._set_state(
             "running", f"● {label}: {display_cmd[:80]}", status_label=label
         )
+
+    # ---- chip "desde" ------------------------------------------------------
+
+    def _mark_started(self) -> None:
+        """Registra o momento do Start/Restart e liga o relógio do chip."""
+        import time
+        self._started_at = time.time()
+        self._since_timer.start()
+        self._refresh_since_chip()
+
+    def _clear_started(self) -> None:
+        self._started_at = None
+        self._since_timer.stop()
+        self._since_label.setVisible(False)
+
+    def _refresh_since_chip(self) -> None:
+        if self._started_at is None:
+            self._since_label.setVisible(False)
+            return
+        import time
+        from datetime import datetime
+        started = datetime.fromtimestamp(self._started_at)
+        elapsed = max(0, int(time.time() - self._started_at))
+        mins = elapsed // 60
+        if mins < 1:
+            ago = "agora"
+        elif mins < 60:
+            ago = f"{mins}min"
+        else:
+            ago = f"{mins // 60}h{mins % 60:02d}"
+        self._since_label.setText(f"🕐 desde {started:%H:%M} · {ago}")
+        self._since_label.setToolTip(
+            f"Start em {started:%d/%m/%Y %H:%M:%S}"
+        )
+        self._since_label.setVisible(True)
 
     def _on_bridge_ready(self) -> None:
         self._bridge_ready = True
@@ -1044,6 +1096,7 @@ class RunnerWidget(QWidget):
         # - intent=start ou restart → o processo morreu/terminou → "exited"
         # - intent=stop → bem-sucedido → "exited"
         # (não tem como sair de stop pra running sem nova chamada explícita)
+        self._clear_started()
         self._set_state("exited", "(processo encerrado)")
 
     def _set_state(

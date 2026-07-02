@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.20.1] — 2026-07-02
+
+### Chip 🕐 "desde HH:MM" na toolbar do runner
+
+Ao clicar **Start** (ou Restart), o runner registra a hora e mostra um chip
+"🕐 desde 11:07 · 2h13" ao lado do status — responde "desde quando esse runner
+está de pé?" sem caçar no log. O tempo decorrido re-renderiza a cada minuto e
+o tooltip traz a data/hora completa do start. O chip some quando o processo
+encerra (Stop, crash ou exit).
+
 ## [1.20.0] — 2026-07-02
 
 ### Fluidez + logs úteis (auditoria do app.log/perf.log)
