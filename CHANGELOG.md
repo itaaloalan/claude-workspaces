@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.24.0] — 2026-07-07
+
+### Auditoria de performance round 3 — usage_for_session fora da UI thread
+
+Análise de ~14h de `perf.log`/`app.log` apontou 4 focos concretos:
+
+- **`usage_for_session` (modelo + tokens da sidebar) tirado do main thread**:
+  novo `services/usage_poller.py` roda o parse do JSONL claimed num
+  `QThreadPool` de 1 thread, no padrão do `repo_status_poller`/
+  `plan_usage_poller`. Antes o tick de 8s (`_refresh_terminal_git_info`)
+  chamava direto na UI thread — o cache incremental deixa o regime barato,
+  mas o primeiro parse de uma sessão grande (ou um append grande após
+  compaction) gerava stalls de 500ms–5s.
+- **Métrica `ui.bridge_ready_ms` corrigida pra consoles lazy**: media a
+  partir da criação do widget, não de `ensure_view_loaded()` — um console
+  aberto horas depois de criado logava `dt` na casa de dezenas de milhões
+  de ms, poluindo a média do perf.log e escondendo o loading real.
+- **Backoff do TTL de `git status` em repos cronicamente lentos**
+  (`git_status.py`): 3 execuções lentas seguidas na mesma pasta dobram o
+  TTL efetivo do cache (cap 60s) até o build/churn passar; volta ao normal
+  assim que uma execução voltar a ser rápida. O aviso "git status LENTO"
+  agora soma quantos avisos foram suprimidos no throttle em vez de sumir
+  silenciosamente.
+- **`StallWatchdog` ignora falsos stalls de suspend/hibernate**
+  (`perf_watchdog.py`): compara o salto do relógio de parede com a duração
+  monotônica medida — retomada de notebook suspenso não vira mais um
+  `[STALL]` de dezenas de segundos no log.
+
 ## [1.23.0] — 2026-07-02
 
 ### Botão ⧉ de copiar a branch no header do console

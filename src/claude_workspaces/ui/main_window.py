@@ -293,6 +293,12 @@ class MainWindow(QMainWindow):
         from ..plan_usage_poller import PlanUsagePoller
         self._plan_usage_poller = PlanUsagePoller(parent=self)
         self._plan_usage_poller.done.connect(self._on_plan_usage_ready)
+        # Poller assíncrono de modelo+tokens da sessão (chip da sidebar):
+        # tira o parse do JSONL claimed do tick de 8s da UI thread — sessões
+        # grandes/turnos longos travavam a UI síncrono antes disso.
+        from ..services.usage_poller import UsagePoller
+        self._usage_poller = UsagePoller(parent=self)
+        self._usage_poller.usage_ready.connect(self._on_usage_ready)
         self._repo_poll_timer = QTimer(self)
         self._repo_poll_timer.setInterval(8_000)
         self._repo_poll_timer.timeout.connect(self._refresh_terminal_git_info)
@@ -7803,12 +7809,12 @@ class MainWindow(QMainWindow):
     # ---------- git info na sidebar ----------
 
     def _refresh_terminal_git_info(self) -> None:
-        """Itera os children visíveis e pede status do repo + atualiza
-        modelo/tokens da sessão. Status do git cai em `_on_repo_status_ready`
-        quando prontos; modelo/tokens é setado direto (leitura síncrona
-        rápida do JSONL claimed)."""
-        from ..usage_telemetry import context_window_for_model, usage_for_session
-
+        """Itera os children visíveis e pede status do repo + modelo/tokens
+        da sessão. Ambos são assíncronos: status do git cai em
+        `_on_repo_status_ready`, modelo/tokens em `_on_usage_ready` —
+        parsear o JSONL claimed inline aqui já travou a UI em sessões
+        grandes (primeiro parse de um arquivo de dezenas de MB, ou um
+        append grande após compaction)."""
         for tab_id, item in list(self.terminals_coord.state.tree_items.items()):
             if item is None or item.isHidden():
                 continue
@@ -7831,38 +7837,47 @@ class MainWindow(QMainWindow):
             # cada pasta tenha branch detectada → seu próprio chip na sidebar.
             for extra in term.extra_dirs():
                 self._repo_poller.request(extra)
-            # Modelo + tokens da sessão claimed. usage_for_session tem cache
-            # incremental (só parseia os bytes novos do JSONL desde o último
-            # tick), então a leitura síncrona aqui é barata mesmo em sessões
-            # grandes. Backend opencode guarda sessões em SQLite — não é
-            # JSONL, então pula (parsear o .db binário aqui era lixo + I/O).
+            # Modelo + tokens da sessão claimed. Backend opencode guarda
+            # sessões em SQLite — não é JSONL, então pula (parsear o .db
+            # binário aqui era lixo + I/O).
             session_path = term.claimed_session_path()
             if session_path is None or session_path.suffix != ".jsonl":
                 widget.update_session_info("", 0, 0, 0)
                 continue
-            try:
-                stats = usage_for_session(session_path)
-            except Exception:
-                log.debug("falha ao agregar usage %s", session_path, exc_info=True)
-                continue
-            cache = stats.cache_creation_tokens + stats.cache_read_tokens
-            new_model = stats.last_model or ""
-            ctx_window = context_window_for_model(new_model)
-            widget.update_session_info(
-                new_model,
-                stats.input_tokens,
-                stats.output_tokens,
-                cache,
-                context_tokens=stats.last_context_tokens,
-                context_window=ctx_window,
-            )
+            self._usage_poller.request(tab_id, session_path)
             # NB: a sidebar apenas *exibe* o modelo da sessão (update_session_info
-            # acima). O app não força modelo via --model; o padrão global é o do
-            # próprio Claude CLI, ajustado pelo /model.
+            # em _on_usage_ready). O app não força modelo via --model; o padrão
+            # global é o do próprio Claude CLI, ajustado pelo /model.
         # Status do uso do plano (janela de 5h) — label acima do "Novo
         # Workspace". Replica o `Plan usage limits → Current session` do
         # claude.ai.
         self._refresh_plan_usage_status()
+
+    def _on_usage_ready(self, tab_id: object, stats: object) -> None:
+        """Slot do `UsagePoller`: recebe o `UsageStats` já calculado fora da
+        UI thread e atualiza o chip de modelo/tokens da aba `tab_id`. A aba
+        pode ter fechado/reordenado entre o request e a resposta — resolve
+        de novo pelo mesmo caminho de `_refresh_terminal_git_info` e ignora
+        silenciosamente se não existir mais."""
+        from ..usage_telemetry import context_window_for_model
+
+        item = self.terminals_coord.state.tree_items.get(tab_id)
+        if item is None or item.isHidden():
+            return
+        widget = self.list_widget.itemWidget(item, 0)
+        if not isinstance(widget, TerminalChildWidget):
+            return
+        cache = stats.cache_creation_tokens + stats.cache_read_tokens
+        new_model = stats.last_model or ""
+        ctx_window = context_window_for_model(new_model)
+        widget.update_session_info(
+            new_model,
+            stats.input_tokens,
+            stats.output_tokens,
+            cache,
+            context_tokens=stats.last_context_tokens,
+            context_window=ctx_window,
+        )
 
     def _on_context_status_refresh_clicked(self) -> None:
         """Click no botão ⟳ ao lado do status do plano: força chamada

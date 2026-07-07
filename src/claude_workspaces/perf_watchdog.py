@@ -53,6 +53,7 @@ class StallWatchdog(QObject):
         super().__init__(parent)
         self._threshold = float(threshold_s)
         self._last_beat = time.monotonic()
+        self._last_beat_wall = time.time()
         self._main_tid = threading.get_ident()
         self._stop = threading.Event()
         self._last_stack_log = 0.0
@@ -69,6 +70,7 @@ class StallWatchdog(QObject):
     # ---- main thread ----
     def _beat(self) -> None:
         self._last_beat = time.monotonic()
+        self._last_beat_wall = time.time()
 
     def stop(self) -> None:
         self._stop.set()
@@ -84,6 +86,7 @@ class StallWatchdog(QObject):
                 continue
             # Main thread está travado AGORA — captura o stack no ato.
             stack = self._grab_main_stack()
+            beat_wall = self._last_beat_wall
             # Espera o heartbeat voltar pra medir a duração total do stall
             # (cap de 30s: se nunca volta, loga o que tem e segue).
             deadline = now + 30.0
@@ -94,6 +97,20 @@ class StallWatchdog(QObject):
             ):
                 time.sleep(_HEARTBEAT_MS / 1000)
             dur_ms = (time.monotonic() - beat) * 1000
+            # CLOCK_MONOTONIC do Linux NÃO avança durante suspend/hibernate
+            # (é isso que o distingue do CLOCK_BOOTTIME) — então dur_ms fica
+            # pequeno mesmo que o notebook tenha ficado suspenso por horas.
+            # O relógio de parede (time.time()), esse sim, salta o intervalo
+            # inteiro. Um wall_dur_ms muito maior que dur_ms é justamente
+            # esse descompasso: sinal de suspend, não de freeze real da UI.
+            wall_dur_ms = (time.time() - beat_wall) * 1000
+            if wall_dur_ms > dur_ms * 3 and wall_dur_ms > 5000:
+                log.info(
+                    "[STALL] ignorado (~%.0fms monotonic vs ~%.0fms parede — "
+                    "provável suspend/hibernate, não freeze real)",
+                    dur_ms, wall_dur_ms,
+                )
+                continue
             perf.record("ui.stall_ms", dur_ms)
             self._log_stall(dur_ms, stack)
 

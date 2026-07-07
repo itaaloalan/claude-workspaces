@@ -152,25 +152,57 @@ def _parse_porcelain_v2(stdout: str) -> tuple[str, int, int, list[GitFile]]:
 # Caso típico: worktree com build ativo (target/, node_modules) churnando arquivos
 # não-rastreados, pollado a cada ciclo.
 _SLOW_STATUS_MS = 100.0
+_SLOW_WARN_INTERVAL_S = 60.0
 _slow_warn_lock = threading.Lock()
 _slow_warn_last: dict[str, float] = {}  # folder -> monotonic do último aviso
+_slow_warn_suppressed: dict[str, int] = {}  # folder -> avisos engolidos desde o último
+
+# Backoff do TTL efetivo de cache pra pastas cronicamente lentas: cada
+# execução lenta soma ao streak; a cada 3 seguidas o TTL dobra (cap
+# _BACKOFF_CAP_S). Uma execução rápida zera o streak — volta ao TTL base
+# assim que o build/churn passar. Não muda o comportamento de repos normais
+# (streak nunca sai de 0).
+_BACKOFF_CAP_S = 60.0
+_slow_streak_lock = threading.Lock()
+_slow_streak: dict[str, int] = {}
+
+
+def _note_status_duration(folder: str, dt_ms: float) -> None:
+    with _slow_streak_lock:
+        if dt_ms >= _SLOW_STATUS_MS:
+            _slow_streak[folder] = _slow_streak.get(folder, 0) + 1
+        else:
+            _slow_streak.pop(folder, None)
+
+
+def _backoff_ttl(folder: str, base_ttl: float) -> float:
+    with _slow_streak_lock:
+        streak = _slow_streak.get(folder, 0)
+    if streak < 3 or base_ttl <= 0:
+        return base_ttl
+    doublings = streak // 3
+    return min(base_ttl * (2**doublings), _BACKOFF_CAP_S)
 
 
 def _maybe_warn_slow_status(folder: str, dt_ms: float) -> None:
-    """Conta no perf.log e loga (throttled 30s/pasta) qual pasta tem git status
-    lento — perf.log agrega 'git.status.slow', app.log nomeia a pasta."""
+    """Conta no perf.log e loga (throttled/pasta, com contador de avisos
+    engolidos) qual pasta tem git status lento — perf.log agrega
+    'git.status.slow', app.log nomeia a pasta."""
     if dt_ms < _SLOW_STATUS_MS:
         return
     from . import perf
     perf.count("git.status.slow")
     now = time.monotonic()
     with _slow_warn_lock:
-        if now - _slow_warn_last.get(folder, 0.0) < 30.0:
+        if now - _slow_warn_last.get(folder, 0.0) < _SLOW_WARN_INTERVAL_S:
+            _slow_warn_suppressed[folder] = _slow_warn_suppressed.get(folder, 0) + 1
             return
         _slow_warn_last[folder] = now
+        suppressed = _slow_warn_suppressed.pop(folder, 0)
+    suffix = f" ({suppressed} aviso(s) anteriores suprimidos)" if suppressed else ""
     log.warning(
         "git status LENTO: %.0fms em %s (build ativo? target/node_modules "
-        "churnando arquivos não-rastreados?)", dt_ms, folder,
+        "churnando arquivos não-rastreados?)%s", dt_ms, folder, suffix,
     )
 
 
@@ -189,6 +221,7 @@ def get_status(folder: str) -> GitStatus:
         return GitStatus(folder=folder, is_repo=False, error=str(e))
     dt_ms = (time.perf_counter() - t0) * 1000.0
     perf.record("git.status.subprocess", dt_ms)
+    _note_status_duration(folder, dt_ms)
     _maybe_warn_slow_status(folder, dt_ms)
     if r.returncode != 0:
         # Não é repo (ou git falhou): exit 128 é o caso comum de
@@ -222,16 +255,18 @@ _status_cache: dict[str, tuple[float, GitStatus]] = {}
 
 
 def get_status_cached(folder: str, ttl: float = 8.0) -> GitStatus:
-    """Como `get_status`, mas serve um resultado recente (< `ttl` s) do cache
-    compartilhado em vez de respawnar o subprocess. Fonte única da verdade pros
-    pollers de status. Após uma ação de git (commit/pull/checkout/stage),
-    chame `invalidate(folder)` antes pra forçar leitura fresca."""
+    """Como `get_status`, mas serve um resultado recente (< `ttl` s, ou mais
+    — ver `_backoff_ttl`) do cache compartilhado em vez de respawnar o
+    subprocess. Fonte única da verdade pros pollers de status. Após uma ação
+    de git (commit/pull/checkout/stage), chame `invalidate(folder)` antes
+    pra forçar leitura fresca (o backoff não afeta invalidação manual)."""
     if not folder:
         return GitStatus(folder=folder, is_repo=False)
+    effective_ttl = _backoff_ttl(folder, ttl)
     now = time.monotonic()
     with _cache_lock:
         hit = _status_cache.get(folder)
-        if hit and (now - hit[0]) < ttl:
+        if hit and (now - hit[0]) < effective_ttl:
             return hit[1]
     st = get_status(folder)
     with _cache_lock:

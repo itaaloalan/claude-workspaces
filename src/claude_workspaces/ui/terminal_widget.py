@@ -303,8 +303,12 @@ class TerminalWidget(QWidget):
         TerminalWidget._tab_uid_counter += 1
         self._tab_uid = TerminalWidget._tab_uid_counter
         # Pro [LOAD-PERF] do bridge: quanto tempo do widget nascer até o
-        # xterm.js ficar interativo (WebEngine + JS carregados).
+        # xterm.js ficar interativo (WebEngine + JS carregados). Consoles
+        # lazy (ensure_view_loaded só roda quando a aba fica ativa, minutos
+        # ou horas depois) sobrescrevem esse marco em ensure_view_loaded —
+        # senão o dt mede "widget existe há X horas", não o loading real.
         self._created_at_perf = time.perf_counter()
+        self._view_load_started_at = self._created_at_perf
         self._is_running = False
         self._output_buffer = bytearray()
         self._last_output_time = 0.0
@@ -579,9 +583,11 @@ class TerminalWidget(QWidget):
         self._ready_timeout: QTimer | None = None
 
     def _on_bridge_ready(self) -> None:
-        # dt = tempo até o console ficar utilizável (criação do widget →
-        # WebEngine + xterm.js prontos). É o "loading" percebido do terminal.
-        dt_ms = (time.perf_counter() - self._created_at_perf) * 1000
+        # dt = tempo até o console ficar utilizável. Medido a partir de
+        # ensure_view_loaded (quando a WebEngine view é de fato criada), não
+        # da criação do widget — console lazy pode nascer horas antes de ser
+        # aberto, e medir a partir daí inflava o dt pra dias.
+        dt_ms = (time.perf_counter() - self._view_load_started_at) * 1000
         log.info("[LOAD-PERF] Terminal bridge pronto dt=%.0fms", dt_ms)
         from .. import perf
         perf.record("ui.bridge_ready_ms", dt_ms)
@@ -604,6 +610,7 @@ class TerminalWidget(QWidget):
         if self._view_built:
             return
         self._view_built = True
+        self._view_load_started_at = time.perf_counter()
         # Console em foco: polling de atividade responsivo (status bar/spinner).
         self._activity_timer.setInterval(250)
         self.view = QWebEngineView(self)
