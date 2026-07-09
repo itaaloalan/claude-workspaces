@@ -26,12 +26,12 @@ class _ClickableLabel(QLabel):
 
 
 _SEG_QSS = (
-    "QLabel { color: #c8c8c8; font-size: 11px; padding: 0 8px; }"
-    "QLabel:hover { color: #fff; background: #2a2a2a; }"
+    "QLabel { color: #c9c6c0; font-size: 11px; padding: 0 8px; }"
+    "QLabel:hover { color: #fff; background: #2d2b26; }"
 )
 
 _SEP_QSS = (
-    "QFrame { background: #2a2a2a; max-width: 1px; min-width: 1px; }"
+    "QFrame { background: #2d2b26; max-width: 1px; min-width: 1px; }"
 )
 
 
@@ -69,7 +69,7 @@ class _IconSegment(QWidget):
             self.setToolTip(tooltip)
         self.setStyleSheet(
             "QWidget { background: transparent; }"
-            "QWidget:hover { background: #2a2a2a; }"
+            "QWidget:hover { background: #2d2b26; }"
         )
         h = QHBoxLayout(self)
         h.setContentsMargins(8, 0, 8, 0)
@@ -79,7 +79,7 @@ class _IconSegment(QWidget):
         self._icon.setPixmap(pix)
         h.addWidget(self._icon)
         self._text = QLabel(text)
-        self._text.setStyleSheet("QLabel { color: #c8c8c8; font-size: 11px; background: transparent; }")
+        self._text.setStyleSheet("QLabel { color: #c9c6c0; font-size: 11px; background: transparent; }")
         h.addWidget(self._text)
 
     def setText(self, text: str) -> None:
@@ -101,7 +101,7 @@ class StatusBarWidgets(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setStyleSheet("background: #161616;")
+        self.setStyleSheet("background: #181714;")
         h = QHBoxLayout(self)
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(0)
@@ -212,7 +212,7 @@ class StatusBarWidgets(QWidget):
             color = "#5ac35a"
         else:
             self.runners.setText(f"Runners: 0/{total} parados")
-            color = "#e5b53b"
+            color = "#d4a04a"
         self.runners._text.setStyleSheet(
             f"QLabel {{ color: {color}; font-size: 11px; background: transparent; }}"
         )
@@ -232,7 +232,7 @@ class StatusBarWidgets(QWidget):
         elif rss_bytes >= 3 * 1024 * 1024 * 1024:
             color = "#d57272"
         elif rss_bytes >= 1536 * 1024 * 1024:
-            color = "#e0b86a"
+            color = "#e3c96a"
         else:
             color = "#9aa0a6"
         self.resources._text.setStyleSheet(
@@ -307,7 +307,7 @@ class StatusBarWidgets(QWidget):
             if modified > 0:
                 self.console_branch.setText(
                     f"<span style='color:#9aa0a6'>⎇</span> "
-                    f"<span style='color:#e5b53b;font-weight:600'>{short}</span>"
+                    f"<span style='color:#d4a04a;font-weight:600'>{short}</span>"
                     f"  <span style='color:#ff9d3b'>●{modified}</span>"
                 )
                 self.console_branch.setToolTip(
@@ -316,7 +316,7 @@ class StatusBarWidgets(QWidget):
             else:
                 self.console_branch.setText(
                     f"<span style='color:#9aa0a6'>⎇</span> "
-                    f"<span style='color:#e5b53b;font-weight:600'>{short}</span> "
+                    f"<span style='color:#d4a04a;font-weight:600'>{short}</span> "
                     f"<span style='color:#5ac35a'>✓</span>"
                 )
                 self.console_branch.setToolTip(
@@ -346,7 +346,7 @@ class StatusBarWidgets(QWidget):
         """Atualiza o segmento da direita: tarefa IA atual.
         working=True pinta dot amarelo, senão verde discreto."""
         dot = "●" if working else "○"
-        color = "#e5b53b" if working else "#5ac35a"
+        color = "#d4a04a" if working else "#5ac35a"
         self.task.setText(
             f"<span style='color:{color}'>{dot}</span> {text}"
         )

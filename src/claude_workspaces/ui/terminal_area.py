@@ -10,7 +10,58 @@ from .terminal_child_widget import (
     STATE_IDLE,
     STATE_WORKING,
 )
-from .terminal_widget import TerminalWidget, tab_uid_of
+from .terminal_widget import TerminalWidget, note_view_destroyed_externally, tab_uid_of
+
+
+class _MaterializeQueue(QObject):
+    """Serializa ensure_view_loaded() (criação de QWebEngineView) entre
+    TODAS as TerminalArea da janela, uma de cada vez.
+
+    Várias áreas materializando webviews no mesmo tick do event loop — como
+    no boot, quando N sessões restauradas viram "atual" em sequência e cada
+    TerminalArea dispara seu timer coalescente(0ms) — produz uma rajada de
+    QWebEngineView sendo construídas quase simultaneamente. Isso reproduziu
+    um SIGSEGV nativo (reentrada em PySide::getWrapperForQObject via
+    QObject::doSetProperty, tanto por foco quanto por QWebEngineUrlRequestJob)
+    em coredumps do processo. Espaçar as criações elimina a concorrência que
+    dispara o bug."""
+
+    _STAGGER_MS = 120
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._pending: list[tuple["TerminalArea", TerminalWidget]] = []
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._dispatch_next)
+
+    def enqueue(self, area: "TerminalArea", w: TerminalWidget) -> None:
+        self._pending.append((area, w))
+        if not self._timer.isActive():
+            self._timer.start(0)
+
+    def _dispatch_next(self) -> None:
+        if not self._pending:
+            return
+        area, w = self._pending.pop(0)
+        try:
+            if area._stack.currentWidget() is w:
+                w.ensure_view_loaded()
+                area.focus_active_console()
+        except RuntimeError:
+            pass  # área ou console fechado antes de materializar
+        if self._pending:
+            self._timer.start(self._STAGGER_MS)
+
+
+_materialize_queue: "_MaterializeQueue | None" = None
+
+
+def _get_materialize_queue() -> "_MaterializeQueue":
+    global _materialize_queue
+    if _materialize_queue is None:
+        _materialize_queue = _MaterializeQueue()
+    return _materialize_queue
 
 # Cor do texto da aba em função do status do console. Mantém paridade
 # com o STATE_COLOR usado nas linhas da sidebar — usuário vê de relance
@@ -25,13 +76,13 @@ _TAB_COLOR = {
 _TAB_COLOR_DEFAULT = QColor(theme.TEXT_MUTED)
 
 _TABBAR_QSS = (
-    "QTabBar { background: #0e0e0e; }"
-    "QTabBar::tab { background: #0e0e0e; "
+    "QTabBar { background: #121110; }"
+    "QTabBar::tab { background: #121110; "
     "  padding: 4px 12px; border: 0; "
-    "  border-right: 1px solid #2a2a2a; "
+    "  border-right: 1px solid #2d2b26; "
     "  font-size: 11px; min-height: 18px; }"
-    "QTabBar::tab:selected { background: #0e0e0e; "
-    "  border-bottom: 2px solid #3d6ea8; }"
+    "QTabBar::tab:selected { background: #121110; "
+    "  border-bottom: 2px solid #d4a04a; }"
 )
 
 
@@ -124,7 +175,7 @@ class TerminalArea(QWidget):
         # Conteúdo: StackAll mantém todas as webviews vivas; a "atual" fica
         # no topo. bg do terminal pra evitar faixa branca atrás das views.
         self._content = QWidget()
-        self._content.setStyleSheet("background: #0e0e0e;")
+        self._content.setStyleSheet("background: #121110;")
         self._content.setMinimumWidth(0)
         self._stack = QStackedLayout(self._content)
         self._stack.setContentsMargins(0, 0, 0, 0)
@@ -191,24 +242,62 @@ class TerminalArea(QWidget):
         self._materialize_timer.start()
 
     def _materialize_current_view(self) -> None:
-        """Cria o WebView do console ativo sob demanda (lazy-load) e devolve
-        o foco a ele. Disparado pelo timer coalescente de
+        """Enfileira a criação do WebView do console ativo sob demanda
+        (lazy-load) — a fila compartilhada (_MaterializeQueue) espaça a
+        criação entre todas as TerminalArea pra evitar rajada de
+        QWebEngineView simultâneas. Disparado pelo timer coalescente de
         _on_bar_current_changed."""
         w = self._stack.currentWidget()
         if isinstance(w, TerminalWidget):
-            w.ensure_view_loaded()
-            self.focus_active_console()
+            _get_materialize_queue().enqueue(self, w)
 
     def focus_active_console(self) -> None:
         """Traz o console ativo pro topo do z-order (StackAll) e manda o foco
-        pra webview, pra digitação cair no console certo sem clique do mouse."""
+        pra webview, pra digitação cair no console certo sem clique do mouse.
+
+        setFocus() só é chamado numa QWebEngineView depois que o bridge JS
+        sinaliza pronto (_bridge_ready). Focar uma view recém-criada, ainda
+        inicializando seu QQuickWindow interno, reentra no resolvedor de
+        wrapper do PySide e derruba o processo (SIGSEGV em
+        PySide::getWrapperForQObject) — reproduzido ao restaurar várias
+        sessões de uma vez, cada uma materializando e recebendo foco em
+        sequência."""
         w = self._stack.currentWidget()
-        if w is not None:
-            # StackAll deixa todas visíveis; garante a ativa no topo do
-            # z-order e manda o foco pra webview (input no console certo).
-            w.raise_()
-            view = getattr(w, "view", None)
-            (view or w).setFocus()
+        if w is None:
+            return
+        # StackAll deixa todas visíveis; garante a ativa no topo do z-order.
+        w.raise_()
+        view = getattr(w, "view", None)
+        if view is None:
+            w.setFocus()
+            return
+        if getattr(w, "_bridge_ready", False):
+            view.setFocus()
+        else:
+            self._focus_when_ready(w)
+
+    def _focus_when_ready(self, w: TerminalWidget) -> None:
+        """Adia o setFocus() pra quando o bridge JS da view sinalizar pronto
+        (ver focus_active_console). Reconfere se `w` ainda é o console ativo
+        na hora, pra não focar uma aba que o usuário já trocou."""
+        bridge = getattr(w, "bridge", None)
+        if bridge is None:
+            return
+
+        def _on_ready() -> None:
+            try:
+                bridge.ready.disconnect(_on_ready)
+            except RuntimeError:
+                return  # bridge/console já destruído (fechou antes do ready)
+            try:
+                if self._stack.currentWidget() is w:
+                    view = getattr(w, "view", None)
+                    if view is not None:
+                        view.setFocus()
+            except RuntimeError:
+                pass  # widget fechado entre o disparo do sinal e o setFocus
+
+        bridge.ready.connect(_on_ready)
 
     def _on_tab_moved(self, from_idx: int, to_idx: int) -> None:
         """Mantém o stack na mesma ordem da barra quando o usuário arrasta
@@ -340,6 +429,7 @@ class TerminalArea(QWidget):
         if isinstance(widget, TerminalWidget):
             widget.terminate()
             widget.release_session_claim()
+            note_view_destroyed_externally(widget)
         self._bar.removeTab(index)
         if widget is not None:
             self._stack.removeWidget(widget)

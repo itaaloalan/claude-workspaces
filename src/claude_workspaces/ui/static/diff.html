@@ -8,7 +8,7 @@
         html, body {
             margin: 0; padding: 0;
             width: 100%; height: 100%;
-            background: #0e0e0e; color: #d0d0d0;
+            background: #121110; color: #d0d0d0;
             overflow: auto;
             font-family: 'JetBrains Mono', 'Hack', 'Fira Code', 'DejaVu Sans Mono', monospace;
             font-size: 12px;
@@ -19,7 +19,7 @@
             align-items: center;
             justify-content: center;
             height: 100%;
-            color: #555;
+            color: #5a5750;
             font-size: 12px;
             font-family: monospace;
             user-select: none;
@@ -33,16 +33,16 @@
         .d2h-wrapper { background: transparent; }
 
         .d2h-file-wrapper {
-            background: #141414;
-            border: 1px solid #2a2a2a !important;
+            background: #161513;
+            border: 1px solid #2d2b26 !important;
             border-radius: 6px;
             overflow: hidden;
             margin: 0 4px 6px;
         }
 
         .d2h-file-header {
-            background: #1c1c1c !important;
-            border-bottom: 1px solid #2a2a2a !important;
+            background: #1c1b18 !important;
+            border-bottom: 1px solid #2d2b26 !important;
             padding: 5px 10px;
         }
 
@@ -57,8 +57,8 @@
 
         /* context / unchanged lines */
         .d2h-code-line { color: #c9d1d9; background: transparent; }
-        .d2h-cntx-line, .d2h-cntx-line td { background: #111 !important; }
-        td.d2h-code-linenumber.d2h-cntx { background: #1a1a1a !important; }
+        .d2h-cntx-line, .d2h-cntx-line td { background: #151412 !important; }
+        td.d2h-code-linenumber.d2h-cntx { background: #1c1b18 !important; }
 
         /* deletions */
         .d2h-del-line td, .d2h-del { background: #3a2326 !important; }
@@ -77,19 +77,19 @@
         .d2h-ins .d2h-change { background: #2d572d !important; }
 
         /* hunk header @@ */
-        .d2h-info-line td, .d2h-info { background: #101c30 !important; color: #5282b0 !important; }
-        td.d2h-code-linenumber.d2h-info { background: #0e1828 !important; }
+        .d2h-info-line td, .d2h-info { background: #2a2417 !important; color: #b08d4e !important; }
+        td.d2h-code-linenumber.d2h-info { background: #241f13 !important; }
 
         /* gutter numbers */
         .d2h-code-linenumber, .d2h-code-side-linenumber {
-            background: #1a1a1a !important;
-            border-color: #2a2a2a !important;
+            background: #1c1b18 !important;
+            border-color: #2d2b26 !important;
             color: #484e57 !important;
             min-width: 28px;
         }
 
         /* side-by-side separator */
-        .d2h-file-side-diff { background: #141414; }
+        .d2h-file-side-diff { background: #161513; }
         .d2h-diff-table { width: 100%; }
 
         /* collapser "N unmodified lines" */
@@ -105,7 +105,7 @@
             background-clip: padding-box;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: rgba(100,160,255,0.35);
+            background: rgba(212,160,74,0.4);
             background-clip: padding-box;
         }
         ::-webkit-scrollbar-corner { background: transparent; }
@@ -117,7 +117,7 @@
 <body>
     <div id="placeholder">Clique num arquivo para ver o diff.</div>
     <div id="diff-wrap" style="display:none;"></div>
-    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="vendor/qwebchannel.js"></script>
     <script src="vendor/diff2html-ui.min.js"></script>
     <script src="diff.js"></script>
 </body>

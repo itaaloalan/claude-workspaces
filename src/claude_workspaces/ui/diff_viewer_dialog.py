@@ -37,11 +37,11 @@ from PySide6.QtWidgets import (
 from ..git_actions import WORKTREE, file_blob
 from . import theme
 
-# Fundos por tipo de linha (sutis, sobre o #0e0e0e do editor).
+# Fundos por tipo de linha (sutis, sobre o #121110 do editor).
 _BG_DEL = QColor("#3a2326")   # removida (esquerda)
 _BG_INS = QColor("#22331f")   # adicionada (direita)
 _BG_CHG = QColor("#2b2f1e")   # alterada (ambos os lados)
-_BG_GAP = QColor("#141414")   # preenchimento de alinhamento
+_BG_GAP = QColor("#161513")   # preenchimento de alinhamento
 
 # Realce do trecho que de fato mudou dentro da linha (word-level), mais forte
 # que o fundo da linha — como no IntelliJ.
@@ -72,8 +72,8 @@ class DiffViewerDialog(QDialog):
         self._cur_hunk: int = -1
         self.setMinimumSize(940, 580)
         self.setStyleSheet(
-            f"QDialog {{ background: {theme.BG_PANEL}; color: #e6e6e6; }}"
-            "QLabel { color: #cdd3da; }"
+            f"QDialog {{ background: {theme.BG_PANEL}; color: #e8e6e3; }}"
+            "QLabel { color: #c9c6c0; }"
         )
 
         outer = QVBoxLayout(self)
@@ -142,8 +142,8 @@ class DiffViewerDialog(QDialog):
         ed.setFont(mono)
         ed.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #0e0e0e; border: 1px solid #2c2c2c;"
-            "  border-radius: 6px; color: #d0d0d0; padding: 2px;"
+            "  background: #121110; border: 1px solid #302d27;"
+            "  border-radius: 6px; color: #c9c6c0; padding: 2px;"
             "}"
         )
         return ed
@@ -401,17 +401,17 @@ def _intra_ranges(
 
 _GHOST_QSS = (
     "QPushButton {"
-    "  background: #1f1f1f; color: #c8c8c8;"
-    "  border: 1px solid #2c2c2c; border-radius: 4px; padding: 5px 16px;"
+    "  background: #22201c; color: #c9c6c0;"
+    "  border: 1px solid #302d27; border-radius: 4px; padding: 5px 16px;"
     "}"
-    "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+    "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
 )
 _TOOL_QSS = (
     "QPushButton {"
-    "  background: #1f1f1f; color: #c8c8c8;"
-    "  border: 1px solid #2c2c2c; border-radius: 4px;"
+    "  background: #22201c; color: #c9c6c0;"
+    "  border: 1px solid #302d27; border-radius: 4px;"
     "  padding: 2px 10px; font-size: 13px;"
     "}"
-    "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
-    "QPushButton:disabled { color: #555; border-color: #232323; }"
+    "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
+    "QPushButton:disabled { color: #5a5750; border-color: #26241f; }"
 )

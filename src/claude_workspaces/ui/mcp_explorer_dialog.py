@@ -30,7 +30,7 @@ from ..services.system_open import open_in_file_manager
 
 log = logging.getLogger(__name__)
 
-_SCOPE_COLOR = {"user": "#6aa9e0", "project": "#5ac35a"}
+_SCOPE_COLOR = {"user": "#e0b268", "project": "#5ac35a"}
 _TRANSPORT_COLOR = {"stdio": "#b08cd6", "sse": "#5ac35a", "http": "#e6a23c"}
 
 
@@ -52,7 +52,7 @@ class McpExplorerDialog(QDialog):
             "<code>.mcp.json</code> (projeto)."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0b0b0;")
+        hint.setStyleSheet("color: #b0ada6;")
         outer.addWidget(hint)
 
         # Split horizontal: lista esquerda, detalhe direita
@@ -64,15 +64,15 @@ class McpExplorerDialog(QDialog):
         self._list = QListWidget()
         self._list.setMaximumWidth(280)
         self._list.setStyleSheet(
-            "QListWidget { background: #181818; border: 1px solid #2c2c2c; "
-            "border-radius: 6px; color: #e6e6e6; }"
-            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #232323; }"
-            "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
+            "QListWidget { background: #1a1916; border: 1px solid #302d27; "
+            "border-radius: 6px; color: #e8e6e3; }"
+            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #26241f; }"
+            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
         )
         self._list.itemSelectionChanged.connect(self._render_detail)
         left.addWidget(self._list, stretch=1)
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #888; font-size: 11px;")
+        self._counter.setStyleSheet("color: #8b8880; font-size: 11px;")
         left.addWidget(self._counter)
         body.addLayout(left)
 
@@ -117,7 +117,7 @@ class McpExplorerDialog(QDialog):
             li = QListWidgetItem(f"{s.name}  ·  {s.transport}")
             li.setData(Qt.ItemDataRole.UserRole, s)
             li.setToolTip(f"Escopo: {s.scope}\nArquivo: {s.source_file}")
-            li.setForeground(QBrush(QColor(_SCOPE_COLOR.get(s.scope, "#c8c8c8"))))
+            li.setForeground(QBrush(QColor(_SCOPE_COLOR.get(s.scope, "#c9c6c0"))))
             self._list.addItem(li)
 
         self._counter.setText(f"{len(self._servers)} server(s)")
@@ -140,7 +140,7 @@ class McpExplorerDialog(QDialog):
             "Adicione em ~/.claude.json:\n"
             "  mcpServers: { nome: { command: '…', args: ['…'] } }"
         )
-        lab.setStyleSheet("color: #888;")
+        lab.setStyleSheet("color: #8b8880;")
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._detail_layout.addWidget(lab)
 
@@ -159,11 +159,11 @@ class McpExplorerDialog(QDialog):
         chip_row = QHBoxLayout()
         chip_row.setSpacing(8)
         chip_row.addWidget(QLabel(
-            f"<span style='color:{_SCOPE_COLOR.get(s.scope,'#888')};'>"
+            f"<span style='color:{_SCOPE_COLOR.get(s.scope,'#8b8880')};'>"
             f"● {s.scope}</span>"
         ))
         chip_row.addWidget(QLabel(
-            f"<span style='color:{_TRANSPORT_COLOR.get(s.transport,'#888')};'>"
+            f"<span style='color:{_TRANSPORT_COLOR.get(s.transport,'#8b8880')};'>"
             f"⇄ {s.transport}</span>"
         ))
         chip_row.addStretch()
@@ -191,7 +191,7 @@ class McpExplorerDialog(QDialog):
             meta_l.addRow("<b>url</b>", url_lab)
         if s.env_keys:
             env_str = ", ".join(f"<code>{k}</code>" for k in s.env_keys)
-            env_lab = QLabel(f"{env_str}  <i style='color:#888;'>(valores ocultos)</i>")
+            env_lab = QLabel(f"{env_str}  <i style='color:#8b8880;'>(valores ocultos)</i>")
             env_lab.setWordWrap(True)
             meta_l.addRow("<b>env</b>", env_lab)
         meta_l.addRow("<b>source</b>", QLabel(f"<code>{s.source_file}</code>"))

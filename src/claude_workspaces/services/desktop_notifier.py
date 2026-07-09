@@ -178,6 +178,18 @@ class DesktopNotifier(QObject):
         self._pool.setMaxThreadCount(1)
         self._job_signals = _GdbusJobSignals()
         self._job_signals.done.connect(self._on_notify_posted)
+        # Callbacks de cada notify() ficam SÓ no main thread, indexados por
+        # job_id (int simples). O payload que atravessa o Signal(object)
+        # cross-thread carrega apenas note_id/title/job_id — nunca closures
+        # Python que referenciam QObjects. Emitir um dict com callables via
+        # Signal(object) de uma QThreadPool worker pro main thread reproduziu
+        # um SIGSEGV nativo (reentrada em PySide::getWrapperForQObject via
+        # QObject::doSetProperty) sob carga — independente de versão do
+        # PySide6/Qt, versão do Python ou Wayland vs X11. Ver coredumps do
+        # boot com várias sessões restauradas disparando "Aguardando" quase
+        # juntas.
+        self._next_job_id = 0
+        self._job_callbacks: dict[int, dict[str, Callable | None]] = {}
         # Timestamp (monotonic) de quando cada nota foi criada — usado pra
         # logar quanto tempo o popup ficou vivo ao receber NotificationClosed.
         self._created_at: dict[int, float] = {}
@@ -347,6 +359,15 @@ class DesktopNotifier(QObject):
         app_name = self._app_name
         server_name = self._server_info.get("name", "?")
         caps = sorted(self._caps)
+        # Callbacks registrados aqui (main thread) e recuperados por job_id
+        # em _on_notify_posted — nunca atravessam o Signal(object) cross-thread.
+        self._next_job_id += 1
+        job_id = self._next_job_id
+        self._job_callbacks[job_id] = {
+            "on_action": on_action,
+            "on_closed": on_closed,
+            "on_posted": on_posted,
+        }
 
         def _job() -> dict:
             # Roda NO WORKER: resolve replaces_id na hora (um notify anterior
@@ -398,21 +419,23 @@ class DesktopNotifier(QObject):
             return {
                 "note_id": note_id,
                 "title": title,
-                "on_action": on_action,
-                "on_closed": on_closed,
-                "on_posted": on_posted,
+                "job_id": job_id,
             }
 
         self._pool.start(_GdbusJob(_job, self._job_signals))
 
     def _on_notify_posted(self, payload: dict) -> None:
         """Completion do Notify — roda no main thread (signal queued).
-        Registra callbacks/timestamps e avisa o chamador via on_posted."""
+        Registra callbacks/timestamps e avisa o chamador via on_posted.
+        Os callbacks em si nunca vieram no payload cross-thread — só o
+        job_id; são recuperados aqui do dict main-thread."""
         note_id = payload.get("note_id")
+        job_id = payload.get("job_id")
+        callbacks = self._job_callbacks.pop(job_id, None) or {}
         if note_id:
             self._pending[note_id] = {
-                "on_action": payload.get("on_action"),
-                "on_closed": payload.get("on_closed"),
+                "on_action": callbacks.get("on_action"),
+                "on_closed": callbacks.get("on_closed"),
             }
             self._created_at[note_id] = time.monotonic()
             log.info(
@@ -426,7 +449,7 @@ class DesktopNotifier(QObject):
                 oldest = next(iter(self._pending))
                 self._pending.pop(oldest, None)
                 self._created_at.pop(oldest, None)
-        on_posted = payload.get("on_posted")
+        on_posted = callbacks.get("on_posted")
         if on_posted is not None:
             try:
                 on_posted(note_id)

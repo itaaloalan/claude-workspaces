@@ -60,17 +60,17 @@ _CAT_ICON = {
 
 _STOP_BTN_QSS = (
     "QPushButton { background: transparent; color: #9aa0a6; "
-    "border: 1px solid #2c2c2c; border-radius: 4px; padding: 2px 10px; "
+    "border: 1px solid #302d27; border-radius: 4px; padding: 2px 10px; "
     "font-size: 11px; }"
     "QPushButton:hover { color: #e06c75; border-color: #e06c75; }"
 )
 
 _FREE_BTN_QSS = (
-    "QPushButton { background: #1f1f1f; color: #e6e6e6; "
-    "border: 1px solid #2c2c2c; border-radius: 5px; padding: 5px 14px; "
+    "QPushButton { background: #22201c; color: #e8e6e3; "
+    "border: 1px solid #302d27; border-radius: 5px; padding: 5px 14px; "
     "font-size: 12px; font-weight: 600; }"
     "QPushButton:hover { border-color: #5ac35a; color: #fff; }"
-    "QPushButton:disabled { color: #555; }"
+    "QPushButton:disabled { color: #5a5750; }"
 )
 
 
@@ -220,7 +220,7 @@ class ResourceDialog(QDialog):
         row = _ClickableFrame()
         row.setCursor(Qt.CursorShape.PointingHandCursor)
         row.setStyleSheet(
-            "QFrame { background: #161616; border: 1px solid #242424; "
+            "QFrame { background: #181714; border: 1px solid #26241f; "
             "border-radius: 6px; }"
             "QLabel { background: transparent; border: 0; }"
         )
@@ -298,7 +298,7 @@ class ResourceDialog(QDialog):
         color = _bar_color(g.rss)
         if color != h["color"]:
             bar.setStyleSheet(
-                "QProgressBar { background: #202020; border: 0; border-radius: 3px; }"
+                "QProgressBar { background: #181714; border: 0; border-radius: 3px; }"
                 f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
             )
             h["color"] = color
@@ -317,7 +317,7 @@ class ResourceDialog(QDialog):
                 old.deleteLater()
             detail = QFrame()
             detail.setStyleSheet(
-                "QFrame { background: #121212; border: 1px solid #242424; "
+                "QFrame { background: #121110; border: 1px solid #26241f; "
                 "border-top: 0; border-radius: 0 0 6px 6px; }"
                 "QLabel { background: transparent; border: 0; }"
             )

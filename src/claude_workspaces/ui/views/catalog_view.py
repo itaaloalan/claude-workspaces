@@ -42,7 +42,7 @@ class CatalogView(QWidget):
         toolbar.addWidget(title)
         toolbar.addStretch()
         hint = QLabel(
-            "<span style='color:#888;'>Single click: detalhe ao lado · "
+            "<span style='color:#8b8880;'>Single click: detalhe ao lado · "
             "Double click: copiar invocação</span>"
         )
         toolbar.addWidget(hint)
@@ -51,8 +51,8 @@ class CatalogView(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(6)
         splitter.setStyleSheet(
-            "QSplitter::handle { background: #2a2a2a; }"
-            "QSplitter::handle:hover { background: #3d6ea8; }"
+            "QSplitter::handle { background: #2d2b26; }"
+            "QSplitter::handle:hover { background: #d4a04a; }"
         )
 
         # SkillsPanel sem auto-dialog — emite só o signal

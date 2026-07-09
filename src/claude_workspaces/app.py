@@ -25,6 +25,8 @@ os.environ.setdefault(
 from PySide6.QtCore import Qt, QTimer  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QColor,
+    QFont,
+    QFontDatabase,
     QIcon,
     QPainter,
     QPalette,
@@ -38,91 +40,92 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from .logging_setup import setup_logging  # noqa: E402
+from .ui import theme  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
 
-_GLOBAL_DARK_QSS = """
-QMenu {
-    background: #1f1f1f;
-    color: #e6e6e6;
-    border: 1px solid #2c2c2c;
+_GLOBAL_DARK_QSS = f"""
+QMenu {{
+    background: {theme.BG_SURFACE};
+    color: {theme.TEXT_PRIMARY};
+    border: 1px solid {theme.BORDER_INPUT};
     padding: 4px 0;
-}
-QMenu::item {
+}}
+QMenu::item {{
     padding: 6px 22px 6px 18px;
     background: transparent;
-}
-QMenu::item:selected {
-    background: #3d6ea8;
-    color: #fff;
-}
-QMenu::item:disabled {
-    color: #777;
-}
-QMenu::separator {
+}}
+QMenu::item:selected {{
+    background: {theme.PRIMARY};
+    color: {theme.TEXT_ON_ACCENT};
+}}
+QMenu::item:disabled {{
+    color: #8b8880;
+}}
+QMenu::separator {{
     height: 1px;
-    background: #2c2c2c;
+    background: {theme.BORDER_INPUT};
     margin: 4px 8px;
-}
-QToolTip {
-    background: #1f1f1f;
-    color: #e6e6e6;
-    border: 1px solid #2c2c2c;
+}}
+QToolTip {{
+    background: {theme.BG_SURFACE};
+    color: {theme.TEXT_PRIMARY};
+    border: 1px solid {theme.BORDER_INPUT};
     padding: 4px 6px;
-}
-QMessageBox, QInputDialog, QFileDialog {
-    background: #181818;
-    color: #e6e6e6;
-}
-QMessageBox QLabel, QInputDialog QLabel {
-    color: #e6e6e6;
+}}
+QMessageBox, QInputDialog, QFileDialog {{
+    background: {theme.BG_DARK};
+    color: {theme.TEXT_PRIMARY};
+}}
+QMessageBox QLabel, QInputDialog QLabel {{
+    color: {theme.TEXT_PRIMARY};
     background: transparent;
-}
+}}
 /* Scrollbar global — espelha o visual minimalista do viewport do
- * console (terminal.html): 8px, sem track, thumb sutil, hover amarelo.
+ * console (terminal.html): 8px, sem track, thumb sutil, hover âmbar.
  * Pega QListWidget/QTreeWidget/QScrollArea/QPlainTextEdit/QTextBrowser
  * etc. de uma vez. */
-QScrollBar:vertical {
+QScrollBar:vertical {{
     background: transparent;
     width: 8px;
     margin: 0;
     border: 0;
-}
-QScrollBar:horizontal {
+}}
+QScrollBar:horizontal {{
     background: transparent;
     height: 8px;
     margin: 0;
     border: 0;
-}
-QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+}}
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
     background: rgba(255, 255, 255, 40);
     border-radius: 4px;
     min-height: 24px;
     min-width: 24px;
-}
-QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
-    background: rgba(229, 181, 59, 140);
-}
+}}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
+    background: rgba(212, 160, 74, 150);
+}}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     background: transparent;
     border: 0;
     height: 0;
     width: 0;
-}
+}}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
-QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
     background: transparent;
-}
+}}
 QScrollBar::up-arrow, QScrollBar::down-arrow,
-QScrollBar::left-arrow, QScrollBar::right-arrow {
+QScrollBar::left-arrow, QScrollBar::right-arrow {{
     background: transparent;
     border: 0;
     width: 0;
     height: 0;
-}
-QScrollBar::corner {
+}}
+QScrollBar::corner {{
     background: transparent;
-}
+}}
 """
 
 
@@ -182,27 +185,27 @@ def _build_dark_palette() -> QPalette:
     Active + Inactive + Disabled pra todos os roles que importam."""
     pal = QPalette()
     base = {
-        QPalette.ColorRole.Window: "#1a1a1a",
-        QPalette.ColorRole.WindowText: "#e6e6e6",
-        QPalette.ColorRole.Base: "#181818",
-        QPalette.ColorRole.AlternateBase: "#1f1f1f",
-        QPalette.ColorRole.Text: "#e6e6e6",
-        QPalette.ColorRole.PlaceholderText: "#888888",
-        QPalette.ColorRole.ToolTipBase: "#1f1f1f",
-        QPalette.ColorRole.ToolTipText: "#e6e6e6",
-        QPalette.ColorRole.Button: "#1f1f1f",
-        QPalette.ColorRole.ButtonText: "#e6e6e6",
-        QPalette.ColorRole.BrightText: "#ffffff",
-        QPalette.ColorRole.Link: "#6aa9e0",
+        QPalette.ColorRole.Window: theme.BG_PANEL,
+        QPalette.ColorRole.WindowText: theme.TEXT_PRIMARY,
+        QPalette.ColorRole.Base: theme.BG_DARK,
+        QPalette.ColorRole.AlternateBase: theme.BG_SURFACE,
+        QPalette.ColorRole.Text: theme.TEXT_PRIMARY,
+        QPalette.ColorRole.PlaceholderText: theme.TEXT_FAINT,
+        QPalette.ColorRole.ToolTipBase: theme.BG_SURFACE,
+        QPalette.ColorRole.ToolTipText: theme.TEXT_PRIMARY,
+        QPalette.ColorRole.Button: theme.BG_SURFACE,
+        QPalette.ColorRole.ButtonText: theme.TEXT_PRIMARY,
+        QPalette.ColorRole.BrightText: theme.TEXT_BRIGHT,
+        QPalette.ColorRole.Link: theme.TEXT_LINK,
         QPalette.ColorRole.LinkVisited: "#a48ad6",
-        QPalette.ColorRole.Highlight: "#3d6ea8",
-        QPalette.ColorRole.HighlightedText: "#ffffff",
+        QPalette.ColorRole.Highlight: theme.PRIMARY,
+        QPalette.ColorRole.HighlightedText: theme.TEXT_ON_ACCENT,
     }
     disabled_overrides = {
-        QPalette.ColorRole.WindowText: "#777777",
-        QPalette.ColorRole.Text: "#777777",
-        QPalette.ColorRole.ButtonText: "#777777",
-        QPalette.ColorRole.HighlightedText: "#bbbbbb",
+        QPalette.ColorRole.WindowText: "#8b8880",
+        QPalette.ColorRole.Text: "#8b8880",
+        QPalette.ColorRole.ButtonText: "#8b8880",
+        QPalette.ColorRole.HighlightedText: "#c9c6c0",
     }
     for role, hexv in base.items():
         c = QColor(hexv)
@@ -212,6 +215,26 @@ def _build_dark_palette() -> QPalette:
     for role, hexv in disabled_overrides.items():
         pal.setColor(QPalette.ColorGroup.Disabled, role, QColor(hexv))
     return pal
+
+
+def _load_ui_font() -> QFont:
+    """Registra a Inter (vendorada em ui/static/fonts/) e monta a fonte
+    padrão da UI. Cai em Noto Sans / Sans Serif se o TTF não carregar —
+    o terminal (xterm) e os QPlainTextEdit continuam em JetBrains Mono,
+    não afetados por isto."""
+    font_path = (
+        Path(__file__).resolve().parent
+        / "ui" / "static" / "fonts" / "Inter-Variable.ttf"
+    )
+    families: list[str] = []
+    if font_path.exists():
+        font_id = QFontDatabase.addApplicationFont(str(font_path))
+        if font_id != -1:
+            families = QFontDatabase.applicationFontFamilies(font_id)
+    font = QFont()
+    font.setFamilies([*families, "Inter", "Noto Sans", "Sans Serif"])
+    font.setPointSize(10)
+    return font
 
 
 def _log_ghost_window_diagnostics(log: logging.Logger) -> None:
@@ -279,55 +302,22 @@ def _log_ghost_window_diagnostics(log: logging.Logger) -> None:
         log.exception("[GHOST-DIAG] falhou")
 
 
-class _PerfApplication(QApplication):
-    """QApplication que cronometra o dispatch de eventos de INPUT.
-
-    `notify()` é o funil de todo evento Qt; aqui medimos só os de interação
-    (mouse/tecla/scroll — comparação de tipo barata antes de qualquer
-    relógio). O tempo medido é o custo do handler síncrono inteiro — é o
-    "clique travou" visto da fonte, sem instrumentar handler por handler.
-    Alimenta `ui.input_dispatch` no perf.log; acima de 100ms loga
-    [INPUT-PERF] no app.log com o widget alvo.
-    """
-
-    _INPUT_TYPES = None  # preenchido no 1º notify (QEvent já importável)
-    _SLOW_MS = 100.0
-
-    def notify(self, receiver, event):  # type: ignore[override]
-        from . import perf
-        if not perf.is_enabled():
-            return super().notify(receiver, event)
-        if type(self)._INPUT_TYPES is None:
-            from PySide6.QtCore import QEvent
-            type(self)._INPUT_TYPES = frozenset({
-                QEvent.Type.MouseButtonPress,
-                QEvent.Type.MouseButtonRelease,
-                QEvent.Type.MouseButtonDblClick,
-                QEvent.Type.KeyPress,
-                QEvent.Type.Wheel,
-            })
-        etype = event.type()
-        if etype not in type(self)._INPUT_TYPES:
-            return super().notify(receiver, event)
-        t0 = time.perf_counter()
-        try:
-            return super().notify(receiver, event)
-        finally:
-            dt_ms = (time.perf_counter() - t0) * 1000
-            from . import perf as _p
-            _p.record("ui.input_dispatch", dt_ms)
-            if dt_ms >= self._SLOW_MS:
-                name = type(receiver).__name__
-                obj_name = ""
-                try:
-                    obj_name = receiver.objectName()
-                except Exception:  # noqa: BLE001
-                    pass
-                target = f"{name}#{obj_name}" if obj_name else name
-                logging.getLogger(__name__).info(
-                    "[INPUT-PERF] dispatch lento: %s em %s dt=%.0fms",
-                    etype.name, target, dt_ms,
-                )
+# NUNCA sobrescrever QApplication.notify() (nem instalar eventFilter no
+# objeto QApplication) em Python neste app. Com um override Python, TODO
+# evento Qt precisa converter o `receiver` num wrapper Python antes de chamar
+# o método — inclusive QObjects internos criados em C++ que nunca tiveram
+# wrapper (QQuickWindow do compositor da QtWebEngine, QWebEngineUrlRequestJob,
+# QQuickItems...). Criar esse wrapper (PySide::getWrapperForQObject) seta uma
+# dynamic property no QObject, o que dispara SINCRONAMENTE um
+# QDynamicPropertyChangeEvent pro mesmo objeto → reentra o notify() → tenta
+# criar o wrapper que ainda está no meio da construção → SIGSEGV nativo.
+# Foi a causa raiz dos crashes de boot/hover/foco de 2026-07-03 (~10
+# coredumps, todos com getWrapperForQObject↔doSetProperty reentrantes
+# sanduichados pelos frames do QApplicationWrapper::notify). O gate
+# `perf.is_enabled()` dentro do método não protegia nada: o wrapping dos
+# argumentos acontece no trampolim gerado, ANTES do corpo Python rodar.
+# A métrica ui.input_dispatch que vivia aqui foi removida; o StallWatchdog
+# (perf_watchdog) cobre o mesmo diagnóstico com stack Python do stall.
 
 
 def main() -> int:
@@ -347,7 +337,7 @@ def main() -> int:
 
     run_probe(backend=settings.ai_backend)
 
-    app = _PerfApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("Claude Workspaces")
     app.setApplicationDisplayName("Claude Workspaces")
     app.setOrganizationName("claude-workspaces")
@@ -358,6 +348,7 @@ def main() -> int:
     # cinza-escuro em fundo cinza-escuro.
     app.setStyle(_WhiteDialogIconStyle(QStyleFactory.create("Fusion")))
     app.setPalette(_build_dark_palette())
+    app.setFont(_load_ui_font())
     # QSS global pra widgets que o Fusion + palette não cobrem direito
     # (QMenu vinha branco em algumas distros, QToolTip idem).
     app.setStyleSheet(_GLOBAL_DARK_QSS)

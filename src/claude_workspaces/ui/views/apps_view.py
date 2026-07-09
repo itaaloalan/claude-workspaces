@@ -168,7 +168,7 @@ class _AppPage(QWidget):
             toolbar.addWidget(b)
 
         self._url_label = QLabel("")
-        self._url_label.setStyleSheet("color: #888; font-size: 11px;")
+        self._url_label.setStyleSheet("color: #8b8880; font-size: 11px;")
         self._url_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         toolbar.addWidget(self._url_label, stretch=1)
 
@@ -285,7 +285,7 @@ class AppsView(QWidget):
         topbar.addWidget(title)
         topbar.addStretch()
         hint = QLabel(
-            "<span style='color:#888;'>PWAs auxiliares com sessão persistente "
+            "<span style='color:#8b8880;'>PWAs auxiliares com sessão persistente "
             "(cookies isolados por app)</span>"
         )
         topbar.addWidget(hint)
@@ -301,11 +301,11 @@ class AppsView(QWidget):
         self._list = QListWidget()
         self._list.setFixedWidth(180)
         self._list.setStyleSheet(
-            "QListWidget { background: #181818; border: 1px solid #2c2c2c; "
-            "border-radius: 6px; color: #d4d4d4; padding: 4px; }"
+            "QListWidget { background: #1a1916; border: 1px solid #302d27; "
+            "border-radius: 6px; color: #c9c6c0; padding: 4px; }"
             "QListWidget::item { padding: 8px 6px; border-radius: 4px; }"
-            "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
-            "QListWidget::item:hover { background: #232323; }"
+            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QListWidget::item:hover { background: #26241f; }"
         )
         self._list.currentRowChanged.connect(self._on_row_changed)
         left.addWidget(self._list, stretch=1)
@@ -334,7 +334,7 @@ class AppsView(QWidget):
         # Stack de páginas
         self._stack = QStackedWidget()
         self._empty = QLabel(
-            "<div style='color:#888; padding:32px; text-align:center;'>"
+            "<div style='color:#8b8880; padding:32px; text-align:center;'>"
             "Nenhum app configurado.<br>Clique em <b>+ App</b> pra adicionar."
             "</div>"
         )

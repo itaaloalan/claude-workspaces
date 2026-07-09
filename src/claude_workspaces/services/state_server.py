@@ -665,26 +665,26 @@ _CONSOLE_HTML = """<!doctype html>
 <title>__TITLE__ — console</title>
 <link rel="stylesheet" href="/static/xterm.css">
 <style>
-  html, body { height: 100%; margin: 0; background: #0e0e0e; }
+  html, body { height: 100%; margin: 0; background: #121110; }
   body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
   #hdr {
     flex: none; display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px; background: #161616; border-bottom: 1px solid #2a2a2a;
-    color: #c8c8c8; font-size: 12px; font-weight: 600;
+    padding: 6px 10px; background: #181714; border-bottom: 1px solid #2d2b26;
+    color: #c9c6c0; font-size: 12px; font-weight: 600;
   }
   #hdr .branch { color: #5ac38a; }
-  #hdr .hint { color: #777; font-weight: 400; margin-left: auto; }
+  #hdr .hint { color: #8b8880; font-weight: 400; margin-left: auto; }
   #tabs { display: flex; gap: 4px; margin-left: 10px; }
   #tabs .tab {
     padding: 2px 9px; border-radius: 6px; cursor: pointer;
-    background: #222; color: #9aa0a6; border: 1px solid #2c2c2c;
+    background: #22201c; color: #9aa0a6; border: 1px solid #302d27;
   }
-  #tabs .tab.active { background: #2e3b4e; color: #e6e6e6; }
+  #tabs .tab.active { background: #2e3b4e; color: #e8e6e3; }
   #restart {
-    background: #222; color: #c8c8c8; border: 1px solid #3a3a3a;
+    background: #22201c; color: #c9c6c0; border: 1px solid #302d27;
     border-radius: 6px; padding: 2px 9px; cursor: pointer; font-size: 12px;
   }
-  #restart:hover { border-color: #e5953b; color: #e5953b; }
+  #restart:hover { border-color: #e0b264; color: #e0b264; }
   #term { flex: 1; min-height: 0; padding: 4px; }
   /* Scrollbar minimalista no viewport do xterm — espelha o visual dos
    * scrollbars Qt do app (8px, track transparente, thumb sutil, hover amarelo). */
@@ -694,10 +694,10 @@ _CONSOLE_HTML = """<!doctype html>
   .xterm-viewport::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,.16); border-radius: 4px; min-height: 24px;
   }
-  .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(229,181,59,.55); }
+  .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(212, 160, 74,.55); }
   #off {
     display: none; position: absolute; inset: 0; align-items: center;
-    justify-content: center; background: rgba(14,14,14,.85); color: #e5953b;
+    justify-content: center; background: rgba(14,14,14,.85); color: #e0b264;
     font-size: 14px; z-index: 9;
   }
 </style>
@@ -722,7 +722,7 @@ _CONSOLE_HTML = """<!doctype html>
     fontSize: 13,
     fontFamily: "monospace",
     lineHeight: 1,
-    theme: { background: "#0e0e0e", foreground: "#d8d8d8" },
+    theme: { background: "#121110", foreground: "#c9c6c0" },
     scrollback: 8000,
   });
   const termEl = document.getElementById("term");

@@ -6,10 +6,10 @@
         allowProposedApi: true,
         scrollback: 1000,
         theme: {
-            background: '#0e0e0e',
-            foreground: '#e0e0e0',
-            cursor: '#e0e0e0',
-            selectionBackground: '#3a3a3a',
+            background: '#121110',
+            foreground: '#e3e1dd',
+            cursor: '#d4a04a',
+            selectionBackground: '#4a3a20',
         },
     });
 

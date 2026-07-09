@@ -255,8 +255,8 @@ class _RunnerFooterRow(QWidget):
 
 
 _CHIP_QSS = (
-    "QPushButton { background: #1b1b1b; "
-    f"color: {theme.TEXT_FAINT}; border: 1px solid #2a2a2a; "
+    "QPushButton { background: #1c1b18; "
+    f"color: {theme.TEXT_FAINT}; border: 1px solid #2d2b26; "
     f"border-radius: 5px; font-size: 9px; font-weight: 650; "
     f"padding: 1px 6px; max-height: 18px; }}"
     f"QPushButton:hover {{ border-color: {theme.PRIMARY}; color: {theme.TEXT_LINK}; }}"
@@ -363,7 +363,7 @@ class SidebarFooter(QWidget):
             f"QPushButton {{ color: {theme.TEXT_FAINT}; background: transparent; "
             "border: none; font-size: 13px; padding: 0px; }"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-            "QPushButton:disabled { color: #555; }"
+            "QPushButton:disabled { color: #5a5750; }"
         )
         up_row.addWidget(
             self.context_status_refresh_btn,
@@ -427,7 +427,7 @@ class SidebarFooter(QWidget):
         # ── Footer bar (sempre visível, 28px) ───────────────────────────
         footer_bar = QWidget()
         footer_bar.setFixedHeight(28)
-        footer_bar.setStyleSheet("QWidget { background: #171717; }")
+        footer_bar.setStyleSheet("QWidget { background: #181714; }")
         fb = QHBoxLayout(footer_bar)
         fb.setContentsMargins(8, 0, 6, 0)
         fb.setSpacing(4)

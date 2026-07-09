@@ -33,6 +33,29 @@ def _login_shell() -> str:
 
 log = logging.getLogger(__name__)
 
+# Contador global de QWebEngineView vivas (todo o app, todos os workspaces) —
+# cada uma carrega um QQuickWindow interno (compositor da WebEngine); eventos
+# de foco/hover/URL-request nesse QQuickWindow reentrando em
+# PySide::getWrapperForQObject reproduziu SIGSEGV nativo em testes. Logar a
+# contagem em cada criação/descarte dá visibilidade de quantas coexistem em
+# uso real, sem precisar instrumentar um debugger a cada investigação.
+_live_webengine_views = 0
+
+
+def note_view_destroyed_externally(widget: "TerminalWidget") -> None:
+    """Decrementa o contador de views vivas quando um console é FECHADO (não
+    só oculto) — `TerminalArea._close_tab` deleta o widget direto
+    (`deleteLater()`), sem passar por `unload_view()`. Chamar antes do
+    delete; no-op se a view já não estava carregada."""
+    if not getattr(widget, "_view_built", False):
+        return
+    global _live_webengine_views
+    _live_webengine_views = max(0, _live_webengine_views - 1)
+    log.info(
+        "[WEBENGINE] view fechada com o console (tab=%s) — %d viva(s) no app",
+        tab_uid_of(widget), _live_webengine_views,
+    )
+
 
 def tab_uid_of(widget: object) -> int:
     """"tab_id" estável de um widget de console. Usa o contador monotônico
@@ -406,7 +429,7 @@ class TerminalWidget(QWidget):
         # entre o toolbar e o terminal (palette default vinha cinza claro
         # em alguns temas).
         self.setStyleSheet(
-            "TerminalWidget { background: #0e0e0e; }"
+            "TerminalWidget { background: #121110; }"
             "QLabel { background: transparent; }"
         )
 
@@ -435,8 +458,8 @@ class TerminalWidget(QWidget):
         self._ctx_bar.setMinimumWidth(0)
         self._ctx_bar.setStyleSheet(
             "QLabel#TerminalContextBar {"
-            " background: #141414; color: #9aa0a6;"
-            " border-bottom: 1px solid #262626;"
+            " background: #161513; color: #9aa0a6;"
+            " border-bottom: 1px solid #1c1b18;"
             " padding: 3px 8px; font-size: 11px; }"
         )
         self._ctx_bar.setVisible(False)
@@ -449,12 +472,12 @@ class TerminalWidget(QWidget):
         toolbar_host.setObjectName("TerminalToolbar")
         toolbar_host.setMinimumWidth(0)
         toolbar_host.setStyleSheet(
-            "QWidget#TerminalToolbar { background: #0e0e0e; border: 0; }"
+            "QWidget#TerminalToolbar { background: #121110; border: 0; }"
         )
         toolbar = QHBoxLayout(toolbar_host)
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(terminal vazio)")
-        self._status.setStyleSheet("color: #b0b0b0;")
+        self._status.setStyleSheet("color: #b0ada6;")
         # Status pode ser muito longo ("Scampering… 9.1k tokens still thinking
         # with medium effort") — sem Ignored propaga largura mínima enorme pro
         # dock central e dispara scroll horizontal na janela toda.
@@ -559,7 +582,7 @@ class TerminalWidget(QWidget):
         self._main_splitter = QSplitter(Qt.Orientation.Vertical, self)
         self._main_splitter.setMinimumWidth(0)
         self._view_placeholder: QWidget | None = QWidget()
-        self._view_placeholder.setStyleSheet("background: #0e0e0e;")
+        self._view_placeholder.setStyleSheet("background: #121110;")
         self._view_placeholder.setMinimumWidth(0)
         self._main_splitter.addWidget(self._view_placeholder)
         self._runner_panel_host = QWidget()
@@ -611,6 +634,12 @@ class TerminalWidget(QWidget):
             return
         self._view_built = True
         self._view_load_started_at = time.perf_counter()
+        global _live_webengine_views
+        _live_webengine_views += 1
+        log.info(
+            "[WEBENGINE] view criada (tab=%s) — %d viva(s) no app",
+            tab_uid_of(self), _live_webengine_views,
+        )
         # Console em foco: polling de atividade responsivo (status bar/spinner).
         self._activity_timer.setInterval(250)
         self.view = QWebEngineView(self)
@@ -644,6 +673,12 @@ class TerminalWidget(QWidget):
         self._unload_timer.stop()
         if not self._view_built or self.view is None:
             return
+        global _live_webengine_views
+        _live_webengine_views = max(0, _live_webengine_views - 1)
+        log.info(
+            "[WEBENGINE] view descarregada (tab=%s) — %d viva(s) no app",
+            tab_uid_of(self), _live_webengine_views,
+        )
         # Para o repasse ao vivo; o bridge persiste e segue capturando p/ replay.
         self.bridge._live = False
         self._primed = False
@@ -661,7 +696,7 @@ class TerminalWidget(QWidget):
         view.deleteLater()
         # Recria o placeholder escuro no topo do splitter (mesmo do __init__).
         self._view_placeholder = QWidget()
-        self._view_placeholder.setStyleSheet("background: #0e0e0e;")
+        self._view_placeholder.setStyleSheet("background: #121110;")
         self._view_placeholder.setMinimumWidth(0)
         self._main_splitter.insertWidget(0, self._view_placeholder)
         self._main_splitter.setStretchFactor(0, 1)
@@ -755,7 +790,7 @@ class TerminalWidget(QWidget):
         cwd_name = Path(cwd).name or cwd
         dirs = f"📁 {escape(cwd_name)}"
         if extras:
-            dirs += f" <span style='color:#7a7f85'>+{len(extras)} dir</span>"
+            dirs += f" <span style='color:#8b8880'>+{len(extras)} dir</span>"
         parts.append(dirs)
 
         # Worktree / branch
@@ -767,7 +802,7 @@ class TerminalWidget(QWidget):
             parts.append(f"🌿 {escape(branch)}")
 
         self._ctx_bar.setText(
-            "<span style='color:#5a5f64'>  •  </span>".join(parts)
+            "<span style='color:#5a5750'>  •  </span>".join(parts)
         )
         # Tooltip com os caminhos completos (o label só mostra o basename)
         tip_dirs = "\n".join([cwd, *extras])
@@ -1401,12 +1436,12 @@ class TerminalWidget(QWidget):
 
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background: #1f1f1f; color: #e6e6e6; "
-            "border: 1px solid #2c2c2c; border-radius: 6px; }"
+            "QMenu { background: #22201c; color: #e8e6e3; "
+            "border: 1px solid #302d27; border-radius: 6px; }"
             "QMenu::item { padding: 6px 16px; }"
-            "QMenu::item:selected { background: #3d6ea8; color: #fff; }"
-            "QMenu::item:disabled { color: #555; }"
-            "QMenu::separator { height: 1px; background: #2a2a2a; margin: 3px 8px; }"
+            "QMenu::item:selected { background: #d4a04a; color: #211709; }"
+            "QMenu::item:disabled { color: #5a5750; }"
+            "QMenu::separator { height: 1px; background: #2d2b26; margin: 3px 8px; }"
         )
 
         act_continue = menu.addAction("▶  Continuar")

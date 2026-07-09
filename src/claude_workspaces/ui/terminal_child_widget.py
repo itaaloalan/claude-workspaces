@@ -148,7 +148,7 @@ class TerminalChildWidget(QWidget):
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
         self._connector_label.setStyleSheet(
-            "QLabel { color: #555555; font-size: 11px; background: transparent; border: 0; }"
+            "QLabel { color: #5a5750; font-size: 11px; background: transparent; border: 0; }"
         )
         outer.addWidget(self._connector_label)
 
@@ -583,9 +583,9 @@ class TerminalChildWidget(QWidget):
         """Renderiza o console como item subordinado ao workspace."""
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
-            bg = "rgba(61, 110, 168, 78)"
+            bg = "rgba(212, 160, 74, 78)"
         elif state == STATE_AWAITING:
-            bg = "rgba(224, 144, 96, 9)"
+            bg = "rgba(229, 130, 74, 9)"
         elif state == STATE_ERROR:
             bg = "rgba(213, 114, 114, 10)"
         else:
@@ -593,7 +593,7 @@ class TerminalChildWidget(QWidget):
         # Borda primary só quando selecionado; demais ficam com borda
         # transparente de 1px pra não deslocar o conteúdo ao selecionar.
         border_color = theme.PRIMARY if self._selected else "transparent"
-        hover_bg = "rgba(74, 130, 197, 100)" if self._selected else "rgba(255, 255, 255, 6)"
+        hover_bg = "rgba(224, 178, 100, 100)" if self._selected else "rgba(255, 255, 255, 6)"
         strip_color = STATE_COLOR[state]
         self._card.setStyleSheet(
             f"#ConsoleCard {{"

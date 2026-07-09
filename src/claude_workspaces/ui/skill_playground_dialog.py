@@ -82,7 +82,7 @@ class SkillPlaygroundDialog(QDialog):
             "Pra liberar tools, ajuste o campo abaixo."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0b0b0;")
+        hint.setStyleSheet("color: #b0ada6;")
         outer.addWidget(hint)
 
         # Prompt
@@ -117,7 +117,7 @@ class SkillPlaygroundDialog(QDialog):
         run_row.addWidget(clear_btn)
         run_row.addStretch()
         self._status = QLabel("idle")
-        self._status.setStyleSheet("color: #888;")
+        self._status.setStyleSheet("color: #8b8880;")
         run_row.addWidget(self._status)
         outer.addLayout(run_row)
 

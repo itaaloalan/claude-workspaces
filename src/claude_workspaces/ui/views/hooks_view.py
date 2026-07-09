@@ -29,7 +29,7 @@ from ...services.system_open import open_in_file_manager
 log = logging.getLogger(__name__)
 
 _SCOPE_COLOR = {
-    "user": "#6aa9e0",
+    "user": "#e0b268",
     "project": "#5ac35a",
     "local": "#e6a23c",
 }
@@ -69,7 +69,7 @@ class HooksView(QWidget):
             "<b>todos</b> os configurados, agrupados por evento e escopo."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0b0b0;")
+        hint.setStyleSheet("color: #b0ada6;")
         outer.addWidget(hint)
 
         # Legend
@@ -88,16 +88,16 @@ class HooksView(QWidget):
         self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.setStyleSheet(
-            "QTreeWidget { background: #181818; border: 1px solid #2c2c2c; "
-            "border-radius: 6px; color: #e6e6e6; }"
+            "QTreeWidget { background: #1a1916; border: 1px solid #302d27; "
+            "border-radius: 6px; color: #e8e6e3; }"
             "QTreeWidget::item { padding: 4px; }"
-            "QTreeWidget::item:selected { background: #3d6ea8; color: #fff; }"
+            "QTreeWidget::item:selected { background: #d4a04a; color: #211709; }"
         )
         self._tree.itemDoubleClicked.connect(self._on_open_file)
         outer.addWidget(self._tree, stretch=1)
 
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #888; font-size: 11px;")
+        self._counter.setStyleSheet("color: #8b8880; font-size: 11px;")
         outer.addWidget(self._counter)
 
     def set_workspace(self, workspace: Workspace | None) -> None:
@@ -136,7 +136,7 @@ class HooksView(QWidget):
                 child.setData(0, Qt.ItemDataRole.UserRole, h)
                 child.setToolTip(0, self._tooltip_for(h))
                 child.setForeground(
-                    1, QBrush(QColor(_SCOPE_COLOR.get(h.scope, "#c8c8c8")))
+                    1, QBrush(QColor(_SCOPE_COLOR.get(h.scope, "#c9c6c0")))
                 )
                 ev_item.addChild(child)
             self._tree.addTopLevelItem(ev_item)

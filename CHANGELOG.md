@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.25.0] — 2026-07-09
+
+### Retema visual "Cursor" — dark quente + accent âmbar
+
+Paleta inteira do app trocada de dark azulado pra dark neutro-quente com
+accent âmbar/dourado, inspirada no visual do Cursor (cursor.com):
+
+- **`ui/theme.py`**: nova escala de `BG_*`/`BORDER_*` com tinta quente,
+  `PRIMARY` sai do azul (`#3d6ea8`) pro âmbar (`#d4a04a`), duas constantes
+  novas — `TEXT_ON_ACCENT` (texto escuro sobre fundo âmbar, contraste
+  ~7.5:1 vs ~2.4:1 com branco) e `PRIMARY_SELECTION_BG` (seleção de
+  listas/trees em âmbar translúcido). `WARNING`/`WAITING` deslocados de
+  matiz pra não colidir visualmente com o novo accent.
+- **`app.py`**: `QPalette` e o QSS global (`QMenu`/`QToolTip`/diálogos/
+  scrollbars) passam a consumir as constantes de `theme.py` em vez de hex
+  duplicado; `Highlight`/`HighlightedText` da paleta usam o par âmbar/texto
+  escuro. UI ganha fonte própria (Inter, vendorada em
+  `ui/static/fonts/Inter-Variable.ttf`, com fallback pra Noto Sans/Sans
+  Serif) — terminal e editores continuam em JetBrains Mono.
+- **`ui/static/terminal.js`, `terminal.html`, `diff.html`**: tema do
+  xterm.js, scrollbars e overrides do diff2html recoloridos pro mesmo
+  dark quente + accent âmbar; verde/vermelho de inserção/deleção do diff
+  não mudam.
+- **~90 arquivos `.py`**: recolorização mecânica de todo hex hardcoded
+  (azuis de seleção/botão primário → âmbar, neutros → nova escala, cinzas
+  soltos → escala de texto) preservando os semânticos que continuam
+  distintos do accent (verde de sucesso, vermelho de erro, rosa/roxo de
+  PR, azul-claro de "renomeado" no git, cores de severidade de skills/
+  hooks, o azul de marca do chip "VS Code").
+
 ## [1.24.0] — 2026-07-07
 
 ### Auditoria de performance round 3 — usage_for_session fora da UI thread

@@ -423,7 +423,9 @@ class LaunchCoordinator(QObject):
             "Contexto atual:\n"
             f"- {wt_line}\n"
             f"- {mcp_line}\n"
-            "Pode continuar de onde paramos."
+            "Esta mensagem é apenas informativa: NÃO inicie nem retome "
+            "nenhuma tarefa por causa dela. Confirme o reload em uma frase "
+            "e aguarde a próxima instrução do usuário."
         )
 
     def launch_shell(

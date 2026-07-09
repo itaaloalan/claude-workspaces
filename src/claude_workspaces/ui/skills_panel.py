@@ -37,7 +37,7 @@ from .skill_detail_dialog import SkillDetailDialog
 log = logging.getLogger(__name__)
 
 KIND_COLOR = {
-    KIND_SKILL: "#6aa9e0",
+    KIND_SKILL: "#e0b268",
     KIND_AGENT: "#b08cd6",
     KIND_COMMAND: "#5ac35a",
 }
@@ -45,13 +45,13 @@ KIND_COLOR = {
 
 _CHIP_CSS = (
     "QPushButton {"
-    "  background: transparent; color: #c8c8c8;"
-    "  border: 1px solid #2c2c2c; border-radius: 12px;"
+    "  background: transparent; color: #c9c6c0;"
+    "  border: 1px solid #302d27; border-radius: 12px;"
     "  padding: 2px 10px; font-size: 11px;"
     "}"
-    "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+    "QPushButton:hover { color: #e8e6e3; border-color: #d4a04a; }"
     "QPushButton:checked {"
-    "  background: #3d6ea8; color: #fff; border-color: #3d6ea8;"
+    "  background: #d4a04a; color: #211709; border-color: #d4a04a;"
     "}"
 )
 
@@ -144,9 +144,9 @@ class SkillsPanel(QWidget):
             "QTabBar::tab { background: transparent; color: #9aa0a6; "
             "  padding: 5px 14px; border: 0; border-bottom: 2px solid transparent;"
             "  font-size: 11px; min-height: 16px; }"
-            "QTabBar::tab:selected { color: #e6e6e6; "
-            "  border-bottom: 2px solid #3d6ea8; }"
-            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
+            "QTabBar::tab:selected { color: #e8e6e3; "
+            "  border-bottom: 2px solid #d4a04a; }"
+            "QTabBar::tab:hover:!selected { color: #c9c6c0; }"
         )
         self._kind_tab_values = [
             self.KIND_FILTER_ALL, KIND_SKILL, KIND_AGENT, KIND_COMMAND,
@@ -195,9 +195,9 @@ class SkillsPanel(QWidget):
         self._search.setPlaceholderText("Filtrar por texto…")
         self._search.setClearButtonEnabled(True)
         self._search.setStyleSheet(
-            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
-            "border-radius: 4px; padding: 4px 8px; color: #e6e6e6; }"
-            "QLineEdit:focus { border-color: #3d6ea8; }"
+            "QLineEdit { background: #22201c; border: 1px solid #302d27; "
+            "border-radius: 4px; padding: 4px 8px; color: #e8e6e3; }"
+            "QLineEdit:focus { border-color: #d4a04a; }"
         )
         self._search.textChanged.connect(self._render)
         outer.addWidget(self._search)
@@ -205,15 +205,15 @@ class SkillsPanel(QWidget):
         self._list = QListWidget()
         self._list.setStyleSheet(
             "QListWidget {"
-            "  background: #181818; border: 1px solid #2c2c2c;"
-            "  border-radius: 6px; color: #e6e6e6;"
+            "  background: #1a1916; border: 1px solid #302d27;"
+            "  border-radius: 6px; color: #e8e6e3;"
             "}"
             "QListWidget::item {"
-            "  padding: 6px 8px; border-bottom: 1px solid #232323;"
-            "  color: #d0d0d0;"
+            "  padding: 6px 8px; border-bottom: 1px solid #26241f;"
+            "  color: #c9c6c0;"
             "}"
-            "QListWidget::item:hover { background: #2a3142; color: #fff; }"
-            "QListWidget::item:selected { background: #3d6ea8; color: #fff; }"
+            "QListWidget::item:hover { background: #2b2620; color: #fff; }"
+            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
         )
         self._list.setWordWrap(True)
         self._list.itemClicked.connect(self._on_click)
@@ -222,7 +222,7 @@ class SkillsPanel(QWidget):
 
         footer = QHBoxLayout()
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        self._counter.setStyleSheet("color: #b0ada6; font-size: 11px;")
         footer.addWidget(self._counter)
         footer.addStretch()
         refresh_btn = QPushButton("↻")
@@ -247,7 +247,7 @@ class SkillsPanel(QWidget):
         row = QHBoxLayout()
         row.setSpacing(4)
         lab = QLabel(label_text)
-        lab.setStyleSheet("color: #888; font-size: 11px;")
+        lab.setStyleSheet("color: #8b8880; font-size: 11px;")
         row.addWidget(lab)
         grp = QButtonGroup(self)
         grp.setExclusive(True)
@@ -413,7 +413,7 @@ class SkillsPanel(QWidget):
                     f"Por workspace:\n{ws_breakdown}"
                 )
             li.setToolTip("\n".join(tooltip_parts))
-            li.setForeground(QBrush(QColor(KIND_COLOR.get(item.kind, "#c8c8c8"))))
+            li.setForeground(QBrush(QColor(KIND_COLOR.get(item.kind, "#c9c6c0"))))
             self._list.addItem(li)
             shown += 1
         total = len(self._all)

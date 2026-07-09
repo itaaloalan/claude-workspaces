@@ -99,7 +99,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         layout = QVBoxLayout(w)
         msg = QLabel("Selecione um workspace na barra lateral ou crie um novo.")
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet("color: #b0b0b0;")
+        msg.setStyleSheet("color: #b0ada6;")
         layout.addWidget(msg)
         return w
 
@@ -119,7 +119,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         self._name = QLabel()
         self._name.setStyleSheet(
-            "font-size: 24px; font-weight: 700; color: #f2f2f2;"
+            "font-size: 24px; font-weight: 700; color: #e8e6e3;"
         )
         header_row.addWidget(self._name)
 
@@ -148,7 +148,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         from .icons import ICONS, ic
 
-        def _icon_btn(qta_name: str, tooltip: str, color: str = "#c8c8c8") -> QPushButton:
+        def _icon_btn(qta_name: str, tooltip: str, color: str = "#c9c6c0") -> QPushButton:
             btn = QPushButton()
             btn.setIcon(ic(qta_name, color=color))
             btn.setIconSize(QSize(14, 14))
@@ -158,7 +158,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
             btn.setStyleSheet(
                 "QPushButton { background: transparent; border: 0; "
                 "border-radius: 4px; }"
-                "QPushButton:hover { background: #2a2a2a; }"
+                "QPushButton:hover { background: #2d2b26; }"
             )
             return btn
 
@@ -271,15 +271,15 @@ class WorkspaceDetailsPanel(QStackedWidget):
         row.setSpacing(8)
         self._mcp_label = QLabel()
         self._mcp_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._mcp_label.setStyleSheet("color: #c8c8c8; font-size: 11px;")
+        self._mcp_label.setStyleSheet("color: #c9c6c0; font-size: 11px;")
         row.addWidget(self._mcp_label, stretch=1)
 
         self._mcp_edit_btn = QPushButton("Configurar MCP")
         self._mcp_edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mcp_edit_btn.setStyleSheet(
-            "QPushButton { background: #1f1f1f; color: #e6e6e6;"
-            "  border: 1px solid #2c2c2c; border-radius: 4px; padding: 3px 10px; font-size: 11px; }"
-            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+            "QPushButton { background: #22201c; color: #e8e6e3;"
+            "  border: 1px solid #302d27; border-radius: 4px; padding: 3px 10px; font-size: 11px; }"
+            "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
         )
         self._mcp_edit_btn.clicked.connect(self._on_edit_mcp)
         row.addWidget(self._mcp_edit_btn)
@@ -349,7 +349,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         from .icons import ICONS, ic
         host = QWidget()
         host.setStyleSheet(
-            "QWidget { background: #1f1f1f; border: 1px solid #2c2c2c; "
+            "QWidget { background: #22201c; border: 1px solid #302d27; "
             "border-radius: 12px; }"
         )
         h = QHBoxLayout(host)
@@ -365,7 +365,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         text_lbl = QLabel(text)
         text_lbl.setStyleSheet(
-            "QLabel { background: transparent; border: 0; color: #c8c8c8; "
+            "QLabel { background: transparent; border: 0; color: #c9c6c0; "
             "font-size: 11px; }"
         )
         text_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -396,26 +396,26 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # Resolve icon: aceita chave do nosso catálogo ou nome qta direto.
         qta_name = ICONS.get(icon, icon) if icon else None
         if qta_name:
-            color = "#ffffff" if primary else "#e6e6e6"
+            color = "#ffffff" if primary else "#e8e6e3"
             btn.setIcon(ic(qta_name, color=color))
             btn.setIconSize(QSize(16, 16))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setMinimumHeight(32)
         if primary:
             btn.setStyleSheet(
-                "QPushButton { background: #3d6ea8; color: #fff; border: 0; "
+                "QPushButton { background: #d4a04a; color: #211709; border: 0; "
                 "border-radius: 6px; padding: 5px 14px; font-size: 12px; "
                 "font-weight: 600; text-align: center; }"
-                "QPushButton:hover { background: #4a82c5; }"
+                "QPushButton:hover { background: #e0b264; }"
                 "QPushButton:pressed { background: #325a8c; }"
             )
         else:
             btn.setStyleSheet(
-                "QPushButton { background: #1f1f1f; color: #e6e6e6; "
-                "border: 1px solid #2c2c2c; border-radius: 6px; "
+                "QPushButton { background: #22201c; color: #e8e6e3; "
+                "border: 1px solid #302d27; border-radius: 6px; "
                 "padding: 5px 14px; font-size: 12px; text-align: center; }"
-                "QPushButton:hover { border-color: #3d6ea8; color: #fff; }"
-                "QPushButton:pressed { background: #181818; }"
+                "QPushButton:hover { border-color: #d4a04a; color: #fff; }"
+                "QPushButton:pressed { background: #1a1916; }"
             )
         return btn
 
@@ -462,7 +462,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
         from .icons import ICONS, ic
         if self.workspace is None:
             return
-        color = "#3d6ea8" if self.workspace.pinned else "#c8c8c8"
+        color = "#d4a04a" if self.workspace.pinned else "#c9c6c0"
         self._pin_btn.setIcon(ic(ICONS["pin"], color=color))
         self._pin_btn.setIconSize(QSize(14, 14))
         self._pin_btn.setToolTip(
@@ -476,7 +476,7 @@ class WorkspaceDetailsPanel(QStackedWidget):
 
         from .icons import ic
         icon_name = "fa5s.window-maximize" if minimized else "fa5s.window-minimize"
-        self._minimize_btn.setIcon(ic(icon_name, color="#c8c8c8"))
+        self._minimize_btn.setIcon(ic(icon_name, color="#c9c6c0"))
         self._minimize_btn.setIconSize(QSize(14, 14))
         self._minimize_btn.setToolTip(
             "Restaurar parte superior" if minimized
@@ -494,15 +494,15 @@ class WorkspaceDetailsPanel(QStackedWidget):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         if primary:
             btn.setStyleSheet(
-                "QPushButton { background: #3d6ea8; color: #fff; border: 0; "
+                "QPushButton { background: #d4a04a; color: #211709; border: 0; "
                 "border-radius: 6px; padding: 6px 12px; font-weight: 600; }"
-                "QPushButton:hover { background: #4a82c5; }"
+                "QPushButton:hover { background: #e0b264; }"
             )
         else:
             btn.setStyleSheet(
-                "QPushButton { background: #1f1f1f; color: #e6e6e6; "
-                "border: 1px solid #2c2c2c; border-radius: 6px; padding: 6px 12px; }"
-                "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+                "QPushButton { background: #22201c; color: #e8e6e3; "
+                "border: 1px solid #302d27; border-radius: 6px; padding: 6px 12px; }"
+                "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
             )
         return btn
 
@@ -521,9 +521,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._sessions_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._sessions_toggle_btn.setToolTip("Colapsar/expandir lista de sessões")
         self._sessions_toggle_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: 0; color: #888;"
+            "QPushButton { background: transparent; border: 0; color: #8b8880;"
             " font-size: 12px; padding: 0; }"
-            "QPushButton:hover { color: #6aa9e0; }"
+            "QPushButton:hover { color: #e0b268; }"
         )
         self._sessions_toggle_btn.clicked.connect(self._toggle_sessions_collapsed)
         header.addWidget(self._sessions_toggle_btn)
@@ -534,9 +534,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._sessions_filter.setClearButtonEnabled(True)
         self._sessions_filter.setMaximumWidth(220)
         self._sessions_filter.setStyleSheet(
-            "QLineEdit { background: #1f1f1f; border: 1px solid #2c2c2c; "
-            "border-radius: 4px; padding: 3px 8px; color: #e6e6e6; font-size: 11px; }"
-            "QLineEdit:focus { border-color: #3d6ea8; }"
+            "QLineEdit { background: #22201c; border: 1px solid #302d27; "
+            "border-radius: 4px; padding: 3px 8px; color: #e8e6e3; font-size: 11px; }"
+            "QLineEdit:focus { border-color: #d4a04a; }"
         )
         self._sessions_filter.textChanged.connect(self._apply_sessions_filter)
         header.addWidget(self._sessions_filter, stretch=1)
@@ -547,10 +547,10 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._only_starred_btn.setToolTip("Mostrar apenas sessões favoritadas")
         self._only_starred_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._only_starred_btn.setStyleSheet(
-            "QPushButton { background: #1f1f1f; border: 1px solid #2c2c2c; "
-            "border-radius: 4px; color: #888; font-size: 13px; padding: 2px; }"
-            "QPushButton:hover { border-color: #3d6ea8; }"
-            "QPushButton:checked { background: #3a2f10; border-color: #f0c040; color: #f0c040; }"
+            "QPushButton { background: #22201c; border: 1px solid #302d27; "
+            "border-radius: 4px; color: #8b8880; font-size: 13px; padding: 2px; }"
+            "QPushButton:hover { border-color: #d4a04a; }"
+            "QPushButton:checked { background: #3a2f10; border-color: #e3c96a; color: #e3c96a; }"
         )
         self._only_starred_btn.toggled.connect(self._apply_sessions_filter)
         header.addWidget(self._only_starred_btn)

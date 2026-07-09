@@ -56,7 +56,7 @@ class SkillEditorDialog(QDialog):
             f"<b>{item.kind.title()}</b> · "
             f"<code>{item.path}</code>"
         )
-        header.setStyleSheet("color: #888;")
+        header.setStyleSheet("color: #8b8880;")
         header.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         outer.addWidget(header)
 

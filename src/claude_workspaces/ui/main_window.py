@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from datetime import UTC
 from pathlib import Path
 
@@ -435,22 +436,22 @@ class MainWindow(QMainWindow):
         # a janela pintar primeiro, evitando flicker do dialog de launch.
         # Só depois do restore popular as áreas é que ligamos o timer, senão
         # o primeiro tick salvaria vazio por cima do estado a restaurar.
-        QTimer.singleShot(
-            0,
-            lambda: (
-                self._restore_sessions(),
-                setattr(self, "_restoring_sessions", False),
-                # Limpa cópias console-scoped de consoles que não voltaram
-                # (fechados/mortos) — senão acumulam indefinidamente.
-                self._gc_orphan_console_runners(),
-                # Seed do payload logo após o restore: o timer só escreve quando
-                # algo mudar em relação a este estado inicial, evitando que o
-                # primeiro tick sobrescreva sessões recém-restauradas que ainda
-                # não estejam marcadas como running.
-                self._persist_active_sessions(),
-                self._sessions_persist_timer.start(),
-            ),
-        )
+        def _after_restore() -> None:
+            self._restoring_sessions = False
+            # Limpa cópias console-scoped de consoles que não voltaram
+            # (fechados/mortos) — senão acumulam indefinidamente.
+            self._gc_orphan_console_runners()
+            # Seed do payload logo após o restore: o timer só escreve quando
+            # algo mudar em relação a este estado inicial, evitando que o
+            # primeiro tick sobrescreva sessões recém-restauradas que ainda
+            # não estejam marcadas como running.
+            self._persist_active_sessions()
+            self._sessions_persist_timer.start()
+
+        # _restore_sessions agora lança as sessões salvas uma de cada vez,
+        # espaçadas (ver _RESTORE_STAGGER_MS) — _after_restore só roda
+        # depois da última.
+        QTimer.singleShot(0, lambda: self._restore_sessions(_after_restore))
         # Primeiro refresh um pouco depois pra dar tempo de o restore criar
         # os children e o claude_cwd estar disponível.
         QTimer.singleShot(800, self._refresh_terminal_git_info)
@@ -478,9 +479,9 @@ class MainWindow(QMainWindow):
         outer.addWidget(self.top_bar)
 
         splitter_css = (
-            "QSplitter::handle { background: #2a2a2a; }"
-            "QSplitter::handle:hover { background: #3a3a3a; }"
-            "QSplitter::handle:pressed { background: #4a82c5; }"
+            "QSplitter::handle { background: #2d2b26; }"
+            "QSplitter::handle:hover { background: #302d27; }"
+            "QSplitter::handle:pressed { background: #e0b264; }"
         )
 
         # Body dock manager (QtAds): sidebar | conteúdo+terminal | right_dock.
@@ -716,7 +717,7 @@ class MainWindow(QMainWindow):
         from .status_bar import StatusBarWidgets
         self.status_widgets = StatusBarWidgets()
         sb = self.statusBar()
-        sb.setStyleSheet("QStatusBar { background: #161616; border-top: 1px solid #2a2a2a; }")
+        sb.setStyleSheet("QStatusBar { background: #181714; border-top: 1px solid #2d2b26; }")
         sb.setSizeGripEnabled(False)
         sb.addPermanentWidget(self.status_widgets, stretch=1)
         # Click no segmento de workspace foca a sidebar/seleciona o
@@ -1029,7 +1030,7 @@ class MainWindow(QMainWindow):
         if title_bar is None:
             return
         btn = QPushButton(title_bar)
-        btn.setIcon(_ic("fa5s.minus", color="#c8c8c8"))
+        btn.setIcon(_ic("fa5s.minus", color="#c9c6c0"))
         btn.setIconSize(QSize(13, 13))
         btn.setFlat(True)
         btn.setFixedSize(22, 22)
@@ -1037,7 +1038,7 @@ class MainWindow(QMainWindow):
         btn.setToolTip("Minimizar painel de ferramentas (Ctrl+Shift+B)")
         btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-            "QPushButton:hover { background: #2a2a2a; }"
+            "QPushButton:hover { background: #2d2b26; }"
         )
         btn.clicked.connect(self._toggle_right_dock)
         # Insere no fim do layout da title bar → fica no canto superior direito,
@@ -1517,20 +1518,20 @@ class MainWindow(QMainWindow):
         self._bottom_sub_splitter.setHandleWidth(SPLITTER_HANDLE_W)
         self._bottom_sub_splitter.setMinimumWidth(0)
         self._bottom_sub_splitter.setStyleSheet(
-            "QSplitter::handle { background: #2a2a2a; }"
-            "QSplitter::handle:hover { background: #3a3a3a; }"
+            "QSplitter::handle { background: #2d2b26; }"
+            "QSplitter::handle:hover { background: #302d27; }"
         )
 
         # ----- Tabs do TERMINAL (só Claude console + EditorTabs) -----
         tabs_qss = (
             "QTabWidget::pane { border: 0; }"
-            "QTabBar { background: #161616; }"
-            "QTabBar::tab { background: #161616; color: #9aa0a6; "
+            "QTabBar { background: #181714; }"
+            "QTabBar::tab { background: #181714; color: #9aa0a6; "
             "  padding: 6px 14px; border: 0; "
-            "  border-right: 1px solid #2a2a2a; min-height: 22px; }"
-            "QTabBar::tab:selected { background: #181818; color: #e6e6e6; "
+            "  border-right: 1px solid #2d2b26; min-height: 22px; }"
+            "QTabBar::tab:selected { background: #1a1916; color: #e8e6e3; "
             "  border-bottom: 2px solid #5ac35a; }"
-            "QTabBar::tab:hover:!selected { color: #c8c8c8; }"
+            "QTabBar::tab:hover:!selected { color: #c9c6c0; }"
         )
         self._terminal_tabs = QTabWidget(pane)
         self._terminal_tabs.setMinimumWidth(0)
@@ -1567,7 +1568,7 @@ class MainWindow(QMainWindow):
         terminal_header = QWidget()
         terminal_header.setMinimumWidth(0)
         terminal_header.setStyleSheet(
-            "background: #161616; border-bottom: 1px solid #2a2a2a;"
+            "background: #181714; border-bottom: 1px solid #2d2b26;"
         )
         th_layout = QHBoxLayout(terminal_header)
         th_layout.setContentsMargins(10, 5, 4, 5)
@@ -1579,7 +1580,7 @@ class MainWindow(QMainWindow):
         self._terminal_pane_title = QLabel("Console IA")
         self._terminal_pane_title.setTextFormat(Qt.TextFormat.RichText)
         self._terminal_pane_title.setStyleSheet(
-            "color: #c8c8c8; font-size: 12px;"
+            "color: #c9c6c0; font-size: 12px;"
         )
         # Branch longo no breadcrumb empurrava o sizeHint do label, forçando
         # a largura mínima do header → painel → dock central e disparando um
@@ -1605,9 +1606,9 @@ class MainWindow(QMainWindow):
         self._plan_chip_btn = _QPB2("📋 Plano")
         self._plan_chip_btn.setStyleSheet(
             "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "border: 1px solid #302d27; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #3d6ea8; }"
+            "QPushButton:hover { color: #e8e6e3; border-color: #d4a04a; }"
         )
         self._plan_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._plan_chip_btn.setToolTip(
@@ -1622,9 +1623,9 @@ class MainWindow(QMainWindow):
         self._worktree_chip_btn = _QPB2("🌿 Worktree")
         self._worktree_chip_btn.setStyleSheet(
             "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "border: 1px solid #302d27; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+            "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
         )
         self._worktree_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._worktree_chip_btn.setToolTip(
@@ -1640,9 +1641,9 @@ class MainWindow(QMainWindow):
         self._reload_chip_btn = _QPB2("🔄 Reload")
         self._reload_chip_btn.setStyleSheet(
             "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #2c2c2c; border-radius: 9px; "
+            "border: 1px solid #302d27; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+            "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
         )
         self._reload_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._reload_chip_btn.setToolTip(
@@ -1678,7 +1679,7 @@ class MainWindow(QMainWindow):
         th_layout.addWidget(self._vscode_chip_btn)
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
-            ic("fa5s.window-minimize", color="#c8c8c8")
+            ic("fa5s.window-minimize", color="#c9c6c0")
         )
         self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
         self._terminal_pane_minimize_btn.setFixedSize(22, 20)
@@ -1686,7 +1687,7 @@ class MainWindow(QMainWindow):
         self._terminal_pane_minimize_btn.setToolTip("Minimizar terminal")
         self._terminal_pane_minimize_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-            "QPushButton:hover { background: #2a2a2a; }"
+            "QPushButton:hover { background: #2d2b26; }"
         )
         self._terminal_pane_minimize_btn.clicked.connect(
             self._toggle_terminal_pane_minimized
@@ -1709,7 +1710,7 @@ class MainWindow(QMainWindow):
         self._loading_overlay = LoadingOverlay(self._terminal_pane_widget)
         self._loading_corner = QLabel("")
         self._loading_corner.setStyleSheet(
-            "color: #6aa9e0; font-size: 12px; padding: 0 8px;"
+            "color: #e0b268; font-size: 12px; padding: 0 8px;"
         )
         self._loading_corner.setVisible(False)
         self.statusBar().addPermanentWidget(self._loading_corner)
@@ -1730,7 +1731,7 @@ class MainWindow(QMainWindow):
         runner_empty = QLabel("Selecione um workspace para ver seus runners.")
         runner_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         runner_empty.setStyleSheet(
-            "background: #0e0e0e; color: #555; padding: 28px;"
+            "background: #121110; color: #5a5750; padding: 28px;"
         )
         self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
 
@@ -1766,7 +1767,7 @@ class MainWindow(QMainWindow):
             cl.setSpacing(0)
             header = QWidget()
             header.setStyleSheet(
-                "background: #161616; border-bottom: 1px solid #2a2a2a;"
+                "background: #181714; border-bottom: 1px solid #2d2b26;"
             )
             hl = QHBoxLayout(header)
             hl.setContentsMargins(8, 3, 4, 3)
@@ -1776,19 +1777,19 @@ class MainWindow(QMainWindow):
             hl.addWidget(icon_lbl)
             t_lbl = QLabel(title)
             t_lbl.setStyleSheet(
-                "color: #c8c8c8; font-size: 11px; font-weight: 600;"
+                "color: #c9c6c0; font-size: 11px; font-weight: 600;"
             )
             hl.addWidget(t_lbl)
             hl.addStretch(1)
             btn = _QPB()
-            btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
+            btn.setIcon(ic("fa5s.window-minimize", color="#c9c6c0"))
             btn.setIconSize(_QS(11, 11))
             btn.setFixedSize(22, 20)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(tooltip_min)
             btn.setStyleSheet(
                 "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-                "QPushButton:hover { background: #2a2a2a; }"
+                "QPushButton:hover { background: #2d2b26; }"
             )
             btn.clicked.connect(on_click)
             hl.addWidget(btn)
@@ -1843,7 +1844,7 @@ class MainWindow(QMainWindow):
         container.setObjectName("consoleRunnerPlaceholder")
         container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         container.setStyleSheet(
-            "#consoleRunnerPlaceholder { background: #0e0e0e; }"
+            "#consoleRunnerPlaceholder { background: #121110; }"
         )
         outer = QVBoxLayout(container)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -1881,7 +1882,7 @@ class MainWindow(QMainWindow):
         )
         body.setAlignment(Qt.AlignmentFlag.AlignCenter)
         body.setWordWrap(True)
-        body.setStyleSheet("background: #0e0e0e; color: #555; padding: 28px;")
+        body.setStyleSheet("background: #121110; color: #5a5750; padding: 28px;")
         outer.addWidget(body, stretch=1)
         return container
 
@@ -1975,7 +1976,7 @@ class MainWindow(QMainWindow):
             else:
                 new_sizes[0] = total
             self._bottom_sub_splitter.setSizes(new_sizes)
-            btn.setIcon(ic("fa5s.window-maximize", color="#c8c8c8"))
+            btn.setIcon(ic("fa5s.window-maximize", color="#c9c6c0"))
             btn.setIconSize(_QS(11, 11))
             btn.setToolTip(tooltip_max)
             if hasattr(self, "_minimize_tray"):
@@ -1999,7 +2000,7 @@ class MainWindow(QMainWindow):
                 new_sizes = [each] * 3
                 new_sizes[idx] = max(target, each)
             self._bottom_sub_splitter.setSizes(new_sizes)
-            btn.setIcon(ic("fa5s.window-minimize", color="#c8c8c8"))
+            btn.setIcon(ic("fa5s.window-minimize", color="#c9c6c0"))
             btn.setIconSize(_QS(11, 11))
             btn.setToolTip(tooltip_min)
             if hasattr(self, "_minimize_tray"):
@@ -3842,7 +3843,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.0)
         item.setFont(0, font)
-        item.setForeground(0, QBrush(QColor("#a8a8a8")))
+        item.setForeground(0, QBrush(QColor("#b0ada6")))
         item.setSizeHint(0, _QS(0, 20))
         self.list_widget.addTopLevelItem(item)
         # Aplica o colapso restaurado imediatamente — esconde os
@@ -4043,9 +4044,9 @@ class MainWindow(QMainWindow):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setToolTip("Buscar arquivos neste workspace (Ctrl+P)")
         btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #c8c8c8; "
+            "QPushButton { background: transparent; color: #c9c6c0; "
             "border: 0; text-align: left; padding: 3px 6px; font-size: 12px; }"
-            "QPushButton:hover { color: #fff; background: #1f1f1f; "
+            "QPushButton:hover { color: #fff; background: #22201c; "
             "border-radius: 3px; }"
         )
 
@@ -4103,11 +4104,11 @@ class MainWindow(QMainWindow):
         )
         btn.setStyleSheet(
             "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px dashed #3a3a3a; border-radius: 4px; "
+            "border: 1px dashed #302d27; border-radius: 4px; "
             "padding: 4px 8px; margin: 0px; text-align: left; "
             "font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #5a5a5a; "
-            "background: #1f1f1f; }"
+            "QPushButton:hover { color: #e8e6e3; border-color: #5a5750; "
+            "background: #22201c; }"
         )
         btn.clicked.connect(lambda: self._show_ai_launch_menu(ws))
         ws_item.addChild(child)
@@ -4606,6 +4607,11 @@ class MainWindow(QMainWindow):
         ws_changed = ws.id != getattr(self, "_last_shown_ws_id", None)
         if ws_changed:
             self._last_shown_ws_id = ws.id
+            # 1ª seleção deste workspace na sessão do app: lança as sessões
+            # salvas dele que ficaram adiadas do boot (ver _restore_sessions).
+            # No-op se não houver nada adiado (workspace inicial, ou já
+            # restaurado numa seleção anterior).
+            self._restore_deferred_sessions_for(ws)
             # Mostra o overlay JÁ GIRANDO e defere o trabalho da troca pro
             # próximo tick do event loop: assim o arco anima ANTES/DURANTE a
             # troca (e não só depois, sobre conteúdo já pronto). O overlay
@@ -4991,8 +4997,8 @@ class MainWindow(QMainWindow):
         cache = getattr(self, "_focus_icon_cache", None)
         if cache is None:
             cache = {
-                "min": ic("fa5s.window-minimize", color="#c8c8c8"),
-                "max": ic("fa5s.window-maximize", color="#c8c8c8"),
+                "min": ic("fa5s.window-minimize", color="#c9c6c0"),
+                "max": ic("fa5s.window-maximize", color="#c9c6c0"),
             }
             self._focus_icon_cache = cache
         icon_min = cache["min"]
@@ -5311,7 +5317,7 @@ class MainWindow(QMainWindow):
                     break
         if ws is None or term is None or not isinstance(term, TerminalWidget):
             placeholder = (
-                "<span style='color:#666'>Claude console — "
+                "<span style='color:#5a5750'>Claude console — "
                 "selecione um console no sidebar</span>"
             )
             if hasattr(self, "_worktree_chip_btn"):
@@ -5348,7 +5354,7 @@ class MainWindow(QMainWindow):
             f"<span style='color:#5ac35a;font-weight:600'>{ws.name}</span>"
         )
         console_html = (
-            f"<span style='color:#e5b53b;font-weight:600'>{display}</span>"
+            f"<span style='color:#d4a04a;font-weight:600'>{display}</span>"
         )
         # Branch + model: lookup do TerminalChildWidget correspondente
         # (mesma fonte usada pelo footer / status bar) — não duplicar
@@ -5379,15 +5385,15 @@ class MainWindow(QMainWindow):
                         if ahead > 0:
                             sync_html += f" <span style='color:#5ac35a'>↑{ahead}</span>"
                         if behind > 0:
-                            sync_html += f" <span style='color:#e09060'>↓{behind}</span>"
+                            sync_html += f" <span style='color:#e5824a'>↓{behind}</span>"
                         mod_html = (
                             f" <span style='color:#ff9d3b'>●{modified}</span>"
                             if modified > 0 else ""
                         )
                         branch_html = (
-                            f" <span style='color:#555'>·</span> "
+                            f" <span style='color:#5a5750'>·</span> "
                             f"<span style='color:#9aa0a6'>branch</span> "
-                            f"<span style='color:#e5b53b;font-weight:600'>"
+                            f"<span style='color:#d4a04a;font-weight:600'>"
                             f"⎇ {short}</span>"
                             # ⧉ = copiar a branch (linkActivated →
                             # _on_pane_title_link). Inline pra ficar colado
@@ -5406,9 +5412,9 @@ class MainWindow(QMainWindow):
                         branch_tip = f"⎇ {branch}{sync_tip}"
                     if model:
                         model_html = (
-                            f" <span style='color:#555'>·</span> "
+                            f" <span style='color:#5a5750'>·</span> "
                             f"<span style='color:#9aa0a6'>modelo</span> "
-                            f"<span style='color:#6aa9e0;font-weight:600'>"
+                            f"<span style='color:#e0b268;font-weight:600'>"
                             f"{model}</span>"
                         )
                         model_full = model
@@ -5426,7 +5432,7 @@ class MainWindow(QMainWindow):
             if len(label) > 30:
                 label = label[:29] + "…"
             worktree_html = (
-                f" <span style='color:#555'>·</span> "
+                f" <span style='color:#5a5750'>·</span> "
                 f"<span style='color:#9aa0a6'>worktree</span> "
                 f"<span style='color:#5ac38a;font-weight:600'>🌿 {escape(label)}</span>"
             )
@@ -5442,7 +5448,7 @@ class MainWindow(QMainWindow):
                 base_full = base
                 b = base if len(base) <= 25 else base[:24] + "…"
                 origem_html = (
-                    f" <span style='color:#555'>·</span> "
+                    f" <span style='color:#5a5750'>·</span> "
                     f"<span style='color:#9aa0a6'>origem</span> "
                     f"<span style='color:#8a8f95;font-weight:600'>🌱 {escape(b)}</span>"
                 )
@@ -5456,7 +5462,7 @@ class MainWindow(QMainWindow):
             if len(mcp_names) > 4:
                 shown += f" +{len(mcp_names) - 4}"
             mcp_html = (
-                f" <span style='color:#555'>·</span> "
+                f" <span style='color:#5a5750'>·</span> "
                 f"<span style='color:#9aa0a6'>mcp</span> "
                 f"<span style='color:#6cc7ce;font-weight:600'>🔌 {shown}</span>"
             )
@@ -5464,13 +5470,13 @@ class MainWindow(QMainWindow):
         # Linha 2: branch · modelo · mcp  (só se houver algum desses campos)
         line1 = (
             f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
-            f"<span style='color:#555'>·</span> "
+            f"<span style='color:#5a5750'>·</span> "
             f"<span style='color:#9aa0a6'>console</span> {console_html}"
         )
         # Cada frag começa com " <span...>·</span> conteúdo" — extrai só
         # o conteúdo removendo o prefixo " · " HTML pra montar a linha 2
         # sem separador inicial desnecessário.
-        _DOT_PREFIX = " <span style='color:#555'>·</span> "
+        _DOT_PREFIX = " <span style='color:#5a5750'>·</span> "
         line2_parts: list[str] = [
             frag[len(_DOT_PREFIX):] if frag.startswith(_DOT_PREFIX) else frag
             for frag in (branch_html, worktree_html, origem_html, model_html, mcp_html)
@@ -7335,7 +7341,7 @@ class MainWindow(QMainWindow):
         if pending:
             self._reload_chip_btn.setText("🔄 Reload › worktree")
             self._reload_chip_btn.setStyleSheet(
-                "QPushButton { background: rgba(61,138,95,0.18); color: #e6e6e6; "
+                "QPushButton { background: rgba(61,138,95,0.18); color: #e8e6e3; "
                 "border: 1px solid #3d8a5f; border-radius: 9px; "
                 "padding: 1px 8px; font-size: 11px; }"
                 "QPushButton:hover { border-color: #4fae77; }"
@@ -7348,9 +7354,9 @@ class MainWindow(QMainWindow):
             self._reload_chip_btn.setText("🔄 Reload")
             self._reload_chip_btn.setStyleSheet(
                 "QPushButton { background: transparent; color: #9aa0a6; "
-                "border: 1px solid #2c2c2c; border-radius: 9px; "
+                "border: 1px solid #302d27; border-radius: 9px; "
                 "padding: 1px 8px; font-size: 11px; }"
-                "QPushButton:hover { color: #e6e6e6; border-color: #3d8a5f; }"
+                "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
             )
             self._reload_chip_btn.setToolTip(
                 "Recarregar a sessão: reinicia o processo mantendo o contexto "
@@ -8324,10 +8330,10 @@ class MainWindow(QMainWindow):
             return
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background: #1f1f1f; color: #e6e6e6; "
-            "border: 1px solid #2c2c2c; border-radius: 6px; }"
+            "QMenu { background: #22201c; color: #e8e6e3; "
+            "border: 1px solid #302d27; border-radius: 6px; }"
             "QMenu::item { padding: 6px 16px; }"
-            "QMenu::item:selected { background: #3d6ea8; color: #fff; }"
+            "QMenu::item:selected { background: #d4a04a; color: #211709; }"
         )
         claude_act = menu.addAction("Claude Code")
         claude_act.triggered.connect(
@@ -8757,36 +8763,127 @@ class MainWindow(QMainWindow):
         save_sessions(saved)
         self._last_persisted_payload = payload
 
+    # Intervalo entre sessões restauradas no boot (ver _restore_sessions).
+    _RESTORE_STAGGER_MS = 350
+
     @log_exceptions(message="Falha ao restaurar sessões Claude")
-    def _restore_sessions(self) -> None:
-        """Recria abas Claude que estavam ativas na última execução.
-        Each entry vira `claude --resume <id>` no terminal embutido."""
+    def _restore_sessions(self, on_done: Callable[[], None] | None = None) -> None:
+        """Recria as abas Claude do workspace inicial (o que a sidebar
+        seleciona por padrão no boot — ver `refresh_list`). Sessões salvas de
+        OUTROS workspaces ficam em `self._deferred_sessions`, restauradas sob
+        demanda na 1ª vez que o usuário seleciona aquele workspace (ver
+        `_restore_deferred_sessions_for`) — mesmo padrão lazy já usado por
+        `RunnerArea`/`GitPanel`.
+
+        Restaurar TODOS os workspaces de uma vez no boot fazia dezenas de
+        consoles ficarem idle/aguardando quase juntos alguns segundos depois,
+        disparando notificações desktop e pollers (git/PR/recursos) em
+        rajada — cada um roda em QThreadPool e devolve o resultado ao main
+        thread via Signal(object); muitas completions colidindo na mesma
+        janela reproduziu um SIGSEGV nativo em reentrância do PySide
+        (PySide::getWrapperForQObject ↔ QObject::doSetProperty) em testes.
+        Restringir o boot ao workspace visível elimina a rajada na origem,
+        em vez de só espaçá-la. `on_done` roda depois do último entry
+        restaurado (ou de cara, se não houver sessões salvas)."""
         saved = load_saved_sessions()
         if not saved:
+            if on_done is not None:
+                on_done()
             return
+        initial_ws = self._current_workspace()
+        initial_ws_id = initial_ws.id if initial_ws is not None else None
+        to_restore = [s for s in saved if s.workspace_id == initial_ws_id]
+        self._deferred_sessions: dict[str, list] = {}
+        for s in saved:
+            if s.workspace_id == initial_ws_id:
+                continue
+            ws = self.workspaces_coord.find_by_id(s.workspace_id)
+            if ws is not None and ws.minimized:
+                # Minimizado: seus consoles vivem no stash de minimizados
+                # (_minimized_console_stash / minimized_sessions.json) e são
+                # recriados por ESSE mecanismo ao restaurar o workspace — não
+                # por aqui, senão restaura duas vezes quando for selecionado.
+                continue
+            self._deferred_sessions.setdefault(s.workspace_id, []).append(s)
+        log.info(
+            "Restaurando %d sessão(ões) do workspace inicial (%s); %d adiada(s) "
+            "até 1ª seleção do respectivo workspace (de %d salvas)",
+            len(to_restore), initial_ws_id, len(saved) - len(to_restore), len(saved),
+        )
         import time as _t
-        restore_t0 = _t.perf_counter()
-        log.info("Restaurando %d sessão(ões) do estado anterior", len(saved))
-        restored = 0
-        skipped = 0
-        for entry in saved:
+        t0 = _t.perf_counter()
+
+        def _boot_done(restored: int, skipped: int) -> None:
+            log.info(
+                "[BOOT-PERF] Restauração concluída em %.0fms: %d lançadas, "
+                "%d ignoradas (de %d no workspace inicial)",
+                (_t.perf_counter() - t0) * 1000, restored, skipped, len(to_restore),
+            )
+            if on_done is not None:
+                on_done()
+
+        self._restore_session_list(to_restore, _boot_done)
+
+    def _restore_deferred_sessions_for(self, ws: Workspace) -> None:
+        """Restaura as sessões salvas de `ws` que ficaram adiadas do boot
+        (ver `_restore_sessions`) — chamado na 1ª vez que o usuário seleciona
+        esse workspace. Sem efeito em seleções seguintes (a lista já foi
+        consumida) nem se o workspace não tinha nada adiado."""
+        deferred = getattr(self, "_deferred_sessions", None)
+        if not deferred:
+            return
+        pending = deferred.pop(ws.id, None)
+        if not pending:
+            return
+        log.info(
+            "Restaurando %d sessão(ões) adiada(s) do workspace '%s' (1ª seleção)",
+            len(pending), ws.name,
+        )
+        self._restore_session_list(pending)
+
+    def _restore_session_list(
+        self,
+        entries: list,
+        on_done: Callable[[int, int], None] | None = None,
+    ) -> None:
+        """Lança `entries` (SavedSession) UMA de cada vez, espaçadas por
+        _RESTORE_STAGGER_MS — usado tanto pelo boot (`_restore_sessions`,
+        workspace inicial) quanto pelo restore adiado por workspace
+        (`_restore_deferred_sessions_for`). `on_done(restored, skipped)`
+        roda depois do último entry (ou de cara, se `entries` vier vazia)."""
+        if not entries:
+            if on_done is not None:
+                on_done(0, 0)
+            return
+        state = {"restored": 0, "skipped": 0, "idx": 0}
+
+        def _restore_next() -> None:
+            idx = state["idx"]
+            if idx >= len(entries):
+                if on_done is not None:
+                    on_done(state["restored"], state["skipped"])
+                return
+            state["idx"] = idx + 1
+            entry = entries[idx]
             ws = self.workspaces_coord.find_by_id(entry.workspace_id)
             if ws is None:
                 log.info(
                     "Sessão %s ignorada: workspace %s não existe mais",
                     entry.session_id, entry.workspace_id,
                 )
-                skipped += 1
-                continue
+                state["skipped"] += 1
+                QTimer.singleShot(self._RESTORE_STAGGER_MS, _restore_next)
+                return
             if ws.minimized:
                 # Workspace minimizado: seus consoles vivem no stash de
-                # minimizados e são recriados só ao restaurar — não no startup.
+                # minimizados e são recriados só ao restaurar — não aqui.
                 log.info(
                     "Sessão %s adiada: workspace %s está minimizado",
                     entry.session_id, ws.name,
                 )
-                skipped += 1
-                continue
+                state["skipped"] += 1
+                QTimer.singleShot(self._RESTORE_STAGGER_MS, _restore_next)
+                return
             cwd_ws = self._find_workspace_for_cwd(entry.cwd)
             if cwd_ws is not None and cwd_ws.id != ws.id:
                 log.info(
@@ -8799,8 +8896,9 @@ class MainWindow(QMainWindow):
                     "Sessão %s ignorada: JSONL inexistente em %s",
                     entry.session_id, entry.cwd,
                 )
-                skipped += 1
-                continue
+                state["skipped"] += 1
+                QTimer.singleShot(self._RESTORE_STAGGER_MS, _restore_next)
+                return
             try:
                 self._launch_claude_for(
                     ws,
@@ -8809,15 +8907,13 @@ class MainWindow(QMainWindow):
                     restored_on_startup=True,
                     backend=entry.backend,
                 )
-                restored += 1
+                state["restored"] += 1
             except Exception:
                 log.exception("Falha ao restaurar sessão %s", entry.session_id)
-                skipped += 1
-        log.info(
-            "[BOOT-PERF] Restauração concluída em %.0fms: %d lançadas, "
-            "%d ignoradas (de %d salvas)",
-            (_t.perf_counter() - restore_t0) * 1000, restored, skipped, len(saved),
-        )
+                state["skipped"] += 1
+            QTimer.singleShot(self._RESTORE_STAGGER_MS, _restore_next)
+
+        _restore_next()
 
     def _open_plugin_palette(self) -> None:
         """Ctrl+P: dialog com comandos declarados por plugins habilitados."""

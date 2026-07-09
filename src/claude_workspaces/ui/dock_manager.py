@@ -17,7 +17,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMainWindow, QWidget
 
 
-def _glyph_icon(glyph: str, size: int = 14, color: str = "#c8c8c8") -> QIcon:
+def _glyph_icon(glyph: str, size: int = 14, color: str = "#c9c6c0") -> QIcon:
     """Renderiza um glyph unicode numa QPixmap transparente. Usado pros
     botões de title bar do QtAds — os ícones default são pretos e somem
     no tema dark."""
@@ -55,18 +55,18 @@ _ADS_DARK_QSS = """
 ads--CDockContainerWidget,
 ads--CDockAreaWidget,
 ads--CDockWidget {
-    background: #181818;
-    color: #e6e6e6;
+    background: #1a1916;
+    color: #e8e6e3;
 }
 ads--CDockAreaTitleBar {
-    background: #181818;
-    border-bottom: 1px solid #2a2a2a;
+    background: #1a1916;
+    border-bottom: 1px solid #2d2b26;
     padding: 0;
 }
 ads--CDockWidgetTab {
-    background: #1f1f1f;
+    background: #22201c;
     border: 0;
-    border-right: 1px solid #2a2a2a;
+    border-right: 1px solid #2d2b26;
     padding: 4px 12px;
     min-height: 22px;
 }
@@ -76,12 +76,12 @@ ads--CDockWidgetTab ads--CElidingLabel {
     background: transparent;
 }
 ads--CDockWidgetTab[activeTab="true"] {
-    background: #181818;
-    border-bottom: 2px solid #3d6ea8;
+    background: #1a1916;
+    border-bottom: 2px solid #d4a04a;
 }
 ads--CDockWidgetTab[activeTab="true"] QLabel,
 ads--CDockWidgetTab[activeTab="true"] ads--CElidingLabel {
-    color: #f2f2f2;
+    color: #e8e6e3;
 }
 ads--CTitleBarButton {
     background: transparent;
@@ -91,18 +91,18 @@ ads--CTitleBarButton {
     min-height: 18px;
 }
 ads--CTitleBarButton:hover {
-    background: #2a2a2a;
+    background: #2d2b26;
     border-radius: 3px;
 }
 ads--CDockSplitter::handle {
-    background: #2a2a2a;
+    background: #2d2b26;
 }
 ads--CDockSplitter::handle:hover {
-    background: #3d6ea8;
+    background: #d4a04a;
 }
 ads--CFloatingDockContainer {
-    background: #181818;
-    border: 1px solid #2a2a2a;
+    background: #1a1916;
+    border: 1px solid #2d2b26;
 }
 """
 

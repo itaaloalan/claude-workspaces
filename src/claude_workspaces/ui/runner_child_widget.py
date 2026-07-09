@@ -372,7 +372,11 @@ def _host_port(url: str) -> str:
     host = parsed.hostname or ""
     if not host:
         return ""
-    port = parsed.port
+    try:
+        port = parsed.port
+    except ValueError:
+        # porta não numérica (ex.: template '{port}' não resolvido) — ignora
+        port = None
     if port:
         return f"{host}:{port}"
     return host

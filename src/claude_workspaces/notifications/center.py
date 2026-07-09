@@ -48,14 +48,14 @@ from .types import (
 
 # Mapa kind → (ícone-qtawesome, cor da borda lateral do card).
 _KIND_VISUAL: dict[str, tuple[str, str]] = {
-    NotificationKind.PERMISSION_REQUIRED: ("fa5s.shield-alt", "#e0892f"),
-    NotificationKind.AGENT_WAITING: ("fa5s.hourglass-half", "#c9772d"),
+    NotificationKind.PERMISSION_REQUIRED: ("fa5s.shield-alt", "#ec8f3a"),
+    NotificationKind.AGENT_WAITING: ("fa5s.hourglass-half", "#c96f2d"),
     NotificationKind.AGENT_WORKING: ("fa5s.spinner", "#5a8fc3"),
     NotificationKind.TASK_COMPLETED: ("fa5s.check-circle", "#5ac35a"),
     NotificationKind.TASK_FAILED: ("fa5s.exclamation-triangle", "#d6504c"),
     NotificationKind.AGENT_IDLE: ("fa5s.coffee", "#9aa0a6"),
-    NotificationKind.LONG_RUNNING: ("fa5s.clock", "#6aa9e0"),
-    NotificationKind.COST_WARNING: ("fa5s.dollar-sign", "#e0892f"),
+    NotificationKind.LONG_RUNNING: ("fa5s.clock", "#e0b268"),
+    NotificationKind.COST_WARNING: ("fa5s.dollar-sign", "#ec8f3a"),
     NotificationKind.WORKSPACE_ERROR: ("fa5s.bug", "#d6504c"),
 }
 
@@ -97,11 +97,11 @@ class NotificationCard(QFrame):
         self._n = notification
         self.setObjectName("NotificationCard")
         icon_name, accent = _KIND_VISUAL.get(
-            notification.kind, ("fa5s.info-circle", "#6aa9e0")
+            notification.kind, ("fa5s.info-circle", "#e0b268")
         )
         self.setStyleSheet(
             "QFrame#NotificationCard {"
-            "  background: #1c1c1c; border: 1px solid #2a2a2a; border-radius: 8px;"
+            "  background: #1c1b18; border: 1px solid #2d2b26; border-radius: 8px;"
             f"  border-left: 3px solid {accent};"
             "}"
             "QFrame#NotificationCard[unseen=\"true\"] {"
@@ -131,27 +131,27 @@ class NotificationCard(QFrame):
             header.addWidget(crit)
         if notification.occurrences > 1:
             occ = QLabel(f"×{notification.occurrences}")
-            occ.setStyleSheet("color: #888; font-size: 10px;")
+            occ.setStyleSheet("color: #8b8880; font-size: 10px;")
             header.addWidget(occ)
         header.addStretch()
         age = QLabel(_humanize_age(notification.updated_at))
-        age.setStyleSheet("color: #707070; font-size: 10px;")
+        age.setStyleSheet("color: #8b8880; font-size: 10px;")
         header.addWidget(age)
         outer.addLayout(header)
 
         # ---------- título + body
         title_lbl = QLabel(notification.title)
-        title_lbl.setStyleSheet("color: #e6e6e6; font-size: 12px; font-weight: 600;")
+        title_lbl.setStyleSheet("color: #e8e6e3; font-size: 12px; font-weight: 600;")
         title_lbl.setWordWrap(True)
         outer.addWidget(title_lbl)
         if notification.body:
             body_lbl = QLabel(notification.body)
-            body_lbl.setStyleSheet("color: #b8b8b8; font-size: 11px;")
+            body_lbl.setStyleSheet("color: #b0ada6; font-size: 11px;")
             body_lbl.setWordWrap(True)
             outer.addWidget(body_lbl)
         if notification.is_snoozed():
             sn = QLabel(f"⏱ adiada — volta em {_humanize_age(time.time(), now=notification.snoozed_until)}")
-            sn.setStyleSheet("color: #c9772d; font-size: 10px; font-style: italic;")
+            sn.setStyleSheet("color: #c96f2d; font-size: 10px; font-style: italic;")
             outer.addWidget(sn)
 
         # ---------- ações
@@ -183,22 +183,22 @@ class NotificationCard(QFrame):
         b.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         if primary:
             b.setStyleSheet(
-                "QPushButton { background: #3d6ea8; color: #fff; border: 0; "
+                "QPushButton { background: #d4a04a; color: #211709; border: 0; "
                 "border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 600; }"
-                "QPushButton:hover { background: #4a82c5; }"
+                "QPushButton:hover { background: #e0b264; }"
             )
         elif flat:
             b.setStyleSheet(
-                "QPushButton { background: transparent; color: #888; border: 0; "
+                "QPushButton { background: transparent; color: #8b8880; border: 0; "
                 "padding: 4px 6px; font-size: 13px; }"
                 "QPushButton:hover { color: #d6504c; }"
             )
         else:
             b.setStyleSheet(
-                "QPushButton { background: #1f1f1f; color: #c8c8c8; "
-                "border: 1px solid #2c2c2c; border-radius: 4px; "
+                "QPushButton { background: #22201c; color: #c9c6c0; "
+                "border: 1px solid #302d27; border-radius: 4px; "
                 "padding: 4px 10px; font-size: 11px; }"
-                "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+                "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
             )
         return b
 
@@ -228,7 +228,7 @@ class NotificationCenter(QFrame):
         self.setObjectName("NotificationCenter")
         self.setStyleSheet(
             "QFrame#NotificationCenter {"
-            "  background: #161616; border: 1px solid #2c2c2c; border-radius: 10px;"
+            "  background: #181714; border: 1px solid #302d27; border-radius: 10px;"
             "}"
             "QLabel { background: transparent; }"
         )
@@ -243,15 +243,15 @@ class NotificationCenter(QFrame):
         # --------------------------------------------------- header
         header = QHBoxLayout()
         title = QLabel("Notificações")
-        title.setStyleSheet("color: #e6e6e6; font-size: 13px; font-weight: 700;")
+        title.setStyleSheet("color: #e8e6e3; font-size: 13px; font-weight: 700;")
         header.addWidget(title)
         header.addStretch()
         self._mark_all_btn = QPushButton("Marcar todas como vistas")
         self._mark_all_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._mark_all_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #6aa9e0; border: 0; "
+            "QPushButton { background: transparent; color: #e0b268; border: 0; "
             "font-size: 11px; padding: 2px 4px; }"
-            "QPushButton:hover { color: #4a82c5; text-decoration: underline; }"
+            "QPushButton:hover { color: #e0b264; text-decoration: underline; }"
         )
         self._mark_all_btn.clicked.connect(self._service.mark_all_seen)
         header.addWidget(self._mark_all_btn)
@@ -272,7 +272,7 @@ class NotificationCenter(QFrame):
         self._clear_btn = QPushButton("Limpar histórico")
         self._clear_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._clear_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #888; border: 0; "
+            "QPushButton { background: transparent; color: #8b8880; border: 0; "
             "font-size: 10px; padding: 2px 4px; }"
             "QPushButton:hover { color: #d6504c; text-decoration: underline; }"
         )
@@ -297,7 +297,7 @@ class NotificationCenter(QFrame):
         # --------------------------------------------------- empty state
         self._empty = QLabel("Tá tudo em dia.\nNenhuma notificação pendente.")
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty.setStyleSheet("color: #707070; font-size: 12px; padding: 30px;")
+        self._empty.setStyleSheet("color: #8b8880; font-size: 12px; padding: 30px;")
         self._empty.hide()
         outer.addWidget(self._empty)
 
@@ -317,13 +317,13 @@ class NotificationCenter(QFrame):
         for k, btn in self._filter_btns.items():
             checked = k == key
             btn.setChecked(checked)
-            bg = "#243044" if checked else "#1f1f1f"
-            color = "#6aa9e0" if checked else "#c8c8c8"
+            bg = "#243044" if checked else "#22201c"
+            color = "#e0b268" if checked else "#c9c6c0"
             btn.setStyleSheet(
                 f"QPushButton {{ background: {bg}; color: {color}; "
-                f"border: 1px solid #2c2c2c; border-radius: 4px; "
+                f"border: 1px solid #302d27; border-radius: 4px; "
                 f"padding: 4px 10px; font-size: 11px; }}"
-                f"QPushButton:hover {{ border-color: #3d6ea8; }}"
+                f"QPushButton:hover {{ border-color: #d4a04a; }}"
             )
         self._refresh()
 

@@ -23,12 +23,12 @@ except ImportError:  # pragma: no cover — opcional na primeira inicialização
 
 
 # Cores default — alinhadas com theme.py / dock_manager QSS
-DEFAULT_COLOR = "#c8c8c8"
-ACTIVE_COLOR = "#e6e6e6"
+DEFAULT_COLOR = "#c9c6c0"
+ACTIVE_COLOR = "#e8e6e3"
 MUTED_COLOR = "#9aa0a6"
-PRIMARY_COLOR = "#3d6ea8"
+PRIMARY_COLOR = "#d4a04a"
 SUCCESS_COLOR = "#5ac35a"
-WARN_COLOR = "#e5b53b"
+WARN_COLOR = "#d4a04a"
 
 
 def ic(name: str, color: str = DEFAULT_COLOR, size: int | None = None) -> QIcon:

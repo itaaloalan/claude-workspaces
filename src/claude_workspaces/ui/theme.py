@@ -7,37 +7,39 @@ conforme tocarmos eles. Veja MAINTAINABILITY.md item #4.
 
 # ---------- Paleta ----------
 
-BG_DEEP = "#0e0e0e"        # áreas do terminal (mais escuro)
-BG_DARKEST = "#141414"     # fundo dock
-BG_DARKER = "#161616"      # topbar, headers compactos
-BG_DARK = "#181818"        # listas, plain text edits
-BG_PANEL = "#1a1a1a"       # background geral de painéis
-BG_SURFACE = "#1f1f1f"     # botões neutros, inputs
+BG_DEEP = "#121110"        # áreas do terminal (mais escuro)
+BG_DARKEST = "#161513"     # fundo dock
+BG_DARKER = "#181714"      # topbar, headers compactos
+BG_DARK = "#1a1916"        # listas, plain text edits
+BG_PANEL = "#1c1b18"       # background geral de painéis
+BG_SURFACE = "#22201c"     # botões neutros, inputs
 
-BORDER = "#2a2a2a"         # divisores, splitter handles
-BORDER_SOFT = "#232323"    # borda em listas (item separator)
-BORDER_INPUT = "#2c2c2c"   # borda de inputs/buttons
+BORDER = "#2d2b26"         # divisores, splitter handles
+BORDER_SOFT = "#26241f"    # borda em listas (item separator)
+BORDER_INPUT = "#302d27"   # borda de inputs/buttons
 
-PRIMARY = "#3d6ea8"        # azul de seleção / botão primário
-PRIMARY_HOVER = "#4a82c5"
-PRIMARY_PRESSED = "#5a92d5"
-PRIMARY_HOVER_BG = "#2a3142"  # hover suave em listas (azul-escuro)
+PRIMARY = "#d4a04a"        # âmbar de seleção / botão primário
+PRIMARY_HOVER = "#e0b264"
+PRIMARY_PRESSED = "#c08f3d"
+PRIMARY_HOVER_BG = "#2b2620"  # hover suave em listas (âmbar-escuro dessaturado)
+TEXT_ON_ACCENT = "#211709"    # texto sobre bg PRIMARY (branco daria ~2.4:1)
+PRIMARY_SELECTION_BG = "rgba(212, 160, 74, 56)"  # bg de item selecionado em listas/trees
 
-TEXT_PRIMARY = "#e6e6e6"    # texto principal
+TEXT_PRIMARY = "#e8e6e3"    # texto principal
 TEXT_BRIGHT = "#ffffff"     # texto sobre seleção
-TEXT_MUTED = "#c8c8c8"      # texto secundário
-TEXT_FADED = "#b0b0b0"      # contadores, hints, status
-TEXT_FAINT = "#888888"      # placeholders, labels de seção
-TEXT_DISABLED = "#555555"
-TEXT_LINK = "#6aa9e0"       # links / hover de botão flat
+TEXT_MUTED = "#c9c6c0"      # texto secundário
+TEXT_FADED = "#b0ada6"      # contadores, hints, status
+TEXT_FAINT = "#8b8880"      # placeholders, labels de seção
+TEXT_DISABLED = "#5a5750"
+TEXT_LINK = "#e0b268"       # links / hover de botão flat
 
 SUCCESS = "#5ac35a"         # verde (concluído, adicionado)
-WARNING = "#e0b86a"         # amber (trabalhando, modificado)
+WARNING = "#e3c96a"         # amarelo (trabalhando, modificado) — afastado do accent
 DANGER = "#d57272"          # vermelho (deletado, erro)
-INFO = "#7aa6e6"            # azul claro (renomeado, info)
-WAITING = "#e09060"         # laranja (aguardando atenção, inbox)
-WAITING_HOVER = "#e0892f"
-WAITING_BG = "#c9772d"      # bg do bell quando há inbox
+INFO = "#7aa6e6"            # azul claro (renomeado, info) — único azul remanescente, semântico
+WAITING = "#e5824a"         # laranja (aguardando atenção, inbox) — afastado do accent
+WAITING_HOVER = "#ec8f3a"
+WAITING_BG = "#c96f2d"      # bg do bell quando há inbox
 PLANNING = "#5BBCB8"        # teal — planejando (plan mode)
 PR_PINK = "#f472b6"         # rosa — PR detectado, estado desconhecido
 PR_PINK_BG = "rgba(244, 114, 182, 0.12)"  # fundo do banner de PR
@@ -84,7 +86,7 @@ def splitter_qss() -> str:
 def primary_button_qss() -> str:
     return (
         f"QPushButton {{"
-        f"  background: {PRIMARY}; color: {TEXT_BRIGHT};"
+        f"  background: {PRIMARY}; color: {TEXT_ON_ACCENT};"
         f"  border: 0; border-radius: 4px; padding: 4px 14px; font-weight: 600;"
         f"}}"
         f"QPushButton:hover {{ background: {PRIMARY_HOVER}; }}"
@@ -135,7 +137,7 @@ def chip_button_qss() -> str:
         f"}}"
         f"QPushButton:hover {{ color: {TEXT_PRIMARY}; border-color: {PRIMARY}; }}"
         f"QPushButton:checked {{"
-        f"  background: {PRIMARY}; color: {TEXT_BRIGHT}; border-color: {PRIMARY};"
+        f"  background: {PRIMARY}; color: {TEXT_ON_ACCENT}; border-color: {PRIMARY};"
         f"}}"
     )
 
@@ -151,8 +153,8 @@ def list_widget_qss() -> str:
         f"  color: {TEXT_MUTED};"
         f"}}"
         f"QListWidget::item:hover {{ background: {PRIMARY_HOVER_BG}; color: {TEXT_BRIGHT}; }}"
-        f"QListWidget::item:selected {{ background: {PRIMARY}; color: {TEXT_BRIGHT}; }}"
-        f"QListWidget::item:selected:hover {{ background: {PRIMARY_HOVER}; color: {TEXT_BRIGHT}; }}"
+        f"QListWidget::item:selected {{ background: {PRIMARY_SELECTION_BG}; color: {TEXT_BRIGHT}; }}"
+        f"QListWidget::item:selected:hover {{ background: rgba(212, 160, 74, 72); color: {TEXT_BRIGHT}; }}"
     )
 
 
@@ -179,9 +181,9 @@ STATE_DONE = SUCCESS        # verde — concluído
 
 
 _STATE_BADGE_BG = {
-    STATE_WORKING: "rgba(224, 184, 106, 38)",
-    STATE_AWAITING: "rgba(224, 144, 96, 46)",
-    STATE_IDLE: "rgba(136, 136, 136, 32)",
+    STATE_WORKING: "rgba(227, 201, 106, 38)",
+    STATE_AWAITING: "rgba(229, 130, 74, 46)",
+    STATE_IDLE: "rgba(139, 136, 128, 32)",
     STATE_ERROR: "rgba(213, 114, 114, 42)",
     STATE_DONE: "rgba(90, 195, 90, 38)",
     PLANNING: "rgba(91, 188, 184, 38)",
@@ -259,6 +261,6 @@ def tree_widget_qss() -> str:
         f"QTreeWidget {{ background: transparent; border: 0; color: {TEXT_PRIMARY}; }}"
         f"QTreeWidget::item {{ padding: 4px 4px; color: {TEXT_PRIMARY}; }}"
         f"QTreeWidget::item:hover {{ background: {PRIMARY_HOVER_BG}; color: {TEXT_BRIGHT}; }}"
-        f"QTreeWidget::item:selected {{ background: {PRIMARY}; color: {TEXT_BRIGHT}; }}"
-        f"QTreeWidget::item:selected:hover {{ background: {PRIMARY_HOVER}; color: {TEXT_BRIGHT}; }}"
+        f"QTreeWidget::item:selected {{ background: {PRIMARY_SELECTION_BG}; color: {TEXT_BRIGHT}; }}"
+        f"QTreeWidget::item:selected:hover {{ background: rgba(212, 160, 74, 72); color: {TEXT_BRIGHT}; }}"
     )

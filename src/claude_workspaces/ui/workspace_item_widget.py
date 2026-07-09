@@ -265,27 +265,48 @@ class WorkspaceItemWidget(QWidget):
     def set_label(self, label: str) -> None:
         self._label.setText(label)
 
+    def _defer_visibility(self, widget: QWidget, visible: bool) -> None:
+        """show()/hide() adiados um tick (QTimer.singleShot(0)) em vez de
+        síncronos. Este widget é item-widget de um QTreeWidgetItem (sidebar)
+        e essas chamadas costumam vir de dentro de uma cascata de sinais
+        same-thread disparada quando uma sessão começa a rodar
+        (TerminalWidget._set_running → running_changed →
+        running_count_changed → workspace_running_changed →
+        MainWindow._refresh_item_label → aqui). O Show/Hide QEvent do badge
+        reentra QCoreApplication::notify enquanto a notify() do evento
+        ORIGINAL ainda está no stack — colidiu com uma reentrância nativa do
+        PySide (getWrapperForQObject ↔ doSetProperty, SIGSEGV) em testes.
+        Adiar garante que roda fora de qualquer notify() em andamento;
+        RuntimeError é o widget já ter sido destruído até lá (workspace
+        fechado entre o emit e o tick seguinte)."""
+        def _apply() -> None:
+            try:
+                widget.setVisible(visible)
+            except RuntimeError:
+                pass
+        QTimer.singleShot(0, _apply)
+
     def set_unread_count(self, count: int) -> None:
         """Pinta badge laranja com nº de notificações pendentes — esconde se 0."""
         if count <= 0:
-            self._notif_badge.hide()
+            self._defer_visibility(self._notif_badge, False)
             return
         self._notif_badge.setText(str(count) if count < 100 else "99+")
-        self._notif_badge.show()
+        self._defer_visibility(self._notif_badge, True)
 
     def set_running_count(self, count: int) -> None:
         """Atualiza o indicador de "rodando" — bolinha verde (count≥1)
         + badge ×N (count>1). Esconde tudo quando count == 0."""
         if count <= 0:
-            self._dot.hide()
-            self._badge.hide()
+            self._defer_visibility(self._dot, False)
+            self._defer_visibility(self._badge, False)
             return
-        self._dot.show()
+        self._defer_visibility(self._dot, True)
         if count > 1:
             self._badge.setText(f"×{count}")
-            self._badge.show()
+            self._defer_visibility(self._badge, True)
         else:
-            self._badge.hide()
+            self._defer_visibility(self._badge, False)
 
     def set_state_summary(self, counts: dict[str, int]) -> None:
         """Colore o dot pelo estado agregado dos consoles do workspace.
@@ -301,7 +322,14 @@ class WorkspaceItemWidget(QWidget):
                 color = _STATE_DOT_COLOR[key]
                 break
         self._dot_color = color
-        self._dot.setStyleSheet(_dot_qss(color))
+        # setStyleSheet força um repolish do widget — mesmo risco de
+        # reentrância que show()/hide() (ver _defer_visibility). Adia junto.
+        def _apply_style(w=self._dot, css=_dot_qss(color)) -> None:
+            try:
+                w.setStyleSheet(css)
+            except RuntimeError:
+                pass
+        QTimer.singleShot(0, _apply_style)
         parts = [
             f"{counts[k]} {_STATE_SUMMARY_LABEL[k]}"
             for k in ("working", "planning", "awaiting", "error", "done", "idle")
@@ -343,13 +371,13 @@ class WorkspaceItemWidget(QWidget):
         acento vertical à esquerda, pra destacar bem do resto. Não-selecionado
         mantém borda transparente de 1px pra não 'pular' o layout ao selecionar."""
         if self._selected:
-            bg = "rgba(61, 110, 168, 92)"
+            bg = "rgba(212, 160, 74, 92)"
             border_qss = (
                 f"border: 1px solid {theme.PRIMARY};"
                 f"  border-left: 3px solid {theme.PRIMARY_HOVER};"
                 f"  border-radius: 6px;"
             )
-            hover_extra = "background: rgba(74, 130, 197, 120);"
+            hover_extra = "background: rgba(224, 178, 100, 120);"
         else:
             bg = "transparent"
             border_qss = (

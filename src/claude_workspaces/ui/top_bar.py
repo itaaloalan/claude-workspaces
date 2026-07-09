@@ -23,7 +23,7 @@ class TopBar(QWidget):
         super().__init__(parent)
         self.setObjectName("TopBar")
         self.setStyleSheet(
-            "QWidget#TopBar { background: #151515; border-bottom: 1px solid #242424; }"
+            "QWidget#TopBar { background: #181714; border-bottom: 1px solid #26241f; }"
         )
 
         row = QHBoxLayout(self)
@@ -35,7 +35,7 @@ class TopBar(QWidget):
         from .icons import ic as _ic
 
         toggle_btn = QPushButton()
-        toggle_btn.setIcon(_ic("fa5s.bars", color="#c8c8c8"))
+        toggle_btn.setIcon(_ic("fa5s.bars", color="#c9c6c0"))
         toggle_btn.setIconSize(_QS(16, 16))
         toggle_btn.setFlat(True)
         toggle_btn.setFixedSize(30, 30)
@@ -43,22 +43,22 @@ class TopBar(QWidget):
         toggle_btn.setToolTip("Esconder / mostrar a barra lateral (Ctrl+B)")
         toggle_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
-            "QPushButton:hover { background: #222; }"
+            "QPushButton:hover { background: #22201c; }"
         )
         toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)
         row.addWidget(toggle_btn)
 
         # Logo Claude (robô) + título — clicáveis pra voltar à home.
         logo = QPushButton("  Claude Workspaces")
-        logo.setIcon(_ic("fa5s.robot", color="#6aa9e0"))
+        logo.setIcon(_ic("fa5s.robot", color="#e0b268"))
         logo.setIconSize(_QS(16, 16))
         logo.setFlat(True)
         logo.setCursor(Qt.CursorShape.PointingHandCursor)
         logo.setStyleSheet(
-            "QPushButton { font-weight: 700; color: #dedede; font-size: 13px; "
+            "QPushButton { font-weight: 700; color: #e8e6e3; font-size: 13px; "
             "padding: 4px 6px; background: transparent; border: 0; border-radius: 6px; "
             "text-align: left; }"
-            "QPushButton:hover { color: #6aa9e0; background: #222; }"
+            "QPushButton:hover { color: #e0b268; background: #22201c; }"
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
@@ -87,10 +87,10 @@ class TopBar(QWidget):
         self.search.setClearButtonEnabled(True)
         self.search.setMinimumWidth(380)
         self.search.setStyleSheet(
-            "QLineEdit { background: #1b1b1b; border: 1px solid #292929; "
-            "border-radius: 6px; padding: 6px 10px; color: #e6e6e6; }"
-            "QLineEdit:hover { border-color: #333; }"
-            "QLineEdit:focus { border-color: #3d6ea8; background: #1e1e1e; }"
+            "QLineEdit { background: #1c1b18; border: 1px solid #26241f; "
+            "border-radius: 6px; padding: 6px 10px; color: #e8e6e3; }"
+            "QLineEdit:hover { border-color: #26241f; }"
+            "QLineEdit:focus { border-color: #d4a04a; background: #181714; }"
         )
         self.search.textChanged.connect(self.search_changed.emit)
         self.search.returnPressed.connect(self.search_submitted.emit)
@@ -100,7 +100,7 @@ class TopBar(QWidget):
 
         # Bell de inbox — destaca quando há console aguardando atenção
         self._inbox_btn = QPushButton()
-        self._inbox_btn.setIcon(_ic("fa5s.bell", color="#c8c8c8"))
+        self._inbox_btn.setIcon(_ic("fa5s.bell", color="#c9c6c0"))
         self._inbox_btn.setIconSize(_QS(15, 15))
         self._inbox_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._inbox_btn.setToolTip("Consoles aguardando atenção")
@@ -113,7 +113,7 @@ class TopBar(QWidget):
         # Simétrico ao toggle da sidebar esquerda — antes só dava pra
         # exibir/esconder via Ctrl+Shift+B, sem botão visível.
         right_dock_btn = QPushButton()
-        right_dock_btn.setIcon(_ic("fa5s.columns", color="#c8c8c8"))
+        right_dock_btn.setIcon(_ic("fa5s.columns", color="#c9c6c0"))
         right_dock_btn.setIconSize(_QS(15, 15))
         right_dock_btn.setFlat(True)
         right_dock_btn.setFixedSize(30, 30)
@@ -121,20 +121,20 @@ class TopBar(QWidget):
         right_dock_btn.setToolTip("Esconder / mostrar painel de ferramentas (Ctrl+Shift+B)")
         right_dock_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
-            "QPushButton:hover { background: #222; }"
+            "QPushButton:hover { background: #22201c; }"
         )
         right_dock_btn.clicked.connect(self.toggle_right_dock_clicked.emit)
         row.addWidget(right_dock_btn)
 
         settings_btn = QPushButton("  Configurar")
-        settings_btn.setIcon(_ic("fa5s.cog", color="#c8c8c8"))
+        settings_btn.setIcon(_ic("fa5s.cog", color="#c9c6c0"))
         settings_btn.setIconSize(_QS(14, 14))
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.setToolTip("Configurações (Ctrl+,)")
         settings_btn.setStyleSheet(
-            "QPushButton { background: #1b1b1b; color: #d8d8d8; "
-            "border: 1px solid #2a2a2a; border-radius: 7px; padding: 6px 12px; }"
-            "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+            "QPushButton { background: #1c1b18; color: #c9c6c0; "
+            "border: 1px solid #2d2b26; border-radius: 7px; padding: 6px 12px; }"
+            "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
         )
         settings_btn.clicked.connect(self.settings_clicked.emit)
         row.addWidget(settings_btn)
@@ -170,18 +170,18 @@ class TopBar(QWidget):
                 "  border: 1px solid #b86d2a; border-radius: 7px;"
                 "  padding: 6px 10px;"
                 "}"
-                "QPushButton:hover { background: #e0892f; border-color: #e0892f; }"
+                "QPushButton:hover { background: #ec8f3a; border-color: #ec8f3a; }"
             )
         else:
-            self._inbox_btn.setIcon(_ic("fa5s.bell", color="#c8c8c8"))
+            self._inbox_btn.setIcon(_ic("fa5s.bell", color="#c9c6c0"))
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
-                "  background: #1b1b1b; color: #c8c8c8;"
-                "  border: 1px solid #2a2a2a; border-radius: 7px;"
+                "  background: #1c1b18; color: #c9c6c0;"
+                "  border: 1px solid #2d2b26; border-radius: 7px;"
                 "  padding: 6px 10px;"
                 "}"
-                "QPushButton:hover { border-color: #3d6ea8; color: #6aa9e0; }"
+                "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
             )
 
     def _focus_search(self) -> None:
