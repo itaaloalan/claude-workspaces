@@ -7211,6 +7211,9 @@ class MainWindow(QMainWindow):
             self._notif_center.open_target_requested.connect(
                 self._on_notif_open_target
             )
+        if self._notif_center.isVisible():
+            self._notif_center.hide()
+            return
         self._notif_center.show_at(self.top_bar._inbox_btn)
 
     def _workspace_name_for_notif(self, workspace_id: str) -> str:

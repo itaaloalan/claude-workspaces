@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.26.0] — 2026-07-10
+
+### Opção de fixar o painel de notificações
+
+O popup de notificações (bell no header) fechava sempre que perdia o
+foco — não dava pra deixá-lo aberto acompanhando pendências enquanto se
+navega pelo app.
+
+- **`notifications/center.py`**: novo botão 📌 no header do
+  `NotificationCenter`. Ao fixar, o painel troca de `Qt.Popup` (fecha ao
+  perder foco) para `Qt.SplashScreen | FramelessWindowHint |
+  WindowStaysOnTopHint` — mesmo trio de flags já usado no
+  `PersistentToast`, escolhido por respeitar posicionamento no KWin
+  (X11/Wayland). Painel fixado fica arrastável (clique e arraste em
+  qualquer área vazia) e o clique em "Abrir" num card não fecha mais o
+  painel. Estado do pin é por sessão (não persiste entre reinícios).
+- **`ui/main_window.py`**: clique na bell agora também fecha o painel se
+  ele já estiver visível (toggle), relevante principalmente com o
+  painel fixado.
+
 ## [1.25.0] — 2026-07-09
 
 ### Retema visual "Cursor" — dark quente + accent âmbar

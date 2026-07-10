@@ -1,7 +1,9 @@
 """NotificationCenter — popup com filtros, cards e ações rápidas.
 
 Substitui o `QMenu` espartano do `MainWindow._show_inbox`. É frameless,
-ancorado debaixo da bell, fecha quando perde foco.
+ancorado debaixo da bell, fecha quando perde foco — a menos que o usuário
+fixe o painel (📌), caso em que ele vira uma janela always-on-top
+arrastável até ser desafixado ou fechado manualmente.
 
 Layout:
 
@@ -26,7 +28,7 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -38,6 +40,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..ui.icons import ic
 from .service import NotificationService
 from .types import (
     ACTIONABLE_KINDS,
@@ -210,6 +213,13 @@ class NotificationCenter(QFrame):
 
     FILTERS = ("all", "pending", "today")
 
+    _FLAGS_POPUP = Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
+    _FLAGS_PINNED = (
+        Qt.WindowType.SplashScreen
+        | Qt.WindowType.FramelessWindowHint
+        | Qt.WindowType.WindowStaysOnTopHint
+    )
+
     def __init__(
         self,
         service: NotificationService,
@@ -217,14 +227,13 @@ class NotificationCenter(QFrame):
         workspace_name_fn: Callable[[str], str] | None = None,
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__(
-            parent,
-            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint,
-        )
+        super().__init__(parent, self._FLAGS_POPUP)
         self._service = service
         self._workspace_name_fn = workspace_name_fn or (lambda wid: wid)
         self._current_filter = "pending"
         self._current_workspace: str | None = None
+        self._pinned = False
+        self._drag_offset = None
         self.setObjectName("NotificationCenter")
         self.setStyleSheet(
             "QFrame#NotificationCenter {"
@@ -246,6 +255,13 @@ class NotificationCenter(QFrame):
         title.setStyleSheet("color: #e8e6e3; font-size: 13px; font-weight: 700;")
         header.addWidget(title)
         header.addStretch()
+        self._pin_btn = QPushButton()
+        self._pin_btn.setCheckable(True)
+        self._pin_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._pin_btn.setFixedSize(24, 24)
+        self._pin_btn.toggled.connect(self._set_pinned)
+        header.addWidget(self._pin_btn)
+        self._refresh_pin_btn_style()
         self._mark_all_btn = QPushButton("Marcar todas como vistas")
         self._mark_all_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._mark_all_btn.setStyleSheet(
@@ -307,6 +323,57 @@ class NotificationCenter(QFrame):
         service.notification_removed.connect(self._refresh)
 
         self._set_filter("pending")
+
+    # ------------------------------------------------------------- pin/fixar
+
+    def _refresh_pin_btn_style(self) -> None:
+        color = "#e0b268" if self._pinned else "#8b8880"
+        bg = "#243044" if self._pinned else "transparent"
+        border = "1px solid #d4a04a" if self._pinned else "1px solid transparent"
+        self._pin_btn.setIcon(ic("fa5s.thumbtack", color=color))
+        self._pin_btn.setStyleSheet(
+            f"QPushButton {{ background: {bg}; border: {border}; border-radius: 4px; }}"
+            "QPushButton:hover { border-color: #d4a04a; }"
+        )
+        self._pin_btn.setToolTip(
+            "Desafixar painel" if self._pinned
+            else "Fixar painel (não fecha ao clicar fora)"
+        )
+
+    def _set_pinned(self, pinned: bool) -> None:
+        was_visible = self.isVisible()
+        geo = self.geometry()  # capturar antes — setWindowFlags recria a janela nativa
+        self._pinned = pinned
+        self.setWindowFlags(self._FLAGS_PINNED if pinned else self._FLAGS_POPUP)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, pinned)
+        self._refresh_pin_btn_style()
+        if was_visible:
+            self.setGeometry(geo)
+            self.show()
+            self.raise_()
+            if not pinned:
+                self.activateWindow()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._pinned and event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._pinned and self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._drag_offset is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     # ------------------------------------------------------------ filtering
 
@@ -384,7 +451,8 @@ class NotificationCenter(QFrame):
             return
         self._service.mark_seen(notif_id)
         self.open_target_requested.emit(n)
-        self.hide()
+        if not self._pinned:
+            self.hide()
 
     def _on_clear_clicked(self) -> None:
         # Limpa só os já vistos/descartados — pendentes ficam.
@@ -406,7 +474,8 @@ class NotificationCenter(QFrame):
         self.move(x, y)
         self.show()
         self.raise_()
-        self.activateWindow()
+        if not self._pinned:
+            self.activateWindow()
 
 
 __all__ = ["NotificationCard", "NotificationCenter"]
