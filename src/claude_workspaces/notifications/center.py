@@ -210,6 +210,7 @@ class NotificationCenter(QFrame):
     """Popup principal. Mostrado via `show_at(anchor)` debaixo da bell."""
 
     open_target_requested = Signal(object)  # Notification
+    pin_toggled = Signal(bool)  # pinned
 
     FILTERS = ("all", "pending", "today")
 
@@ -226,14 +227,23 @@ class NotificationCenter(QFrame):
         *,
         workspace_name_fn: Callable[[str], str] | None = None,
         parent: QWidget | None = None,
+        pinned: bool = False,
     ) -> None:
-        super().__init__(parent, self._FLAGS_POPUP)
+        # As window flags são fixas pra vida útil da janela — no Wayland o
+        # "role" de uma surface é permanente, então trocar flags depois de
+        # criada (setWindowFlags em runtime) derruba a conexão do protocolo
+        # (xdg_popup → xdg_toplevel não é permitido) e mata o app inteiro.
+        # Por isso o pin recria o widget (ver MainWindow._rebuild_notif_center)
+        # em vez de alternar flags nesta instância.
+        super().__init__(parent, self._FLAGS_PINNED if pinned else self._FLAGS_POPUP)
         self._service = service
         self._workspace_name_fn = workspace_name_fn or (lambda wid: wid)
         self._current_filter = "pending"
         self._current_workspace: str | None = None
-        self._pinned = False
+        self._pinned = pinned
         self._drag_offset = None
+        if pinned:
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setObjectName("NotificationCenter")
         self.setStyleSheet(
             "QFrame#NotificationCenter {"
@@ -257,9 +267,10 @@ class NotificationCenter(QFrame):
         header.addStretch()
         self._pin_btn = QPushButton()
         self._pin_btn.setCheckable(True)
+        self._pin_btn.setChecked(pinned)  # antes de conectar — não emite na construção
         self._pin_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._pin_btn.setFixedSize(24, 24)
-        self._pin_btn.toggled.connect(self._set_pinned)
+        self._pin_btn.toggled.connect(self.pin_toggled)
         header.addWidget(self._pin_btn)
         self._refresh_pin_btn_style()
         self._mark_all_btn = QPushButton("Marcar todas como vistas")
@@ -339,20 +350,6 @@ class NotificationCenter(QFrame):
             "Desafixar painel" if self._pinned
             else "Fixar painel (não fecha ao clicar fora)"
         )
-
-    def _set_pinned(self, pinned: bool) -> None:
-        was_visible = self.isVisible()
-        geo = self.geometry()  # capturar antes — setWindowFlags recria a janela nativa
-        self._pinned = pinned
-        self.setWindowFlags(self._FLAGS_PINNED if pinned else self._FLAGS_POPUP)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, pinned)
-        self._refresh_pin_btn_style()
-        if was_visible:
-            self.setGeometry(geo)
-            self.show()
-            self.raise_()
-            if not pinned:
-                self.activateWindow()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if self._pinned and event.button() == Qt.MouseButton.LeftButton:

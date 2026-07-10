@@ -7203,18 +7203,48 @@ class MainWindow(QMainWindow):
     def _show_inbox(self) -> None:
         """Abre o NotificationCenter (popup) embaixo da bell."""
         if self._notif_center is None:
-            self._notif_center = NotificationCenter(
-                self.notif_service,
-                workspace_name_fn=self._workspace_name_for_notif,
-                parent=self,
-            )
-            self._notif_center.open_target_requested.connect(
-                self._on_notif_open_target
-            )
+            self._notif_center = self._make_notif_center(pinned=False)
         if self._notif_center.isVisible():
             self._notif_center.hide()
             return
         self._notif_center.show_at(self.top_bar._inbox_btn)
+
+    def _make_notif_center(self, *, pinned: bool) -> NotificationCenter:
+        center = NotificationCenter(
+            self.notif_service,
+            workspace_name_fn=self._workspace_name_for_notif,
+            parent=self,
+            pinned=pinned,
+        )
+        center.open_target_requested.connect(self._on_notif_open_target)
+        center.pin_toggled.connect(self._rebuild_notif_center)
+        return center
+
+    def _rebuild_notif_center(self, pinned: bool) -> None:
+        """Recria o NotificationCenter com as flags pra pinned/despinned.
+
+        No Wayland o "role" de uma surface é permanente — não dá pra
+        alternar `Qt.Popup` <-> `Qt.SplashScreen|WindowStaysOnTopHint` via
+        `setWindowFlags` numa janela viva sem derrubar a conexão do
+        protocolo (ver center.py). Por isso recriamos o widget do zero,
+        preservando posição e visibilidade.
+        """
+        old = self._notif_center
+        was_visible = old.isVisible() if old is not None else False
+        geo = old.geometry() if old is not None else None
+        if old is not None:
+            old.hide()
+            old.pin_toggled.disconnect(self._rebuild_notif_center)
+            old.open_target_requested.disconnect(self._on_notif_open_target)
+            old.deleteLater()
+        new = self._make_notif_center(pinned=pinned)
+        self._notif_center = new
+        if was_visible and geo is not None:
+            new.setGeometry(geo)
+            new.show()
+            new.raise_()
+            if not pinned:
+                new.activateWindow()
 
     def _workspace_name_for_notif(self, workspace_id: str) -> str:
         ws = self.workspaces_coord.find_by_id(workspace_id)

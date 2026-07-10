@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.26.1] — 2026-07-10
+
+### Fix: app crashava ao fixar o painel de notificações (Wayland)
+
+A v1.26.0 alternava as window flags do `NotificationCenter` em runtime
+(`setWindowFlags`) pra fixar/desafixar o painel. No Wayland o "role" de
+uma surface é permanente — trocar de `Qt.Popup` (xdg_popup) pra
+`Qt.SplashScreen|WindowStaysOnTopHint` (xdg_toplevel) numa janela viva
+gera `xdg_surface: error 2` e o KWin derruba a conexão do protocolo,
+matando o app inteiro.
+
+- **`notifications/center.py`**: as flags agora são decididas só no
+  construtor (`pinned: bool`), nunca trocadas depois. Novo sinal
+  `pin_toggled` — o botão de pin não mexe mais em flags, só avisa.
+- **`ui/main_window.py`**: `_rebuild_notif_center` recria o
+  `NotificationCenter` do zero ao (des)fixar, preservando posição e
+  visibilidade — em vez de reconfigurar o widget existente.
+
 ## [1.26.0] — 2026-07-10
 
 ### Opção de fixar o painel de notificações
