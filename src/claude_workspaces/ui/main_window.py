@@ -7221,17 +7221,20 @@ class MainWindow(QMainWindow):
         return center
 
     def _rebuild_notif_center(self, pinned: bool) -> None:
-        """Recria o NotificationCenter com as flags pra pinned/despinned.
+        """Recria o NotificationCenter ao (des)fixar.
 
-        No Wayland o "role" de uma surface é permanente — não dá pra
-        alternar `Qt.Popup` <-> `Qt.SplashScreen|WindowStaysOnTopHint` via
-        `setWindowFlags` numa janela viva sem derrubar a conexão do
-        protocolo (ver center.py). Por isso recriamos o widget do zero,
-        preservando posição e visibilidade.
+        Despinado é uma janela `Qt.Popup` (coordenadas globais de tela);
+        pinado é um widget filho comum desta janela (coordenadas locais,
+        relativas a `self`) — ver docstring de `NotificationCenter` sobre
+        por quê (Wayland não permite cliente posicionar toplevel, então
+        o modo fixado precisa ser um overlay interno, não uma janela).
+        Por isso a posição precisa ser convertida entre os dois sistemas
+        de coordenadas ao trocar de modo; e como as window flags são
+        fixas pra vida útil do widget, a troca recria a instância.
         """
         old = self._notif_center
         was_visible = old.isVisible() if old is not None else False
-        geo = old.geometry() if old is not None else None
+        top_left = old.geometry().topLeft() if old is not None else None
         if old is not None:
             old.hide()
             old.pin_toggled.disconnect(self._rebuild_notif_center)
@@ -7239,8 +7242,16 @@ class MainWindow(QMainWindow):
             old.deleteLater()
         new = self._make_notif_center(pinned=pinned)
         self._notif_center = new
-        if was_visible and geo is not None:
-            new.setGeometry(geo)
+        if was_visible and top_left is not None:
+            if pinned:
+                # popup (global) → filho (local ao self)
+                pos = self.mapFromGlobal(top_left)
+                pos.setX(max(0, min(pos.x(), self.width() - new.width())))
+                pos.setY(max(0, min(pos.y(), self.height() - new.minimumHeight())))
+            else:
+                # filho (local ao self) → popup (global)
+                pos = self.mapToGlobal(top_left)
+            new.move(pos)
             new.show()
             new.raise_()
             if not pinned:

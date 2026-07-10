@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.27.1] — 2026-07-10
+
+### Fix: painel de notificações fixado abria centralizado e não movia (Wayland)
+
+O fix anterior do crash ao fixar (v1.26.1) trocou o painel fixado pra
+uma janela `SplashScreen|WindowStaysOnTopHint` — mas no Wayland um
+cliente não pode posicionar uma janela toplevel (não existe "set
+position" no protocolo): o KWin ignorava `setGeometry`/`move()` e
+sempre centralizava, e o arraste manual também não tinha efeito.
+
+- **`notifications/center.py`**: painel fixado agora é um widget filho
+  comum (overlay) da `MainWindow`, não mais uma janela separada —
+  posicionamento e arraste passam a ser coordenadas de widget, que
+  funcionam em qualquer plataforma. `show_at` e o drag (`mousePressEvent`/
+  `mouseMoveEvent`) foram ajustados pra coordenadas locais quando pinado.
+- **`ui/main_window.py`**: `_rebuild_notif_center` converte a posição
+  entre coordenadas globais (popup) e locais (overlay filho) ao trocar
+  de modo, com clamp pra manter o painel dentro da janela ao fixar.
+
 ## [1.27.0] — 2026-07-10
 
 ### Feature: comparar com branch base no painel Git (estilo IntelliJ)

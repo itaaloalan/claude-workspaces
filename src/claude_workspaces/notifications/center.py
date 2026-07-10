@@ -2,8 +2,15 @@
 
 Substitui o `QMenu` espartano do `MainWindow._show_inbox`. É frameless,
 ancorado debaixo da bell, fecha quando perde foco — a menos que o usuário
-fixe o painel (📌), caso em que ele vira uma janela always-on-top
-arrastável até ser desafixado ou fechado manualmente.
+fixe o painel (📌), caso em que ele vira um widget filho comum
+sobreposto (overlay) dentro da MainWindow, arrastável dentro da janela,
+até ser desafixado ou fechado manualmente.
+
+Por que overlay e não janela always-on-top: no Wayland um cliente não
+pode posicionar uma janela toplevel (não existe "set position" no
+protocolo) — o compositor centraliza e ignora `move()`/`setGeometry()`.
+Um widget filho comum usa coordenadas de widget, que funcionam em
+qualquer plataforma.
 
 Layout:
 
@@ -215,11 +222,6 @@ class NotificationCenter(QFrame):
     FILTERS = ("all", "pending", "today")
 
     _FLAGS_POPUP = Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
-    _FLAGS_PINNED = (
-        Qt.WindowType.SplashScreen
-        | Qt.WindowType.FramelessWindowHint
-        | Qt.WindowType.WindowStaysOnTopHint
-    )
 
     def __init__(
         self,
@@ -229,21 +231,24 @@ class NotificationCenter(QFrame):
         parent: QWidget | None = None,
         pinned: bool = False,
     ) -> None:
-        # As window flags são fixas pra vida útil da janela — no Wayland o
-        # "role" de uma surface é permanente, então trocar flags depois de
-        # criada (setWindowFlags em runtime) derruba a conexão do protocolo
-        # (xdg_popup → xdg_toplevel não é permitido) e mata o app inteiro.
-        # Por isso o pin recria o widget (ver MainWindow._rebuild_notif_center)
-        # em vez de alternar flags nesta instância.
-        super().__init__(parent, self._FLAGS_PINNED if pinned else self._FLAGS_POPUP)
+        # Despinado: janela Popup de verdade (fecha ao clicar fora).
+        # Pinado: widget filho comum de `parent` (sem window flags) — vira
+        # um overlay dentro da MainWindow em vez de uma janela separada.
+        # As window flags são fixas pra vida útil do widget — trocar flags
+        # de uma janela viva via setWindowFlags derruba a conexão Wayland
+        # (o "role" da surface é permanente); por isso o pin recria o
+        # widget do zero (ver MainWindow._rebuild_notif_center) em vez de
+        # alternar flags nesta instância.
+        if pinned:
+            super().__init__(parent)
+        else:
+            super().__init__(parent, self._FLAGS_POPUP)
         self._service = service
         self._workspace_name_fn = workspace_name_fn or (lambda wid: wid)
         self._current_filter = "pending"
         self._current_workspace: str | None = None
         self._pinned = pinned
         self._drag_offset = None
-        if pinned:
-            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setObjectName("NotificationCenter")
         self.setStyleSheet(
             "QFrame#NotificationCenter {"
@@ -352,15 +357,19 @@ class NotificationCenter(QFrame):
         )
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        # Coordenadas de widget (não globais) — pinado é filho comum do
+        # parent, não uma janela toplevel; `move()` opera na posição
+        # relativa ao parent.
         if self._pinned and event.button() == Qt.MouseButton.LeftButton:
-            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self._drag_offset = event.position().toPoint()
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
         if self._pinned and self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            delta = event.position().toPoint() - self._drag_offset
+            self.move(self.pos() + delta)
             event.accept()
             return
         super().mouseMoveEvent(event)
@@ -466,8 +475,14 @@ class NotificationCenter(QFrame):
         """Posiciona o popup logo abaixo do widget âncora, alinhado à direita."""
         self._refresh()
         gp = anchor_widget.mapToGlobal(anchor_widget.rect().bottomRight())
-        x = gp.x() - self.width()
-        y = gp.y() + 4
+        if self._pinned and self.parentWidget() is not None:
+            # Overlay filho: posição relativa ao parent, não global.
+            local = self.parentWidget().mapFromGlobal(gp)
+            x = local.x() - self.width()
+            y = local.y() + 4
+        else:
+            x = gp.x() - self.width()
+            y = gp.y() + 4
         self.move(x, y)
         self.show()
         self.raise_()
