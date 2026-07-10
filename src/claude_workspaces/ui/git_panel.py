@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import (
+    QEvent,
     QFileSystemWatcher,
     QObject,
     QPoint,
@@ -456,6 +457,7 @@ class GitPanel(QWidget):
             "QPushButton:hover { color: #c9c6c0; border-color: #302d27; }"
             "QPushButton:checked { background: #4a3a20; color: #eac27d; border-color: #d4a04a; }"
         )
+        self._diff_hdr = diff_hdr
         hdr_lay = QHBoxLayout(diff_hdr)
         hdr_lay.setContentsMargins(6, 2, 6, 2)
         hdr_lay.setSpacing(4)
@@ -464,6 +466,11 @@ class GitPanel(QWidget):
         self._diff_filename.setStyleSheet("color: #9aa0a6; font-size: 11px; background: transparent;")
         hdr_lay.addWidget(self._diff_filename)
         hdr_lay.addStretch()
+        # Duplo-clique no header (widget normal, não o webview) também abre
+        # o modal expandido — capturar duplo-clique de dentro do conteúdo
+        # renderizado pelo QWebEngineView não é confiável via Qt.
+        diff_hdr.installEventFilter(self)
+        self._diff_filename.installEventFilter(self)
 
         # Toggles inline ↔ lado-a-lado
         self._diff_inline_btn = QPushButton("Inline")
@@ -489,6 +496,14 @@ class GitPanel(QWidget):
         self._diff_ctx_btn.setToolTip("Mostrar arquivo completo / só hunks")
         self._diff_ctx_btn.clicked.connect(self._toggle_diff_context)
         hdr_lay.addWidget(self._diff_ctx_btn)
+
+        self._diff_expand_btn = QPushButton("⛶")
+        self._diff_expand_btn.setToolTip(
+            "Abrir num modal grande, com navegação entre arquivos "
+            "(duplo clique aqui também abre)"
+        )
+        self._diff_expand_btn.clicked.connect(self._open_diff_expand_dialog)
+        hdr_lay.addWidget(self._diff_expand_btn)
 
         diff_vlay.addWidget(diff_hdr)
 
@@ -1530,6 +1545,15 @@ class GitPanel(QWidget):
 
     # ---------- interação ----------
 
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 (nome exigido pelo Qt)
+        if (
+            event.type() == QEvent.Type.MouseButtonDblClick
+            and obj in (self._diff_hdr, self._diff_filename)
+        ):
+            self._open_diff_expand_dialog()
+            return True
+        return super().eventFilter(obj, event)
+
     def _on_item_changed(self, item: QTreeWidgetItem, _col: int) -> None:
         self._update_commit_button()
 
@@ -1653,6 +1677,60 @@ class GitPanel(QWidget):
             text = get_diff(folder, rel, staged=staged, context=self._diff_context)
             self._diff_filename.setText(rel)
         self._diff_web.show_diff(text, name)
+
+    # ---------- modal expandido (mais espaço + navegação entre arquivos) ----
+
+    def _build_diff_entries(self) -> tuple[list[dict], int]:
+        """Monta a lista de arquivos na MESMA ordem da árvore (por repo →
+        Changes → Unversioned, cada grupo ordenado por path), no formato
+        esperado pelo `DiffExpandDialog`. Devolve (entries, index) com index
+        apontando pro arquivo de `self._shown_diff`."""
+        entries: list[dict] = []
+        shown_key = self._shown_diff[:2] if self._shown_diff else None
+        index = 0
+        for folder, st in self._statuses.items():
+            if not st.is_repo or not st.files:
+                continue
+            scan = self._compare_scans.get(folder)
+            merge_base_sha = (
+                scan.merge_base_sha
+                if self._compare_base and scan and scan.merge_base_sha
+                else ""
+            )
+            label_suffix = f"⇆ vs {self._compare_base}" if merge_base_sha else ""
+            changes = sorted(
+                (gf for gf in st.files if not gf.is_untracked), key=lambda f: f.path
+            )
+            untracked = sorted(
+                (gf for gf in st.files if gf.is_untracked), key=lambda f: f.path
+            )
+            for gf in (*changes, *untracked):
+                if shown_key == (folder, gf.path):
+                    index = len(entries)
+                entries.append(
+                    {
+                        "folder": folder,
+                        "rel_path": gf.path,
+                        "staged": gf.is_staged and not gf.is_unstaged,
+                        "merge_base_sha": merge_base_sha,
+                        "label_suffix": label_suffix,
+                    }
+                )
+        return entries, index
+
+    def _open_diff_expand_dialog(self) -> None:
+        if self._shown_diff is None:
+            return
+        entries, index = self._build_diff_entries()
+        if not entries:
+            return
+        from .diff_expand_dialog import DiffExpandDialog
+
+        fmt = "side-by-side" if self._diff_side_btn.isChecked() else "line-by-line"
+        DiffExpandDialog(
+            entries, index=index, output_format=fmt, context=self._diff_context,
+            parent=self,
+        ).show()
 
     def _refresh_shown_diff(self, statuses: dict) -> None:
         """Atualiza o diff exibido se o arquivo ainda tem mudanças.

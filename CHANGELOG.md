@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.28.0] — 2026-07-10
+
+### Feature: modal de diff expandido com navegação entre arquivos
+
+O diff embutido do painel Git fica espremido num dock estreito — faltava
+uma forma rápida de ver o mesmo diff rico com mais espaço de tela, e
+navegar entre os arquivos sem fechar e reabrir.
+
+- **`ui/diff_expand_dialog.py`** (novo): `DiffExpandDialog` reabre o mesmo
+  diff (diff2html/highlight.js) num modal grande e não-modal, com toggles
+  Inline/Lado a lado e Expandir contexto herdados do painel, e navegação
+  por arquivo via botões ▲/▼ ou F7/Shift+F7.
+- **`ui/git_panel.py`**: botão `⛶` no header do diff embutido abre o
+  modal no arquivo atual; duplo-clique no mesmo header (via `eventFilter`)
+  faz o mesmo. `_build_diff_entries()` monta a lista de arquivos na mesma
+  ordem da árvore (Changes → Unversioned, por repo), cobrindo tanto o modo
+  normal quanto o "Comparar com branch base".
+
 ## [1.27.1] — 2026-07-10
 
 ### Fix: painel de notificações fixado abria centralizado e não movia (Wayland)
