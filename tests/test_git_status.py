@@ -6,7 +6,10 @@ from claude_workspaces.git_status import (
     GitFile,
     GitStatus,
     _parse_porcelain_v2,
+    get_compare_scan,
+    get_diff_range,
     get_status,
+    merge_base,
 )
 
 
@@ -195,3 +198,90 @@ def test_parse_empty_output():
     branch, ahead, behind, files = _parse_porcelain_v2("")
     assert branch == "?"
     assert (ahead, behind, files) == (0, 0, [])
+
+
+# ---------- comparação com branch base (merge_base / get_compare_scan) ----
+
+@pytest.fixture
+def feature_repo(repo):
+    """`repo` (branch main, 1 commit) + branch `feature` com 1 commit próprio,
+    1 mudança não commitada e 1 arquivo untracked; e um commit extra em
+    `main` feito DEPOIS do fork — prova que a comparação usa merge-base
+    (three-dot), não `main..feature` (two-dot), que incluiria esse commit."""
+    _run(["git", "checkout", "-q", "-b", "feature"], repo)
+    (repo / "feature.txt").write_text("feature content\n")
+    _run(["git", "add", "feature.txt"], repo)
+    _run(["git", "commit", "-q", "-m", "feature commit"], repo)
+    (repo / "file.txt").write_text("edited on feature\n")
+    (repo / "untracked.txt").write_text("wip\n")
+
+    _run(["git", "checkout", "-q", "main"], repo)
+    (repo / "only_on_main.txt").write_text("main-only\n")
+    _run(["git", "add", "only_on_main.txt"], repo)
+    _run(["git", "commit", "-q", "-m", "main moved on after fork"], repo)
+    _run(["git", "checkout", "-q", "feature"], repo)
+    return repo
+
+
+def test_merge_base_finds_fork_point(feature_repo):
+    sha = merge_base(str(feature_repo), "main")
+    assert sha
+    # merge-base é o commit "init" (pai comum), não o HEAD atual de main.
+    main_head = subprocess.run(
+        ["git", "rev-parse", "main"], cwd=feature_repo,
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert sha != main_head
+
+
+def test_merge_base_nonexistent_ref(repo):
+    assert merge_base(str(repo), "does-not-exist") == ""
+
+
+def test_get_compare_scan_lists_feature_changes_not_main(feature_repo):
+    scan = get_compare_scan(str(feature_repo), "main")
+    assert not scan.error
+    assert scan.merge_base_sha
+    paths = {f.path for f in scan.files}
+    assert "feature.txt" in paths        # commitado na feature
+    assert "file.txt" in paths           # editado não-commitado
+    assert "untracked.txt" in paths      # untracked
+    assert "only_on_main.txt" not in paths  # só existe no commit extra de main
+
+
+def test_get_compare_scan_untracked_status(feature_repo):
+    scan = get_compare_scan(str(feature_repo), "main")
+    untracked = {f.path: f.status for f in scan.files}["untracked.txt"]
+    assert untracked == "??"
+
+
+def test_get_compare_scan_base_inexistente(repo):
+    scan = get_compare_scan(str(repo), "nao-existe-em-lugar-nenhum")
+    assert scan.error
+    assert scan.files == []
+
+
+def test_get_compare_scan_numstat(feature_repo):
+    scan = get_compare_scan(str(feature_repo), "main")
+    added, removed = scan.numstat.get("feature.txt", (0, 0))
+    assert added >= 1
+
+
+def test_get_diff_range_committed_and_edited(feature_repo):
+    scan = get_compare_scan(str(feature_repo), "main")
+    text = get_diff_range(str(feature_repo), "file.txt", scan.merge_base_sha)
+    assert "edited on feature" in text
+
+
+def test_get_diff_range_untracked(feature_repo):
+    scan = get_compare_scan(str(feature_repo), "main")
+    text = get_diff_range(str(feature_repo), "untracked.txt", scan.merge_base_sha)
+    assert "wip" in text
+
+
+def test_get_diff_range_size_cap(feature_repo, monkeypatch):
+    from claude_workspaces import git_status as gs
+    monkeypatch.setattr(gs, "MAX_DIFF_BYTES", 4)
+    scan = get_compare_scan(str(feature_repo), "main")
+    text = get_diff_range(str(feature_repo), "feature.txt", scan.merge_base_sha)
+    assert text.startswith("(diff grande demais")

@@ -127,8 +127,16 @@ def delete_untracked(folder: str, file_path: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def list_branches(folder: str) -> tuple[list[str], str]:
-    """Lista branches locais; retorna (branches, current). Vazio em erro."""
+def list_branches(
+    folder: str, include_remotes: bool = False
+) -> tuple[list[str], str]:
+    """Lista branches locais; retorna (branches, current). Vazio em erro.
+
+    Com `include_remotes=True`, acrescenta as branches remotas (ex.:
+    `origin/main`) depois das locais — usado pelo picker de "comparar com
+    branch base", que costuma apontar pra `origin/main`/`origin/dev` em vez
+    de um branch local desatualizado. `*/HEAD` (o ponteiro simbólico do
+    remoto) é filtrado."""
     if not Path(folder).is_dir():
         return [], ""
     try:
@@ -154,6 +162,28 @@ def list_branches(folder: str) -> tuple[list[str], str]:
         return [], ""
     branches = [b.strip() for b in r.stdout.splitlines() if b.strip()]
     current = c.stdout.strip() if c.returncode == 0 else ""
+
+    if include_remotes:
+        try:
+            rr = subprocess.run(
+                ["git", "branch", "-r", "--format=%(refname:short)"],
+                cwd=folder,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env={**os.environ, "LC_ALL": "C", "GIT_OPTIONAL_LOCKS": "0"},
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            rr = None
+        if rr is not None and rr.returncode == 0:
+            seen = set(branches)
+            for b in rr.stdout.splitlines():
+                b = b.strip()
+                if not b or b.endswith("/HEAD") or b in seen:
+                    continue
+                seen.add(b)
+                branches.append(b)
+
     return branches, current
 
 

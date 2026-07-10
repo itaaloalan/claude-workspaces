@@ -8,6 +8,7 @@ from claude_workspaces.git_actions import (
     discard_unstaged,
     fetch,
     has_staged_changes,
+    list_branches,
     pull_ff_only,
     stage_all,
     stage_file,
@@ -118,3 +119,44 @@ def test_actions_on_invalid_dir():
     ok, msg = stage_file("/path/that/does/not/exist", "x")
     assert not ok
     assert "inexistente" in msg.lower() or msg
+
+
+# ---------- list_branches(include_remotes) ----------
+
+def test_list_branches_local_only(repo):
+    _run(["git", "checkout", "-q", "-b", "feature"], repo)
+    branches, current = list_branches(str(repo))
+    assert set(branches) == {"main", "feature"}
+    assert current == "feature"
+
+
+def test_list_branches_include_remotes(tmp_path):
+    """Clona `repo` num segundo path (remote fake) e confere que
+    include_remotes=True acrescenta origin/<branch> à lista."""
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], upstream)
+    _run(["git", "config", "user.email", "t@t"], upstream)
+    _run(["git", "config", "user.name", "t"], upstream)
+    (upstream / "f.txt").write_text("x\n")
+    _run(["git", "add", "f.txt"], upstream)
+    _run(["git", "commit", "-q", "-m", "init"], upstream)
+
+    clone = tmp_path / "clone"
+    _run(["git", "clone", "-q", str(upstream), str(clone)], tmp_path)
+    _run(["git", "config", "user.email", "t@t"], clone)
+    _run(["git", "config", "user.name", "t"], clone)
+
+    branches_local, _ = list_branches(str(clone))
+    assert "origin/main" not in branches_local
+
+    branches_all, _ = list_branches(str(clone), include_remotes=True)
+    assert "main" in branches_all
+    assert "origin/main" in branches_all
+    assert not any(b.endswith("/HEAD") for b in branches_all)
+
+
+def test_list_branches_invalid_dir():
+    branches, current = list_branches("/path/that/does/not/exist")
+    assert branches == []
+    assert current == ""

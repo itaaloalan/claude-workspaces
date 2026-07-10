@@ -338,6 +338,12 @@ def get_diff(
         return r.stdout
     # Saída vazia: pode ser arquivo untracked (??).  Gera unified diff via
     # --no-index para que diff2html consiga parsear e highlight.js colorir.
+    return _untracked_diff(folder, file_path, context)
+
+
+def _untracked_diff(folder: str, file_path: str, context: int | None) -> str:
+    """Unified diff de um arquivo sem histórico (untracked) via --no-index
+    contra /dev/null — comum a `get_diff` e `get_diff_range`."""
     abs_path = Path(folder) / file_path
     if not abs_path.is_file():
         return ""
@@ -366,5 +372,137 @@ def get_diff(
     if r2.returncode not in (0, 1):
         return f"(git diff --no-index falhou: {r2.stderr.strip()})"
     return r2.stdout or ""
+
+
+# --- Comparação com branch base (estilo IntelliJ "Compare with branch...") -
+
+
+def merge_base(folder: str, base_rev: str) -> str:
+    """SHA de `git merge-base <base_rev> HEAD`; '' se a ref não existe, a
+    história não é relacionada, ou o comando falha/expira."""
+    try:
+        r = _run(["git", "merge-base", base_rev, "HEAD"], folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+    if r.returncode != 0:
+        return ""
+    return r.stdout.strip()
+
+
+@dataclass
+class CompareScan:
+    """Resultado de comparar a branch atual (HEAD + working tree) contra
+    `base_rev`: tudo que a branch introduz, commitado ou não."""
+
+    folder: str
+    base_rev: str
+    merge_base_sha: str = ""
+    files: list[GitFile] = field(default_factory=list)
+    numstat: dict[str, tuple[int, int]] = field(default_factory=dict)
+    error: str = ""
+
+
+def get_compare_scan(folder: str, base_rev: str) -> CompareScan:
+    """Varre `merge-base(base_rev, HEAD) → working tree`: o que a branch
+    atual introduz em relação à base, incluindo mudanças não commitadas.
+
+    Ao contrário de `git diff base...HEAD`, aqui incluímos também o que
+    ainda não foi commitado (working tree) e arquivos untracked — pra que
+    o modo comparação mostre o mesmo universo que o modo "mudanças locais",
+    só que com uma base diferente.
+    """
+    scan = CompareScan(folder=folder, base_rev=base_rev)
+    if not folder or not Path(folder).is_dir():
+        scan.error = "pasta inexistente"
+        return scan
+    try:
+        rv = _run(["git", "rev-parse", "--verify", "--quiet", base_rev], folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        scan.error = str(e)
+        return scan
+    if rv.returncode != 0:
+        scan.error = f"base '{base_rev}' inexistente"
+        return scan
+
+    sha = merge_base(folder, base_rev)
+    if not sha:
+        scan.error = "merge-base falhou (histórias não relacionadas?)"
+        return scan
+    scan.merge_base_sha = sha
+
+    # Import local: evita ciclo (git_actions não importa git_status; git_status
+    # reusa só o parser de name-status).
+    from .git_actions import _parse_name_status_z
+
+    try:
+        r_names = _run(["git", "diff", "--name-status", "-z", sha], folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        scan.error = str(e)
+        return scan
+    if r_names.returncode == 0:
+        for status, path in _parse_name_status_z(r_names.stdout):
+            code = status[0] if status else ""
+            scan.files.append(GitFile(status=f"{code} ", path=path))
+
+    try:
+        r_untracked = _run(
+            ["git", "ls-files", "--others", "--exclude-standard", "-z"], folder
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        r_untracked = None
+    if r_untracked is not None and r_untracked.returncode == 0:
+        for path in r_untracked.stdout.split("\0"):
+            if path:
+                scan.files.append(GitFile(status="??", path=path))
+
+    try:
+        r_num = _run(["git", "diff", "--numstat", sha], folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        r_num = None
+    if r_num is not None and r_num.returncode == 0:
+        for line in r_num.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) != 3:
+                continue
+            a, d, path = parts
+            added = int(a) if a.isdigit() else 0
+            removed = int(d) if d.isdigit() else 0
+            if " => " in path and "{" not in path:
+                path = path.split(" => ", 1)[1]
+            scan.numstat[path] = (added, removed)
+
+    return scan
+
+
+def get_diff_range(
+    folder: str,
+    file_path: str,
+    base_sha: str,
+    context: int | None = None,
+) -> str:
+    """Unified diff de `file_path` entre `base_sha` e o working tree
+    (`git diff <base_sha> -- <file_path>`, que já inclui mudanças não
+    commitadas). Mesmos cap/aviso de tamanho e fallback --no-index pra
+    arquivo untracked de `get_diff`."""
+    args = ["git", "diff", "--no-color"]
+    if context is not None:
+        args.append(f"-U{context}")
+    args.extend([base_sha, "--", file_path])
+    try:
+        r = _run(args, folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return f"(erro ao rodar git diff: {e})"
+    if r.returncode != 0:
+        return f"(git diff falhou: {r.stderr.strip()})"
+    if r.stdout:
+        if len(r.stdout) > MAX_DIFF_BYTES:
+            return (
+                f"(diff grande demais ({len(r.stdout) // 1024} KiB) — "
+                "abra o arquivo no editor para ver as mudanças completas)"
+            )
+        return r.stdout
+    # Saída vazia: pode ser arquivo untracked (não existe em base_sha nem em
+    # HEAD/index) — mesmo fallback de get_diff.
+    return _untracked_diff(folder, file_path, context)
 
 

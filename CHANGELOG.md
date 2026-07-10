@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.27.0] — 2026-07-10
+
+### Feature: comparar com branch base no painel Git (estilo IntelliJ)
+
+O painel Git já listava as mudanças não commitadas com diff embutido
+(inline/lado-a-lado); faltava comparar a branch atual contra outra
+(main/dev), como o "Compare with branch..." do IntelliJ, sem precisar
+abrir a IDE.
+
+- **`git_status.py`**: `merge_base()`, `CompareScan` e `get_compare_scan()`
+  varrem `merge-base(base, HEAD) → working tree` (tudo que a branch atual
+  introduz, commitado ou não); `get_diff_range()` gera o diff unified de um
+  arquivo contra qualquer SHA base.
+- **`git_actions.py`**: `list_branches(..., include_remotes=True)` também
+  lista as branches remotas (ex.: `origin/main`).
+- **`compare_meta.py`** (novo): persiste a última base de comparação
+  escolhida por repo em `compare_bases.json`.
+- **`ui/git_panel.py`**: botão `⇆` na toolbar liga o modo comparação —
+  árvore, diff embutido (Inline/Lado a lado) e diff nativo side-by-side
+  (duplo clique) passam a mostrar merge-base → working tree. Modo somente
+  leitura: esconde a área de commit e os checkboxes de stage.
+
 ## [1.26.1] — 2026-07-10
 
 ### Fix: app crashava ao fixar o painel de notificações (Wayland)
