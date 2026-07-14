@@ -180,7 +180,11 @@ def _backoff_ttl(folder: str, base_ttl: float) -> float:
         streak = _slow_streak.get(folder, 0)
     if streak < 3 or base_ttl <= 0:
         return base_ttl
-    doublings = streak // 3
+    # Cap do expoente: streaks muito longos (repo cronicamente lento por
+    # dias) faziam `2**doublings` estourar OverflowError na conversão pra
+    # float antes mesmo do min() aplicar o cap de TTL. 32 doublings já é
+    # muito além do necessário pra saturar em _BACKOFF_CAP_S.
+    doublings = min(streak // 3, 32)
     return min(base_ttl * (2**doublings), _BACKOFF_CAP_S)
 
 

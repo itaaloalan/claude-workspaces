@@ -5,7 +5,9 @@ import pytest
 from claude_workspaces.git_status import (
     GitFile,
     GitStatus,
+    _backoff_ttl,
     _parse_porcelain_v2,
+    _slow_streak,
     get_compare_scan,
     get_diff_range,
     get_status,
@@ -285,3 +287,31 @@ def test_get_diff_range_size_cap(feature_repo, monkeypatch):
     scan = get_compare_scan(str(feature_repo), "main")
     text = get_diff_range(str(feature_repo), "feature.txt", scan.merge_base_sha)
     assert text.startswith("(diff grande demais")
+
+
+# ---------- _backoff_ttl (backoff de TTL pra pastas cronicamente lentas) --
+
+def test_backoff_ttl_no_streak_returns_base():
+    assert _backoff_ttl("/repo/sem-streak", 5.0) == 5.0
+
+
+def test_backoff_ttl_caps_at_backoff_cap(monkeypatch):
+    from claude_workspaces import git_status as gs
+    _slow_streak["/repo/lento"] = 9  # 3 doublings
+    try:
+        assert _backoff_ttl("/repo/lento", 5.0) == min(5.0 * 8, gs._BACKOFF_CAP_S)
+    finally:
+        _slow_streak.pop("/repo/lento", None)
+
+
+def test_backoff_ttl_huge_streak_does_not_overflow():
+    """Regressão: streak muito grande (repo cronicamente lento por dias)
+    fazia `2**doublings` estourar OverflowError na conversão int->float
+    antes do min() aplicar o cap. Ver app.log: 'repo status poller falhou'
+    com OverflowError em produção."""
+    from claude_workspaces import git_status as gs
+    _slow_streak["/repo/streak-gigante"] = 10_000
+    try:
+        assert _backoff_ttl("/repo/streak-gigante", 5.0) == gs._BACKOFF_CAP_S
+    finally:
+        _slow_streak.pop("/repo/streak-gigante", None)

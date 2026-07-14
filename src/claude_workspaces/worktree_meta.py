@@ -13,6 +13,7 @@ do console pra mostrar `origem 🌱 <base>`.
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 from .storage import config_dir
@@ -22,6 +23,16 @@ log = logging.getLogger(__name__)
 
 def _bases_file() -> Path:
     return config_dir() / "worktree_bases.json"
+
+
+# Cache em memória de `_load()`, invalidado por mtime do arquivo. Sem isso,
+# `get_base_branch` faz stat+read+json.loads em disco a cada chamada — e é
+# chamado no hot path de `_refresh_terminal_pane_title` (poll de atividade
+# a cada 250ms por console), o que aparecia como stalls de main thread no
+# perf watchdog.
+_cache_lock = threading.Lock()
+_cache_mtime: float | None = None
+_cache_data: dict[str, str] = {}
 
 
 def _norm(worktree_path: str) -> str:
@@ -34,26 +45,52 @@ def _norm(worktree_path: str) -> str:
 
 
 def _load() -> dict[str, str]:
+    global _cache_mtime, _cache_data
     path = _bases_file()
-    if not path.exists():
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        # Arquivo não existe (ainda) ou virou inacessível: cache vazio.
+        with _cache_lock:
+            _cache_mtime = None
+            _cache_data = {}
         return {}
+
+    with _cache_lock:
+        if _cache_mtime == mtime:
+            return _cache_data
+
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         log.warning("Não consegui ler %s", path)
+        with _cache_lock:
+            _cache_mtime = None
+            _cache_data = {}
         return {}
+
     if not isinstance(data, dict):
-        return {}
-    return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
+        parsed: dict[str, str] = {}
+    else:
+        parsed = {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)}
+
+    with _cache_lock:
+        _cache_mtime = mtime
+        _cache_data = parsed
+    return parsed
 
 
 def _save(bases: dict[str, str]) -> None:
+    global _cache_mtime, _cache_data
     path = _bases_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(bases, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    with _cache_lock:
+        _cache_mtime = path.stat().st_mtime
+        _cache_data = bases
 
 
 def set_base_branch(worktree_path: str, base: str) -> None:

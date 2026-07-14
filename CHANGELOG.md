@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.28.1] — 2026-07-14
+
+### Fix: OverflowError no backoff de git status + stalls de main thread + logs mais analisáveis
+
+Análise dos logs (`app.log`/`perf.log`) mostrou um repo cronicamente lento
+derrubando o poller de status em loop de erro, e stalls recorrentes da UI
+causados por I/O síncrono; aproveitado pra deixar `perf.log` fácil de
+`grep`/agregar por hora sem parser dedicado.
+
+- **`git_status.py`**: `_backoff_ttl` limitava o TTL efetivo com `min(...,
+  _BACKOFF_CAP_S)`, mas calculava `2**doublings` ANTES do cap — um repo
+  lento por streak muito longo (visto em produção: `ogpms_fix_melhoria-
+  mensagens-validacao-sap` lento por ~2 dias seguidos) estourava
+  `OverflowError: int too large to convert to float` e derrubava o
+  `repo_status_poller` daquele repo em loop até o próximo restart do app.
+  Agora `doublings` é capado em 32 antes da exponenciação.
+- **`worktree_meta.py`**: `get_base_branch` (chamado no hot path de
+  `_refresh_terminal_pane_title`, a cada poll de atividade de console —
+  ~250ms) lia `worktree_bases.json` do disco (stat+read+json.loads) em
+  toda chamada, sem cache. O watchdog de stall apontava consistentemente
+  pra esse caminho como causa de freezes de 300ms–2.4s na main thread.
+  Agora `_load()` cacheia por mtime do arquivo, igual ao padrão já usado
+  em `mcp_inspector.list_project_server_names_cached`.
+- **`perf.py`**: `flush()` gravava um bloco multi-linha por janela de 30s
+  (`_log.info("\n".join(lines))`), então só a primeira linha carregava
+  timestamp — analisar `perf.log` por hora exigia rastrear a linha `===
+  janela ===` anterior num parser à parte. Agora cada métrica vira sua
+  própria linha de log, com seu próprio `%(asctime)s`, direto `grep`ável
+  (`grep "T git.status" perf.log | cut -c1-13 | sort | uniq -c`).
+
 ## [1.28.0] — 2026-07-10
 
 ### Feature: modal de diff expandido com navegação entre arquivos

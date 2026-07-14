@@ -142,9 +142,16 @@ def count(name: str, amount: float = 1) -> None:
 def flush() -> None:
     """Despeja o resumo da janela atual no perf.log e zera os buckets.
 
-    Uma linha por métrica. Para timers: nº de chamadas, média/máx em ms,
-    total acumulado na janela e quanto isso representa por segundo (o sinal
-    mais direto de 'onde o CPU foi'). Para contadores: total e taxa/s.
+    Uma linha de log POR MÉTRICA — não um bloco multi-linha. Cada `_log.info`
+    separado ganha seu próprio `%(asctime)s` do formatter, então qualquer
+    métrica fica direto `grep`ável/agregável por hora (`grep "T git.status"
+    perf.log | cut -c1-13`) sem precisar rastrear a linha "=== janela ==="
+    anterior pra saber o timestamp — dor real em análises passadas, que
+    exigiam um parser dedicado só pra bucketizar por hora.
+
+    Para timers: nº de chamadas, média/máx em ms, total acumulado na janela
+    e quanto isso representa por segundo (o sinal mais direto de 'onde o CPU
+    foi'). Para contadores: total e taxa/s.
     """
     if not _enabled:
         return
@@ -158,25 +165,23 @@ def flush() -> None:
         _reset_window(now)
     if not timers and not counters:
         return
-    lines = [f"=== janela {window_s:.1f}s ==="]
+    _log.info("=== janela %.1fs ===", window_s)
     for name in sorted(timers):
         b = timers[name]
         avg = b.total_ms / b.n if b.n else 0.0
         # ms gastos por segundo de janela = fração de 1 core (×1000 = 100%).
         ms_per_s = b.total_ms / window_s
-        lines.append(
-            f"  T {name:<28} n={b.n:<6} avg={avg:6.2f}ms "
-            f"max={b.max_ms:7.2f}ms total={b.total_ms:8.1f}ms "
-            f"({ms_per_s:6.1f}ms/s)"
+        _log.info(
+            "T %-28s n=%-6d avg=%6.2fms max=%7.2fms total=%8.1fms (%6.1fms/s)",
+            name, b.n, avg, b.max_ms, b.total_ms, ms_per_s,
         )
     for name in sorted(counters):
         c = counters[name]
         rate = c.total / window_s
-        lines.append(
-            f"  C {name:<28} n={c.n:<6} total={c.total:12.0f} "
-            f"rate={rate:12.1f}/s"
+        _log.info(
+            "C %-28s n=%-6d total=%12.0f rate=%12.1f/s",
+            name, c.n, c.total, rate,
         )
-    _log.info("\n".join(lines))
 
 
 def _reset_window(now: float) -> None:
