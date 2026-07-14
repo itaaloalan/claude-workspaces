@@ -145,6 +145,11 @@ def main() -> int:
         return 0
 
     settings = _load_settings()
+    # Respeita o toggle "notificação nativa" das Configurações — sem isso,
+    # desligar na UI não bastava: o hook roda como subprocess independente
+    # do app e disparava do mesmo jeito a cada fim de turno.
+    if settings.get("notify_native_enabled") is False:
+        return 0
     app_name = str(settings.get("notify_app_name") or DEFAULT_APP_NAME)
     title_fmt = str(settings.get("notify_hook_title_format") or DEFAULT_TITLE_FORMAT)
     default_body = str(

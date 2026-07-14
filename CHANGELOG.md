@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.28.3] — 2026-07-14
+
+### Fix: notify-hook.py ignorava o toggle "notificação nativa" da UI
+
+Desmarcar "notificação nativa" nas Configurações não bastava pra parar
+os toasts do Plasma: o hook `Stop` do Claude Code (`packaging/notify-
+hook.py`, instalado em `~/.config/claude-workspaces/notify-hook.py` e
+registrado em `hooks.Stop` do `~/.claude/settings.json`) roda como
+subprocess independente do app a cada fim de turno de QUALQUER sessão
+Claude, e só lia o `settings.json` pra textos (nome/título) — nunca
+checava `notify_native_enabled`. Resultado: mesmo com o toggle desligado
+na UI, o toast nativo continuava disparando via `gdbus`/`notify-send`.
+
+- **`packaging/notify-hook.py`**: `main()` agora retorna cedo quando
+  `notify_native_enabled` é `False` explícito no `settings.json`. Sem o
+  campo (config antiga), mantém o comportamento default de notificar.
+- Hook Stop removido de `~/.claude/settings.json` via `uninstall_hook()`
+  existente (`hook_manager.py`), preservando os demais hooks (superset,
+  session-timer). Reinstalar pela UI volta a respeitar o toggle.
+
 ## [1.28.2] — 2026-07-14
 
 ### Fix: aviso "deploy fora do worktree" repetia no log do runner a cada ~3s
