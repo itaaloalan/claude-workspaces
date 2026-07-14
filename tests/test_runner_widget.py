@@ -156,3 +156,30 @@ def test_cross_repo_override_is_ignored(qapp, tmp_path):
     finally:
         w.terminate()
         w.deleteLater()
+
+
+def test_deploy_warning_logs_once_despite_on_off_flicker(qapp):
+    """Regressão: `served_mismatch()` roda a cada ~3s num subprocess (ss/lsof)
+    e pode oscilar True/False por flakiness de detecção mesmo com o deploy
+    permanecendo fora do worktree o tempo todo. Antes, cada oscilação para
+    True reimprimia a linha de aviso no log do runner ("fica toda hora").
+    Agora só a primeira transição loga; o chip ainda reflete o estado atual."""
+    w = RunnerWidget(RunnerConfig(name="sipe-manager", start_cmd="echo hi"),
+                     default_cwd="/tmp")
+    try:
+        emitted: list[bytes] = []
+        w.bridge.output_to_terminal.connect(lambda b: emitted.append(bytes(b)))
+
+        w.set_deploy_warning(True, "/outro/worktree")
+        w.set_deploy_warning(False)
+        w.set_deploy_warning(True, "/outro/worktree")
+        w.set_deploy_warning(False)
+        w.set_deploy_warning(True, "/outro/worktree")
+
+        warn_lines = [e for e in emitted if b"deploy fora do worktree" in e]
+        assert len(warn_lines) == 1
+        # Chip continua refletindo o estado atual mesmo sem reimprimir o log.
+        assert w._deploy_warned is True
+    finally:
+        w.terminate()
+        w.deleteLater()

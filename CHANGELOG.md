@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.28.2] — 2026-07-14
+
+### Fix: aviso "deploy fora do worktree" repetia no log do runner a cada ~3s
+
+`set_deploy_warning` usava o mesmo flag (`_deploy_warned`) tanto pro chip
+📁 quanto pra decidir se reimprime a linha de aviso no log. Esse flag é
+recalculado a cada ~3s por `served_mismatch()` (subprocess `ss`/`lsof`),
+que pode oscilar True/False por flakiness de detecção mesmo com o deploy
+permanecendo fora do worktree o tempo todo — cada oscilação para `True`
+reimprimia "⚠ deploy fora do worktree — ...".
+
+- **`ui/runner_widget.py`**: novo flag `_deploy_warned_logged`, separado
+  do estado do chip, que só permite logar a linha uma vez por execução
+  (reseta em start/restart, igual ao `_port_mismatch_warned` já existente).
+  O chip continua refletindo o estado atual em tempo real.
+
 ## [1.28.1] — 2026-07-14
 
 ### Fix: OverflowError no backoff de git status + stalls de main thread + logs mais analisáveis

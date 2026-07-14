@@ -96,6 +96,12 @@ class RunnerWidget(QWidget):
         # Aviso "deploy fora do worktree" (Detecção A do served_proc): o
         # processo que escuta a porta roda de outra pasta. Inline, sem popup.
         self._deploy_warned: bool = False
+        # Log da linha de aviso é separado do estado do chip: `_deploy_warned`
+        # é recalculado a cada ~3s (served_mismatch via ss/lsof) e pode
+        # oscilar True/False/True por flakiness do subprocess — sem isso, cada
+        # oscilação reimprimia a linha no log do runner. Uma vez impresso
+        # nesta execução, não repete; só reseta em start/restart.
+        self._deploy_warned_logged: bool = False
         # URL atual conhecida pelo widget (config ou detectada). Mantida pra
         # sincronizar a sidebar (host:port). Inicializa a partir da config
         # (com {port} já expandido pra porta do runner).
@@ -693,16 +699,18 @@ class RunnerWidget(QWidget):
                 f"mas este runner é do worktree {self.effective_cwd()}.\n"
                 "Reinicie o servidor a partir do worktree pra testar o código certo."
             )
-            msg = (
-                "\r\n\x1b[38;5;203m⚠ deploy fora do worktree — a porta está sendo "
-                f"servida de {served_cwd or '(desconhecido)'}, não deste worktree."
-                "\x1b[0m\r\n"
-            )
-            self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
-            try:
-                self.bridge.output_to_terminal.emit(msg.encode("utf-8"))
-            except Exception:
-                log.debug("emit do aviso de deploy falhou", exc_info=True)
+            if not self._deploy_warned_logged:
+                self._deploy_warned_logged = True
+                msg = (
+                    "\r\n\x1b[38;5;203m⚠ deploy fora do worktree — a porta está sendo "
+                    f"servida de {served_cwd or '(desconhecido)'}, não deste worktree."
+                    "\x1b[0m\r\n"
+                )
+                self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
+                try:
+                    self.bridge.output_to_terminal.emit(msg.encode("utf-8"))
+                except Exception:
+                    log.debug("emit do aviso de deploy falhou", exc_info=True)
         else:
             self._refresh_cwd_chip()
 
@@ -812,6 +820,7 @@ class RunnerWidget(QWidget):
             self._ready_pattern_matched = False
             self._rodando_emitted = False
             self._port_mismatch_warned = False
+            self._deploy_warned_logged = False
             # Banner com o diretório/worktree no INÍCIO de cada execução —
             # com vários consoles/worktrees, deixa explícito onde o runner
             # está rodando sem precisar abrir o chip 📁.
