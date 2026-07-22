@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.28.4] — 2026-07-22
+
+### Fix: painel de Runners da sidebar ocupava espaço demais e empurrava a lista de workspaces
+
+O painel "Runners" do rodapé (`SidebarFooter`) crescia sem limite — cada
+runner virava uma linha filha direta sem scroll nem teto de altura. Em
+workspaces com muitos runners (ex.: sipepro), o painel dominava a
+sidebar e espremia a árvore de workspaces (`stretch=1`) pra cima.
+
+- **`src/claude_workspaces/ui/sidebar_footer.py`**: `_runner_rows_widget`
+  agora fica dentro de um `QScrollArea` com `setMaximumHeight(280)`
+  (constante `_RUNNER_PANEL_MAX_HEIGHT`), mesmo padrão já usado em
+  `console_runners_dialog.py`. Com poucos runners o painel continua do
+  tamanho do conteúdo; acima do teto, aparece scrollbar interna em vez
+  de empurrar a lista de workspaces.
+
 ## [1.28.3] — 2026-07-14
 
 ### Fix: notify-hook.py ignorava o toggle "notificação nativa" da UI

@@ -24,9 +24,11 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -39,6 +41,10 @@ from .minimize_tray import MinimizeTray
 _RE_COOLDOWN = re.compile(r"cooldown\s+\d+[mh]")
 _RE_HOURS_PCT = re.compile(r"\d+h\s+\d+%")
 _RE_PCT = re.compile(r"\d+%")
+
+# Teto de altura do painel de runners no rodapé da sidebar — acima disso
+# o painel vira scroll em vez de empurrar a árvore de workspaces.
+_RUNNER_PANEL_MAX_HEIGHT = 280
 
 
 class _ClickableLabel(QLabel):
@@ -396,10 +402,26 @@ class SidebarFooter(QWidget):
         rp_layout.addWidget(runner_head)
 
         self._runner_rows_widget = QWidget()
+        self._runner_rows_widget.setAutoFillBackground(False)
         self._runner_rows = QVBoxLayout(self._runner_rows_widget)
         self._runner_rows.setContentsMargins(0, 0, 0, 0)
         self._runner_rows.setSpacing(4)
-        rp_layout.addWidget(self._runner_rows_widget)
+
+        self._runner_scroll = QScrollArea()
+        self._runner_scroll.setWidgetResizable(True)
+        self._runner_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._runner_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._runner_scroll.setMaximumHeight(_RUNNER_PANEL_MAX_HEIGHT)
+        self._runner_scroll.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+        )
+        self._runner_scroll.setMinimumWidth(0)
+        self._runner_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        self._runner_scroll.viewport().setAutoFillBackground(False)
+        self._runner_scroll.setWidget(self._runner_rows_widget)
+        rp_layout.addWidget(self._runner_scroll)
         outer.addWidget(self._runner_panel)
 
         # ── Painel: minimizados ─────────────────────────────────────────
