@@ -21,20 +21,22 @@ from PySide6.QtGui import (
     QClipboard,
     QColor,
     QFont,
+    QFontMetrics,
     QGuiApplication,
     QPainter,
 )
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QStyle,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -82,8 +84,8 @@ log = logging.getLogger(__name__)
 
 def _collect_numstat(folder: str) -> dict[str, tuple[int, int]]:
     """{rel_path: (added, removed)} combinando working-tree e staged. Linhas
-    binárias ('-') viram (0, 0). Alimenta o ±linhas do feed ao vivo; é
-    best-effort (renames simples normalizados pro caminho novo)."""
+    binárias ('-') viram (0, 0). Alimenta o ±linhas da árvore e do contador;
+    é best-effort (renames simples normalizados pro caminho novo)."""
     out: dict[str, tuple[int, int]] = {}
     for extra in ([], ["--cached"]):
         try:
@@ -106,7 +108,7 @@ def _collect_numstat(folder: str) -> dict[str, tuple[int, int]]:
             a, d, path = parts
             added = int(a) if a.isdigit() else 0
             removed = int(d) if d.isdigit() else 0
-            # rename "old => new"; "{a => b}/c" fica cru (raro no feed).
+            # rename "old => new"; "{a => b}/c" fica cru (raro).
             if " => " in path and "{" not in path:
                 path = path.split(" => ", 1)[1]
             out[path] = (added, removed)
@@ -149,8 +151,8 @@ class _WatchDirsTask(QRunnable):
 
 class _StatusScanTask(QRunnable):
     """Roda `get_status` (subprocess `git status`) fora da UI thread pra cada
-    pasta, mais `git diff --numstat` pras ±linhas do feed. Só devolve dados;
-    o rebuild da árvore e o feed ficam na UI thread."""
+    pasta, mais `git diff --numstat` pras ±linhas da árvore. Só devolve
+    dados; o rebuild da árvore fica na UI thread."""
 
     def __init__(
         self,
@@ -214,6 +216,40 @@ STATUS_COLOR = {
     "novo": "#8b8880",
 }
 
+# Glyph por status do arquivo (mesma cor do texto), renderizado pequeno
+# (ver setIconSize da árvore) pra ler como um "dot" estilo Zed.
+_STATUS_ICON_NAME = {
+    "adicionado": "fa5s.plus",
+    "deletado": "fa5s.minus",
+    "renomeado": "fa5s.long-arrow-alt-right",
+    "copiado": "fa5s.long-arrow-alt-right",
+    "novo": "far.circle",
+}
+_status_icon_cache: dict[tuple[str, str], object] = {}
+
+
+def _status_icon(label: str, color: str):
+    """QIcon do status, cacheado por (label, cor) — qtawesome recria o QIcon
+    a cada chamada e isso roda por arquivo em todo rebuild da árvore."""
+    key = (label, color)
+    icon = _status_icon_cache.get(key)
+    if icon is None:
+        from .icons import ic
+
+        icon = ic(_STATUS_ICON_NAME.get(label, "fa5s.circle"), color=color)
+        _status_icon_cache[key] = icon
+    return icon
+
+
+def _dir_name_key(path: str) -> tuple[str, str]:
+    """Chave de ordenação (diretório, basename): arquivos da raiz primeiro,
+    depois cada pasta com seus arquivos juntos — ordenar por path puro
+    intercalava arquivos da raiz no meio dos separadores de pasta."""
+    if "/" in path:
+        rel_dir, name = path.rsplit("/", 1)
+        return (rel_dir, name)
+    return ("", path)
+
 POLL_INTERVAL_MS = 30_000
 
 # UserRole keys
@@ -222,8 +258,12 @@ T_FILE = "file"
 T_REPO = "repo"
 T_FOLDER = "folder"  # separador de pasta na lista de arquivos
 
+# Role extra do item de arquivo: tupla (added, removed) pintada pelo
+# _ChangesDelegate na borda direita da linha.
+_STATS_ROLE = Qt.ItemDataRole.UserRole + 1
+
 # Pastas que o watcher do worktree nunca observa (pesadas/irrelevantes pro
-# feed) + teto de diretórios pra não estourar o limite de inotify.
+# status) + teto de diretórios pra não estourar o limite de inotify.
 _WATCH_SKIP_DIRS = {
     ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
     "dist", "build", "target", ".mypy_cache", ".pytest_cache", ".ruff_cache",
@@ -232,21 +272,12 @@ _WATCH_SKIP_DIRS = {
 }
 _WATCH_DIR_CAP = 1500
 
-# Glyph + cor por código de status (mesma paleta do STATUS_COLOR/diálogo de
-# push) usados nas linhas do feed ao vivo.
-_FEED_GLYPH = {"A": "+", "M": "~", "D": "−", "R": "→", "C": "→", "T": "~"}
-_FEED_COLOR = {
-    "A": "#5ac35a", "M": "#e3c96a", "D": "#d57272",
-    "R": "#7aa6e6", "C": "#7aa6e6", "T": "#e3c96a",
-}
-
-
 def _worktree_watch_dirs(folder: str) -> list[str]:
     """Diretórios do working tree a observar. O QFileSystemWatcher não é
     recursivo, então cada subpasta entra na lista; podamos pastas pesadas
     (_WATCH_SKIP_DIRS) e limitamos a _WATCH_DIR_CAP. inotify num diretório
     reporta create/delete/modify dos arquivos contidos — é o que dispara o
-    feed quando um arquivo é salvo."""
+    refresh da árvore quando um arquivo é salvo."""
     dirs: list[str] = []
     try:
         for root, subdirs, _files in os.walk(folder):
@@ -291,58 +322,118 @@ def _fingerprint_statuses(statuses: dict[str, GitStatus]) -> tuple:
     )
 
 
-class _StatsDelegate(QStyledItemDelegate):
-    """Pinta a coluna de stats (+N -M) em verde e vermelho.
+class _ChangesDelegate(QStyledItemDelegate):
+    """Delegate da árvore de changes em coluna única (estilo Zed).
 
-    O dado UserRole da coluna 1 é uma tupla (added: int, removed: int).
-    Renderiza da direita pra esquerda: '-M' (vermelho) mais à direita,
-    '+N' (verde) à esquerda dele, alinhados à margem direita da célula.
+    - Separador de pasta (T_FOLDER): caminho completo dimmed, elidido no
+      MEIO — o fim do path (mais informativo) fica sempre visível.
+    - Demais linhas: fundo/seleção/checkbox/ícone pintados pelo estilo
+      nativo (preserva hit-test do checkbox), nome elidido à direita
+      parando antes da zona de stats, e '+N -M' (verde/vermelho, dado em
+      _STATS_ROLE) colados à margem direita da linha. Linhas sem stats
+      usam a largura toda — nenhum pixel fica reservado.
     """
 
     _ADD = QColor("#5ac35a")
     _DEL = QColor("#d57272")
+    _DIM = QColor("#5a5750")
+    _SEL_TEXT = QColor("#211709")
+    _FALLBACK = QColor("#c9c6c0")
+    _GAP = 5
 
     def paint(self, painter: QPainter, option, index) -> None:  # type: ignore[override]
-        super().paint(painter, option, index)
-        raw = index.data(Qt.ItemDataRole.UserRole)
-        if not isinstance(raw, tuple) or len(raw) != 2:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        widget = opt.widget
+        style = widget.style() if widget else QApplication.style()
+        full_text = opt.text
+        # O estilo pinta fundo/hover/seleção/checkbox/ícone; o texto (que
+        # precisa de elide custom) é responsabilidade nossa.
+        opt.text = ""
+        style.drawControl(
+            QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget
+        )
+
+        fm = QFontMetrics(opt.font)
+        selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+        text_rect = style.subElementRect(
+            QStyle.SubElement.SE_ItemViewItemText, opt, widget
+        )
+
+        data = index.data(Qt.ItemDataRole.UserRole) or {}
+        if isinstance(data, dict) and data.get("type") == T_FOLDER:
+            painter.save()
+            painter.setFont(opt.font)
+            painter.setPen(self._SEL_TEXT if selected else self._DIM)
+            painter.drawText(
+                text_rect,
+                Qt.AlignmentFlag.AlignVCenter,
+                fm.elidedText(
+                    full_text, Qt.TextElideMode.ElideMiddle, text_rect.width()
+                ),
+            )
+            painter.restore()
             return
-        added, removed = raw
-        if not added and not removed:
-            return
+
+        stats = index.data(_STATS_ROLE)
+        add_s = del_s = ""
+        if isinstance(stats, tuple) and len(stats) == 2:
+            added, removed = stats
+            add_s = f"+{added}" if added else ""
+            del_s = f"-{removed}" if removed else ""
+        stats_w = 0
+        if add_s or del_s:
+            stats_w = fm.horizontalAdvance(add_s) + fm.horizontalAdvance(del_s)
+            if add_s and del_s:
+                stats_w += self._GAP
+
         painter.save()
-        painter.setFont(option.font)
-        fm = painter.fontMetrics()
-        r = option.rect
-        x = r.right() - 4
+        painter.setFont(opt.font)
+        avail = text_rect.width() - (stats_w + self._GAP if stats_w else 0)
+        if selected:
+            pen = self._SEL_TEXT
+        else:
+            fg = index.data(Qt.ItemDataRole.ForegroundRole)
+            pen = fg.color() if isinstance(fg, QBrush) else self._FALLBACK
+        painter.setPen(pen)
+        painter.drawText(
+            QRect(
+                text_rect.x(), text_rect.y(), max(0, avail), text_rect.height()
+            ),
+            Qt.AlignmentFlag.AlignVCenter,
+            fm.elidedText(full_text, Qt.TextElideMode.ElideRight, max(0, avail)),
+        )
 
-        if removed:
-            s = f"-{removed}"
-            w = fm.horizontalAdvance(s)
-            painter.setPen(self._DEL)
+        # Stats da direita pra esquerda, colados à margem da LINHA (não do
+        # text_rect) pra ficarem alinhados entre arquivos com indentação igual.
+        x = opt.rect.right() - 4
+        r = opt.rect
+        if del_s:
+            w = fm.horizontalAdvance(del_s)
+            painter.setPen(self._SEL_TEXT if selected else self._DEL)
             painter.drawText(
                 QRect(x - w, r.top(), w, r.height()),
                 Qt.AlignmentFlag.AlignVCenter,
-                s,
+                del_s,
             )
-            x = x - w - 5
-
-        if added:
-            s = f"+{added}"
-            w = fm.horizontalAdvance(s)
-            painter.setPen(self._ADD)
+            x -= w + self._GAP
+        if add_s:
+            w = fm.horizontalAdvance(add_s)
+            painter.setPen(self._SEL_TEXT if selected else self._ADD)
             painter.drawText(
                 QRect(x - w, r.top(), w, r.height()),
                 Qt.AlignmentFlag.AlignVCenter,
-                s,
+                add_s,
             )
-
         painter.restore()
 
 
 class GitPanel(QWidget):
-    """Painel estilo IntelliJ Commit:
-    - QTreeWidget agrupado por repo, com sub-grupos "Changes" e "Unversioned"
+    """Painel de changes (estilo Zed/IntelliJ Commit):
+    - QTreeWidget de coluna única com grupos "Changes" e "Unversioned";
+      single-repo monta os grupos direto na raiz, multi-repo tem um nível
+      de item por repo. Separadores de pasta dimmed + arquivos (basename,
+      ícone de status, ±linhas à direita) via _ChangesDelegate.
     - Cada arquivo tem checkbox; o commit usa só os marcados
     - Área de commit no rodapé (mensagem multilinha + botão Commit)
     - Diff inline opcional (toggle no header)
@@ -411,10 +502,19 @@ class GitPanel(QWidget):
         )
 
         self._tree = QTreeWidget()
-        self._tree.setColumnCount(2)
+        self._tree.setColumnCount(1)
         self._tree.setHeaderHidden(True)
         self._tree.setRootIsDecorated(True)
         self._tree.setExpandsOnDoubleClick(False)
+        # Indentação curta: com grupos na raiz (single-repo) sobra largura
+        # pro nome do arquivo em painéis estreitos.
+        self._tree.setIndentation(11)
+        self._tree.setUniformRowHeights(True)
+        # Ícones de status pequenos — leem como um "dot" colorido, não como
+        # ícone de toolbar.
+        from PySide6.QtCore import QSize as _QSize
+
+        self._tree.setIconSize(_QSize(10, 10))
         self._tree.setStyleSheet(
             "QTreeWidget {"
             "  background: #1a1916; border: 1px solid #302d27;"
@@ -424,14 +524,10 @@ class GitPanel(QWidget):
             "QTreeWidget::item:hover { background: #2b2620; color: #fff; }"
             "QTreeWidget::item:selected { background: #d4a04a; color: #211709; }"
         )
-        # Coluna 0 = filename (estica pra preencher); coluna 1 = stats +/- (fixo)
-        hdr = self._tree.header()
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
-        hdr.resizeSection(1, 72)
-        # Delegate que renderiza +N (verde) -M (vermelho) na coluna de stats
-        self._stats_delegate = _StatsDelegate(self._tree)
-        self._tree.setItemDelegateForColumn(1, self._stats_delegate)
+        # Coluna única: o delegate pinta nome elidido + stats "+N -M" na
+        # borda direita da própria linha (nada de coluna fixa reservada).
+        self._changes_delegate = _ChangesDelegate(self._tree)
+        self._tree.setItemDelegate(self._changes_delegate)
         self._tree.itemChanged.connect(self._on_item_changed)
         self._tree.itemClicked.connect(self._on_single_click)
         self._tree.itemDoubleClicked.connect(self._on_double_click)
@@ -519,26 +615,6 @@ class GitPanel(QWidget):
         commit_area = self._build_commit_area()
         self._commit_area = commit_area
 
-        # Feed de atividade ao vivo do worktree — fluxo cronológico dos arquivos
-        # tocados (criados/modificados/deletados) com ±linhas, estilo terminal.
-        # É o "hero" do painel: fica no topo do splitter e visível por padrão.
-        self._feed = QPlainTextEdit()
-        self._feed.setReadOnly(True)
-        self._feed.setMaximumBlockCount(200)  # descarta linhas antigas
-        self._feed.setMinimumHeight(80)
-        self._feed.setPlaceholderText(
-            "Mudanças no worktree aparecem aqui em tempo real…"
-        )
-        fmono = QFont("monospace")
-        fmono.setStyleHint(QFont.StyleHint.Monospace)
-        self._feed.setFont(fmono)
-        self._feed.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background: #121110; border: 1px solid #302d27;"
-            "  border-radius: 6px; color: #c9c6c0; padding: 4px;"
-            "}"
-        )
-
         # Console de atividade git (commits, merges, checkouts, pulls, fetch)
         # — alimentado pelas ações do app e pelo reflog (captura também o que
         # as skills/terminal fazem). Oculto até ter algo / toggle na toolbar.
@@ -569,15 +645,13 @@ class GitPanel(QWidget):
             "QSplitter::handle { background: #2d2b26; }"
             "QSplitter::handle:hover { background: #d4a04a; }"
         )
-        main_split.addWidget(self._feed)
         main_split.addWidget(split)
         main_split.addWidget(commit_area)
         main_split.addWidget(self._activity)
-        main_split.setStretchFactor(0, 0)  # feed
-        main_split.setStretchFactor(1, 1)  # tree/diff
-        main_split.setStretchFactor(2, 0)  # commit
-        main_split.setStretchFactor(3, 0)  # atividade git
-        main_split.setSizes([200, 320, 110, 0])
+        main_split.setStretchFactor(0, 1)  # tree/diff
+        main_split.setStretchFactor(1, 0)  # commit
+        main_split.setStretchFactor(2, 0)  # atividade git
+        main_split.setSizes([460, 110, 0])
         self._main_split = main_split
         outer.addWidget(main_split, stretch=1)
         # Byte offset já lido de cada reflog (.git/logs/HEAD) por repo.
@@ -604,15 +678,9 @@ class GitPanel(QWidget):
         self._status_signals = _StatusScanSignals()
         self._status_signals.done.connect(self._apply_statuses)
         self._prev_unchecked: dict[str, set[str]] = {}
-        self._counter_before_scan = ""
         self._status_spinner = Spinner(parent=self)
         self._status_spinner.tick.connect(self._on_status_spinner_tick)
 
-        # Feed ao vivo: estado por pasta {folder: {path: (code, +, -)}} pra
-        # detectar deltas entre scans; chave do conjunto de pastas pra resetar
-        # o baseline ao trocar de workspace/console.
-        self._prev_event_state: dict[str, dict[str, tuple]] = {}
-        self._feed_folders_key: tuple = ()
         # Diretórios do worktree atualmente observados (caros de montar — só
         # recomputados quando o conjunto de repos muda, e em thread do pool).
         self._wt_dirs: list[str] = []
@@ -886,20 +954,20 @@ class GitPanel(QWidget):
     def _set_read_only_mode(self, read_only: bool) -> None:
         """Modo comparação é somente leitura: esconde a área de commit (não
         faz sentido commitar 'vs base') e libera o espaço pro diff/árvore.
-        Índices do _main_split: 0=feed, 1=tree/diff, 2=commit, 3=atividade."""
+        Índices do _main_split: 0=tree/diff, 1=commit, 2=atividade."""
         if getattr(self, "_read_only_mode", False) == read_only:
             return
         self._read_only_mode = read_only
         self._commit_area.setVisible(not read_only)
         sizes = self._main_split.sizes()
-        if len(sizes) == 4:
-            if read_only and sizes[2] > 0:
-                sizes[1] += sizes[2]
-                sizes[2] = 0
-            elif not read_only and sizes[2] == 0:
-                take = max(90, sizes[1] // 4)
-                sizes[1] = max(120, sizes[1] - take)
-                sizes[2] = take
+        if len(sizes) == 3:
+            if read_only and sizes[1] > 0:
+                sizes[0] += sizes[1]
+                sizes[1] = 0
+            elif not read_only and sizes[1] == 0:
+                take = max(90, sizes[0] // 4)
+                sizes[0] = max(120, sizes[0] - take)
+                sizes[1] = take
             self._main_split.setSizes(sizes)
 
     # ---------- refresh ----------
@@ -914,17 +982,13 @@ class GitPanel(QWidget):
         self._drain_reflogs()
 
         # Preserva o estado de checked dos arquivos (rel_path) por repo —
-        # lido da árvore atual (UI thread) pra reaplicar no rebuild.
+        # lido da árvore atual (UI thread) pra reaplicar no rebuild. Walk
+        # genérico: funciona tanto com grupos na raiz (single-repo flat)
+        # quanto com nível de repo (multi-repo).
         self._prev_unchecked = {}
-        for i in range(self._tree.topLevelItemCount()):
-            repo_item = self._tree.topLevelItem(i)
-            data = repo_item.data(0, Qt.ItemDataRole.UserRole) or {}
-            if data.get("type") != T_REPO:
-                continue
-            folder = data["folder"]
-            unchecked: set[str] = set()
-            self._collect_unchecked_files(repo_item, unchecked)
-            self._prev_unchecked[folder] = unchecked
+        self._collect_unchecked_files(
+            self._tree.invisibleRootItem(), self._prev_unchecked
+        )
 
         active_folders = self._active_folders()
         self._status_epoch += 1
@@ -935,9 +999,8 @@ class GitPanel(QWidget):
             return
 
         # Coleta `get_status` (subprocess) numa thread — não bloqueia a UI.
-        # Mostra "atualizando…" no contador enquanto roda.
-        if not self._status_spinner.is_running():
-            self._counter_before_scan = self._counter.text()
+        # Mostra "atualizando…" no contador enquanto roda; _apply_statuses
+        # sempre recalcula o texto final via _update_summary_labels.
         self._counter.setText(f"{self._status_spinner.frame()} atualizando…")
         self._status_spinner.start()
         compare_bases = (
@@ -967,19 +1030,6 @@ class GitPanel(QWidget):
         self._compare_scans = compare_scans or {}
         self._set_read_only_mode(bool(self._compare_base))
 
-        # Feed ao vivo pausado no modo comparação: ele é sobre atividade do
-        # working tree "agora" e recomputar baseline vs merge-base a cada
-        # toggle poluiria com o histórico inteiro da branch. Preserva
-        # _prev_event_state — ao voltar ao modo local os deltas desde então
-        # aparecem normalmente.
-        if not self._compare_base:
-            folders_key = tuple(active_folders)
-            if folders_key != self._feed_folders_key:
-                self._feed.clear()
-                self._prev_event_state = {}
-                self._feed_folders_key = folders_key
-            self._process_feed_events(active_folders, new_statuses, numstats or {})
-
         # Refresh ao vivo do diff exibido — roda ANTES do early-return de
         # fingerprint porque o diff pode mudar sem alterar a lista de arquivos
         # (ex.: editar de novo um arquivo já "M").
@@ -992,9 +1042,12 @@ class GitPanel(QWidget):
         # rebuild ao trocar de modo/base mesmo com lista de arquivos igual.
         new_fp = (_fingerprint_statuses(new_statuses), self._compare_base)
         if new_fp == self._status_fingerprint and self._tree.topLevelItemCount():
-            # Estado idêntico — só atualiza referência e restaura o contador.
+            # Lista de arquivos idêntica — sem rebuild (preserva scroll e
+            # seleção), mas os ±linhas podem ter mudado (ex.: salvar de novo
+            # um arquivo já "M"): atualiza stats in-place e o resumo.
             self._statuses = new_statuses
-            self._counter.setText(self._counter_before_scan)
+            self._update_stats_in_place(numstats or {})
+            self._update_summary_labels(numstats)
             return
 
         self._tree.blockSignals(True)
@@ -1011,8 +1064,13 @@ class GitPanel(QWidget):
             self._update_commit_button()
             return
 
+        # Single-repo (caso comum) monta os grupos direto na raiz — sem o
+        # nível do item de repo, que só come indentação/largura; a branch já
+        # aparece na toolbar e no header do painel.
+        repo_count = sum(
+            1 for f in active_folders if self._statuses[f].is_repo
+        )
         repo_folders: list[str] = []
-        total_files = 0
         for folder in active_folders:
             status = self._statuses[folder]
             if not status.is_repo:
@@ -1022,163 +1080,147 @@ class GitPanel(QWidget):
                 folder, status,
                 prev_unchecked.get(folder, set()),
                 numstats.get(folder) if numstats else None,
+                flat=(repo_count == 1),
             )
-            total_files += len(status.files)
 
         self._has_any_repo = bool(repo_folders)
+        self._update_summary_labels(numstats)
         if not self._has_any_repo:
             placeholder = QTreeWidgetItem(["(nenhuma pasta é repo git)"])
             placeholder.setFlags(placeholder.flags() & ~Qt.ItemFlag.ItemIsEnabled)
             self._tree.addTopLevelItem(placeholder)
-            self._counter.setText("")
-            self._branch_btn.setText("  —")
-            self._branch_btn.setEnabled(False)
-            self.header_summary_changed.emit("")
             self._poll_timer.stop()
-        else:
-            if self._compare_base:
-                base_label = self._compare_base[:24]
-                self._counter.setText(
-                    f"<span style='color:#7aa6e6'>⇆ {total_files} arquivo(s) "
-                    f"vs {base_label}</span>"
-                )
-            elif total_files == 0:
-                self._counter.setText("<span style='color:#5ac35a'>✓ limpo</span>")
-            else:
-                self._counter.setText(
-                    f"<span style='color:#d4a04a'>● {total_files} alteração(ões)</span>"
-                )
-            self._counter.setTextFormat(Qt.TextFormat.RichText)
-            # Atualiza label do branch picker: 1 repo → mostra branch;
-            # >1 repos com mesma branch → idem; senão → "(multi)".
-            branches = {s.branch for s in self._statuses.values() if s.is_repo and s.branch}
-            if not branches:
-                self._branch_btn.setText("  —")
-                self._branch_btn.setEnabled(False)
-                branch_text = ""
-            elif len(branches) == 1:
-                br = next(iter(branches))
-                self._branch_btn.setText(f"  {br[:24]}")
-                self._branch_btn.setEnabled(True)
-                branch_text = br
-            else:
-                self._branch_btn.setText("  (multi)")
-                self._branch_btn.setToolTip(
-                    "Multi-repo com branches diferentes — click pra escolher repo"
-                )
-                self._branch_btn.setEnabled(True)
-                branch_text = "(multi)"
-            # Resumo pro header do painel: "⎇ branch · N mudança(s)" ou
-            # "⎇ branch · ✓ limpo". Cores espelham o toolbar (branch âmbar,
-            # contador âmbar, limpo verde).
-            if branch_text:
-                br_html = (
-                    f"<span style='color:{theme.WARNING}'>⎇ {branch_text[:24]}</span>"
-                )
-                if self._compare_base:
-                    self.header_summary_changed.emit(
-                        f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
-                        f"<span style='color:#7aa6e6'>⇆ {total_files} vs "
-                        f"{self._compare_base[:24]}</span>"
-                    )
-                elif total_files == 0:
-                    self.header_summary_changed.emit(
-                        f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
-                        f"<span style='color:{theme.SUCCESS}'>✓ limpo</span>"
-                    )
-                else:
-                    self.header_summary_changed.emit(
-                        f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
-                        f"<span style='color:{theme.WARNING}'>● {total_files} mudança(s)</span>"
-                    )
-            else:
-                self.header_summary_changed.emit("")
-            if not self._poll_timer.isActive():
-                self._poll_timer.start()
+        elif not self._poll_timer.isActive():
+            self._poll_timer.start()
 
         self._tree.blockSignals(False)
         self._update_watches(repo_folders)
         self._update_commit_button()
 
-    # ---------- feed ao vivo ----------
-
-    def _process_feed_events(
-        self, active_folders: list[str], statuses: dict, numstats: dict
-    ) -> None:
-        """Compara o estado atual (status + ±linhas) com o do scan anterior
-        e emite uma linha no feed pra cada arquivo novo/alterado. Na primeira
-        vez que vê uma pasta (baseline) lista o estado atual uma vez, sem
-        timbre de 'agora'."""
-        for folder in active_folders:
-            st = statuses.get(folder)
-            if st is None or not st.is_repo:
-                continue
-            counts = numstats.get(folder, {})
-            cur: dict[str, tuple] = {}
-            for f in st.files:
-                code = _status_code(f.status)
-                a, d = counts.get(f.path, (0, 0))
-                cur[f.path] = (code, a, d)
-            prev = self._prev_event_state.get(folder)
-            if prev is None:
-                self._feed_baseline(st, cur)
-            else:
-                for path, tup in cur.items():
-                    if prev.get(path) != tup:
-                        self._feed_event(path, tup)
-            self._prev_event_state[folder] = cur
-
-    def _feed_line(
-        self, path: str, code: str, added: int, removed: int, *, baseline: bool
-    ) -> str:
-        glyph = _FEED_GLYPH.get(code, "~")
-        color = _FEED_COLOR.get(code, "#c9c6c0")
-        counts = ""
-        if added or removed:
-            counts = (
-                f"  <span style='color:#5ac35a'>+{added}</span> "
-                f"<span style='color:#d57272'>-{removed}</span>"
-            )
-        body = (
-            f"<span style='color:{color}'>{glyph}</span> "
-            f"<span style='color:{color}'>{_html(path)}</span>{counts}"
-        )
-        if baseline:
-            return f"<span style='color:#5a5750'>·</span> {body}"
-        from datetime import datetime
-
-        ts = datetime.now().strftime("%H:%M:%S")
-        return f"<span style='color:#5a5750'>{ts}</span>  {body}"
-
-    def _feed_baseline(self, st: GitStatus, cur: dict[str, tuple]) -> None:
-        if not cur:
+    def _update_summary_labels(self, numstats: dict | None) -> None:
+        """Contador da toolbar ("● N arquivo(s) +X -Y"), badge da branch e
+        resumo pro header do painel. Recalculado a cada scan — inclusive no
+        early-return de fingerprint, pros ±linhas ficarem ao vivo."""
+        repo_stats = [st for st in self._statuses.values() if st.is_repo]
+        if not repo_stats:
+            self._counter.setText("")
+            self._branch_btn.setText("  —")
+            self._branch_btn.setEnabled(False)
+            self.header_summary_changed.emit("")
             return
-        branch = st.branch or "?"
-        sep = (
-            f"<span style='color:#5a5750'>── {_html(branch)} · "
-            f"{len(cur)} mudança(s) atual(is) ──</span>"
-        )
-        self._feed.appendHtml(sep)
-        for path, (code, a, d) in cur.items():
-            self._feed.appendHtml(self._feed_line(path, code, a, d, baseline=True))
-        self._feed_scroll()
 
-    def _feed_event(self, path: str, tup: tuple) -> None:
-        code, a, d = tup
-        self._feed.appendHtml(self._feed_line(path, code, a, d, baseline=False))
-        self._feed_scroll()
+        total_files = sum(len(st.files) for st in repo_stats)
+        total_add = total_del = 0
+        for folder, st in self._statuses.items():
+            if not st.is_repo:
+                continue
+            ns = (numstats or {}).get(folder) or {}
+            total_add += sum(a for a, _ in ns.values())
+            total_del += sum(d for _, d in ns.values())
+        stats_html = ""
+        if total_add or total_del:
+            stats_html = (
+                f"  <span style='color:#5ac35a'>+{total_add}</span> "
+                f"<span style='color:#d57272'>-{total_del}</span>"
+            )
 
-    def _feed_scroll(self) -> None:
-        sb = self._feed.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        if self._compare_base:
+            base_label = self._compare_base[:24]
+            self._counter.setText(
+                f"<span style='color:#7aa6e6'>⇆ {total_files} arquivo(s) "
+                f"vs {base_label}</span>{stats_html}"
+            )
+        elif total_files == 0:
+            self._counter.setText("<span style='color:#5ac35a'>✓ limpo</span>")
+        else:
+            self._counter.setText(
+                f"<span style='color:#d4a04a'>● {total_files} arquivo(s)</span>"
+                f"{stats_html}"
+            )
+        self._counter.setTextFormat(Qt.TextFormat.RichText)
 
-    def _collect_unchecked_files(self, parent: QTreeWidgetItem, out: set[str]) -> None:
+        # Atualiza label do branch picker: 1 repo → mostra branch;
+        # >1 repos com mesma branch → idem; senão → "(multi)".
+        branches = {s.branch for s in repo_stats if s.branch}
+        if not branches:
+            self._branch_btn.setText("  —")
+            self._branch_btn.setEnabled(False)
+            branch_text = ""
+        elif len(branches) == 1:
+            br = next(iter(branches))
+            self._branch_btn.setText(f"  {br[:24]}")
+            self._branch_btn.setEnabled(True)
+            branch_text = br
+        else:
+            self._branch_btn.setText("  (multi)")
+            self._branch_btn.setToolTip(
+                "Multi-repo com branches diferentes — click pra escolher repo"
+            )
+            self._branch_btn.setEnabled(True)
+            branch_text = "(multi)"
+
+        # Resumo pro header do painel: "⎇ branch · N mudança(s) +X -Y" ou
+        # "⎇ branch · ✓ limpo". Cores espelham o toolbar.
+        if branch_text:
+            br_html = (
+                f"<span style='color:{theme.WARNING}'>⎇ {branch_text[:24]}</span>"
+            )
+            if self._compare_base:
+                self.header_summary_changed.emit(
+                    f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
+                    f"<span style='color:#7aa6e6'>⇆ {total_files} vs "
+                    f"{self._compare_base[:24]}</span>"
+                )
+            elif total_files == 0:
+                self.header_summary_changed.emit(
+                    f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
+                    f"<span style='color:{theme.SUCCESS}'>✓ limpo</span>"
+                )
+            else:
+                self.header_summary_changed.emit(
+                    f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
+                    f"<span style='color:{theme.WARNING}'>● {total_files} "
+                    f"mudança(s)</span>{stats_html}"
+                )
+        else:
+            self.header_summary_changed.emit("")
+
+    def _update_stats_in_place(self, numstats: dict) -> None:
+        """Reaplica os ±linhas (_STATS_ROLE) nos itens de arquivo já montados,
+        sem rebuild — usado quando o fingerprint não mudou mas o conteúdo dos
+        arquivos sim (a lista é igual, os numstats não)."""
+        self._tree.blockSignals(True)
+
+        def walk(parent: QTreeWidgetItem) -> None:
+            for i in range(parent.childCount()):
+                child = parent.child(i)
+                data = child.data(0, Qt.ItemDataRole.UserRole) or {}
+                if data.get("type") == T_FILE:
+                    ns = numstats.get(data["folder"]) or {}
+                    added, removed = ns.get(data["rel_path"], (0, 0))
+                    child.setData(
+                        0,
+                        _STATS_ROLE,
+                        (added, removed) if (added or removed) else None,
+                    )
+                else:
+                    walk(child)
+
+        walk(self._tree.invisibleRootItem())
+        self._tree.blockSignals(False)
+        self._tree.viewport().update()
+
+    def _collect_unchecked_files(
+        self, parent: QTreeWidgetItem, out: dict[str, set[str]]
+    ) -> None:
+        """Coleta os arquivos desmarcados agrupados por folder — walk
+        genérico que funciona com ou sem o nível de item de repo."""
         for i in range(parent.childCount()):
             child = parent.child(i)
             data = child.data(0, Qt.ItemDataRole.UserRole) or {}
             if data.get("type") == T_FILE:
                 if child.checkState(0) == Qt.CheckState.Unchecked:
-                    out.add(data["rel_path"])
+                    out.setdefault(data["folder"], set()).add(data["rel_path"])
             else:
                 self._collect_unchecked_files(child, out)
 
@@ -1253,16 +1295,16 @@ class GitPanel(QWidget):
         self._activity.setVisible(show)
         # Ao mostrar, garante uma altura inicial no splitter (do contrário Qt
         # daria só o minimumHeight); ao esconder, colapsa o painel.
-        # Índices do _main_split: 0=feed, 1=tree/diff, 2=commit, 3=atividade.
+        # Índices do _main_split: 0=tree/diff, 1=commit, 2=atividade.
         sizes = self._main_split.sizes()
-        if len(sizes) == 4:
-            if show and sizes[3] == 0:
-                take = max(120, sizes[1] // 4)
-                sizes[1] = max(120, sizes[1] - take)
-                sizes[3] = take
+        if len(sizes) == 3:
+            if show and sizes[2] == 0:
+                take = max(120, sizes[0] // 4)
+                sizes[0] = max(120, sizes[0] - take)
+                sizes[2] = take
             elif not show:
-                sizes[1] += sizes[3]
-                sizes[3] = 0
+                sizes[0] += sizes[2]
+                sizes[2] = 0
             self._main_split.setSizes(sizes)
 
     def _log_activity(self, text: str, color: str | None = None) -> None:
@@ -1356,51 +1398,71 @@ class GitPanel(QWidget):
         status: GitStatus,
         prev_unchecked: set[str],
         numstats: dict[str, tuple[int, int]] | None = None,
+        flat: bool = False,
     ) -> None:
+        """Monta os itens de um repo. Com `flat=True` (single-repo, caso
+        comum) os grupos vão direto na raiz da árvore — sem o item de repo,
+        que só consome indentação; branch/↑↓ já aparecem na toolbar."""
         ns = numstats or {}
-        name = Path(folder).name
-        ahead_behind = ""
-        if status.ahead or status.behind:
-            bits = []
-            if status.ahead:
-                bits.append(f"↑{status.ahead}")
-            if status.behind:
-                bits.append(f"↓{status.behind}")
-            ahead_behind = " " + "".join(bits)
-        marker = "✓ limpo" if not status.files else f"{len(status.files)} mudança(s)"
-        # Totais +/- para o label do repo
-        total_add = sum(a for a, _ in ns.values())
-        total_del = sum(d for _, d in ns.values())
-        stats_str = ""
-        if total_add:
-            stats_str += f"  +{total_add}"
-        if total_del:
-            stats_str += f"  -{total_del}"
-        repo_item = QTreeWidgetItem(
-            [f"{name}  ·  {status.branch}{ahead_behind}  ·  {marker}{stats_str}", ""]
-        )
-        repo_item.setData(
-            0, Qt.ItemDataRole.UserRole, {"type": T_REPO, "folder": folder}
-        )
-        f = repo_item.font(0)
-        f.setBold(True)
-        repo_item.setFont(0, f)
-        if status.error:
-            repo_item.setForeground(0, QBrush(QColor("#d57272")))
-            repo_item.setText(0, repo_item.text(0) + f"  ({status.error})")
         compare_scan = self._compare_scans.get(folder)
+        errors: list[str] = []
+        if status.error:
+            errors.append(status.error)
         if compare_scan and compare_scan.error:
-            repo_item.setForeground(0, QBrush(QColor("#d57272")))
-            repo_item.setText(
-                0,
-                repo_item.text(0)
-                + f"  (comparar vs {compare_scan.base_rev}: {compare_scan.error})",
+            errors.append(
+                f"comparar vs {compare_scan.base_rev}: {compare_scan.error}"
             )
-        # Linha de cabeçalho do repo ocupa a largura inteira: recupera os 72px
-        # reservados (ociosos) da coluna de stats pra branch não ser cortada.
-        # ElideRight corta o fim (· marcador/stats, redundante) antes da branch.
-        repo_item.setFirstColumnSpanned(True)
-        repo_item.setToolTip(0, repo_item.text(0))
+
+        repo_item: QTreeWidgetItem | None = None
+        if not flat:
+            name = Path(folder).name
+            ahead_behind = ""
+            if status.ahead or status.behind:
+                bits = []
+                if status.ahead:
+                    bits.append(f"↑{status.ahead}")
+                if status.behind:
+                    bits.append(f"↓{status.behind}")
+                ahead_behind = " " + "".join(bits)
+            marker = (
+                "✓ limpo" if not status.files else f"{len(status.files)} mudança(s)"
+            )
+            # Totais +/- para o label do repo
+            total_add = sum(a for a, _ in ns.values())
+            total_del = sum(d for _, d in ns.values())
+            stats_str = ""
+            if total_add:
+                stats_str += f"  +{total_add}"
+            if total_del:
+                stats_str += f"  -{total_del}"
+            repo_item = QTreeWidgetItem(
+                [f"{name}  ·  {status.branch}{ahead_behind}  ·  {marker}{stats_str}"]
+            )
+            repo_item.setData(
+                0, Qt.ItemDataRole.UserRole, {"type": T_REPO, "folder": folder}
+            )
+            f = repo_item.font(0)
+            f.setBold(True)
+            repo_item.setFont(0, f)
+            if errors:
+                repo_item.setForeground(0, QBrush(QColor("#d57272")))
+                repo_item.setText(
+                    0, repo_item.text(0) + "  (" + "; ".join(errors) + ")"
+                )
+            repo_item.setToolTip(0, repo_item.text(0))
+        elif errors:
+            # Flat sem linha de repo: o erro vira um item próprio no topo.
+            err_item = QTreeWidgetItem(["⚠ " + "; ".join(errors)])
+            err_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            err_item.setForeground(0, QBrush(QColor("#d57272")))
+            err_item.setToolTip(0, "; ".join(errors))
+            self._tree.addTopLevelItem(err_item)
+
+        def attach(item: QTreeWidgetItem) -> None:
+            if repo_item is not None:
+                repo_item.addChild(item)
+            else:
+                self._tree.addTopLevelItem(item)
 
         checkable = not self._compare_base
         changes_label = (
@@ -1420,7 +1482,7 @@ class GitPanel(QWidget):
             grp = self._make_group_item(
                 folder, changes_label, len(changes), checkable=checkable
             )
-            repo_item.addChild(grp)
+            attach(grp)
             self._add_files_with_dirs(
                 grp, folder, changes, prev_unchecked, ns, checkable=checkable
             )
@@ -1429,14 +1491,15 @@ class GitPanel(QWidget):
             grp = self._make_group_item(
                 folder, "Unversioned Files", len(untracked), checkable=checkable
             )
-            repo_item.addChild(grp)
+            attach(grp)
             self._add_files_with_dirs(
                 grp, folder, untracked, prev_unchecked, ns, checkable=checkable
             )
             grp.setExpanded(True)
 
-        repo_item.setExpanded(True)
-        self._tree.addTopLevelItem(repo_item)
+        if repo_item is not None:
+            repo_item.setExpanded(True)
+            self._tree.addTopLevelItem(repo_item)
 
     def _add_files_with_dirs(
         self,
@@ -1448,8 +1511,8 @@ class GitPanel(QWidget):
         checkable: bool = True,
     ) -> None:
         """Insere arquivos agrupados por pasta (separadores de diretório dimmed)."""
-        # Ordena por caminho para agrupar arquivos da mesma pasta
-        sorted_files = sorted(files, key=lambda gf: gf.path)
+        # Raiz primeiro, depois por pasta — mesma ordem do _build_diff_entries
+        sorted_files = sorted(files, key=lambda gf: _dir_name_key(gf.path))
         last_dir = None
         for gf in sorted_files:
             rel_dir = gf.path.rsplit("/", 1)[0] if "/" in gf.path else ""
@@ -1464,14 +1527,16 @@ class GitPanel(QWidget):
             parent.addChild(child)
 
     def _make_folder_sep(self, rel_dir: str) -> QTreeWidgetItem:
-        """Linha separadora de pasta — dimmed, não selecionável, sem checkbox."""
-        item = QTreeWidgetItem([rel_dir, ""])
+        """Linha separadora de pasta — dimmed, não selecionável, sem checkbox.
+        Guarda o caminho completo; o elide (no meio) é do _ChangesDelegate."""
+        item = QTreeWidgetItem([rel_dir])
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # não selecionável nem editável
         item.setForeground(0, QBrush(QColor("#5a5750")))
         f = item.font(0)
         f.setFamily("monospace")
         f.setPointSizeF(f.pointSizeF() * 0.9)
         item.setFont(0, f)
+        item.setToolTip(0, rel_dir)
         item.setData(0, Qt.ItemDataRole.UserRole, {"type": T_FOLDER})
         return item
 
@@ -1509,8 +1574,9 @@ class GitPanel(QWidget):
         # Só o basename — o diretório pai é exibido pelo separador acima
         name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
         color = STATUS_COLOR.get(gf.label(), "#b0ada6")
-        item = QTreeWidgetItem([name, ""])
+        item = QTreeWidgetItem([name])
         item.setForeground(0, QBrush(QColor(color)))
+        item.setIcon(0, _status_icon(gf.label(), color))
         mono = item.font(0)
         mono.setFamily("monospace")
         item.setFont(0, mono)
@@ -1536,11 +1602,11 @@ class GitPanel(QWidget):
                 "is_untracked": gf.is_untracked,
             },
         )
-        # Coluna 1: stats +/- via delegate
+        # Stats +/- pintados pelo _ChangesDelegate na borda direita da linha
         if numstats:
             added, removed = numstats.get(rel, (0, 0))
             if added or removed:
-                item.setData(1, Qt.ItemDataRole.UserRole, (added, removed))
+                item.setData(0, _STATS_ROLE, (added, removed))
         return item
 
     # ---------- interação ----------
@@ -1590,7 +1656,7 @@ class GitPanel(QWidget):
             scan = self._compare_scans.get(folder)
             if not st.is_repo or not st.files or not scan or not scan.merge_base_sha:
                 continue
-            for gf in sorted(st.files, key=lambda f: f.path):
+            for gf in sorted(st.files, key=lambda f: _dir_name_key(f.path)):
                 if folder == clicked_folder and gf.path == clicked_rel:
                     clicked_index = len(entries)
                 entries.append(
@@ -1699,10 +1765,12 @@ class GitPanel(QWidget):
             )
             label_suffix = f"⇆ vs {self._compare_base}" if merge_base_sha else ""
             changes = sorted(
-                (gf for gf in st.files if not gf.is_untracked), key=lambda f: f.path
+                (gf for gf in st.files if not gf.is_untracked),
+                key=lambda f: _dir_name_key(f.path),
             )
             untracked = sorted(
-                (gf for gf in st.files if gf.is_untracked), key=lambda f: f.path
+                (gf for gf in st.files if gf.is_untracked),
+                key=lambda f: _dir_name_key(f.path),
             )
             for gf in (*changes, *untracked):
                 if shown_key == (folder, gf.path):
@@ -1762,29 +1830,22 @@ class GitPanel(QWidget):
     # ---------- collecting checked files ----------
 
     def _collect_checked_files(self) -> dict[str, list[str]]:
-        """Devolve {folder: [rel_path, ...]} pra cada repo com arquivos marcados."""
+        """Devolve {folder: [rel_path, ...]} pra cada repo com arquivos
+        marcados. Walk genérico a partir da raiz — o bucket por folder vem
+        do payload de cada arquivo, então funciona com ou sem item de repo."""
         out: dict[str, list[str]] = {}
-        for i in range(self._tree.topLevelItemCount()):
-            repo = self._tree.topLevelItem(i)
-            data = repo.data(0, Qt.ItemDataRole.UserRole) or {}
-            if data.get("type") != T_REPO:
-                continue
-            folder = data["folder"]
-            files: list[str] = []
-            self._walk_collect_checked(repo, files)
-            if files:
-                out[folder] = files
+        self._walk_collect_checked(self._tree.invisibleRootItem(), out)
         return out
 
     def _walk_collect_checked(
-        self, parent: QTreeWidgetItem, out: list[str]
+        self, parent: QTreeWidgetItem, out: dict[str, list[str]]
     ) -> None:
         for i in range(parent.childCount()):
             child = parent.child(i)
             data = child.data(0, Qt.ItemDataRole.UserRole) or {}
             if data.get("type") == T_FILE:
                 if child.checkState(0) == Qt.CheckState.Checked:
-                    out.append(data["rel_path"])
+                    out.setdefault(data["folder"], []).append(data["rel_path"])
             else:
                 self._walk_collect_checked(child, out)
 
@@ -1915,7 +1976,7 @@ class GitPanel(QWidget):
         if self._compare_base:
             return
         group_name = items[0].data(0, Qt.ItemDataRole.UserRole).get("name", "")
-        items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
+        folder = items[0].data(0, Qt.ItemDataRole.UserRole).get("folder", "")
         if "Unversioned" in group_name:
             menu.addAction(
                 self._action("+ Add todos", lambda: self._stage_group(items[0]))
@@ -1934,6 +1995,20 @@ class GitPanel(QWidget):
                     lambda: self._rollback_group(items[0]),
                 )
             )
+        # No modo flat (single-repo) a linha de repo não existe — as ações
+        # de repo ficam acessíveis pelo grupo.
+        if folder:
+            menu.addSeparator()
+            menu.addAction(
+                self._action("⤓ Pull (ff-only)", lambda: self._do_pull_one(folder))
+            )
+            menu.addAction(
+                self._action("⇡⇣ Fetch", lambda: self._do_fetch_one(folder))
+            )
+            menu.addAction(
+                self._action("⬆ Push…", lambda: self._do_push(folders=[folder]))
+            )
+            self._add_switch_branch_menu(menu, folder)
 
     def _build_repo_menu(
         self, menu: QMenu, items: list[QTreeWidgetItem]

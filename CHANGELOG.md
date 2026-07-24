@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.33.0] — 2026-07-24
+
+### Painel GIT unificado (estilo Zed) — sem feed duplicado e sem truncamento
+
+A aba de ferramentas mostrava os arquivos modificados **duas vezes**: um
+feed de texto cronológico no topo (com word-wrap quebrando os paths) e a
+árvore "Changes (N)" abaixo — que ainda truncava nomes com "…" mesmo com
+espaço sobrando (coluna de stats fixa de 72px + indentação de 2–3 níveis).
+Agora é uma lista única e organizada:
+
+- **`ui/git_panel.py`**: feed ao vivo removido (o watcher/numstat que o
+  alimentava continua — agora atualiza a árvore e o contador). Árvore em
+  **coluna única** com `_ChangesDelegate`: nome elidido usando toda a
+  largura disponível, stats "+N -M" (verde/vermelho) colados à direita da
+  linha sem pixel reservado, separadores de pasta com caminho completo
+  elidido no **meio** (fim sempre visível). Ícone de status ("dot"
+  colorido) por arquivo. Single-repo monta os grupos direto na raiz (sem
+  o nível de item de repo — branch já está na toolbar); multi-repo mantém
+  o nível por repo. Indentação reduzida pra 11px.
+- Contador da toolbar e resumo do header agora mostram
+  "● N arquivo(s) +X -Y"; os ±linhas da árvore e o resumo atualizam
+  **in-place** quando só o conteúdo dos arquivos muda (antes ficavam
+  congelados até a lista de arquivos mudar, mascarado pelo feed).
+- Ações de repo (pull/fetch/push/trocar branch) acessíveis pelo menu de
+  contexto dos grupos (no modo flat a linha de repo não existe mais).
+- **`tests/test_git_panel_tree.py`**: novo — shape flat/multi-repo,
+  coleta de checked/unchecked, stats in-place e contador.
+
 ## [1.32.0] — 2026-07-24
 
 ### Perf: travadas no uso diário — renderer WebGL no xterm e I/O do poll fora da main thread
