@@ -43,6 +43,13 @@ class _MaterializeQueue(QObject):
     def _dispatch_next(self) -> None:
         if not self._pending:
             return
+        # Recycle do renderer em andamento: segura a fila inteira (sem
+        # perder o pending) — uma page criada agora nasceria no renderer
+        # moribundo e impediria o processo de morrer.
+        from ..services.webengine_recycler import recycling_active
+        if recycling_active():
+            self._timer.start(250)
+            return
         area, w = self._pending.pop(0)
         try:
             if area._stack.currentWidget() is w:

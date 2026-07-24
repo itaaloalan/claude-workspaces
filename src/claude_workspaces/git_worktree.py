@@ -163,6 +163,26 @@ def current_branch(path: str) -> str:
     return out.strip() if rc == 0 else ""
 
 
+def branch_from_head_file(path: str) -> str:
+    """Branch atual lendo `git_dir/HEAD` — sem subprocess (mesma técnica do
+    `is_worktree_path`). "" se detached, ref fora de refs/heads ou erro.
+    Pra caminhos quentes (pollers) onde o `git rev-parse` por chamada
+    dominava o perf.log."""
+    dirs = resolve_git_dirs(path)
+    if dirs is None:
+        return ""
+    try:
+        content = (dirs[0] / "HEAD").read_text(
+            encoding="utf-8", errors="replace"
+        ).strip()
+    except OSError:
+        return ""
+    prefix = "ref: refs/heads/"
+    if content.startswith(prefix):
+        return content[len(prefix):]
+    return ""  # hash puro = detached (paridade com current_branch)
+
+
 def list_local_branches(repo_path: str) -> list[str]:
     """Lista nomes das branches locais (ordenadas por uso recente)."""
     rc, out = _run(

@@ -84,18 +84,33 @@ def save(
     notifications: list[Notification],
     preferences: dict[str, Any],
 ) -> None:
+    """Monta o payload a partir dos objetos e delega pra `save_payload`."""
+    save_payload(
+        path,
+        {
+            "version": SCHEMA_VERSION,
+            "notifications": [n.to_dict() for n in notifications],
+            "preferences": dict(preferences),
+        },
+    )
+
+
+def save_payload(path: Path, payload: dict[str, Any]) -> None:
     """Escrita atômica via tmp + os.replace. Silencia erros de I/O —
-    não vale matar o app por causa de notificação não persistida."""
-    payload = {
-        "version": SCHEMA_VERSION,
-        "notifications": [n.to_dict() for n in notifications],
-        "preferences": dict(preferences),
-    }
+    não vale matar o app por causa de notificação não persistida.
+
+    Recebe o payload já em dicts puros: o `NotificationService` serializa o
+    snapshot na main thread e manda o dump+I/O pra um worker — este código
+    não pode tocar em objetos `Notification` mutáveis.
+    """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False),
+            # Compacto de propósito: com 500 entradas o arquivo passa de
+            # 300KB indentado; separators corta ~metade do tamanho e do
+            # custo de CPU do dumps, que já foi fonte de stall da UI.
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
         )
         os.replace(tmp, path)
@@ -112,4 +127,4 @@ def _archive_corrupt(path: Path) -> None:
         log.exception("falha ao fazer backup de %s", path)
 
 
-__all__ = ["SCHEMA_VERSION", "default_preferences", "load", "save"]
+__all__ = ["SCHEMA_VERSION", "default_preferences", "load", "save", "save_payload"]

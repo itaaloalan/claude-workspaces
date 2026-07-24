@@ -295,6 +295,11 @@ class RunnerWidget(QWidget):
     def _build_view(self) -> None:
         if self.view is not None:
             return
+        # Recycle do renderer em andamento: criar uma page agora faria ela
+        # nascer no renderer moribundo — o reload vem no fim do ciclo.
+        from ..services.webengine_recycler import recycling_active
+        if recycling_active():
+            return
         self.view = QWebEngineView(self)
         s = self.view.settings()
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
@@ -314,7 +319,7 @@ class RunnerWidget(QWidget):
         self._unload_timer.stop()
         if self.view is None:
             return
-        self.bridge._live = False
+        self.bridge.suspend_live()
         self._bridge_ready = False
         view = self.view
         self.view = None
@@ -672,7 +677,7 @@ class RunnerWidget(QWidget):
         )
         self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
         try:
-            self.bridge.output_to_terminal.emit(msg.encode("utf-8"))
+            self.bridge.emit_direct(msg.encode("utf-8"))
         except Exception:
             log.debug("emit do aviso de porta falhou", exc_info=True)
         self._status.setText(f"● rodando na :{real} (≠ :{cfg} configurada)")
@@ -708,7 +713,7 @@ class RunnerWidget(QWidget):
                 )
                 self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
                 try:
-                    self.bridge.output_to_terminal.emit(msg.encode("utf-8"))
+                    self.bridge.emit_direct(msg.encode("utf-8"))
                 except Exception:
                     log.debug("emit do aviso de deploy falhou", exc_info=True)
         else:
@@ -946,7 +951,7 @@ class RunnerWidget(QWidget):
         )
         self._log_buf = (self._log_buf + banner)[-self._log_buf_max:]
         try:
-            self.bridge.output_to_terminal.emit(banner.encode("utf-8"))
+            self.bridge.emit_direct(banner.encode("utf-8"))
         except Exception:
             log.debug("emit do banner de cwd falhou", exc_info=True)
 

@@ -281,6 +281,7 @@ def test_persistence_roundtrip(tmp_path: Path):
     svc1 = NotificationService(path)
     n = svc1.notify(NotificationKind.PERMISSION_REQUIRED, "perm", workspace_id="w")
     svc1.set_preferences(muted_kinds=[NotificationKind.AGENT_IDLE])
+    svc1.flush_now()  # write é debounced — força o flush antes do reload
     # reload em nova instância
     svc2 = NotificationService(path)
     assert len(svc2.list()) == 1
@@ -305,6 +306,7 @@ def test_persistence_corrupt_json_archives_and_recovers(tmp_path: Path):
     assert backups, "deve criar backup do JSON corrompido"
     # app continua funcionando — pode emitir e persistir
     svc.notify(NotificationKind.TASK_COMPLETED, "ok", workspace_id="w")
+    svc.flush_now()
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["version"] == persistence.SCHEMA_VERSION
 
@@ -316,6 +318,87 @@ def test_persistence_wrong_shape_archives(tmp_path: Path):
     svc = NotificationService(path)
     assert svc.list() == []
     assert list(tmp_path.glob("notif.json.corrupt-*"))
+
+
+def test_flush_is_debounced_and_flush_now_writes(tmp_path: Path):
+    path = tmp_path / "notif.json"
+    svc = NotificationService(path)
+    svc.notify(NotificationKind.TASK_COMPLETED, "ok", workspace_id="w")
+    # Debounce: nada no disco logo após a mutação.
+    assert not path.exists()
+    svc.flush_now()
+    assert path.exists()
+    items, _prefs = persistence.load(path)
+    assert len(items) == 1
+    # flush_now sem dirty é no-op limpo.
+    svc.flush_now()
+
+
+def test_persistence_reads_legacy_indented_file(tmp_path: Path):
+    path = tmp_path / "notif.json"
+    n = _make(title="legado")
+    payload = {
+        "version": persistence.SCHEMA_VERSION,
+        "notifications": [n.to_dict()],
+        "preferences": persistence.default_preferences(),
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    items, prefs = persistence.load(path)
+    assert len(items) == 1 and items[0].title == "legado"
+    assert prefs["history_limit"] == 500
+
+
+def test_store_prune_by_age_and_category():
+    s = NotificationStore()
+    now = time.time()
+    old_seen = _make(title="vista-velha", kind=NotificationKind.TASK_COMPLETED)
+    old_seen.seen = True
+    old_seen.updated_at = now - 8 * 86400
+    old_dismissed = _make(title="dispensada-velha")
+    old_dismissed.dismissed = True
+    old_dismissed.updated_at = now - 2 * 86400
+    fresh_seen = _make(title="vista-recente", kind=NotificationKind.TASK_COMPLETED)
+    fresh_seen.seen = True
+    fresh_seen.updated_at = now - 3600
+    actionable_old = _make(title="pendencia", kind=NotificationKind.PERMISSION_REQUIRED)
+    actionable_old.seen = True
+    actionable_old.updated_at = now - 30 * 86400
+    unseen_old = _make(title="nao-vista")
+    unseen_old.updated_at = now - 30 * 86400
+    s.restore([old_seen, old_dismissed, fresh_seen, actionable_old, unseen_old])
+    removed = s.prune(now=now)
+    titles = {n.title for n in s.snapshot()}
+    assert removed == 2
+    # Caem: vista não-actionable >7d e dismissed >24h. Ficam: recente,
+    # actionable (mesmo velha) e não-vista (mesmo velha).
+    assert titles == {"vista-recente", "pendencia", "nao-vista"}
+
+
+def test_service_prunes_legacy_store_on_boot(tmp_path: Path):
+    path = tmp_path / "notif.json"
+    old = _make(title="velha", kind=NotificationKind.TASK_COMPLETED)
+    old.seen = True
+    old.updated_at = time.time() - 30 * 86400
+    persistence.save(path, [old, _make(title="nova")], persistence.default_preferences())
+    svc = NotificationService(path)
+    assert [n.title for n in svc.list()] == ["nova"]
+
+
+def test_mark_all_seen_emits_only_changed(tmp_path: Path):
+    svc = NotificationService(tmp_path / "notif.json")
+    svc.notify(NotificationKind.AGENT_WAITING, "a", workspace_id="w", dedup_key="a")
+    svc.notify(NotificationKind.AGENT_WAITING, "b", workspace_id="w", dedup_key="b")
+    seen_first = svc.list()[0]
+    svc.mark_seen(seen_first.id)
+    emitted: list[Notification] = []
+    svc.notification_changed.connect(emitted.append)
+    svc.mark_all_seen()
+    # Só a entrada que ainda não estava vista gera evento.
+    assert len(emitted) == 1
+    assert emitted[0].id != seen_first.id
+    emitted.clear()
+    svc.mark_all_seen()  # tudo já visto → nenhum emit
+    assert emitted == []
 
 
 def test_priority_default_for_permission_required():

@@ -35,7 +35,11 @@ def test_bridge_ready_goes_live_and_replays(qapp):
 
 
 def test_live_pty_output_passes_after_ready(qapp):
-    """Depois de ready, um chunk do PTY chega ao terminal (não fica gated)."""
+    """Depois de ready, um chunk do PTY chega ao terminal (não fica gated).
+    O output ao vivo agora é coalescido (janela de 16ms) — o emit sai no
+    flush do timer, não inline."""
+    import time as _time
+
     w = RunnerWidget(RunnerConfig(name="ogpms-xhtml-watch", start_cmd="echo hi"),
                      default_cwd="/tmp")
     try:
@@ -44,6 +48,11 @@ def test_live_pty_output_passes_after_ready(qapp):
         w.bridge.output_to_terminal.connect(lambda b: emitted.append(bytes(b)))
         # Chunk como se viesse do PTY (passa pelo _on_pty_output do bridge).
         w.session.output_received.emit(b"compilando xhtml...\n")
+        # Coalescido: nada inline; o flush vem com o timer de 16ms.
+        assert not any(b"compilando xhtml" in e for e in emitted)
+        deadline = _time.monotonic() + 2.0
+        while not emitted and _time.monotonic() < deadline:
+            qapp.processEvents()
         assert any(b"compilando xhtml" in e for e in emitted)
     finally:
         w.terminate()

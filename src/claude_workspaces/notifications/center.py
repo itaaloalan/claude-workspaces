@@ -34,7 +34,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QCursor, QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -334,11 +334,25 @@ class NotificationCenter(QFrame):
         outer.addWidget(self._empty)
 
         # --------------------------------------------------- bindings
-        service.notification_added.connect(self._refresh)
-        service.notification_changed.connect(self._refresh)
-        service.notification_removed.connect(self._refresh)
+        # Coalescido: uma rajada de eventos (ex.: "marcar todas como vistas"
+        # muda N entradas) vira 1 rebuild da lista, não N. O rebuild é
+        # síncrono na main thread — sem isso ele aparecia nos stalls.
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(100)
+        self._refresh_timer.timeout.connect(self._refresh)
+        service.notification_added.connect(self._schedule_refresh)
+        service.notification_changed.connect(self._schedule_refresh)
+        service.notification_removed.connect(self._schedule_refresh)
 
         self._set_filter("pending")
+
+    def _schedule_refresh(self, *_args) -> None:
+        # Popup fechado nem agenda: show_at() já refaz a lista ao abrir.
+        if not self.isVisible():
+            return
+        if not self._refresh_timer.isActive():
+            self._refresh_timer.start()
 
     # ------------------------------------------------------------- pin/fixar
 

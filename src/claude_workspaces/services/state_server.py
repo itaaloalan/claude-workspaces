@@ -88,6 +88,9 @@ class StateServer:
         self._snapshot: dict = {"ports": {}}
         # cwd → (expira_em, {"branch": ..., "worktree": ...})
         self._branch_cache: dict[str, tuple[float, dict]] = {}
+        # cwd → common-dir do repo. Estável na sessão (worktree não troca de
+        # repo) → sem TTL; evita o subprocess de repo_root a cada miss.
+        self._repo_key_cache: dict[str, str] = {}
         self._httpd: ThreadingHTTPServer | None = None
         # Callback de "Ir para a sessão" (entry do snapshot) — injetado
         # pela main_window via um Signal.emit (thread-safe: a emissão de
@@ -609,23 +612,36 @@ class StateServer:
             import subprocess
 
             from ..git_worktree import (
-                current_branch,
+                branch_from_head_file,
                 is_worktree_path,
                 repo_root,
                 resolve_git_dirs,
             )
             info["worktree"] = bool(is_worktree_path(cwd))
-            info["branch"] = current_branch(cwd) or ""
+            # Sem subprocess: lê git_dir/HEAD direto. O rev-parse por miss
+            # (com timeout de até 60s no _run) chegou a 18s no perf.log
+            # competindo por GIL/disco com a main thread.
+            info["branch"] = branch_from_head_file(cwd)
             # Identidade ESTÁVEL do repo (common-dir): igual pro checkout
             # principal e todos os worktrees, diferente entre repos. Agrupa os
-            # runners por repo no plugin (api/web do sipe vs manager).
-            try:
-                root = repo_root(cwd)
-                dirs = resolve_git_dirs(root) if root else None
-                if dirs is not None:
-                    info["repo"] = str(dirs[1].resolve())
-            except Exception:
-                log.debug("repo-key falhou pra %s", cwd, exc_info=True)
+            # runners por repo no plugin (api/web do sipe vs manager). Nunca
+            # muda durante a sessão → cache próprio sem TTL.
+            with self._lock:
+                repo_key = self._repo_key_cache.get(cwd)
+            if repo_key is None:
+                repo_key = ""
+                try:
+                    root = repo_root(cwd)
+                    dirs = resolve_git_dirs(root) if root else None
+                    if dirs is not None:
+                        repo_key = str(dirs[1].resolve())
+                except Exception:
+                    log.debug("repo-key falhou pra %s", cwd, exc_info=True)
+                with self._lock:
+                    if len(self._repo_key_cache) > 256:
+                        self._repo_key_cache.clear()
+                    self._repo_key_cache[cwd] = repo_key
+            info["repo"] = repo_key
             # HEAD curto pra Detecção B (carimbo de build vs commit atual).
             # Subprocesso direto (fora do _run do git_worktree) — instrumentado
             # à parte pra não ficar invisível no perf.log.
@@ -649,7 +665,9 @@ class StateServer:
             self._branch_cache = {
                 k: v for k, v in self._branch_cache.items() if v[0] > now
             }
-            self._branch_cache[cwd] = (now + 5.0, info)
+            # TTL 30s: dado exibicional (pill da porta); com 5s todo poll do
+            # plugin pagava misses em série — e cada miss era subprocess.
+            self._branch_cache[cwd] = (now + 30.0, info)
         return info
 
 

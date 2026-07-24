@@ -186,11 +186,57 @@ class TerminalBridge(QObject):
         # Sem este gate, emits antes do JS conectar se perderiam e os que
         # vazassem entre a conexão do channel e o replay duplicariam o tail.
         self._live = False
+        # Coalescing de output → JS: cada read de PTY (≤8KB) virava uma
+        # mensagem QWebChannel própria — sob TUI redesenhando, rajada de
+        # IPCs pequenas que mantém o renderer em churn permanente de heap.
+        # Acumula aqui e descarrega 1x por janela de 16ms (ou ao passar de
+        # _FLUSH_MAX, pra rajadas grandes não inflarem latência/payload).
+        self._out_buf = bytearray()
+        self._flush_timer = QTimer(self)
+        self._flush_timer.setSingleShot(True)
+        self._flush_timer.setInterval(16)
+        self._flush_timer.timeout.connect(self._flush_output)
+
+    _FLUSH_MAX = 262_144
+
+    def _queue_output(self, data: bytes) -> None:
+        self._out_buf.extend(data)
+        if len(self._out_buf) >= self._FLUSH_MAX:
+            self._flush_output()
+        elif not self._flush_timer.isActive():
+            self._flush_timer.start()
+
+    def _flush_output(self) -> None:
+        self._flush_timer.stop()
+        if self._out_buf:
+            data = bytes(self._out_buf)
+            self._out_buf.clear()
+            from .. import perf
+            perf.count("bridge.flushes")
+            perf.count("bridge.flush_bytes", len(data))
+            self.output_to_terminal.emit(data)
+
+    def emit_direct(self, data: bytes) -> None:
+        """Emite bypassando o coalescing, mas flusha o pendente antes —
+        preserva a ordem entre output de PTY e mensagens sintéticas
+        (banners/avisos do runner)."""
+        self._flush_output()
+        self.output_to_terminal.emit(data)
+
+    def suspend_live(self) -> None:
+        """Unload da view: corta o repasse ao vivo e descarta o coalescido
+        pendente — o _replay_buffer do widget cobre a reconstrução."""
+        self._live = False
+        self._flush_timer.stop()
+        self._out_buf.clear()
 
     def go_live(self, history: bytes) -> None:
         """Chamado quando o xterm.js do console acabou de carregar: limpa o
         terminal, despeja todo o histórico acumulado (replay) e passa a
         repassar o output ao vivo daí em diante."""
+        # Nada coalescido de antes do (re)load pode vazar pra depois do reset.
+        self._flush_timer.stop()
+        self._out_buf.clear()
         self.clear_requested.emit()
         self._line_buf.clear()
         if history:
@@ -208,9 +254,9 @@ class TerminalBridge(QObject):
             if self._line_buf:
                 pending = bytes(self._line_buf)
                 self._line_buf.clear()
-                self.output_to_terminal.emit(pending + data)
+                self._queue_output(pending + data)
             else:
-                self.output_to_terminal.emit(data)
+                self._queue_output(data)
             return
         self._line_buf.extend(data)
         out = bytearray()
@@ -223,7 +269,7 @@ class TerminalBridge(QObject):
             if self._line_matches(line):
                 out.extend(line)
         if out:
-            self.output_to_terminal.emit(bytes(out))
+            self._queue_output(bytes(out))
 
     def set_filter(self, text: str) -> None:
         """Define o filtro de linhas. Vazio = sem filtro (pass-through)."""
@@ -233,6 +279,8 @@ class TerminalBridge(QObject):
         """Limpa o terminal e re-emite `full_log` aplicando o filtro atual.
         Resets também o buffer de linha parcial — chamada típica após o
         usuário mudar o filtro."""
+        self._flush_timer.stop()
+        self._out_buf.clear()
         self.clear_requested.emit()
         self._line_buf.clear()
         if not full_log:
@@ -632,6 +680,12 @@ class TerminalWidget(QWidget):
         todos no startup. Idempotente."""
         if self._view_built:
             return
+        # Recycle do renderer em andamento: criar uma page agora faria ela
+        # nascer no renderer moribundo (e o manteria vivo) — o reload da
+        # view ativa vem no fim do ciclo, via _reload_active_webengine_views.
+        from ..services.webengine_recycler import recycling_active
+        if recycling_active():
+            return
         self._view_built = True
         self._view_load_started_at = time.perf_counter()
         global _live_webengine_views
@@ -679,8 +733,9 @@ class TerminalWidget(QWidget):
             "[WEBENGINE] view descarregada (tab=%s) — %d viva(s) no app",
             tab_uid_of(self), _live_webengine_views,
         )
-        # Para o repasse ao vivo; o bridge persiste e segue capturando p/ replay.
-        self.bridge._live = False
+        # Para o repasse ao vivo (e descarta o coalescido pendente); o bridge
+        # persiste e o _replay_buffer segue capturando p/ replay.
+        self.bridge.suspend_live()
         self._primed = False
         # Console oculto: alenta o polling de atividade (250ms→1s). Mantém as
         # notificações de fundo (status working/needs_decision) funcionando, mas

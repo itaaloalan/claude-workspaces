@@ -95,12 +95,28 @@ def _short_cmdline(cmd: list[str], name: str) -> str:
 
 
 @dataclass
+class RendererStat:
+    """Um QtWebEngineProcess --type=renderer da árvore do app. RSS+swap é a
+    métrica do watchdog de recycle: o renderer dos terminais acumula heap do
+    Blink por dias e o que o kernel empurra pra swap some do RSS."""
+
+    pid: int
+    rss: int = 0   # bytes
+    swap: int = 0  # bytes (VmSwap; 0 se indisponível)
+
+
+def _is_webengine_renderer(name: str, cmdline: list[str]) -> bool:
+    return _WEBENGINE_HINT in (name or "").lower() and "--type=renderer" in cmdline
+
+
+@dataclass
 class Snapshot:
     total_rss: int = 0
     total_cpu: float = 0.0
     n_procs: int = 0
     n_zombies: int = 0
     groups: list[ProcGroup] = field(default_factory=list)  # desc por RSS
+    renderers: list[RendererStat] = field(default_factory=list)
 
 
 @dataclass
@@ -185,12 +201,14 @@ class ProcessMonitor:
         total_rss = 0
         total_cpu = 0.0
         n_zombies = 0
+        renderers: list[RendererStat] = []
         seen: set[int] = set()
         for p in procs:
             try:
                 with p.oneshot():
                     rss = int(p.memory_info().rss)
                     is_zombie = p.status() == psutil.STATUS_ZOMBIE
+                    name = p.name()
                 cpu = self._cpu(p)
             except psutil.Error:
                 continue
@@ -199,6 +217,21 @@ class ProcessMonitor:
             total_cpu += cpu
             if is_zombie:
                 n_zombies += 1
+            # Renderers do QtWebEngine ganham stat próprio (watchdog de
+            # recycle). cmdline/swap só pros 1-3 processos com o hint no
+            # nome — o resto da árvore continua pagando só o oneshot.
+            if _WEBENGINE_HINT in name.lower():
+                try:
+                    if _is_webengine_renderer(name, p.cmdline()):
+                        try:
+                            swap = int(p.memory_full_info().swap)
+                        except psutil.Error:
+                            swap = 0
+                        renderers.append(
+                            RendererStat(pid=p.pid, rss=rss, swap=swap)
+                        )
+                except psutil.Error:
+                    pass
         # Poda o cache de CPU pros pids ainda vivos (igual ao sample()).
         self._cpu_cache = {
             pid: proc for pid, proc in self._cpu_cache.items() if pid in seen
@@ -209,6 +242,7 @@ class ProcessMonitor:
             n_procs=len(seen),
             n_zombies=n_zombies,
             groups=[],
+            renderers=renderers,
         )
 
     def sample(self, leaders: dict[int, tuple[str, str]] | None = None) -> Snapshot:

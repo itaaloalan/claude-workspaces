@@ -14,6 +14,7 @@ from claude_workspaces.process_monitor import (
     CAT_RUNNER,
     CAT_WEBENGINE,
     ProcessMonitor,
+    _is_webengine_renderer,
     human_bytes,
 )
 
@@ -28,6 +29,29 @@ def test_human_bytes_units():
 
 def test_human_bytes_negative_clamped():
     assert human_bytes(-100) == "0 B"
+
+
+def test_is_webengine_renderer():
+    assert _is_webengine_renderer(
+        "QtWebEngineProcess", ["/path/QtWebEngineProcess", "--type=renderer"]
+    )
+    # Processo utilitário (GPU, network) não conta.
+    assert not _is_webengine_renderer(
+        "QtWebEngineProcess", ["/path/QtWebEngineProcess", "--type=gpu-process"]
+    )
+    assert not _is_webengine_renderer("python3", ["python3", "--type=renderer"])
+    assert not _is_webengine_renderer("", [])
+
+
+def test_sample_totals_has_renderers_field():
+    """Campo presente e bem-formado. Na suíte completa a árvore do pytest
+    PODE ter renderers reais (testes de RunnerWidget sobem QtWebEngine) —
+    então não dá pra exigir lista vazia, só a forma."""
+    mon = ProcessMonitor()
+    snap = mon.sample_totals()
+    assert isinstance(snap.renderers, list)
+    assert all(r.pid > 0 and r.rss >= 0 and r.swap >= 0 for r in snap.renderers)
+    assert snap.n_procs >= 1
 
 
 def test_sample_includes_self():

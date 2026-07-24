@@ -335,6 +335,18 @@ class MainWindow(QMainWindow):
         # rodava síncrono no tick, engasgando animações a cada 8s.
         self._resource_sampler = ResourceSampler(self._process_monitor, parent=self)
         self._resource_sampler.sample_ready.connect(self._on_resource_sample)
+        # Watchdog do renderer dos terminais: todos dividem UM processo
+        # Chromium (--process-per-site) que acumula heap por dias — acima
+        # do limiar, recicla (unload geral → morte do processo → reload).
+        from ..services.webengine_recycler import WebEngineRecycler
+        self._webengine_recycler = WebEngineRecycler(
+            threshold_bytes=lambda: max(
+                0, int(getattr(self.settings, "webengine_recycle_mb", 1500))
+            ) * 1024 * 1024,
+            collect_loaded=self._collect_loaded_webengine_widgets,
+            reload_active=self._reload_active_webengine_views,
+            parent=self,
+        )
         self._resource_timer = QTimer(self)
         self._resource_timer.setInterval(8_000)
         self._resource_timer.timeout.connect(self._sample_resources)
@@ -3635,6 +3647,75 @@ class MainWindow(QMainWindow):
         self.status_widgets.set_resources(
             snap.total_rss, snap.total_cpu, snap.n_zombies
         )
+        self._webengine_recycler.on_sample(getattr(snap, "renderers", []))
+
+    def _collect_loaded_webengine_widgets(self) -> list:
+        """Consoles e runners com QWebEngineView viva — alvos do unload no
+        recycle do renderer. Espelha o walk de `_resource_leaders`."""
+        from .runner_widget import RunnerWidget
+        from .terminal_widget import TerminalWidget
+
+        out: list = []
+
+        def add_runner_area(area: object) -> None:
+            tabs = getattr(area, "tabs", None)
+            if tabs is None:
+                return
+            for i in range(tabs.count()):
+                w = tabs.widget(i)
+                if isinstance(w, RunnerWidget) and w.view is not None:
+                    out.append(w)
+
+        for area in self._runner_areas.values():
+            add_runner_area(area)
+        for per_ws in self._console_runner_areas.values():
+            for area in per_ws.values():
+                add_runner_area(area)
+
+        for area in (getattr(self.terminals_coord, "_areas", {}) or {}).values():
+            stack = getattr(area, "_stack", None)
+            if stack is None:
+                continue
+            for i in range(stack.count()):
+                w = stack.widget(i)
+                if (
+                    isinstance(w, TerminalWidget)
+                    and getattr(w, "_view_built", False)
+                    and w.view is not None
+                ):
+                    out.append(w)
+        return out
+
+    def _reload_active_webengine_views(self) -> None:
+        """Fim do recycle: re-materializa a view ativa de cada área VISÍVEL
+        (o que o usuário está olhando agora — pode ter trocado de aba durante
+        a janela de morte do renderer). O resto recarrega on-demand."""
+        from .runner_widget import RunnerWidget
+        from .terminal_area import _get_materialize_queue
+        from .terminal_widget import TerminalWidget
+
+        queue = _get_materialize_queue()
+        for area in (getattr(self.terminals_coord, "_areas", {}) or {}).values():
+            if not area.isVisible():
+                continue
+            stack = getattr(area, "_stack", None)
+            w = stack.currentWidget() if stack is not None else None
+            if isinstance(w, TerminalWidget):
+                queue.enqueue(area, w)
+
+        def reload_runner_area(area: object) -> None:
+            tabs = getattr(area, "tabs", None)
+            if tabs is None or not getattr(area, "isVisible", lambda: False)():
+                return
+            w = tabs.currentWidget()
+            if isinstance(w, RunnerWidget) and w.isVisible():
+                w._build_view()
+
+        for area in self._runner_areas.values():
+            reload_runner_area(area)
+        for per_ws in self._console_runner_areas.values():
+            for area in per_ws.values():
+                reload_runner_area(area)
 
     def _stop_process_by_pid(self, pid: int) -> None:
         """Para o runner cujo session leader é `pid` (via PtySession.terminate,
@@ -8776,6 +8857,10 @@ class MainWindow(QMainWindow):
         self._shutdown_persisted = True
         self._sessions_persist_timer.stop()
         self._persist_active_sessions()
+        # Flush final das notificações — o write normal é debounced (1,5s)
+        # e off-thread; aqui garante que a última rajada não se perde.
+        if hasattr(self, "notif_service"):
+            self.notif_service.flush_now()
 
     @log_exceptions(message="Falha ao persistir sessões Claude ativas")
     def _persist_active_sessions(self) -> None:

@@ -71,14 +71,42 @@ class NotificationStore:
     def mark_seen(self, notif_id: str) -> Notification | None:
         return self.update(notif_id, seen=True)
 
-    def mark_all_seen(self) -> int:
-        count = 0
+    def mark_all_seen(self) -> list[Notification]:
+        """Retorna só as entradas que mudaram — o serviço emite
+        `notification_changed` por item, e re-emitir as já vistas fazia o
+        center/tray rebuildarem ~500x num clique."""
+        changed: list[Notification] = []
         for n in self._items:
             if not n.seen:
                 n.seen = True
                 n.updated_at = time.time()
-                count += 1
-        return count
+                changed.append(n)
+        return changed
+
+    def prune(
+        self,
+        *,
+        seen_max_age_s: float = 7 * 86400,
+        dismissed_max_age_s: float = 86400,
+        now: float | None = None,
+    ) -> int:
+        """Retenção por idade: remove dismissed velhas (>24h) e vistas
+        não-actionable velhas (>7 dias). Sem isso o store vive no teto do
+        history_limit (500 × ~650 bytes) e cada flush reserializa tudo.
+        Pendências actionable não vistas nunca caem por idade."""
+        ref = time.time() if now is None else now
+
+        def _keep(n: Notification) -> bool:
+            age = ref - (n.updated_at or n.created_at)
+            if n.dismissed:
+                return age <= dismissed_max_age_s
+            if n.seen and not n.is_actionable():
+                return age <= seen_max_age_s
+            return True
+
+        before = len(self._items)
+        self._items = [n for n in self._items if _keep(n)]
+        return before - len(self._items)
 
     def snooze(self, notif_id: str, seconds: int) -> Notification | None:
         return self.update(

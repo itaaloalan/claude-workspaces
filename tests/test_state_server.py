@@ -295,6 +295,69 @@ def test_branch_info_repo_key_consistente_entre_worktrees(tmp_path):
     assert other_repo and other_repo != main_repo  # repo diferente
 
 
+def test_branch_from_head_file_sem_subprocess(tmp_path):
+    """branch via leitura de git_dir/HEAD: ref normal → nome; detached → ""."""
+    import subprocess
+
+    def run(args, cwd):
+        subprocess.run(args, cwd=cwd, capture_output=True, check=True)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run(["git", "init", "-q", "-b", "main"], repo)
+    run(["git", "config", "user.email", "t@t"], repo)
+    run(["git", "config", "user.name", "t"], repo)
+    (repo / "f.txt").write_text("hi")
+    run(["git", "add", "f.txt"], repo)
+    run(["git", "commit", "-q", "-m", "init"], repo)
+
+    from claude_workspaces.git_worktree import branch_from_head_file
+    assert branch_from_head_file(str(repo)) == "main"
+    run(["git", "checkout", "-q", "--detach"], repo)
+    assert branch_from_head_file(str(repo)) == ""
+    assert branch_from_head_file(str(tmp_path)) == ""  # fora de repo
+
+
+def test_branch_info_memoiza_repo_key_e_respeita_ttl(tmp_path, monkeypatch):
+    """repo_root (estável) roda 1x por cwd; dentro do TTL nem o miss roda."""
+    import subprocess
+
+    def run(args, cwd):
+        subprocess.run(args, cwd=cwd, capture_output=True, check=True)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run(["git", "init", "-q", "-b", "main"], repo)
+    run(["git", "config", "user.email", "t@t"], repo)
+    run(["git", "config", "user.name", "t"], repo)
+    (repo / "f.txt").write_text("hi")
+    run(["git", "add", "f.txt"], repo)
+    run(["git", "commit", "-q", "-m", "init"], repo)
+
+    from claude_workspaces import git_worktree
+    calls = {"repo_root": 0}
+    real_repo_root = git_worktree.repo_root
+
+    def counting_repo_root(path):
+        calls["repo_root"] += 1
+        return real_repo_root(path)
+
+    monkeypatch.setattr(git_worktree, "repo_root", counting_repo_root)
+
+    srv = StateServer(port=_free_port())
+    info1 = srv._branch_info(str(repo))
+    assert info1["branch"] == "main" and info1["repo"]
+    assert calls["repo_root"] == 1
+    # Dentro do TTL: cache hit, nada roda.
+    srv._branch_info(str(repo))
+    assert calls["repo_root"] == 1
+    # TTL expirado: novo miss, mas o repo_key memoizado NÃO re-roda repo_root.
+    srv._branch_cache.clear()
+    info2 = srv._branch_info(str(repo))
+    assert info2["repo"] == info1["repo"]
+    assert calls["repo_root"] == 1
+
+
 def test_open_endpoint(tmp_path, monkeypatch):
     import urllib.error
 

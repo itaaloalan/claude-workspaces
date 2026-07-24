@@ -28,13 +28,32 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 
 from . import persistence
 from .store import NotificationStore
 from .types import Notification, NotificationKind, NotificationPriority
 
 log = logging.getLogger(__name__)
+
+# Janela do debounce de persistência: transições de atividade dos consoles
+# chegam em rajada (N consoles × poll de 250ms) e cada uma mutava o store —
+# 1,5s coalesce a rajada num único write sem risco real de perda (o flush
+# final síncrono roda no shutdown gracioso).
+_FLUSH_DEBOUNCE_MS = 1500
+
+
+class _SaveJob(QRunnable):
+    """dumps + I/O do notifications.json fora da main thread. Recebe o
+    payload já em dicts puros — nada aqui toca em objetos mutáveis."""
+
+    def __init__(self, path: Path, payload: dict[str, Any]) -> None:
+        super().__init__()
+        self._path = path
+        self._payload = payload
+
+    def run(self) -> None:  # noqa: D102
+        persistence.save_payload(self._path, self._payload)
 
 
 class NotificationService(QObject):
@@ -60,6 +79,22 @@ class NotificationService(QObject):
         self._store = NotificationStore(history_limit=int(prefs.get("history_limit", 500)))
         self._store.restore(items)
         self._last_unread = self._store.unread_count()
+
+        # Persistência debounced + off-thread. O _flush() era síncrono na
+        # main thread a cada mutação — com 500 entradas (~320KB) o dumps
+        # aparecia nos stacks dos stalls do perf_watchdog.
+        self._flush_timer = QTimer(self)
+        self._flush_timer.setSingleShot(True)
+        self._flush_timer.setInterval(_FLUSH_DEBOUNCE_MS)
+        self._flush_timer.timeout.connect(self._do_flush)
+        self._flush_pool = QThreadPool(self)
+        self._flush_pool.setMaxThreadCount(1)  # fila serial — ordem dos os.replace
+        self._flush_dirty = False
+
+        # Retenção: encolhe o arquivo herdado (dismissed >24h, vistas >7d)
+        # já no primeiro boot e mantém o teto em sessões longas (tick).
+        if self._store.prune():
+            self._flush()
 
         # Timer de relembrete para pendências actionable.
         self._reminder_timer = QTimer(self)
@@ -210,7 +245,7 @@ class NotificationService(QObject):
     def mark_all_seen(self) -> None:
         changed = self._store.mark_all_seen()
         if changed:
-            for n in self._store.snapshot():
+            for n in changed:
                 self.notification_changed.emit(n)
             self._announce_unread()
             self._flush()
@@ -285,6 +320,11 @@ class NotificationService(QObject):
     def _tick_reminders(self) -> None:
         secs = max(15, int(self._preferences.get("reminder_seconds", 120)))
         now = time.time()
+        # Retenção contínua em sessões longas (o tick já é periódico e O(N)
+        # aqui é barato). Sem emit por item: center/tray re-listam do store.
+        if self._store.prune(now=now):
+            self._announce_unread()
+            self._flush()
         # _last_reminder acumula um key por notif que já lembrou — poda os
         # que não existem mais no store (removidos por history_limit,
         # clear_all, etc.) pra não crescer pela vida inteira da sessão.
@@ -305,9 +345,38 @@ class NotificationService(QObject):
     # ----------------------------------------------------------- persistence
 
     def _flush(self) -> None:
+        """Marca dirty e arma o debounce — o write real sai em _do_flush."""
         if self._path is None:
             return
-        persistence.save(self._path, self._store.snapshot(), self._preferences)
+        self._flush_dirty = True
+        if not self._flush_timer.isActive():
+            self._flush_timer.start()
+
+    def _do_flush(self) -> None:
+        if self._path is None or not self._flush_dirty:
+            return
+        self._flush_dirty = False
+        # Serializa pra dicts puros AQUI (main thread, onde o store é mutado)
+        # — o worker só faz dumps + write, sem torn-read de dataclass mutável.
+        self._flush_pool.start(_SaveJob(self._path, self._build_payload()))
+
+    def _build_payload(self) -> dict[str, Any]:
+        return {
+            "version": persistence.SCHEMA_VERSION,
+            "notifications": [n.to_dict() for n in self._store.snapshot()],
+            "preferences": dict(self._preferences),
+        }
+
+    def flush_now(self) -> None:
+        """Flush final síncrono (shutdown/testes): espera writes em voo e
+        grava o estado corrente — a última escrita vence qualquer job."""
+        if self._path is None:
+            return
+        self._flush_timer.stop()
+        self._flush_pool.waitForDone(2000)
+        if self._flush_dirty:
+            self._flush_dirty = False
+            persistence.save_payload(self._path, self._build_payload())
 
     def _announce_unread(self) -> None:
         count = self._store.unread_count()

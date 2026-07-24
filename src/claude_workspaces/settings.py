@@ -167,6 +167,13 @@ class Settings:
     # Ajustável ao vivo (TerminalBridge.set_scrollback_lines empurra pro JS sem
     # reiniciar). Default 1000.
     console_scrollback_lines: int = 1000
+    # Limiar (MB) de RSS+swap do renderer QtWebEngineProcess dos terminais.
+    # Todos os consoles/runners dividem UM renderer (--process-per-site) que
+    # nunca reinicia sozinho e acumula heap do Blink por dias — já chegou a
+    # 8GB. Acima do limiar o app "recicla": descarrega todas as views, espera
+    # o renderer morrer e recarrega as ativas via replay (~1s de blip).
+    # 0 = desligado.
+    webengine_recycle_mb: int = 1500
     # Instrumentação de performance: acumula métricas agregadas (tempo gasto
     # em git status, parse de atividade, throughput de PTY, sample de
     # recursos, push de estado) e despeja um resumo periódico no perf.log

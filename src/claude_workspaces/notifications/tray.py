@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
@@ -50,12 +50,22 @@ class TrayNotifier(QObject):
         self._menu = QMenu()
         self._tray.setContextMenu(self._menu)
 
-        service.notification_added.connect(self._refresh)
-        service.notification_changed.connect(self._refresh)
-        service.notification_removed.connect(self._refresh)
-        service.unread_count_changed.connect(self._refresh)
+        # Coalescido (single-shot 0ms): uma rajada de eventos no mesmo tick
+        # (ex.: "marcar todas" muda N entradas) rebuilda tooltip+menu 1x.
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setSingleShot(True)
+        self._refresh_timer.setInterval(0)
+        self._refresh_timer.timeout.connect(self._refresh)
+        service.notification_added.connect(self._schedule_refresh)
+        service.notification_changed.connect(self._schedule_refresh)
+        service.notification_removed.connect(self._schedule_refresh)
+        service.unread_count_changed.connect(self._schedule_refresh)
 
         self._refresh()
+
+    def _schedule_refresh(self, *_args) -> None:
+        if not self._refresh_timer.isActive():
+            self._refresh_timer.start()
 
     def set_app_name(self, name: str) -> None:
         self._app_name = name

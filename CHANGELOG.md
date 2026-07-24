@@ -1,5 +1,52 @@
 # Changelog
 
+## [1.29.0] — 2026-07-24
+
+### Perf: recycle do renderer QtWebEngine (vazamento de até 8GB) + fim dos stalls de 24s
+
+Diagnóstico a partir do app.log/perf.log: o renderer único dos terminais
+(`--process-per-site`) acumulava heap do Blink por dias sem nunca
+reiniciar (medido 2,1GB RSS + 5,9GB swap), empurrando a máquina pra swap
+thrash; e o `notifications.json` (322KB) era reserializado inteiro,
+síncrono na main thread, a cada transição de status de cada console —
+stalls de até 26s registrados pelo perf_watchdog.
+
+**Memória (renderer):**
+
+- **`services/webengine_recycler.py`** (novo): watchdog que monitora
+  RSS+swap dos renderers (via `RendererStat` no `ProcessMonitor`) e, acima
+  de `webengine_recycle_mb` (default 1500, 0 desliga) por 2 amostras,
+  recicla: descarrega todas as views de terminal (o renderer morre ao
+  zerar as pages; SIGKILL de fallback em 6s) e recarrega a view ativa via
+  replay existente (~1s de blip). Telemetria `[WEBENGINE-MEM]` /
+  `[WEBENGINE-RECYCLE]` no app.log; cooldown de 10min; ignora renderers
+  de outras views (PWAs, diff) via `renderProcessPid()`.
+- **`ui/terminal_widget.py`**: coalescing de output no `TerminalBridge` —
+  chunks de PTY (≤8KB cada) acumulam e saem 1x por janela de 16ms
+  (`_FLUSH_MAX` 256KB), cortando ~5-20x as mensagens QWebChannel e o
+  churn de heap no renderer. `emit_direct()` preserva a ordem dos
+  banners do runner; `suspend_live()` descarta pendente no unload.
+- Guards `recycling_active()` em `ensure_view_loaded`, `_build_view` e
+  `_MaterializeQueue` — nenhuma page nasce no renderer moribundo.
+
+**Fluidez (main thread):**
+
+- **`notifications/service.py`**: `_flush()` agora é debounced (1,5s) e o
+  dumps+write rodam num `QThreadPool` serial — a main thread só monta o
+  payload. `flush_now()` síncrono no shutdown (`_persist_on_shutdown`).
+- **`notifications/persistence.py`**: JSON compacto (`separators`) — ~50%
+  menos bytes/CPU; leitura aceita o formato antigo.
+- **`notifications/store.py`**: `prune()` por idade (dismissed >24h,
+  vistas não-actionable >7 dias) no boot e no tick de reminders — o
+  arquivo para de viver no teto de 500 entradas. `mark_all_seen()`
+  retorna só o que mudou (antes: ~500 emits → ~500 rebuilds de UI).
+- **`notifications/center.py` / `tray.py`**: refresh coalescido por
+  QTimer single-shot; o center nem agenda quando está fechado.
+- **`services/state_server.py`**: `_branch_info` sem subprocess pra
+  branch (lê `git_dir/HEAD` via nova `git_worktree.branch_from_head_file`),
+  common-dir memoizado por cwd e TTL do cache 5s→30s — de ~3 subprocess
+  por cwd a cada 5s pra 1 a cada 30s (max medido: 18s por chamada).
+
 ## [1.28.4] — 2026-07-22
 
 ### Fix: painel de Runners da sidebar ocupava espaço demais e empurrava a lista de workspaces
