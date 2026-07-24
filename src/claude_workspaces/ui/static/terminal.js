@@ -17,6 +17,36 @@
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
 
+    // Renderer acelerado: webgl > canvas > DOM (fallback). O DOM renderer
+    // (default sem addon) recria nós a cada redraw do TUI do Claude —
+    // churn de heap de ~130MB/min no renderer Chromium compartilhado, que
+    // virava swap. WebGL/canvas desenham em textura estável.
+    // Carregar DEPOIS do open() (os addons de renderer exigem terminal
+    // aberto). Se o contexto WebGL morrer (driver/gpu), volta pro canvas.
+    (function () {
+        function tryCanvas() {
+            try {
+                if (typeof CanvasAddon !== 'undefined') {
+                    term.loadAddon(new CanvasAddon.CanvasAddon());
+                    return true;
+                }
+            } catch (e) { /* segue no DOM */ }
+            return false;
+        }
+        try {
+            if (typeof WebglAddon !== 'undefined') {
+                const webgl = new WebglAddon.WebglAddon();
+                webgl.onContextLoss(function () {
+                    try { webgl.dispose(); } catch (e) { }
+                    tryCanvas();
+                });
+                term.loadAddon(webgl);
+                return;
+            }
+        } catch (e) { /* webgl indisponível */ }
+        tryCanvas();
+    })();
+
     // Ctrl+V cola (igual ao Konsole). Por padrão o xterm.js intercepta Ctrl+V e
     // manda \x16 (literal-next), então só Ctrl+Shift+V — o paste nativo do
     // navegador — colava. Retornar false faz o xterm não tratar a tecla e deixa

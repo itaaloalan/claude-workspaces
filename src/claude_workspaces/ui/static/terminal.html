@@ -66,6 +66,11 @@
     <script src="vendor/qwebchannel.js"></script>
     <script src="vendor/xterm.js"></script>
     <script src="vendor/addon-fit.js"></script>
+    <!-- Renderers acelerados (webgl > canvas > DOM). Sem eles o xterm usa o
+         renderer DOM, que recria nós a cada redraw do TUI — churn de heap
+         medido em ~130MB/min no renderer compartilhado. -->
+    <script src="vendor/addon-webgl.js"></script>
+    <script src="vendor/addon-canvas.js"></script>
     <script src="terminal.js"></script>
 </body>
 </html>

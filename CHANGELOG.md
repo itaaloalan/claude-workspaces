@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.32.0] — 2026-07-24
+
+### Perf: travadas no uso diário — renderer WebGL no xterm e I/O do poll fora da main thread
+
+Mesmo após 1.29/1.30, o uso normal registrava stalls de 3-7s a cada
+~15-20s. Diagnóstico via watchdog + [WEBENGINE-MEM]:
+
+1. O xterm.js rodava no **renderer DOM** (nenhum addon de render vendorado)
+   — cada redraw do TUI do Claude recria nós DOM, churn de heap medido em
+   ~130MB/min no renderer compartilhado, que o kernel despeja pra swap
+   continuamente (I/O de fundo permanente).
+2. O poll de atividade fazia **I/O de disco síncrono na main thread** a
+   cada tick: `open()` do JSONL da sessão (scan de worktrees), listagem de
+   sessões (resolução de título) e stat/parse do session_marks.json —
+   com o sistema paginando, um único `open()` travou a UI por 3s+ (stack
+   real do perf_watchdog).
+
+Mudanças:
+
+- **`ui/static/vendor/`**: vendorados `addon-webgl.js` (xterm-addon-webgl
+  0.16.0) e `addon-canvas.js` (xterm-addon-canvas 0.5.0), compatíveis com
+  o xterm.js 5.3.0. `terminal.js` carrega WebGL → fallback Canvas →
+  fallback DOM (com handler de context-loss). Corta o churn de DOM/heap
+  do renderer na raiz.
+- **`ui/terminal_widget.py`**: novo worker serial compartilhado
+  (`_SessionIOJob`/`_run_session_io`) — o trio de I/O do poll roda fora
+  da main thread; na UI ficam só os throttles e a aplicação dos
+  resultados (`_on_session_io_done`, com checagem de staleness). Payload
+  worker→main só com dados puros (lição do SIGSEGV do desktop_notifier).
+  `adopt_worktree` usa `branch_from_head_file` (sem subprocess).
+
 ## [1.31.0] — 2026-07-24
 
 ### Painel "Runners" da sidebar redimensionável

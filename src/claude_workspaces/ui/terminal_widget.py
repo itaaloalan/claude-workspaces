@@ -7,7 +7,16 @@ import weakref
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import (
+    QObject,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+    Slot,
+)
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -55,6 +64,97 @@ def note_view_destroyed_externally(widget: "TerminalWidget") -> None:
         "[WEBENGINE] view fechada com o console (tab=%s) — %d viva(s) no app",
         tab_uid_of(widget), _live_webengine_views,
     )
+
+
+class _SessionIOSignals(QObject):
+    # Payload: dict SÓ de dados puros (str/int/float/list/dataclass) —
+    # emitir callables/QObjects de worker→main via Signal(object) já
+    # reproduziu SIGSEGV nativo (ver desktop_notifier).
+    done = Signal(dict)
+
+
+def _run_session_io(inp: dict) -> dict:
+    """I/O de disco do poll de atividade — roda FORA da main thread.
+
+    Sob pressão de swap/disco, um simples `open()` do JSONL da sessão
+    bloqueou a main thread por 3s+ (stack real do perf_watchdog). Este
+    worker concentra o trio de I/O do poll (resolver sessão, rename
+    externo, scan de worktrees); a DECISÃO sobre os resultados continua
+    na main thread (_on_session_io_done). Entrada/saída são dados puros.
+    """
+    out: dict = {}
+    cwd = inp.get("resolve_cwd") or ""
+    if cwd:
+        try:
+            from ..claude_sessions import list_sessions_backend
+            out["sessions"] = list_sessions_backend(
+                cwd, backend=inp.get("backend", "claude"), limit=20
+            )
+        except Exception:
+            log.debug("session resolution falhou em %s", cwd, exc_info=True)
+    sid = inp.get("rename_sid") or ""
+    if sid:
+        try:
+            from ..session_marks import get_custom_name, marks_mtime
+            mtime = marks_mtime()
+            if mtime != inp.get("marks_mtime_seen"):
+                out["marks_mtime"] = mtime
+                out["custom_name"] = get_custom_name(sid)
+        except Exception:
+            log.debug("falha ao checar rename externo", exc_info=True)
+    wt_dir = inp.get("wt_check_dir") or ""
+    if wt_dir:
+        try:
+            out["wt_dir_gone"] = not Path(wt_dir).is_dir()
+        except OSError:
+            pass
+    spath = inp.get("wt_scan_path") or ""
+    if spath:
+        try:
+            p = Path(spath)
+            if p.exists():
+                from ..claude_sessions import scan_worktree_adds
+                hits, off = scan_worktree_adds(
+                    p, int(inp.get("wt_scan_offset", 0))
+                )
+                out["wt_hits"] = hits
+                out["wt_offset"] = off
+                out["wt_scan_path"] = spath
+        except Exception:
+            log.debug("scan de worktree no JSONL falhou", exc_info=True)
+    return out
+
+
+class _SessionIOJob(QRunnable):
+    def __init__(self, inp: dict, signals: _SessionIOSignals) -> None:
+        super().__init__()
+        self._inp = inp
+        self._signals = signals
+
+    def run(self) -> None:  # noqa: D102
+        try:
+            out = _run_session_io(self._inp)
+        except Exception:
+            log.debug("job de session-io falhou", exc_info=True)
+            out = {}
+        try:
+            self._signals.done.emit(out)
+        except RuntimeError:
+            pass  # widget destruído com job em voo
+
+
+# Pool serial COMPARTILHADO por todos os consoles: serializar o I/O evita
+# N threads batendo em disco ao mesmo tempo justamente quando ele está
+# saturado (o cenário que motivou o offload).
+_session_io_pool: QThreadPool | None = None
+
+
+def _get_session_io_pool() -> QThreadPool:
+    global _session_io_pool
+    if _session_io_pool is None:
+        _session_io_pool = QThreadPool()
+        _session_io_pool.setMaxThreadCount(1)
+    return _session_io_pool
 
 
 def tab_uid_of(widget: object) -> int:
@@ -452,6 +552,13 @@ class TerminalWidget(QWidget):
         # renames externos (skill /criar-worktree etc.) escritos direto
         # no arquivo enquanto a sessão está aberta.
         self._marks_mtime_seen: float = 0.0
+        # I/O de disco do poll (resolver sessão, rename externo, scan de
+        # worktrees) roda num worker compartilhado — sob pressão de swap um
+        # open() síncrono na main thread já travou a UI por 3s+. Um job em
+        # voo por console; resultados aplicados em _on_session_io_done.
+        self._session_io_signals = _SessionIOSignals()
+        self._session_io_signals.done.connect(self._on_session_io_done)
+        self._session_io_inflight = False
         # Throttles (monotonic) de sub-etapas caras do _poll_activity, que de
         # outra forma rodariam I/O/regex a cada tick (250ms). detect_pr decodi-
         # fica 8KB + 4 regex; check_rename faz stat de session_marks.json.
@@ -913,41 +1020,9 @@ class TerminalWidget(QWidget):
             self._last_status, self._last_working, self._last_needs_decision
         )
 
-    def _check_external_rename(self) -> None:
-        """Detecta rename feito por FORA do app: a skill /criar-worktree
-        (ou qualquer processo) pode escrever `custom_name` direto no
-        session_marks.json. Compara o mtime do arquivo (stat barato a cada
-        poll) e, quando muda, re-lê o nome da sessão reivindicada e
-        propaga pra sidebar via activity_changed — mesmo caminho do
-        rename interno (set_custom_name)."""
-        sid = self._claimed_session_id
-        if not sid:
-            return
-        # Throttle ~1.5s: o stat de session_marks.json a cada tick (250ms) era
-        # custo recorrente; rename externo é raro e 1.5s de latência é ok.
-        now = time.monotonic()
-        if now - self._rename_check_last < 1.5:
-            return
-        self._rename_check_last = now
-        try:
-            from ..session_marks import get_custom_name, marks_mtime
-            mtime = marks_mtime()
-            if mtime == self._marks_mtime_seen:
-                return
-            self._marks_mtime_seen = mtime
-            saved = get_custom_name(sid)
-        except Exception:
-            log.debug("falha ao checar rename externo", exc_info=True)
-            return
-        # Só aplica nome não-vazio: entrada ausente/limpa não apaga um
-        # rename feito dentro do app nesta execução.
-        if saved and saved != self._custom_name:
-            self._custom_name = saved
-            self.activity_changed.emit(
-                self._last_status, self._last_working, self._last_needs_decision
-            )
-
     def _try_resolve_session(self) -> None:
+        """Versão síncrona (testes/chamadas pontuais). O poll usa o worker
+        (_schedule_session_io) pra mesma lógica sem I/O na main thread."""
         if self._session_resolved or not self._claude_cwd:
             return
         backend = getattr(self, "_backend", "claude")
@@ -956,6 +1031,13 @@ class TerminalWidget(QWidget):
             sessions = list_sessions_backend(self._claude_cwd, backend=backend, limit=20)
         except Exception:
             log.debug("session resolution falhou em %s", self._claude_cwd, exc_info=True)
+            return
+        self._apply_resolved_sessions(sessions)
+
+    def _apply_resolved_sessions(self, sessions: list) -> None:
+        """Decisão de claim/preview sobre uma lista de sessões já lida do
+        disco (pelo worker ou pela versão síncrona). Main thread only."""
+        if self._session_resolved or not self._claude_cwd:
             return
         if not sessions:
             return
@@ -1097,49 +1179,89 @@ class TerminalWidget(QWidget):
         /criar-worktree). "" quando o console não adotou worktree."""
         return getattr(self, "_worktree_dir", "")
 
-    def _scan_session_worktrees(self) -> None:
-        """Scan incremental (throttled ~1s) do JSONL da sessão procurando
-        `git worktree add` rodado pela própria sessão. Ao achar um worktree
-        válido, adota: 🌿 na sidebar/header e git status do worktree."""
-        now = time.monotonic()
-        if now - self._wt_scan_last < 1.0:
+    def _schedule_session_io(self) -> None:
+        """Agenda no worker compartilhado o I/O de disco do poll (resolver
+        sessão, rename externo, scan de worktrees no JSONL). Os throttles e
+        a montagem dos inputs (dados puros) ficam aqui na main thread; o
+        resultado volta em _on_session_io_done. Um job em voo por console."""
+        if self._session_io_inflight:
             return
-        self._wt_scan_last = now
+        inp: dict = {}
+        now = time.monotonic()
+        if not self._session_resolved and self._claude_cwd:
+            inp["resolve_cwd"] = self._claude_cwd
+            inp["backend"] = getattr(self, "_backend", "claude")
+        sid = self.claimed_session_id()
+        if sid and now - self._rename_check_last >= 1.5:
+            self._rename_check_last = now
+            inp["rename_sid"] = sid
+            inp["marks_mtime_seen"] = self._marks_mtime_seen
+        if now - self._wt_scan_last >= 1.0:
+            self._wt_scan_last = now
+            if self._worktree_dir:
+                inp["wt_check_dir"] = self._worktree_dir
+            if (
+                sid
+                and self._claude_cwd
+                and getattr(self, "_backend", "claude") == "claude"
+            ):
+                from ..claude_sessions import project_sessions_dir
+                spath = str(
+                    project_sessions_dir(self._claude_cwd) / f"{sid}.jsonl"
+                )
+                if spath != self._wt_scan_path:
+                    # Sessão (re)vinculada: recomeça o scan do zero —
+                    # restart/resume re-encontra worktrees deste transcript.
+                    self._wt_scan_path = spath
+                    self._wt_scan_offset = 0
+                inp["wt_scan_path"] = spath
+                inp["wt_scan_offset"] = self._wt_scan_offset
+        if not inp:
+            return
+        self._session_io_inflight = True
+        _get_session_io_pool().start(
+            _SessionIOJob(inp, self._session_io_signals)
+        )
+
+    def _on_session_io_done(self, out: dict) -> None:
+        """Aplica na main thread os resultados do worker de I/O. Cada bloco
+        reconfere o estado atual (staleness): o job foi montado 1+ tick
+        atrás e a sessão pode ter sido re-vinculada nesse meio tempo."""
+        self._session_io_inflight = False
+        sessions = out.get("sessions")
+        if sessions is not None and not self._session_resolved:
+            self._apply_resolved_sessions(sessions)
+        if "marks_mtime" in out:
+            self._marks_mtime_seen = float(out["marks_mtime"])
+            saved = out.get("custom_name") or ""
+            # Só aplica nome não-vazio: entrada ausente/limpa não apaga um
+            # rename feito dentro do app nesta execução.
+            if saved and saved != self._custom_name:
+                self._custom_name = saved
+                self.activity_changed.emit(
+                    self._last_status, self._last_working,
+                    self._last_needs_decision,
+                )
         # Worktree adotado sumiu (ex.: /criar-worktree remover)? Desfaz.
-        if self._worktree_dir and not Path(self._worktree_dir).is_dir():
+        if out.get("wt_dir_gone") and self._worktree_dir:
             self._worktree_dir = ""
             self._is_worktree = False
             self._worktree_label = ""
             self.worktree_adopted.emit("", "")
-        path = self.claimed_session_path()
-        if path is None or self.backend() != "claude":
-            return
-        spath = str(path)
-        if spath != self._wt_scan_path:
-            # Sessão (re)vinculada: recomeça o scan do zero — restart/resume
-            # re-encontra worktrees criados antes neste transcript.
-            self._wt_scan_path = spath
-            self._wt_scan_offset = 0
-        from ..claude_sessions import scan_worktree_adds
-        try:
-            hits, self._wt_scan_offset = scan_worktree_adds(
-                path, self._wt_scan_offset
-            )
-        except Exception:
-            log.debug("scan de worktree no JSONL falhou", exc_info=True)
-            return
-        for wt_path, branch, base in hits:
-            p = Path(wt_path)
-            if not p.is_absolute() and self._claude_cwd:
-                p = Path(self._claude_cwd) / p
-            self.adopt_worktree(str(p), branch, base)
+        if out.get("wt_scan_path") == self._wt_scan_path and "wt_offset" in out:
+            self._wt_scan_offset = int(out["wt_offset"])
+            for wt_path, branch, base in out.get("wt_hits") or []:
+                p = Path(wt_path)
+                if not p.is_absolute() and self._claude_cwd:
+                    p = Path(self._claude_cwd) / p
+                self.adopt_worktree(str(p), branch, base)
 
     def adopt_worktree(self, path: str, branch: str = "", base: str = "") -> None:
         """Associa o console a um git worktree criado durante a sessão.
         Valida que o path é mesmo uma worktree linkada antes de adotar.
         `base`, quando informada (skill /criar-worktree), registra a branch
         originária pra exibir no header."""
-        from ..git_worktree import current_branch, is_worktree_path
+        from ..git_worktree import branch_from_head_file, is_worktree_path
         if not Path(path).is_dir() or not is_worktree_path(path):
             return
         if base:
@@ -1151,7 +1273,8 @@ class TerminalWidget(QWidget):
         if path == self._worktree_dir:
             return
         if not branch:
-            branch = current_branch(path)
+            # Sem subprocess: lê git_dir/HEAD (roda na main thread).
+            branch = branch_from_head_file(path)
         self._worktree_dir = path
         self._is_worktree = True
         self._worktree_label = f" · {branch}" if branch else " · isolado"
@@ -1222,17 +1345,12 @@ class TerminalWidget(QWidget):
             if self._last_output_time
             else 999.0
         )
-        # Tenta resolver o título da sessão (Claude grava JSONL ~1-3s após start)
-        with perf.timed("poll.resolve_session"):
-            self._try_resolve_session()
-        # Rename externo (skill escrevendo session_marks.json): aplica
-        # antes dos early-returns abaixo pra sidebar atualizar mesmo idle.
-        with perf.timed("poll.check_rename"):
-            self._check_external_rename()
-        # Worktrees criados pela sessão (skill /criar-worktree): scan
-        # incremental do JSONL, throttled — antes dos early-returns abaixo.
-        with perf.timed("poll.scan_worktrees"):
-            self._scan_session_worktrees()
+        # I/O de disco do poll (resolver sessão, rename externo, scan de
+        # worktrees) vai pro worker compartilhado — na main thread ficam só
+        # os throttles e a aplicação dos resultados (_on_session_io_done).
+        # Sob swap pressure um open() síncrono aqui já travou a UI por 3s+.
+        with perf.timed("poll.schedule_io"):
+            self._schedule_session_io()
         # Verifica callback de "pronto" independente do dirty check —
         # depende do buffer corrente, não do diff de status. Memoiza o scan
         # (mesmo decode+strip caro do parse) enquanto o buffer não muda.
