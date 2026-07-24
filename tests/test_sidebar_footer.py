@@ -6,8 +6,11 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QCheckBox, QPushButton
 
 from claude_workspaces.ui.sidebar_footer import (
+    _RUNNER_PANEL_MAX_HEIGHT,
+    _RUNNER_PANEL_MIN_HEIGHT,
     SidebarFooter,
     _ClickableLabel,
+    _PanelResizeHandle,
     _RunnerFooterRow,
     _UsageLabel,
 )
@@ -162,3 +165,90 @@ def test_toggling_stack_checkbox_emits_signal(qapp):
     row = _rows(footer)[0]
     row.findChild(QCheckBox).setChecked(False)
     assert got == [("ws", "r1", False)]
+
+
+# ---------- resize do painel de runners ----------
+
+from PySide6.QtCore import QPointF
+from PySide6.QtWidgets import QSizePolicy
+
+
+def _mouse_ev(ev_type, global_y: float, button=Qt.MouseButton.LeftButton):
+    return QMouseEvent(
+        ev_type,
+        QPointF(10, 3),
+        QPointF(50, global_y),
+        button,
+        button,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _drag(handle: _PanelResizeHandle, y_from: float, y_to: float) -> None:
+    handle.mousePressEvent(_mouse_ev(QMouseEvent.Type.MouseButtonPress, y_from))
+    handle.mouseMoveEvent(_mouse_ev(QMouseEvent.Type.MouseMove, y_to))
+    handle.mouseReleaseEvent(_mouse_ev(QMouseEvent.Type.MouseButtonRelease, y_to))
+
+
+def test_runner_panel_default_max_height(qapp):
+    footer = SidebarFooter()
+    assert footer._runner_scroll.maximumHeight() == _RUNNER_PANEL_MAX_HEIGHT
+
+
+def test_set_runner_panel_height_seeds_ceiling(qapp):
+    footer = SidebarFooter()
+    footer.set_runner_panel_height(400)
+    assert footer._runner_scroll.maximumHeight() == 400
+
+
+def test_set_runner_panel_height_zero_is_noop(qapp):
+    footer = SidebarFooter()
+    footer.set_runner_panel_height(0)
+    assert footer._runner_scroll.maximumHeight() == _RUNNER_PANEL_MAX_HEIGHT
+
+
+def test_set_runner_panel_height_clamps_to_min(qapp):
+    footer = SidebarFooter()
+    footer.set_runner_panel_height(10)
+    assert footer._runner_scroll.maximumHeight() == _RUNNER_PANEL_MIN_HEIGHT
+
+
+def test_drag_up_increases_ceiling_and_emits_on_release(qapp):
+    footer = SidebarFooter()
+    got = []
+    footer.runner_panel_height_changed.connect(got.append)
+    handle = footer.findChild(_PanelResizeHandle)
+    assert handle is not None
+    # Arrastar 50px pra CIMA (y global diminui) → teto cresce 50px.
+    _drag(handle, y_from=500, y_to=450)
+    assert footer._runner_scroll.maximumHeight() == _RUNNER_PANEL_MAX_HEIGHT + 50
+    assert got == [_RUNNER_PANEL_MAX_HEIGHT + 50]
+
+
+def test_drag_down_shrinks_ceiling_with_min_clamp(qapp):
+    footer = SidebarFooter()
+    handle = footer.findChild(_PanelResizeHandle)
+    _drag(handle, y_from=100, y_to=600)
+    assert footer._runner_scroll.maximumHeight() == _RUNNER_PANEL_MIN_HEIGHT
+
+
+def test_double_click_resets_to_default(qapp):
+    footer = SidebarFooter()
+    got = []
+    footer.runner_panel_height_changed.connect(got.append)
+    footer.set_runner_panel_height(500)
+    handle = footer.findChild(_PanelResizeHandle)
+    handle.mouseDoubleClickEvent(
+        _mouse_ev(QMouseEvent.Type.MouseButtonDblClick, 300)
+    )
+    assert footer._runner_scroll.maximumHeight() == _RUNNER_PANEL_MAX_HEIGHT
+    assert got == [_RUNNER_PANEL_MAX_HEIGHT]
+
+
+def test_resize_keeps_ceiling_semantics(qapp):
+    # sizePolicy vertical segue Maximum — o valor é teto, não altura fixa.
+    footer = SidebarFooter()
+    handle = footer.findChild(_PanelResizeHandle)
+    _drag(handle, y_from=500, y_to=400)
+    policy = footer._runner_scroll.sizePolicy()
+    assert policy.verticalPolicy() == QSizePolicy.Policy.Maximum

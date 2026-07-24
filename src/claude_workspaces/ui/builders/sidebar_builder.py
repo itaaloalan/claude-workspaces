@@ -511,6 +511,10 @@ class SidebarBuilder:
         self.set_runner_scope_collapsed = (
             self._footer.set_runner_scope_collapsed
         )
+        self.runner_panel_height_changed = (
+            self._footer.runner_panel_height_changed
+        )
+        self.set_runner_panel_height = self._footer.set_runner_panel_height
         self.set_console_runners = self._footer.set_console_runners
         self.version_label = self._footer.version_label
         self.minimized_tray = self._footer.minimized_tray

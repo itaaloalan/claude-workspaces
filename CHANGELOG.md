@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.31.0] — 2026-07-24
+
+### Painel "Runners" da sidebar redimensionável
+
+O painel de runners do rodapé da sidebar tinha teto fixo de 280px — com
+7+ runners virava scroll sem opção de ver a lista inteira.
+
+- **`ui/sidebar_footer.py`**: novo `_PanelResizeHandle` no topo do painel
+  (grip fino, cursor de resize) — arrastar pra cima aumenta o teto de
+  altura do scroll (o scroll diminui/some), arrastar pra baixo reduz;
+  duplo clique restaura os 280px. Clamp em [100px, 60% da janela]. O valor
+  é TETO, não altura fixa: com poucos runners o painel segue encolhendo
+  pra altura natural (sizePolicy `Maximum` preservado).
+- **`settings.py`**: novo campo `runner_footer_panel_height` (0 = default)
+  — a altura escolhida persiste entre sessões.
+- **`ui/main_window.py` + `builders/sidebar_builder.py`**: seed no boot e
+  persistência no fim do drag (signal `runner_panel_height_changed`),
+  mesmo padrão do colapso de seções do rodapé.
+
 ## [1.30.0] — 2026-07-24
 
 ### Perf: boot sem trava — restore de sessões não materializa mais N WebEngines

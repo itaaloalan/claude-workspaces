@@ -2158,6 +2158,13 @@ class MainWindow(QMainWindow):
         builder.runner_scope_collapsed_changed.connect(
             self._on_runner_footer_collapsed
         )
+        # Altura do painel de runners (handle de resize) idem.
+        builder.set_runner_panel_height(
+            self.settings.runner_footer_panel_height
+        )
+        builder.runner_panel_height_changed.connect(
+            self._on_runner_footer_panel_height
+        )
         self._actions_toggle_btn = builder.actions_toggle_btn
         self._actions_toggle_btn.clicked.connect(self._toggle_child_actions)
         self._refresh_actions_toggle_btn()
@@ -6074,6 +6081,14 @@ class MainWindow(QMainWindow):
     def _on_runner_footer_collapsed(self, scope: str, collapsed: bool) -> None:
         """Persiste o colapso das seções do rodapé de runners."""
         self.settings.runner_footer_collapsed[scope] = bool(collapsed)
+        try:
+            self.settings.save()
+        except OSError:
+            log.warning("falha ao salvar settings", exc_info=True)
+
+    def _on_runner_footer_panel_height(self, height: int) -> None:
+        """Persiste a altura escolhida do painel de runners do rodapé."""
+        self.settings.runner_footer_panel_height = int(height)
         try:
             self.settings.save()
         except OSError:

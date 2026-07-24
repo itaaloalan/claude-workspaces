@@ -43,8 +43,15 @@ _RE_HOURS_PCT = re.compile(r"\d+h\s+\d+%")
 _RE_PCT = re.compile(r"\d+%")
 
 # Teto de altura do painel de runners no rodapé da sidebar — acima disso
-# o painel vira scroll em vez de empurrar a árvore de workspaces.
+# o painel vira scroll em vez de empurrar a árvore de workspaces. O teto é
+# ajustável pelo usuário arrastando o handle no topo do painel; este valor
+# é só o default (e o alvo do duplo clique de reset).
 _RUNNER_PANEL_MAX_HEIGHT = 280
+_RUNNER_PANEL_MIN_HEIGHT = 100
+# O clamp por fração da janela evita esmagar a árvore de workspaces; o cap
+# absoluto cobre o seed no boot, quando window().height() ainda é 0.
+_RUNNER_PANEL_MAX_FRACTION = 0.6
+_RUNNER_PANEL_ABS_MAX = 1200
 
 
 class _ClickableLabel(QLabel):
@@ -54,6 +61,82 @@ class _ClickableLabel(QLabel):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
+
+
+class _PanelResizeHandle(QWidget):
+    """Handle fino de arraste no topo do painel de runners.
+
+    Fica ACIMA do conteúdo, então arrastar pra cima aumenta o painel:
+    `dragged` emite o delta em px (positivo = aumentar) desde o press."""
+
+    drag_started = Signal()
+    dragged = Signal(int)
+    drag_finished = Signal()
+    reset_requested = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(6)
+        self.setCursor(QCursor(Qt.CursorShape.SplitVCursor))
+        self.setToolTip(
+            "Arraste para redimensionar o painel de runners "
+            "(duplo clique restaura)"
+        )
+        self._press_y: float | None = None
+        self._hover = False
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        from PySide6.QtGui import QColor, QPainter
+
+        if self._press_y is not None:
+            color = theme.PRIMARY_HOVER
+        elif self._hover:
+            color = theme.PRIMARY
+        else:
+            color = theme.BORDER
+        painter = QPainter(self)
+        w = self.width()
+        grip_w = min(48, max(24, w // 4))
+        x = (w - grip_w) // 2
+        y = (self.height() - 2) // 2
+        painter.fillRect(x, y, grip_w, 2, QColor(color))
+        painter.end()
+
+    def enterEvent(self, event) -> None:  # type: ignore[override]
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_y = event.globalPosition().y()
+            self.drag_started.emit()
+            self.update()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._press_y is not None:
+            self.dragged.emit(int(self._press_y - event.globalPosition().y()))
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if self._press_y is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._press_y = None
+            self.drag_finished.emit()
+            self.update()
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._press_y = None
+            self.reset_requested.emit()
+            self.update()
+        super().mouseDoubleClickEvent(event)
 
 
 class _UsageLabel(QLabel):
@@ -294,6 +377,9 @@ class SidebarFooter(QWidget):
     # Seção do rodapé colapsada/expandida — main_window persiste em
     # settings (sobrevive ao restart).
     runner_scope_collapsed_changed = Signal(str, bool)  # scope, collapsed
+    # Teto de altura do painel ajustado pelo handle de resize (emitido só
+    # no fim do drag) — main_window persiste em settings.
+    runner_panel_height_changed = Signal(int)  # height px
 
     def __init__(
         self,
@@ -311,6 +397,8 @@ class SidebarFooter(QWidget):
         # Há console aberto/focado no workspace exibido (mostra a seção
         # console com o ⬇ mesmo sem cópias).
         self._console_active = False
+        self._runner_panel_height = _RUNNER_PANEL_MAX_HEIGHT
+        self._drag_start_height = 0
         self._build()
 
     def _build(self) -> None:
@@ -391,8 +479,17 @@ class SidebarFooter(QWidget):
         self._runner_panel.setStyleSheet(_PANEL_QSS)
         self._runner_panel.setVisible(False)
         rp_layout = QVBoxLayout(self._runner_panel)
-        rp_layout.setContentsMargins(8, 6, 8, 6)
+        # Margem top 0: o handle de resize cola na borda superior do painel
+        # (área de clique maior); o spacing abaixo dele compensa.
+        rp_layout.setContentsMargins(8, 0, 8, 6)
         rp_layout.setSpacing(5)
+
+        self._runner_resize_handle = _PanelResizeHandle()
+        self._runner_resize_handle.drag_started.connect(self._on_resize_drag_started)
+        self._runner_resize_handle.dragged.connect(self._on_resize_dragged)
+        self._runner_resize_handle.drag_finished.connect(self._on_resize_drag_finished)
+        self._runner_resize_handle.reset_requested.connect(self._on_resize_reset)
+        rp_layout.addWidget(self._runner_resize_handle)
 
         runner_head = QLabel("Runners")
         runner_head.setStyleSheet(
@@ -413,7 +510,7 @@ class SidebarFooter(QWidget):
         self._runner_scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        self._runner_scroll.setMaximumHeight(_RUNNER_PANEL_MAX_HEIGHT)
+        self._runner_scroll.setMaximumHeight(self._runner_panel_height)
         self._runner_scroll.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
         )
@@ -503,6 +600,44 @@ class SidebarFooter(QWidget):
         elif self._runner_workspace_id:
             self._runner_collapsed_workspace_id = self._runner_workspace_id
         self._runner_panel.setVisible(checked)
+
+    def _on_resize_drag_started(self) -> None:
+        self._drag_start_height = self._runner_panel_height
+
+    def _on_resize_dragged(self, delta: int) -> None:
+        self._apply_runner_panel_height(self._drag_start_height + delta)
+
+    def _on_resize_drag_finished(self) -> None:
+        self.runner_panel_height_changed.emit(self._runner_panel_height)
+
+    def _on_resize_reset(self) -> None:
+        self._apply_runner_panel_height(_RUNNER_PANEL_MAX_HEIGHT)
+        self.runner_panel_height_changed.emit(self._runner_panel_height)
+
+    def _apply_runner_panel_height(self, height: int) -> None:
+        """Aplica o teto de altura ao scroll de runners, com clamp.
+
+        Só mexe no maximumHeight — o sizePolicy vertical continua Maximum,
+        então com poucos runners o painel segue encolhendo pra altura
+        natural (o valor é teto, não altura fixa)."""
+        # Fração só vale com uma janela real já mostrada — no boot (ou com o
+        # footer órfão) window() é o próprio footer / janela ainda sem
+        # geometria, e o cap absoluto cobre.
+        win = self.window()
+        cap = _RUNNER_PANEL_ABS_MAX
+        if win is not None and win is not self and win.isVisible() and win.height() > 0:
+            cap = min(cap, int(win.height() * _RUNNER_PANEL_MAX_FRACTION))
+        h = max(_RUNNER_PANEL_MIN_HEIGHT, min(int(height), cap))
+        self._runner_panel_height = h
+        self._runner_scroll.setMaximumHeight(h)
+
+    def set_runner_panel_height(self, height: int) -> None:
+        """Seeda a altura persistida do painel de runners (boot).
+
+        0/None = mantém o default. Não emite signal — evita re-persistir
+        o próprio valor recém-carregado."""
+        if height and int(height) > 0:
+            self._apply_runner_panel_height(int(height))
 
     def _toggle_min(self, checked: bool) -> None:
         if checked and self._usage_panel.isVisible():

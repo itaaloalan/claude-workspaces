@@ -91,6 +91,9 @@ class Settings:
     runner_group_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado das seções do rodapé de runners da sidebar.
     runner_footer_collapsed: dict = field(default_factory=dict)  # {"workspace"|"console": bool}
+    # Altura (px) escolhida pro painel de runners do rodapé da sidebar.
+    # 0 = default. É um TETO: com poucos runners o painel encolhe.
+    runner_footer_panel_height: int = 0
     # Endpoint local pro plugin de browser (badge/faixa de worktree):
     # http://127.0.0.1:<porta>/state.json com o mapa porta → runner.
     browser_state_server_enabled: bool = True

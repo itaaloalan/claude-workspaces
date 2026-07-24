@@ -18,6 +18,7 @@ def test_save_load_roundtrip(tmp_path, monkeypatch):
         claude_extra_args=["--dangerously-skip-permissions"],
         body_splitter_sizes=[200, 800],
         window_geometry=[100, 50, 1400, 900],
+        runner_footer_panel_height=420,
     )
     s.save()
     loaded = Settings.load()
@@ -25,6 +26,11 @@ def test_save_load_roundtrip(tmp_path, monkeypatch):
     assert loaded.claude_extra_args == ["--dangerously-skip-permissions"]
     assert loaded.body_splitter_sizes == [200, 800]
     assert loaded.window_geometry == [100, 50, 1400, 900]
+    assert loaded.runner_footer_panel_height == 420
+
+
+def test_runner_footer_panel_height_default_zero():
+    assert Settings().runner_footer_panel_height == 0
 
 
 def test_load_ignores_unknown_fields(tmp_path, monkeypatch):
