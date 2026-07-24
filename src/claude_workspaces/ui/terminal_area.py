@@ -52,7 +52,10 @@ class _MaterializeQueue(QObject):
             return
         area, w = self._pending.pop(0)
         try:
-            if area._stack.currentWidget() is w:
+            # Só materializa a aba current da ÁREA ATIVA do host — área de
+            # workspace não-exposto (StackAll faz todas parecerem visíveis)
+            # re-materializa quando for ativada (on_area_activated).
+            if area._stack.currentWidget() is w and _area_is_active(area):
                 w.ensure_view_loaded()
                 area.focus_active_console()
         except RuntimeError:
@@ -69,6 +72,29 @@ def _get_materialize_queue() -> "_MaterializeQueue":
     if _materialize_queue is None:
         _materialize_queue = _MaterializeQueue()
     return _materialize_queue
+
+
+# Probe "esta área é a ativa do terminal_host?" — injetado pela MainWindow.
+# Necessário porque o host usa QStackedLayout.StackAll: TODAS as áreas ficam
+# "visíveis" (compostas), então isVisible()/showEvent não distinguem o
+# workspace realmente exposto e, sem o probe, o restore de boot materializava
+# uma QWebEngineView por sessão restaurada (9 views num boot travado de 24s).
+# None (testes / antes do wiring) = permissivo, comporta como antes.
+_active_area_probe = None
+
+
+def set_active_area_probe(fn) -> None:
+    global _active_area_probe
+    _active_area_probe = fn
+
+
+def _area_is_active(area: "TerminalArea") -> bool:
+    if _active_area_probe is None:
+        return True
+    try:
+        return bool(_active_area_probe(area))
+    except RuntimeError:
+        return False  # host/área destruídos durante teardown
 
 # Cor do texto da aba em função do status do console. Mantém paridade
 # com o STATE_COLOR usado nas linhas da sidebar — usuário vê de relance
@@ -243,10 +269,33 @@ class TerminalArea(QWidget):
         super().showEvent(event)
         # Área voltou a ficar visível: cancela o unload do console ativo e o
         # (re)materializa caso tenha sido descarregado enquanto oculto.
+        # Gate de área ativa: sob StackAll, TODA área recebe showEvent quando
+        # o pane aparece — sem o probe isso materializava as views de todos
+        # os workspaces no boot.
+        if not _area_is_active(self):
+            return
         cur = self._stack.currentWidget()
         if isinstance(cur, TerminalWidget):
             cur.cancel_unload()
         self._materialize_timer.start()
+
+    def on_area_activated(self) -> None:
+        """Chamado pela MainWindow quando esta área vira a current do
+        terminal_host (troca de workspace). Sob StackAll não há
+        show/hideEvent nessa troca — este é o par explícito."""
+        cur = self._stack.currentWidget()
+        if isinstance(cur, TerminalWidget):
+            cur.cancel_unload()
+        self._materialize_timer.start()
+
+    def on_area_deactivated(self) -> None:
+        """Par do on_area_activated: área deixou de ser a current do host.
+        Agenda o lazy-unload de todos os consoles (90s) — antes disso a view
+        current de cada workspace vivia pra sempre (StackAll nunca esconde)."""
+        for i in range(self._stack.count()):
+            w = self._stack.widget(i)
+            if isinstance(w, TerminalWidget):
+                w.schedule_unload()
 
     def _materialize_current_view(self) -> None:
         """Enfileira a criação do WebView do console ativo sob demanda
@@ -254,6 +303,8 @@ class TerminalArea(QWidget):
         criação entre todas as TerminalArea pra evitar rajada de
         QWebEngineView simultâneas. Disparado pelo timer coalescente de
         _on_bar_current_changed."""
+        if not _area_is_active(self):
+            return  # área de workspace não-exposto: materializa ao ativar
         w = self._stack.currentWidget()
         if isinstance(w, TerminalWidget):
             _get_materialize_queue().enqueue(self, w)
@@ -320,7 +371,11 @@ class TerminalArea(QWidget):
 
     # ---------- API pública ----------
 
-    def add_terminal(self, title: str) -> TerminalWidget:
+    def add_terminal(self, title: str, *, make_current: bool = True) -> TerminalWidget:
+        """`make_current=False` (restore de boot): adiciona a aba sem
+        promovê-la a current — não dispara materialização de WebView nem
+        rouba o foco. Obs.: a PRIMEIRA aba de uma área vazia sempre vira
+        current (comportamento do QTabBar), o que é desejado."""
         widget = TerminalWidget()
         widget.running_changed.connect(self._on_running_changed)
         widget.running_changed.connect(
@@ -341,7 +396,8 @@ class TerminalArea(QWidget):
         )
         idx = self._stack.addWidget(widget)
         self._bar.insertTab(idx, title)
-        self._set_current_index(idx)
+        if make_current:
+            self._set_current_index(idx)
         widget.setProperty("_base_title", title)
         # Texto inicial já com `#N` (mesmo formato do sidebar).
         self._bar.setTabText(idx, f"✓ {self._compute_tab_display(widget)}")

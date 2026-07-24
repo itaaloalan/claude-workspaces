@@ -39,6 +39,11 @@ STALL_THRESHOLD_S = 0.200
 _STACK_LOG_INTERVAL_S = 5.0
 _HEARTBEAT_MS = 50
 _STACK_LIMIT = 12  # frames mais internos mostrados
+# Multi-sampling durante o stall: re-captura o stack a cada tanto, até o
+# teto — num stall longo, o perfil das amostras diz onde o tempo REALMENTE
+# foi (a amostra única do início era cega pro resto).
+_SAMPLE_EVERY_S = 2.0
+_MAX_SAMPLES = 6
 
 
 class StallWatchdog(QObject):
@@ -85,17 +90,29 @@ class StallWatchdog(QObject):
             if (now - beat) < self._threshold:
                 continue
             # Main thread está travado AGORA — captura o stack no ato.
-            stack = self._grab_main_stack()
+            samples: list[tuple[float, str]] = [(0.0, self._grab_main_stack())]
             beat_wall = self._last_beat_wall
             # Espera o heartbeat voltar pra medir a duração total do stall
             # (cap de 30s: se nunca volta, loga o que tem e segue).
+            # Multi-sampling: re-amostra o stack a cada ~2s (máx. _MAX_SAMPLES)
+            # — num stall de 24s, uma foto só do primeiro instante escondia
+            # onde os outros 23s foram gastos (visto no freeze do restore de
+            # boot: a amostra única caiu num addWidget inocente).
             deadline = now + 30.0
+            last_sample = now
             while (
                 self._last_beat == beat
                 and time.monotonic() < deadline
                 and not self._stop.is_set()
             ):
                 time.sleep(_HEARTBEAT_MS / 1000)
+                t = time.monotonic()
+                if (
+                    len(samples) < _MAX_SAMPLES
+                    and t - last_sample >= _SAMPLE_EVERY_S
+                ):
+                    last_sample = t
+                    samples.append((t - beat, self._grab_main_stack()))
             dur_ms = (time.monotonic() - beat) * 1000
             # CLOCK_MONOTONIC do Linux NÃO avança durante suspend/hibernate
             # (é isso que o distingue do CLOCK_BOOTTIME) — então dur_ms fica
@@ -112,7 +129,7 @@ class StallWatchdog(QObject):
                 )
                 continue
             perf.record("ui.stall_ms", dur_ms)
-            self._log_stall(dur_ms, stack)
+            self._log_stall(dur_ms, samples)
 
     def _grab_main_stack(self) -> str:
         try:
@@ -123,7 +140,7 @@ class StallWatchdog(QObject):
         except Exception:  # noqa: BLE001 — diagnóstico nunca derruba nada
             return "(falha capturando stack)"
 
-    def _log_stall(self, dur_ms: float, stack: str) -> None:
+    def _log_stall(self, dur_ms: float, samples: list[tuple[float, str]]) -> None:
         now = time.monotonic()
         if (now - self._last_stack_log) < _STACK_LOG_INTERVAL_S:
             self._suppressed += 1
@@ -134,10 +151,18 @@ class StallWatchdog(QObject):
             suffix = f" ({self._suppressed} stall(s) anteriores sem stack — ver ui.stall_ms no perf.log)"
             self._suppressed = 0
         level = logging.WARNING if dur_ms >= 1000 else logging.INFO
+        if len(samples) == 1:
+            body = f"stack no momento do stall:\n{samples[0][1]}"
+        else:
+            parts = [
+                f"amostra {i + 1}/{len(samples)} @ ~{off:.1f}s:\n{stk}"
+                for i, (off, stk) in enumerate(samples)
+            ]
+            body = "stacks amostrados durante o stall:\n" + "\n".join(parts)
         log.log(
             level,
-            "[STALL] main thread bloqueado ~%.0fms%s\nstack no momento do stall:\n%s",
-            dur_ms, suffix, stack,
+            "[STALL] main thread bloqueado ~%.0fms%s\n%s",
+            dur_ms, suffix, body,
         )
 
 

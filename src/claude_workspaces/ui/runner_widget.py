@@ -290,7 +290,10 @@ class RunnerWidget(QWidget):
         self._unload_timer.setSingleShot(True)
         self._unload_timer.setInterval(90 * 1000)  # 90s oculto
         self._unload_timer.timeout.connect(self.unload_view)
-        self._build_view()
+        # View NÃO nasce aqui: o showEvent constrói quando o pane aparece de
+        # fato. O construtor eager criava 1 QWebEngineView por runner
+        # persistido no boot (pane oculto incluso) — parte do thundering herd
+        # que travava o restore. PTY/log capture independem da view (_log_buf).
 
     def _build_view(self) -> None:
         if self.view is not None:

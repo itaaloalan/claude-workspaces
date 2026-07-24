@@ -41,6 +41,26 @@ def test_stall_detected_with_stack(qapp, caplog):
         wd.stop()
 
 
+def test_long_stall_logs_multiple_samples(qapp, caplog, monkeypatch):
+    """Stall longo → várias amostras de stack (perfil), não uma foto só.
+    Encurta o intervalo de amostragem pra não segurar o teste 5s."""
+    from claude_workspaces import perf_watchdog as pw
+    monkeypatch.setattr(pw, "_SAMPLE_EVERY_S", 0.15)
+    wd = StallWatchdog(threshold_s=0.15)
+    try:
+        _pump(qapp, 200)
+        with caplog.at_level(logging.INFO, logger="claude_workspaces.perf_watchdog"):
+            time.sleep(0.8)   # stall longo o bastante pra ≥2 amostras
+            _pump(qapp, 400)
+        stalls = [r for r in caplog.records if "[STALL]" in r.getMessage()]
+        assert stalls
+        msg = stalls[0].getMessage()
+        assert "stacks amostrados durante o stall" in msg
+        assert "amostra 1/" in msg and "amostra 2/" in msg
+    finally:
+        wd.stop()
+
+
 def test_no_stall_no_log(qapp, caplog):
     wd = StallWatchdog(threshold_s=0.15)
     try:

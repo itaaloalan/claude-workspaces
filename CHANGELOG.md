@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.30.0] — 2026-07-24
+
+### Perf: boot sem trava — restore de sessões não materializa mais N WebEngines
+
+O restore de boot com ~9 sessões travava a main thread ~24s (2x): cada aba
+restaurada virava current e materializava sua QWebEngineView (9 views), o
+`terminal_host` em StackAll fazia áreas de workspaces não-expostos
+"parecerem" visíveis (materializavam também e nunca descarregavam), e cada
+RunnerWidget criava QWebEngineView no construtor mesmo com o pane oculto —
+tudo somado aos 9 `fish -ic` + `claude --resume` subindo juntos.
+
+- **`ui/terminal_area.py`**: `add_terminal(make_current=False)` (restore
+  adiciona a aba sem promover); probe global `set_active_area_probe` —
+  materialização (fila, showEvent, timer) só roda na área que é a current
+  REAL do host (isVisible() mente sob StackAll); `on_area_activated()`/
+  `on_area_deactivated()` — a troca de workspace agora cancela/agenda o
+  lazy-unload (antes a view current de cada workspace vivia pra sempre).
+- **`ui/main_window.py` + `coordinators/launch_coordinator.py`**: fluxo
+  `restored_on_startup` não faz `terminal_host.setCurrentWidget` por sessão
+  nem foca o pane "Runners console" (`_ensure_terminal_runner_panel(...,
+  focus_pane=False)`); hook único no `currentChanged` do host dispara os
+  pares ativa/desativa.
+- **`ui/runner_widget.py`**: sem `_build_view()` no construtor — o
+  `showEvent` (já existente) constrói quando o pane realmente aparece.
+  PTY/log capture independem da view.
+- **`perf_watchdog.py`**: multi-sampling — num stall longo captura o stack
+  a cada 2s (até 6 amostras) em vez de uma foto do primeiro instante, que
+  escondia onde os ~24s eram gastos.
+
+Resultado esperado no boot: 1-2 `[WEBENGINE] view criada` (era 9), PTYs
+sobem igual (sessões aparecem na sidebar de imediato), troca de workspace
+materializa on-demand em ~100-400ms.
+
 ## [1.29.0] — 2026-07-24
 
 ### Perf: recycle do renderer QtWebEngine (vazamento de até 8GB) + fim dos stalls de 24s

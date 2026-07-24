@@ -1119,6 +1119,24 @@ class MainWindow(QMainWindow):
                 # pro console ativo da área pra digitação cair sem clique.
                 w.focus_active_console()
 
+    def _on_terminal_area_switched(self, _idx: int = -1) -> None:
+        """Par ativa/desativa das TerminalAreas na troca de workspace. Sob
+        StackAll não há show/hideEvent nessa troca, então: a área que saiu
+        agenda lazy-unload das views (90s) e a que entrou cancela o unload
+        do console ativo e o (re)materializa."""
+        current = self.terminal_host.currentWidget()
+        prev = getattr(self, "_prev_terminal_area", None)
+        if prev is current:
+            return
+        if isinstance(prev, TerminalArea):
+            try:
+                prev.on_area_deactivated()
+            except RuntimeError:
+                pass  # área destruída (workspace fechado)
+        self._prev_terminal_area = current
+        if isinstance(current, TerminalArea):
+            current.on_area_activated()
+
     def _raise_current_host_widget(self, _idx: int = -1) -> None:
         """Igual ao terminal_host, mas pros runner hosts em StackAll: traz a
         área atual do host que emitiu o sinal pro topo do z-order."""
@@ -1518,6 +1536,16 @@ class MainWindow(QMainWindow):
         # z-order ao trocar de workspace (defensivo — o StackAll já levanta a
         # current, mas raise_() explícito blinda contra ordem errada).
         self.terminal_host.currentChanged.connect(self._raise_current_terminal_area)
+        # Probe de "área ativa" pro lazy-load das views: sob StackAll toda
+        # área parece visível, então a materialização/unload precisa saber
+        # qual é a current REAL do host — sem isso o restore de boot criava
+        # uma QWebEngineView por sessão restaurada.
+        from .terminal_area import set_active_area_probe
+        set_active_area_probe(
+            lambda area: self.terminal_host.currentWidget() is area
+        )
+        self._prev_terminal_area = None
+        self.terminal_host.currentChanged.connect(self._on_terminal_area_switched)
 
         # Embute o host num sub-splitter vertical: Claude console em cima
         # + Runners (workspace + console) embaixo (minimizável).
@@ -6204,12 +6232,18 @@ class MainWindow(QMainWindow):
             lambda _sid: self._refresh_active_plan()
         )
 
-    def _ensure_terminal_runner_panel(self, workspace: Workspace, terminal) -> RunnerArea:
+    def _ensure_terminal_runner_panel(
+        self, workspace: Workspace, terminal, *, focus_pane: bool = True
+    ) -> RunnerArea:
+        """`focus_pane=False` (restore de boot): cria/regista a RunnerArea
+        sem focar o pane "Runners console" — o boot não deve roubar o foco
+        nem forçar o pane visível pra cada console restaurado."""
         existing = self._console_runner_areas.get(workspace.id, {}).get(tab_uid_of(terminal))
         if existing is not None:
             # Já existe — só foca o pane "Runners console" e seleciona a area.
-            self.console_runner_host.setCurrentWidget(existing)
-            self._ensure_runners_console_pane_visible()
+            if focus_pane:
+                self.console_runner_host.setCurrentWidget(existing)
+                self._ensure_runners_console_pane_visible()
             return existing
         sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
         area = RunnerArea(
@@ -6274,8 +6308,9 @@ class MainWindow(QMainWindow):
         # Painel mora no pane "Runners console" (separado) — não embute mais
         # no próprio terminal. O toolbar `▤ Runners` do terminal foca o pane.
         self.console_runner_host.addWidget(area)
-        self.console_runner_host.setCurrentWidget(area)
-        self._ensure_runners_console_pane_visible()
+        if focus_pane:
+            self.console_runner_host.setCurrentWidget(area)
+            self._ensure_runners_console_pane_visible()
         # Atualiza o grupo "Runners console" da sidebar — agora que a
         # area existe, o lookup pelo `_console_runner_areas` casa o sid
         # com os runners persistidos (chave pending criada no boot
@@ -8422,6 +8457,10 @@ class MainWindow(QMainWindow):
             cwd_override,
             backend_override=backend,
             skip_dialog=skip_dialog,
+            # Restore de boot: a aba entra SEM virar current — cada aba
+            # promovida materializava sua QWebEngineView (9 views num boot
+            # de 9 sessões, main thread travada ~24s). O PTY sobe igual.
+            make_current=not restored_on_startup,
         )
         if terminal is not None:
             if restored_on_startup:
@@ -8440,11 +8479,17 @@ class MainWindow(QMainWindow):
             if sid and any(
                 (r.console_session_id or "") == sid for r in workspace.runners
             ):
-                self._ensure_terminal_runner_panel(workspace, terminal)
-            area = self.terminals_coord.area_for(workspace.id)
-            if area is not None:
-                self.terminal_host.setCurrentWidget(area)
-                self._bottom_tabs.setCurrentWidget(self.terminal_host)
+                self._ensure_terminal_runner_panel(
+                    workspace, terminal, focus_pane=not restored_on_startup
+                )
+            if not restored_on_startup:
+                # No restore, trocar o host a cada sessão fazia cada área
+                # materializar em sequência; o _after_restore foca o
+                # workspace inicial uma única vez ao final.
+                area = self.terminals_coord.area_for(workspace.id)
+                if area is not None:
+                    self.terminal_host.setCurrentWidget(area)
+                    self._bottom_tabs.setCurrentWidget(self.terminal_host)
 
     def _show_ai_launch_menu(self, workspace: Workspace) -> None:
         if not OPENCODE_ENABLED:

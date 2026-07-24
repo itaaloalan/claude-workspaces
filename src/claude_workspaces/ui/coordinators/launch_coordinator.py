@@ -77,6 +77,7 @@ class LaunchCoordinator(QObject):
         cwd_override: str = "",
         backend_override: str = "",
         skip_dialog: bool = False,
+        make_current: bool = True,
     ) -> TerminalWidget | None:
         """Fluxo principal. Devolve o TerminalWidget criado ou None se
         usuário cancelou / falhou."""
@@ -154,7 +155,7 @@ class LaunchCoordinator(QObject):
         backend_short = "opencode" if backend == "opencode" else "claude"
         title = f"{backend_short} (resume)" if resume_session_id else backend_short
         title = f"{title}{worktree_label}"
-        terminal = area.add_terminal(title)
+        terminal = area.add_terminal(title, make_current=make_current)
         terminal.configure_claude(cwd, resume_session_id or None, backend=backend)
         terminal.set_context_info(
             cwd, extras,
