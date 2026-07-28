@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.33.1] — 2026-07-28
+
+### Fix: acentos em negrito virando blocos pretos no console (WebGL)
+
+Desde o renderer WebGL do xterm.js ([1.33.0](#1330--2026-07-24)), caracteres
+acentuados em negrito (ex: "obrigat**ó**rios") podiam renderizar como blocos
+pretos sólidos — corrupção clássica do texture atlas de glyphs do
+addon-webgl 0.16 num bundle xterm.js 5.3.0 já com anos de idade. Afeta
+igualmente o console Claude e os runners (mesmo `terminal.html`).
+
+- **`ui/static/vendor/`**: xterm.js atualizado 5.3.0 → 5.5.0,
+  addon-webgl 0.16.0 → 0.18.0, addon-canvas 0.5.0 → 0.7.0,
+  addon-fit atualizado junto — carregam correções de atlas acumuladas.
+- **`ui/static/terminal.js`**: `document.fonts.ready` agora também chama
+  `clearTextureAtlas()` no renderer ativo (webgl ou canvas), descartando
+  qualquer glyph rasterizado com fonte de fallback antes das fontes reais
+  estabilizarem.
+
 ## [1.33.0] — 2026-07-24
 
 ### Painel GIT unificado (estilo Zed) — sem feed duplicado e sem truncamento

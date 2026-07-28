@@ -23,11 +23,20 @@
     // virava swap. WebGL/canvas desenham em textura estável.
     // Carregar DEPOIS do open() (os addons de renderer exigem terminal
     // aberto). Se o contexto WebGL morrer (driver/gpu), volta pro canvas.
+    //
+    // `rendererAddon` guarda o addon ativo (webgl OU canvas) pra poder
+    // limpar o texture atlas assim que as fontes terminarem de carregar
+    // (ver document.fonts.ready abaixo) — glyphs rasterizados no atlas
+    // antes da fonte real estar pronta (ex: negrito acentuado caindo no
+    // fallback) ficam corrompidos (blocos pretos) e nunca são re-rasterizados
+    // sozinhos.
+    let rendererAddon = null;
     (function () {
         function tryCanvas() {
             try {
                 if (typeof CanvasAddon !== 'undefined') {
-                    term.loadAddon(new CanvasAddon.CanvasAddon());
+                    rendererAddon = new CanvasAddon.CanvasAddon();
+                    term.loadAddon(rendererAddon);
                     return true;
                 }
             } catch (e) { /* segue no DOM */ }
@@ -38,9 +47,11 @@
                 const webgl = new WebglAddon.WebglAddon();
                 webgl.onContextLoss(function () {
                     try { webgl.dispose(); } catch (e) { }
+                    rendererAddon = null;
                     tryCanvas();
                 });
                 term.loadAddon(webgl);
+                rendererAddon = webgl;
                 return;
             }
         } catch (e) { /* webgl indisponível */ }
@@ -97,7 +108,16 @@
     aggressiveFit();
 
     if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(safeFit);
+        document.fonts.ready.then(function () {
+            safeFit();
+            // Descarta qualquer glyph rasterizado no atlas do renderer
+            // acelerado ANTES das fontes estabilizarem — sem isso, um
+            // glyph "errado" (ex: negrito acentuado com fallback de fonte)
+            // fica cacheado pro resto da sessão do terminal.
+            if (rendererAddon && typeof rendererAddon.clearTextureAtlas === 'function') {
+                try { rendererAddon.clearTextureAtlas(); } catch (e) { /* renderer já caiu pro DOM */ }
+            }
+        });
     }
 
     new QWebChannel(qt.webChannelTransport, function (channel) {
