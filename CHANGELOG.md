@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.33.2] — 2026-07-29
+
+### Fix: arraste do painel "Runners" da sidebar não redimensionava nada
+
+O handle de arraste (adicionado no painel de runners redimensionável,
+[1.31.0](#1310--2026-07-24)) só mexia no `maximumHeight` do `QScrollArea` — que tem
+`sizePolicy` vertical `Maximum`, então o layout nunca aloca mais que o
+`sizeHint()` do widget (~fixo, ignora conteúdo por padrão). Resultado:
+arrastar pra cima não crescia o painel; o valor era persistido
+(`runner_footer_panel_height`) mas nunca tinha efeito visual.
+
+- **`ui/sidebar_footer.py`**: novo `_sync_runner_scroll_height()` ajusta o
+  `minimumHeight` pro `min(teto arrastado, altura natural do conteúdo)` —
+  agora o arraste vira altura de verdade nos dois sentidos, sem inflar o
+  painel além do que o conteúdo ocupa. Chamado tanto no drag quanto a cada
+  `_render_runner_rows()` (conteúdo muda com add/remove/colapso de seção).
+
 ## [1.33.1] — 2026-07-28
 
 ### Fix: acentos em negrito virando blocos pretos no console (WebGL)

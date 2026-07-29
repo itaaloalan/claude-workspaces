@@ -252,3 +252,49 @@ def test_resize_keeps_ceiling_semantics(qapp):
     _drag(handle, y_from=500, y_to=400)
     policy = footer._runner_scroll.sizePolicy()
     assert policy.verticalPolicy() == QSizePolicy.Policy.Maximum
+
+
+def _fill_runners(footer: SidebarFooter, n: int) -> None:
+    rows = [
+        (f"ws{i}", f"r{i}", f"runner{i}", "idle", "parado", "", f"/x/{i}", "workspace", True)
+        for i in range(n)
+    ]
+    footer.set_console_runners(rows, console_active=False)
+
+
+def test_drag_up_actually_grows_minimum_height_when_content_fills_it(qapp):
+    # Bug real reportado: arrastar pra cima só mexia no maximumHeight (um
+    # teto que o sizeHint() do QScrollArea nunca alcançava sozinho) — o
+    # painel nunca crescia de verdade. Com bastante conteúdo (> teto
+    # arrastado), minimumHeight deve IGUALAR o teto — senão o arraste
+    # continua sendo cosmético.
+    footer = SidebarFooter()
+    _fill_runners(footer, 30)  # conteúdo bem maior que qualquer teto testado
+    handle = footer.findChild(_PanelResizeHandle)
+    _drag(handle, y_from=500, y_to=400)  # +100px
+    expected = _RUNNER_PANEL_MAX_HEIGHT + 100
+    assert footer._runner_scroll.maximumHeight() == expected
+    assert footer._runner_scroll.minimumHeight() == expected
+
+
+def test_panel_does_not_inflate_past_natural_content_height(qapp):
+    # Com pouco conteúdo, mesmo um teto alto não deve forçar espaço vazio —
+    # minimumHeight fica limitado à altura natural do conteúdo.
+    footer = SidebarFooter()
+    _fill_runners(footer, 1)
+    footer.set_runner_panel_height(600)
+    content_h = footer._runner_rows_widget.sizeHint().height()
+    assert footer._runner_scroll.minimumHeight() == content_h
+    assert content_h < 600
+
+
+def test_rerender_after_resize_keeps_minimum_height_in_sync(qapp):
+    # Runners somem (ex: console fechado) depois de um drag — o painel não
+    # pode continuar "inflado" pro tamanho do conteúdo antigo.
+    footer = SidebarFooter()
+    _fill_runners(footer, 30)
+    handle = footer.findChild(_PanelResizeHandle)
+    _drag(handle, y_from=500, y_to=400)  # teto = default + 100
+    _fill_runners(footer, 1)
+    content_h = footer._runner_rows_widget.sizeHint().height()
+    assert footer._runner_scroll.minimumHeight() == content_h

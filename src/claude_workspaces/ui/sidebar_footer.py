@@ -615,11 +615,13 @@ class SidebarFooter(QWidget):
         self.runner_panel_height_changed.emit(self._runner_panel_height)
 
     def _apply_runner_panel_height(self, height: int) -> None:
-        """Aplica o teto de altura ao scroll de runners, com clamp.
+        """Aplica o teto de altura escolhido pelo arraste, com clamp.
 
-        Só mexe no maximumHeight — o sizePolicy vertical continua Maximum,
-        então com poucos runners o painel segue encolhendo pra altura
-        natural (o valor é teto, não altura fixa)."""
+        `_runner_scroll` tem sizePolicy vertical Maximum — o layout nunca
+        aloca mais que o sizeHint() dele, que o QScrollArea deixa ~fixo
+        (ignora o conteúdo por padrão). Sem `_sync_runner_scroll_height`
+        abaixo, subir o teto era um no-op: o maximumHeight mudava mas o
+        painel continuava do tamanho de sempre."""
         # Fração só vale com uma janela real já mostrada — no boot (ou com o
         # footer órfão) window() é o próprio footer / janela ainda sem
         # geometria, e o cap absoluto cobre.
@@ -630,6 +632,19 @@ class SidebarFooter(QWidget):
         h = max(_RUNNER_PANEL_MIN_HEIGHT, min(int(height), cap))
         self._runner_panel_height = h
         self._runner_scroll.setMaximumHeight(h)
+        self._sync_runner_scroll_height()
+
+    def _sync_runner_scroll_height(self) -> None:
+        """Ajusta o minimumHeight do scroll pra que o teto arrastado
+        (`_runner_panel_height`) vire altura de verdade, não só um limite
+        que o sizeHint() do QScrollArea nunca alcança sozinho.
+
+        min(teto, altura natural do conteúdo): com poucas rows o painel
+        fica do tamanho do conteúdo (sem sobra vazia); com mais rows que
+        cabem no teto, o painel cresce até o teto e o resto vira scroll."""
+        self._runner_rows.activate()
+        content_h = self._runner_rows_widget.sizeHint().height()
+        self._runner_scroll.setMinimumHeight(min(self._runner_panel_height, content_h))
 
     def set_runner_panel_height(self, height: int) -> None:
         """Seeda a altura persistida do painel de runners (boot).
@@ -794,6 +809,9 @@ class SidebarFooter(QWidget):
         if self._console_active and not any(r[7] == "console" for r in rows):
             _add_section("console", 0)
         self._runner_rows.addStretch(1)
+        # Conteúdo mudou (rows adicionadas/removidas, seção colapsada) —
+        # o minimumHeight precisa acompanhar (ver _sync_runner_scroll_height).
+        self._sync_runner_scroll_height()
 
     def _toggle_runner_scope(self, scope: str) -> None:
         collapsed = not self._runner_scope_collapsed.get(scope, False)
