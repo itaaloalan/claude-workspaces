@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.37.0] — 2026-07-30
+
+### Feat: ícones Phosphor, declutter e fluidez (Fase 3 do redesign Orca)
+
+- **Iconografia unificada**: chrome inteiro migrado pra Phosphor (`ph.`,
+  traço fino) via qtawesome — top bar, sidebar nav, tab bar global, row
+  do dock direito, botões de runner e ícones do QtAds. Fim dos glyphs
+  Unicode e emojis nos botões principais. Fix: `registerCustomIcon` do
+  QtAds toma posse do QIcon e corrompia o cache do qtawesome ("Internal
+  C++ object already deleted") — agora registra cópias.
+- **Declutter**: ghost buttons como padrão, listas sem grade por item,
+  splitters invisíveis (aparecem no hover), headers de seção mais
+  discretos, barra de estado dos cards reduzida pra 2px.
+- **Fluidez**: novo `ui/animations.py` (fade helpers com
+  `settings.reduce_motion`; nunca sobre containers com webview) +
+  fade-out no overlay da troca de workspace.
+- **Perf**: refresh do painel Git coalescido na troca de
+  workspace/console (era 2 scans, virou 1 com debounce de 50ms).
+- **Guarda**: `tests/test_theme_tokens.py` trava o número de hexes fora
+  do theme.py (ratchet — só pode descer).
+
 ## [1.36.0] — 2026-07-30
 
 ### Feat: redesign de layout estilo Orca (Fase 2)
