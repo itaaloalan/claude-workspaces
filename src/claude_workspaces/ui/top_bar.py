@@ -25,8 +25,10 @@ class TopBar(QWidget):
             "QWidget#TopBar { background: #131313; border-bottom: 1px solid #1f1f1f; }"
         )
 
+        # Barra única e compacta (~38px) — a tab ativa já diz o workspace.
+        self.setFixedHeight(38)
         row = QHBoxLayout(self)
-        row.setContentsMargins(8, 6, 12, 6)
+        row.setContentsMargins(8, 4, 12, 4)
         row.setSpacing(8)
 
         from PySide6.QtCore import QSize as _QS
@@ -61,25 +63,6 @@ class TopBar(QWidget):
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
-
-        # Workspace ativo: chip proeminente ao lado do logo. Atualizado
-        # via set_active_workspace(name). Escondido quando não há ws.
-        self._ws_chip = QPushButton()
-        self._ws_chip.setIcon(_ic("fa5s.folder-open", color="#6fbf73"))
-        self._ws_chip.setIconSize(_QS(13, 13))
-        self._ws_chip.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._ws_chip.setToolTip("Workspace selecionado — click pra ir pra home")
-        self._ws_chip.setStyleSheet(
-            "QPushButton { background: rgba(111, 191, 115, 20); "
-            "color: #dfeee0; font-weight: 650; font-size: 12px; "
-            "border: 1px solid rgba(111, 191, 115, 42); border-radius: 12px; "
-            "padding: 4px 12px; }"
-            "QPushButton:hover { background: rgba(111, 191, 115, 34); "
-            "border-color: rgba(111, 191, 115, 90); }"
-        )
-        self._ws_chip.clicked.connect(self.home_clicked.emit)
-        self._ws_chip.setVisible(False)
-        row.addWidget(self._ws_chip)
 
         # Slot central: GlobalConsoleTabBar (injetada via set_console_tabs).
         # Placeholder stretch até a MainWindow injetar.
@@ -135,14 +118,6 @@ class TopBar(QWidget):
         if item is not None and item.widget() is not None:
             item.widget().deleteLater()
         self._row.insertWidget(self._center_slot_index, widget, stretch=1)
-
-    def set_active_workspace(self, name: str | None) -> None:
-        """Atualiza o chip de workspace ativo. None oculta."""
-        if not name:
-            self._ws_chip.setVisible(False)
-            return
-        self._ws_chip.setText(f"  {name}")
-        self._ws_chip.setVisible(True)
 
     def set_inbox_count(self, count: int) -> None:
         self._inbox_count = count

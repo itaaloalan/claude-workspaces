@@ -3979,10 +3979,6 @@ class MainWindow(QMainWindow):
             self.status_widgets.set_console_info(None)
 
     def _update_status_bar(self, ws: "Workspace | None") -> None:
-        # Top bar chip de workspace ativo (proeminente, ao lado do logo)
-        if hasattr(self, "top_bar"):
-            self.top_bar.set_active_workspace(ws.name if ws else None)
-
         """Atualiza os segmentos da QStatusBar. Pode receber None pra
         zerar (workspace vazio)."""
         if not hasattr(self, "status_widgets"):
