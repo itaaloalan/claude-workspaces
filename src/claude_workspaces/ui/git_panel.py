@@ -897,9 +897,9 @@ class GitPanel(QWidget):
             "Marca todos os arquivos de CHANGES (clique direito: desmarcar todos)"
         )
         self._stage_all_btn.setStyleSheet(
-            "QPushButton { background: #383838; color: #c6c6c6;"
-            " border: 1px solid #4f4f4f; border-radius: 6px; padding: 5px 10px; }"
-            "QPushButton:hover { border-color: #7f7f7f; color: #f4f4f4; }"
+            f"QPushButton {{ background: {theme.BG_SURFACE}; color: {theme.TEXT_MUTED};"
+            f" border: 1px solid {theme.BORDER_INPUT}; border-radius: 6px; padding: 5px 10px; }}"
+            f"QPushButton:hover {{ border-color: {theme.TEXT_FAINT}; color: {theme.TEXT_PRIMARY}; }}"
         )
         self._stage_all_btn.clicked.connect(
             lambda: self._set_all_files_checked(True)
@@ -1000,11 +1000,11 @@ class GitPanel(QWidget):
         hdr.setCursor(Qt.CursorShape.PointingHandCursor)
         hdr.setCheckable(True)
         hdr.setStyleSheet(
-            "QPushButton { background: transparent; color: #7f7f7f;"
-            " border: 0; text-align: left; font-size: 11px;"
-            " font-weight: 600; letter-spacing: 0.5px; padding: 3px 4px; }"
-            "QPushButton:hover { color: #c6c6c6; }"
-            "QPushButton:checked { color: #c6c6c6; }"
+            f"QPushButton {{ background: transparent; color: {theme.TEXT_FAINT};"
+            f" border: 0; text-align: left; font-size: 11px;"
+            f" font-weight: 600; letter-spacing: 0.5px; padding: 3px 4px; }}"
+            f"QPushButton:hover {{ color: {theme.TEXT_MUTED}; }}"
+            f"QPushButton:checked {{ color: {theme.TEXT_MUTED}; }}"
         )
         hdr.toggled.connect(self._on_committed_toggled)
         self._committed_hdr = hdr
@@ -1066,7 +1066,7 @@ class GitPanel(QWidget):
             parent: QTreeWidgetItem | None = None
             if len(result) > 1:
                 parent = QTreeWidgetItem(tree, [Path(folder).name])
-                parent.setForeground(0, QColor("#7f7f7f"))
+                parent.setForeground(0, QColor(theme.TEXT_FAINT))
                 parent.setExpanded(True)
             for bf in files:
                 total += 1

@@ -156,6 +156,18 @@ class StatusBarWidgets(QWidget):
 
         h.addStretch(1)
 
+        # Uso do plano (estilo footer do Orca): espelho da linha compacta
+        # do rodapé da sidebar — "5h 34% · sem 41%…" com cores por faixa.
+        # Oculto até o primeiro resultado do PlanUsagePoller.
+        self.usage = QLabel("")
+        self.usage.setTextFormat(Qt.TextFormat.RichText)
+        self.usage.setStyleSheet(_SEG_QSS)
+        self.usage.setVisible(False)
+        self._usage_sep = _separator()
+        self._usage_sep.setVisible(False)
+        h.addWidget(self.usage)
+        h.addWidget(self._usage_sep)
+
         self.encoding = _segment("UTF-8", "Encoding")
         self.line_ending = _segment("LF", "Line ending")
         self.indent = _segment("Spaces: 4", "Indentação")
@@ -165,6 +177,14 @@ class StatusBarWidgets(QWidget):
             h.addWidget(w)
 
     # ---------- setters ----------
+
+    def set_usage(self, html: str, tooltip: str = "") -> None:
+        """Linha compacta de uso do plano no footer. Vazio esconde."""
+        visible = bool(html.strip())
+        self.usage.setText(html)
+        self.usage.setToolTip(tooltip)
+        self.usage.setVisible(visible)
+        self._usage_sep.setVisible(visible)
 
     def set_workspace(self, name: str | None) -> None:
         self.workspace.setText(name or "—")

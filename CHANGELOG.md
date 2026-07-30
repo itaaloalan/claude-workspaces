@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.39.0] — 2026-07-30
+
+### Fix: seleção de console na sidebar quebrada pós-paleta
+
+O `TerminalChildWidget` selecionado ainda usava borda `PRIMARY` sólida
+(que virou quase branca na paleta nova) + hover âmbar legado, brigando
+com o card unificado do workspace — agora a seleção é um véu/borda
+branco-alpha sutis. O padding vertical de 3px dos itens da tree (E2)
+fazia os widgets transbordarem sobre a row seguinte (textos sobrepostos)
+— voltou pra 1px.
+
+### Feat: painel git no layout do Orca
+
+- "Criar PR" em pill primário no topo + refresh + menu ⋯ (fetch/pull/
+  diff inline/atividade); linha de branch com compare e Push
+- área de commit no topo: mensagem + botão largo "Marcar tudo pro
+  commit" (clique direito desmarca) + Commit/Commit+Push
+- seção CHANGES com header e contador; NOVA seção COMMITTED ON BRANCH
+  (arquivos commitados vs merge-base do upstream, scan lazy em thread,
+  +N -M coloridos, duplo-clique abre o diff commitado como aba central)
+- novos helpers em git_status.py: `upstream_ref`, `get_branch_files`,
+  `get_diff_committed`
+
+### Feat: footer estilo Orca
+
+Linha compacta de uso do plano ("5h 34% · sem 41%…") agora também no
+footer (status bar), espelhando o rodapé da sidebar sem recomputo — ao
+lado do segmento de RAM/CPU, que já abre o gerenciador de recursos ao
+clicar.
+
 ## [1.38.0] — 2026-07-30
 
 ### Fix URGENTE: lentidão extrema / app travando + véu cinza no console

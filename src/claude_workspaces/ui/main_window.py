@@ -302,6 +302,9 @@ class MainWindow(QMainWindow):
         from ..plan_usage_poller import PlanUsagePoller
         self._plan_usage_poller = PlanUsagePoller(parent=self)
         self._plan_usage_poller.done.connect(self._on_plan_usage_ready)
+        # Segundo slot roda DEPOIS do render principal (ordem de conexão):
+        # espelha a linha compacta de uso no footer (estilo Orca).
+        self._plan_usage_poller.done.connect(self._mirror_usage_to_status_bar)
         # Poller assíncrono de modelo+tokens da sessão (chip da sidebar):
         # tira o parse do JSONL claimed do tick de 8s da UI thread — sessões
         # grandes/turnos longos travavam a UI síncrono antes disso.
@@ -8334,6 +8337,18 @@ class MainWindow(QMainWindow):
         secs = max(int((datetime.now() - ts).total_seconds()), 0)
         label.setText(relative_time_phrase(secs))
         label.setVisible(True)
+
+    def _mirror_usage_to_status_bar(self, _result=None) -> None:
+        """Espelha no footer (status bar) a linha compacta de uso do plano
+        que o `_on_plan_usage_ready` acabou de renderizar no rodapé da
+        sidebar — mesma fonte, zero recomputo. Conectado ao MESMO sinal,
+        depois do slot principal (ordem de conexão garante)."""
+        label = getattr(self, "_context_status_label", None)
+        if label is None or not hasattr(self, "status_widgets"):
+            return
+        # Independe da visibilidade do painel da sidebar (colapsável pelo
+        # usuário) — se há texto de uso, mostra no footer.
+        self.status_widgets.set_usage(label.text(), label.toolTip())
 
     def _refresh_plan_usage_status(self, force: bool = False) -> None:
         """Agenda o recálculo do uso do plano no PlanUsagePoller (worker
