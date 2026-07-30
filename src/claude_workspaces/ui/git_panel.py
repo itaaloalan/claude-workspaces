@@ -207,13 +207,13 @@ class _StatusScanTask(QRunnable):
 
 
 STATUS_COLOR = {
-    "modificado": "#e3c96a",
-    "mod (idx+ws)": "#e3c96a",
-    "adicionado": "#5ac35a",
-    "deletado": "#d57272",
-    "renomeado": "#7aa6e6",
-    "copiado": "#7aa6e6",
-    "novo": "#8b8880",
+    "modificado": "#d6b95c",
+    "mod (idx+ws)": "#d6b95c",
+    "adicionado": "#6fbf73",
+    "deletado": "#cf6f6f",
+    "renomeado": "#6f9fd8",
+    "copiado": "#6f9fd8",
+    "novo": "#757575",
 }
 
 # Glyph por status do arquivo (mesma cor do texto), renderizado pequeno
@@ -334,11 +334,11 @@ class _ChangesDelegate(QStyledItemDelegate):
       usam a largura toda — nenhum pixel fica reservado.
     """
 
-    _ADD = QColor("#5ac35a")
-    _DEL = QColor("#d57272")
-    _DIM = QColor("#5a5750")
-    _SEL_TEXT = QColor("#211709")
-    _FALLBACK = QColor("#c9c6c0")
+    _ADD = QColor("#6fbf73")
+    _DEL = QColor("#cf6f6f")
+    _DIM = QColor("#4f4f4f")
+    _SEL_TEXT = QColor("#111111")
+    _FALLBACK = QColor("#b8b8b8")
     _GAP = 5
 
     def paint(self, painter: QPainter, option, index) -> None:  # type: ignore[override]
@@ -497,8 +497,8 @@ class GitPanel(QWidget):
         split.setChildrenCollapsible(True)
         split.setHandleWidth(6)
         split.setStyleSheet(
-            "QSplitter::handle { background: #2d2b26; }"
-            "QSplitter::handle:hover { background: #d4a04a; }"
+            "QSplitter::handle { background: #262626; }"
+            "QSplitter::handle:hover { background: #e6e6e6; }"
         )
 
         self._tree = QTreeWidget()
@@ -517,12 +517,12 @@ class GitPanel(QWidget):
         self._tree.setIconSize(_QSize(10, 10))
         self._tree.setStyleSheet(
             "QTreeWidget {"
-            "  background: #1a1916; border: 1px solid #302d27;"
-            "  border-radius: 6px; color: #e8e6e3;"
+            "  background: #161616; border: 1px solid #2b2b2b;"
+            "  border-radius: 6px; color: #e6e6e6;"
             "}"
-            "QTreeWidget::item { padding: 2px 4px; color: #c9c6c0; }"
-            "QTreeWidget::item:hover { background: #2b2620; color: #fff; }"
-            "QTreeWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QTreeWidget::item { padding: 2px 4px; color: #b8b8b8; }"
+            "QTreeWidget::item:hover { background: #222222; color: #fff; }"
+            "QTreeWidget::item:selected { background: #e6e6e6; color: #111111; }"
         )
         # Coluna única: o delegate pinta nome elidido + stats "+N -M" na
         # borda direita da própria linha (nada de coluna fixa reservada).
@@ -547,11 +547,11 @@ class GitPanel(QWidget):
         # e botão de expandir contexto
         diff_hdr = QWidget()
         diff_hdr.setStyleSheet(
-            "QWidget { background: #1c1b18; border-bottom: 1px solid #2d2b26; }"
-            "QPushButton { background: transparent; color: #8b8880; border: 1px solid transparent;"
+            "QWidget { background: #181818; border-bottom: 1px solid #262626; }"
+            "QPushButton { background: transparent; color: #757575; border: 1px solid transparent;"
             " border-radius: 3px; padding: 1px 7px; font-size: 11px; }"
-            "QPushButton:hover { color: #c9c6c0; border-color: #302d27; }"
-            "QPushButton:checked { background: #4a3a20; color: #eac27d; border-color: #d4a04a; }"
+            "QPushButton:hover { color: #b8b8b8; border-color: #2b2b2b; }"
+            "QPushButton:checked { background: #2e2e2e; color: #e6e6e6; border-color: #e6e6e6; }"
         )
         self._diff_hdr = diff_hdr
         hdr_lay = QHBoxLayout(diff_hdr)
@@ -559,7 +559,7 @@ class GitPanel(QWidget):
         hdr_lay.setSpacing(4)
 
         self._diff_filename = QLabel("")
-        self._diff_filename.setStyleSheet("color: #9aa0a6; font-size: 11px; background: transparent;")
+        self._diff_filename.setStyleSheet("color: #8f8f8f; font-size: 11px; background: transparent;")
         hdr_lay.addWidget(self._diff_filename)
         hdr_lay.addStretch()
         # Duplo-clique no header (widget normal, não o webview) também abre
@@ -584,7 +584,7 @@ class GitPanel(QWidget):
 
         # Separador visual
         sep = QLabel("·")
-        sep.setStyleSheet("color: #302d27; background: transparent;")
+        sep.setStyleSheet("color: #2b2b2b; background: transparent;")
         hdr_lay.addWidget(sep)
 
         self._diff_ctx_btn = QPushButton("Expandir")
@@ -630,8 +630,8 @@ class GitPanel(QWidget):
         self._activity.setFont(amono)
         self._activity.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #121110; border: 1px solid #302d27;"
-            "  border-radius: 6px; color: #c9c6c0; padding: 4px;"
+            "  background: #0e0e0e; border: 1px solid #2b2b2b;"
+            "  border-radius: 6px; color: #b8b8b8; padding: 4px;"
             "}"
         )
 
@@ -642,8 +642,8 @@ class GitPanel(QWidget):
         main_split.setChildrenCollapsible(False)
         main_split.setHandleWidth(6)
         main_split.setStyleSheet(
-            "QSplitter::handle { background: #2d2b26; }"
-            "QSplitter::handle:hover { background: #d4a04a; }"
+            "QSplitter::handle { background: #262626; }"
+            "QSplitter::handle:hover { background: #e6e6e6; }"
         )
         main_split.addWidget(split)
         main_split.addWidget(commit_area)
@@ -698,19 +698,19 @@ class GitPanel(QWidget):
         # Branch picker inline — mostra a branch atual (ou "(multi)") com
         # ícone code-branch. Click abre o branch picker do primeiro repo.
         self._branch_btn = QPushButton("  —")
-        self._branch_btn.setIcon(_ic("fa5s.code-branch", color="#d4a04a"))
+        self._branch_btn.setIcon(_ic("fa5s.code-branch", color="#e6e6e6"))
         self._branch_btn.setIconSize(_QS(11, 11))
         self._branch_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._branch_btn.setToolTip("Trocar branch do primeiro repo deste workspace")
         # Branch destacada em amarelo pra ficar visível à primeira vista,
         # tanto em mono-repo quanto em multi-repo.
         self._branch_btn.setStyleSheet(
-            "QPushButton { background: rgba(212, 160, 74,0.08); color: #d4a04a; "
-            "border: 1px solid rgba(212, 160, 74,0.35); border-radius: 4px; "
+            "QPushButton { background: rgba(255, 255, 255, 0.06); color: #e6e6e6; "
+            "border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 4px; "
             "padding: 2px 8px; font-size: 11px; font-weight: 600; }"
-            "QPushButton:hover { border-color: #d4a04a; color: #eac27d; "
-            "background: rgba(212, 160, 74,0.16); }"
-            "QPushButton:disabled { color: #5a5750; border-color: #302d27; "
+            "QPushButton:hover { border-color: #e6e6e6; color: #e6e6e6; "
+            "background: rgba(255, 255, 255, 0.10); }"
+            "QPushButton:disabled { color: #4f4f4f; border-color: #2b2b2b; "
             "background: transparent; font-weight: 400; }"
         )
         self._branch_btn.clicked.connect(self._on_branch_btn_clicked)
@@ -727,26 +727,26 @@ class GitPanel(QWidget):
             "introduz (commitado ou não) em relação a outra branch"
         )
         self._compare_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #8b8880; "
+            "QPushButton { background: transparent; color: #757575; "
             "border: 1px solid transparent; border-radius: 4px; "
             "padding: 2px 8px; font-size: 11px; font-weight: 600; }"
-            "QPushButton:hover { border-color: #7aa6e6; color: #7aa6e6; }"
+            "QPushButton:hover { border-color: #6f9fd8; color: #6f9fd8; }"
             "QPushButton:checked { background: rgba(122, 166, 230, 0.14); "
-            "color: #7aa6e6; border-color: rgba(122, 166, 230, 0.5); }"
+            "color: #6f9fd8; border-color: rgba(122, 166, 230, 0.5); }"
         )
         self._compare_btn.clicked.connect(self._on_compare_btn_clicked)
         branch_row.addWidget(self._compare_btn)
 
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #b0ada6; font-size: 11px; padding: 0 4px;")
+        self._counter.setStyleSheet("color: #9a9a9a; font-size: 11px; padding: 0 4px;")
         branch_row.addWidget(self._counter)
         branch_row.addStretch()
 
         btn_css = (
-            "QPushButton { background: transparent; color: #b0ada6; "
+            "QPushButton { background: transparent; color: #9a9a9a; "
             "border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; }"
-            "QPushButton:hover { color: #e0b268; border-color: #d4a04a; }"
-            "QPushButton:disabled { color: #302d27; }"
+            "QPushButton:hover { color: #cfcfcf; border-color: #e6e6e6; }"
+            "QPushButton:disabled { color: #2b2b2b; }"
         )
 
         from PySide6.QtCore import QSize as _QS
@@ -755,7 +755,7 @@ class GitPanel(QWidget):
 
         def _icon_btn(qta_name: str, tooltip: str, slot, label: str = "") -> QPushButton:
             b = QPushButton(f"  {label}" if label else "")
-            b.setIcon(_ic(qta_name, color="#b0ada6"))
+            b.setIcon(_ic(qta_name, color="#9a9a9a"))
             b.setIconSize(_QS(13, 13))
             b.setToolTip(tooltip)
             b.setStyleSheet(btn_css)
@@ -806,10 +806,10 @@ class GitPanel(QWidget):
         self._msg.setMinimumHeight(56)
         self._msg.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #1a1916; border: 1px solid #302d27;"
-            "  border-radius: 4px; color: #e8e6e3; padding: 4px;"
+            "  background: #161616; border: 1px solid #2b2b2b;"
+            "  border-radius: 4px; color: #e6e6e6; padding: 4px;"
             "}"
-            "QPlainTextEdit:focus { border-color: #d4a04a; }"
+            "QPlainTextEdit:focus { border-color: #e6e6e6; }"
         )
         v.addWidget(self._msg, stretch=1)
 
@@ -818,20 +818,20 @@ class GitPanel(QWidget):
 
         primary_qss = (
             "QPushButton {"
-            "  background: #d4a04a; color: #211709;"
+            "  background: #e6e6e6; color: #111111;"
             "  border: 0; border-radius: 4px; padding: 4px 14px; font-weight: 600;"
             "}"
-            "QPushButton:hover { background: #e0b264; }"
-            "QPushButton:disabled { background: #2d2b26; color: #5a5750; }"
+            "QPushButton:hover { background: #f2f2f2; }"
+            "QPushButton:disabled { background: #262626; color: #4f4f4f; }"
         )
         ghost_qss = (
             "QPushButton {"
-            "  background: #22201c; color: #c9c6c0;"
-            "  border: 1px solid #302d27; border-radius: 4px;"
+            "  background: #1e1e1e; color: #b8b8b8;"
+            "  border: 1px solid #2b2b2b; border-radius: 4px;"
             "  padding: 4px 12px;"
             "}"
-            "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
-            "QPushButton:disabled { color: #5a5750; border-color: #2d2b26; }"
+            "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
+            "QPushButton:disabled { color: #4f4f4f; border-color: #262626; }"
         )
 
         self._commit_btn = QPushButton("Commit")
@@ -1120,21 +1120,21 @@ class GitPanel(QWidget):
         stats_html = ""
         if total_add or total_del:
             stats_html = (
-                f"  <span style='color:#5ac35a'>+{total_add}</span> "
-                f"<span style='color:#d57272'>-{total_del}</span>"
+                f"  <span style='color:#6fbf73'>+{total_add}</span> "
+                f"<span style='color:#cf6f6f'>-{total_del}</span>"
             )
 
         if self._compare_base:
             base_label = self._compare_base[:24]
             self._counter.setText(
-                f"<span style='color:#7aa6e6'>⇆ {total_files} arquivo(s) "
+                f"<span style='color:#6f9fd8'>⇆ {total_files} arquivo(s) "
                 f"vs {base_label}</span>{stats_html}"
             )
         elif total_files == 0:
-            self._counter.setText("<span style='color:#5ac35a'>✓ limpo</span>")
+            self._counter.setText("<span style='color:#6fbf73'>✓ limpo</span>")
         else:
             self._counter.setText(
-                f"<span style='color:#d4a04a'>● {total_files} arquivo(s)</span>"
+                f"<span style='color:#e6e6e6'>● {total_files} arquivo(s)</span>"
                 f"{stats_html}"
             )
         self._counter.setTextFormat(Qt.TextFormat.RichText)
@@ -1168,7 +1168,7 @@ class GitPanel(QWidget):
             if self._compare_base:
                 self.header_summary_changed.emit(
                     f"{br_html} <span style='color:{theme.TEXT_FAINT}'>·</span> "
-                    f"<span style='color:#7aa6e6'>⇆ {total_files} vs "
+                    f"<span style='color:#6f9fd8'>⇆ {total_files} vs "
                     f"{self._compare_base[:24]}</span>"
                 )
             elif total_files == 0:
@@ -1314,7 +1314,7 @@ class GitPanel(QWidget):
         ts = datetime.now().strftime("%H:%M:%S")
         body = _html(text)
         line = (
-            f"<span style='color:#5a5750'>{ts}</span> "
+            f"<span style='color:#4f4f4f'>{ts}</span> "
             + (f"<span style='color:{color}'>{body}</span>" if color else body)
         )
         self._activity.appendHtml(line)
@@ -1378,16 +1378,16 @@ class GitPanel(QWidget):
         new_sha = parts[1][:7]
         action = msg.split(":", 1)[0].split(" ", 1)[0].lower()
         color = {
-            "merge": "#7aa6e6",
-            "pull": "#7aa6e6",
-            "rebase": "#7aa6e6",
-            "commit": theme.SUCCESS if hasattr(theme, "SUCCESS") else "#5ac35a",
-            "checkout": "#e3c96a",
-            "reset": "#d57272",
-            "revert": "#d57272",
-            "cherry-pick": "#7aa6e6",
-            "clone": "#5ac35a",
-        }.get(action, "#b0ada6")
+            "merge": "#6f9fd8",
+            "pull": "#6f9fd8",
+            "rebase": "#6f9fd8",
+            "commit": theme.SUCCESS if hasattr(theme, "SUCCESS") else "#6fbf73",
+            "checkout": "#d6b95c",
+            "reset": "#cf6f6f",
+            "revert": "#cf6f6f",
+            "cherry-pick": "#6f9fd8",
+            "clone": "#6fbf73",
+        }.get(action, "#9a9a9a")
         return (f"⎇ {repo}: {msg}  ({new_sha})", color)
 
     # ---------- árvore ----------
@@ -1445,7 +1445,7 @@ class GitPanel(QWidget):
             f.setBold(True)
             repo_item.setFont(0, f)
             if errors:
-                repo_item.setForeground(0, QBrush(QColor("#d57272")))
+                repo_item.setForeground(0, QBrush(QColor("#cf6f6f")))
                 repo_item.setText(
                     0, repo_item.text(0) + "  (" + "; ".join(errors) + ")"
                 )
@@ -1454,7 +1454,7 @@ class GitPanel(QWidget):
             # Flat sem linha de repo: o erro vira um item próprio no topo.
             err_item = QTreeWidgetItem(["⚠ " + "; ".join(errors)])
             err_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            err_item.setForeground(0, QBrush(QColor("#d57272")))
+            err_item.setForeground(0, QBrush(QColor("#cf6f6f")))
             err_item.setToolTip(0, "; ".join(errors))
             self._tree.addTopLevelItem(err_item)
 
@@ -1531,7 +1531,7 @@ class GitPanel(QWidget):
         Guarda o caminho completo; o elide (no meio) é do _ChangesDelegate."""
         item = QTreeWidgetItem([rel_dir])
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # não selecionável nem editável
-        item.setForeground(0, QBrush(QColor("#5a5750")))
+        item.setForeground(0, QBrush(QColor("#4f4f4f")))
         f = item.font(0)
         f.setFamily("monospace")
         f.setPointSizeF(f.pointSizeF() * 0.9)
@@ -1547,7 +1547,7 @@ class GitPanel(QWidget):
         f = item.font(0)
         f.setBold(True)
         item.setFont(0, f)
-        item.setForeground(0, QBrush(QColor("#c9c6c0")))
+        item.setForeground(0, QBrush(QColor("#b8b8b8")))
         if checkable:
             item.setFlags(
                 item.flags()
@@ -1573,7 +1573,7 @@ class GitPanel(QWidget):
         rel = gf.path
         # Só o basename — o diretório pai é exibido pelo separador acima
         name = rel.rsplit("/", 1)[-1] if "/" in rel else rel
-        color = STATUS_COLOR.get(gf.label(), "#b0ada6")
+        color = STATUS_COLOR.get(gf.label(), "#9a9a9a")
         item = QTreeWidgetItem([name])
         item.setForeground(0, QBrush(QColor(color)))
         item.setIcon(0, _status_icon(gf.label(), color))

@@ -148,7 +148,7 @@ class TerminalChildWidget(QWidget):
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
         self._connector_label.setStyleSheet(
-            "QLabel { color: #5a5750; font-size: 11px; background: transparent; border: 0; }"
+            "QLabel { color: #4f4f4f; font-size: 11px; background: transparent; border: 0; }"
         )
         outer.addWidget(self._connector_label)
 
@@ -205,7 +205,7 @@ class TerminalChildWidget(QWidget):
         self._notif_badge.setStyleSheet(
             "QLabel {"
             "  background: rgba(201, 119, 45, 100);"
-            "  color: #ffce99;"
+            "  color: #dd9a63;"
             "  font-size: 9px; font-weight: 700;"
             "  padding: 1px 5px; border-radius: 6px;"
             "}"
@@ -220,7 +220,7 @@ class TerminalChildWidget(QWidget):
         self._runner_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._runner_badge.setStyleSheet(
             "QLabel {"
-            "  background: rgba(90, 195, 138, 60);"
+            "  background: rgba(111, 191, 115, 60);"
             "  color: #7ee0a0;"
             "  font-size: 9px; font-weight: 700;"
             "  padding: 1px 5px; border-radius: 6px;"
@@ -583,11 +583,11 @@ class TerminalChildWidget(QWidget):
         """Renderiza o console como item subordinado ao workspace."""
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
-            bg = "rgba(212, 160, 74, 78)"
+            bg = "rgba(255, 255, 255, 38)"
         elif state == STATE_AWAITING:
-            bg = "rgba(229, 130, 74, 9)"
+            bg = "rgba(204, 139, 87, 9)"
         elif state == STATE_ERROR:
-            bg = "rgba(213, 114, 114, 10)"
+            bg = "rgba(207, 111, 111, 10)"
         else:
             bg = "transparent"
         # Borda primary só quando selecionado; demais ficam com borda
@@ -742,9 +742,9 @@ class TerminalChildWidget(QWidget):
         b = branch if len(branch) <= 18 else branch[:17] + "…"
         if is_worktree:
             glyph = (
-                f"<span style='background: rgba(90, 195, 138, 0.18);"
-                f" color: #5ac38a; font-weight: 700;'>&nbsp;wt&nbsp;</span>"
-                f" <span style='color: #5ac38a;'>🌿 {b}</span>"
+                f"<span style='background: rgba(111, 191, 115, 0.18);"
+                f" color: #6fbf73; font-weight: 700;'>&nbsp;wt&nbsp;</span>"
+                f" <span style='color: #6fbf73;'>🌿 {b}</span>"
             )
         else:
             glyph = f"⎇ {b}"

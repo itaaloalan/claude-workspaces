@@ -56,7 +56,7 @@ class TerminalPaneBuilder:
 
         self.header = QWidget()
         self.header.setStyleSheet(
-            "background: #181714; border-bottom: 1px solid #2d2b26;"
+            "background: #131313; border-bottom: 1px solid #262626;"
         )
         self.header.setCursor(Qt.CursorShape.PointingHandCursor)
         # Clique no header (fora dos botões) chama o callback
@@ -66,15 +66,15 @@ class TerminalPaneBuilder:
         h.setContentsMargins(8, 4, 8, 4)
         h.setSpacing(6)
         title = QLabel("Terminal")
-        title.setStyleSheet("color: #8b8880; font-size: 11px;")
+        title.setStyleSheet("color: #757575; font-size: 11px;")
         h.addWidget(title)
         h.addStretch()
 
         btn_css = (
-            "QPushButton { background: transparent; color: #b0ada6; "
+            "QPushButton { background: transparent; color: #9a9a9a; "
             "border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; }"
-            "QPushButton:hover { color: #e0b268; border-color: #d4a04a; }"
-            "QPushButton:disabled { color: #302d27; }"
+            "QPushButton:hover { color: #cfcfcf; border-color: #e6e6e6; }"
+            "QPushButton:disabled { color: #2b2b2b; }"
         )
         # Ícones estilo Windows: minimizar (linha), maximizar (quadrado),
         # restaurar (quadrados sobrepostos)
@@ -117,7 +117,7 @@ class TerminalPaneBuilder:
         )
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setStyleSheet(
-            "background: #121110; color: #5a5750; padding: 28px;"
+            "background: #0e0e0e; color: #4f4f4f; padding: 28px;"
         )
         self.placeholder_idx = self.host.addWidget(self.empty_label)
         layout.addWidget(self.host, stretch=1)

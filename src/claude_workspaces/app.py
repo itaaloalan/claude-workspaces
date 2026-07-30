@@ -59,7 +59,7 @@ QMenu::item:selected {{
     color: {theme.TEXT_ON_ACCENT};
 }}
 QMenu::item:disabled {{
-    color: #8b8880;
+    color: #757575;
 }}
 QMenu::separator {{
     height: 1px;
@@ -103,7 +103,7 @@ QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
     min-width: 24px;
 }}
 QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
-    background: rgba(212, 160, 74, 150);
+    background: rgba(255, 255, 255, 70);
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
@@ -202,10 +202,10 @@ def _build_dark_palette() -> QPalette:
         QPalette.ColorRole.HighlightedText: theme.TEXT_ON_ACCENT,
     }
     disabled_overrides = {
-        QPalette.ColorRole.WindowText: "#8b8880",
-        QPalette.ColorRole.Text: "#8b8880",
-        QPalette.ColorRole.ButtonText: "#8b8880",
-        QPalette.ColorRole.HighlightedText: "#c9c6c0",
+        QPalette.ColorRole.WindowText: "#757575",
+        QPalette.ColorRole.Text: "#757575",
+        QPalette.ColorRole.ButtonText: "#757575",
+        QPalette.ColorRole.HighlightedText: "#b8b8b8",
     }
     for role, hexv in base.items():
         c = QColor(hexv)

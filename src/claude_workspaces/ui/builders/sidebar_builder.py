@@ -132,7 +132,7 @@ class _WorkspaceBorderOverlay(QWidget):
     estado de seleção do workspace — azul (PRIMARY) quando selecionado,
     cinza neutro caso contrário."""
 
-    _BORDER_COLOR = QColor("#26241f")
+    _BORDER_COLOR = QColor("#1f1f1f")
     _BORDER_COLOR_SELECTED = QColor(theme.PRIMARY)
     _BORDER_RADIUS = 6
 
@@ -237,7 +237,7 @@ class _WorkspaceBorderOverlay(QWidget):
 
 _SECTION_HEADER_QSS = (
     "QLabel {"
-    "  color: #8b8880;"
+    "  color: #757575;"
     "  font-size: 10px;"
     "  font-weight: 700;"
     "  letter-spacing: 1.4px;"
@@ -352,7 +352,7 @@ class SidebarBuilder:
         from ..icons import ic as _ic
 
         self.wrapper = QWidget()
-        self.wrapper.setStyleSheet("background: #181714;")
+        self.wrapper.setStyleSheet("background: #131313;")
         layout = QVBoxLayout(self.wrapper)
         layout.setContentsMargins(10, 10, 8, 6)
         layout.setSpacing(7)
@@ -380,9 +380,9 @@ class SidebarBuilder:
         self.filter_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.filter_btn.setToolTip("Filtros avançados (em breve)")
         self.filter_btn.setStyleSheet(
-            "QPushButton { background: #1c1b18; "
-            "border: 1px solid #26241f; border-radius: 6px; }"
-            f"QPushButton:hover {{ border-color: {theme.PRIMARY}; background: #181714; }}"
+            "QPushButton { background: #181818; "
+            "border: 1px solid #1f1f1f; border-radius: 6px; }"
+            f"QPushButton:hover {{ border-color: {theme.PRIMARY}; background: #131313; }}"
         )
         search_row.addWidget(self.filter_btn)
         layout.addLayout(search_row)

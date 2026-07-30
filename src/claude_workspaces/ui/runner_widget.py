@@ -186,7 +186,7 @@ class RunnerWidget(QWidget):
         toolbar = QHBoxLayout(toolbar_widget)
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(parado)")
-        self._status.setStyleSheet("color: #b0ada6;")
+        self._status.setStyleSheet("color: #9a9a9a;")
         # Status pode ser longo; Ignored evita que empurre o mínimo horizontal.
         self._status.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
@@ -199,7 +199,7 @@ class RunnerWidget(QWidget):
         # Visível só com processo vivo; o relógio re-renderiza a cada minuto.
         self._since_label = QLabel()
         self._since_label.setStyleSheet(
-            "QLabel { color: #9aa0a6; border: 1px solid #302d27; "
+            "QLabel { color: #8f8f8f; border: 1px solid #2b2b2b; "
             "border-radius: 9px; padding: 1px 8px; font-size: 11px; }"
         )
         self._since_label.setVisible(False)
@@ -214,10 +214,10 @@ class RunnerWidget(QWidget):
         # permite redirecioná-lo pro diretório de um console específico.
         self._cwd_btn = QPushButton()
         self._cwd_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #302d27; border-radius: 9px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px solid #2b2b2b; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #d4a04a; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #e6e6e6; }"
         )
         self._cwd_btn.clicked.connect(self._open_cwd_menu)
         toolbar.addWidget(self._cwd_btn)
@@ -228,10 +228,10 @@ class RunnerWidget(QWidget):
         # também existe no dialog ⚙ Editar.
         self._port_btn = QPushButton()
         self._port_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #302d27; border-radius: 9px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px solid #2b2b2b; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #4d8a52; }"
         )
         self._port_btn.setToolTip(
             "Porta base do runner — clique pra alterar. {port} no "
@@ -248,10 +248,10 @@ class RunnerWidget(QWidget):
         # pra abrir no navegador. Oculto enquanto não há URL.
         self._url_btn = QPushButton()
         self._url_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #302d27; border-radius: 9px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px solid #2b2b2b; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #d4a04a; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #e6e6e6; }"
         )
         self._url_btn.clicked.connect(
             lambda _c=False: self._current_url
@@ -717,9 +717,9 @@ class RunnerWidget(QWidget):
         if watching:
             self._hot_reload_btn.setStyleSheet(
                 "QPushButton { background: rgba(224, 138, 60, 0.18); "
-                "color: #e0a55c; border: 1px solid #e08a3c; "
+                "color: #dd9a63; border: 1px solid #cc8b57; "
                 "border-radius: 9px; padding: 1px 8px; font-size: 11px; }"
-                "QPushButton:hover { color: #f5c98a; border-color: #f5c98a; }"
+                "QPushButton:hover { color: #e8b184; border-color: #e8b184; }"
             )
             self._hot_reload_btn.setToolTip(
                 f"Hot reload ativo — observando {self._running_cwd or '?'} "
@@ -728,10 +728,10 @@ class RunnerWidget(QWidget):
             )
         else:
             self._hot_reload_btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #9aa0a6; "
-                "border: 1px solid #302d27; border-radius: 9px; "
+                "QPushButton { background: transparent; color: #8f8f8f; "
+                "border: 1px solid #2b2b2b; border-radius: 9px; "
                 "padding: 1px 8px; font-size: 11px; }"
-                "QPushButton:hover { color: #e8e6e3; border-color: #e08a3c; }"
+                "QPushButton:hover { color: #e6e6e6; border-color: #cc8b57; }"
             )
             self._hot_reload_btn.setToolTip(
                 "Hot reload ligado — passa a observar .java/.xhtml e "

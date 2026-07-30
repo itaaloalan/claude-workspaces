@@ -59,18 +59,18 @@ _CAT_ICON = {
 }
 
 _STOP_BTN_QSS = (
-    "QPushButton { background: transparent; color: #9aa0a6; "
-    "border: 1px solid #302d27; border-radius: 4px; padding: 2px 10px; "
+    "QPushButton { background: transparent; color: #8f8f8f; "
+    "border: 1px solid #2b2b2b; border-radius: 4px; padding: 2px 10px; "
     "font-size: 11px; }"
-    "QPushButton:hover { color: #e06c75; border-color: #e06c75; }"
+    "QPushButton:hover { color: #cf6f6f; border-color: #cf6f6f; }"
 )
 
 _FREE_BTN_QSS = (
-    "QPushButton { background: #22201c; color: #e8e6e3; "
-    "border: 1px solid #302d27; border-radius: 5px; padding: 5px 14px; "
+    "QPushButton { background: #1e1e1e; color: #e6e6e6; "
+    "border: 1px solid #2b2b2b; border-radius: 5px; padding: 5px 14px; "
     "font-size: 12px; font-weight: 600; }"
-    "QPushButton:hover { border-color: #5ac35a; color: #fff; }"
-    "QPushButton:disabled { color: #5a5750; }"
+    "QPushButton:hover { border-color: #6fbf73; color: #fff; }"
+    "QPushButton:disabled { color: #4f4f4f; }"
 )
 
 
@@ -220,7 +220,7 @@ class ResourceDialog(QDialog):
         row = _ClickableFrame()
         row.setCursor(Qt.CursorShape.PointingHandCursor)
         row.setStyleSheet(
-            "QFrame { background: #181714; border: 1px solid #26241f; "
+            "QFrame { background: #131313; border: 1px solid #1f1f1f; "
             "border-radius: 6px; }"
             "QLabel { background: transparent; border: 0; }"
         )
@@ -298,7 +298,7 @@ class ResourceDialog(QDialog):
         color = _bar_color(g.rss)
         if color != h["color"]:
             bar.setStyleSheet(
-                "QProgressBar { background: #181714; border: 0; border-radius: 3px; }"
+                "QProgressBar { background: #131313; border: 0; border-radius: 3px; }"
                 f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
             )
             h["color"] = color
@@ -317,7 +317,7 @@ class ResourceDialog(QDialog):
                 old.deleteLater()
             detail = QFrame()
             detail.setStyleSheet(
-                "QFrame { background: #121110; border: 1px solid #26241f; "
+                "QFrame { background: #0e0e0e; border: 1px solid #1f1f1f; "
                 "border-top: 0; border-radius: 0 0 6px 6px; }"
                 "QLabel { background: transparent; border: 0; }"
             )

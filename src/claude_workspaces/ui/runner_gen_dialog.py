@@ -76,7 +76,7 @@ class RunnerGenDialog(QDialog):
         self._empty_label = QLabel(
             "(sem sessões anteriores neste workspace — gere uma nova abaixo)"
         )
-        self._empty_label.setStyleSheet("color: #8b8880; font-size: 11px;")
+        self._empty_label.setStyleSheet("color: #757575; font-size: 11px;")
         root.addWidget(self._empty_label)
 
         actions = QHBoxLayout()

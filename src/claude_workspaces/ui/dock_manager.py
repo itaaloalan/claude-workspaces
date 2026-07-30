@@ -17,7 +17,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMainWindow, QWidget
 
 
-def _glyph_icon(glyph: str, size: int = 14, color: str = "#c9c6c0") -> QIcon:
+def _glyph_icon(glyph: str, size: int = 14, color: str = "#b8b8b8") -> QIcon:
     """Renderiza um glyph unicode numa QPixmap transparente. Usado pros
     botões de title bar do QtAds — os ícones default são pretos e somem
     no tema dark."""
@@ -55,33 +55,33 @@ _ADS_DARK_QSS = """
 ads--CDockContainerWidget,
 ads--CDockAreaWidget,
 ads--CDockWidget {
-    background: #1a1916;
-    color: #e8e6e3;
+    background: #161616;
+    color: #e6e6e6;
 }
 ads--CDockAreaTitleBar {
-    background: #1a1916;
-    border-bottom: 1px solid #2d2b26;
+    background: #161616;
+    border-bottom: 1px solid #262626;
     padding: 0;
 }
 ads--CDockWidgetTab {
-    background: #22201c;
+    background: #1e1e1e;
     border: 0;
-    border-right: 1px solid #2d2b26;
+    border-right: 1px solid #262626;
     padding: 4px 12px;
     min-height: 22px;
 }
 ads--CDockWidgetTab QLabel,
 ads--CDockWidgetTab ads--CElidingLabel {
-    color: #9aa0a6;
+    color: #8f8f8f;
     background: transparent;
 }
 ads--CDockWidgetTab[activeTab="true"] {
-    background: #1a1916;
-    border-bottom: 2px solid #d4a04a;
+    background: #161616;
+    border-bottom: 2px solid #e6e6e6;
 }
 ads--CDockWidgetTab[activeTab="true"] QLabel,
 ads--CDockWidgetTab[activeTab="true"] ads--CElidingLabel {
-    color: #e8e6e3;
+    color: #e6e6e6;
 }
 ads--CTitleBarButton {
     background: transparent;
@@ -91,18 +91,18 @@ ads--CTitleBarButton {
     min-height: 18px;
 }
 ads--CTitleBarButton:hover {
-    background: #2d2b26;
+    background: #262626;
     border-radius: 3px;
 }
 ads--CDockSplitter::handle {
-    background: #2d2b26;
+    background: #262626;
 }
 ads--CDockSplitter::handle:hover {
-    background: #d4a04a;
+    background: #e6e6e6;
 }
 ads--CFloatingDockContainer {
-    background: #1a1916;
-    border: 1px solid #2d2b26;
+    background: #161616;
+    border: 1px solid #262626;
 }
 """
 

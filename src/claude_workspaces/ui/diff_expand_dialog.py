@@ -28,30 +28,30 @@ from .diff_web_view import DiffWebView
 
 _GHOST_QSS = (
     "QPushButton {"
-    "  background: #22201c; color: #c9c6c0;"
-    "  border: 1px solid #302d27; border-radius: 4px; padding: 5px 16px;"
+    "  background: #1e1e1e; color: #b8b8b8;"
+    "  border: 1px solid #2b2b2b; border-radius: 4px; padding: 5px 16px;"
     "}"
-    "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
+    "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
 )
 _TOOL_QSS = (
     "QPushButton {"
-    "  background: #22201c; color: #c9c6c0;"
-    "  border: 1px solid #302d27; border-radius: 4px;"
+    "  background: #1e1e1e; color: #b8b8b8;"
+    "  border: 1px solid #2b2b2b; border-radius: 4px;"
     "  padding: 2px 10px; font-size: 13px;"
     "}"
-    "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
-    "QPushButton:disabled { color: #5a5750; border-color: #26241f; }"
+    "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
+    "QPushButton:disabled { color: #4f4f4f; border-color: #1f1f1f; }"
 )
 # Mesmas cores dos toggles do diff_hdr embutido (git_panel.py) — consistência
 # visual entre o painel e o modal.
 _TOGGLE_QSS = (
     "QPushButton {"
-    "  background: transparent; color: #8b8880;"
-    "  border: 1px solid #302d27; border-radius: 4px;"
+    "  background: transparent; color: #757575;"
+    "  border: 1px solid #2b2b2b; border-radius: 4px;"
     "  padding: 2px 10px; font-size: 12px;"
     "}"
-    "QPushButton:hover { color: #c9c6c0; border-color: #d4a04a; }"
-    "QPushButton:checked { background: #4a3a20; color: #eac27d; border-color: #d4a04a; }"
+    "QPushButton:hover { color: #b8b8b8; border-color: #e6e6e6; }"
+    "QPushButton:checked { background: #2e2e2e; color: #e6e6e6; border-color: #e6e6e6; }"
 )
 
 
@@ -82,8 +82,8 @@ class DiffExpandDialog(QDialog):
         self.resize(1180, 780)
         self.setMinimumSize(940, 580)
         self.setStyleSheet(
-            f"QDialog {{ background: {theme.BG_PANEL}; color: #e8e6e3; }}"
-            "QLabel { color: #c9c6c0; }"
+            f"QDialog {{ background: {theme.BG_PANEL}; color: #e6e6e6; }}"
+            "QLabel { color: #b8b8b8; }"
         )
 
         outer = QVBoxLayout(self)

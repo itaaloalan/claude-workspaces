@@ -103,7 +103,7 @@ class SkillDetailView(QWidget):
             "Selecione uma skill, agente ou comando na lista à esquerda "
             "pra ver detalhes, lint, telemetria e o conteúdo."
         )
-        lab.setStyleSheet("color: #8b8880;")
+        lab.setStyleSheet("color: #757575;")
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lab.setWordWrap(True)
         self._inner_layout.addWidget(lab)
@@ -145,10 +145,10 @@ class SkillDetailView(QWidget):
         self._inner_layout.addLayout(header)
 
         meta = QLabel(
-            f"<span style='color:#8b8880;'>"
+            f"<span style='color:#757575;'>"
             f"<b>{KIND_LABEL_MAP.get(item.kind, item.kind)}</b> · "
             f"fonte: <code>{item.source_label}</code> · "
-            f"<code style='color:#e0b268;'>{item.path}</code>"
+            f"<code style='color:#cfcfcf;'>{item.path}</code>"
             f"</span>"
         )
         meta.setWordWrap(True)
@@ -159,13 +159,13 @@ class SkillDetailView(QWidget):
         issues = lint_item(item, self._catalog_names)
         if issues:
             box = QGroupBox(f"Lint ({len(issues)} issue(s))")
-            box.setStyleSheet("QGroupBox { color: #e6a23c; }")
+            box.setStyleSheet("QGroupBox { color: #d6b95c; }")
             box_l = QVBoxLayout(box)
             for i in issues:
                 color = (
-                    "#e74c3c" if i.severity == "error"
-                    else "#e6a23c" if i.severity == "warning"
-                    else "#909399"
+                    "#cf6f6f" if i.severity == "error"
+                    else "#d6b95c" if i.severity == "warning"
+                    else "#8f8f8f"
                 )
                 lab = QLabel(
                     f"<span style='color:{color};'>{i.badge()} "
@@ -182,12 +182,12 @@ class SkillDetailView(QWidget):
         usage = self._usage
         if usage and usage.count > 0:
             stats = QLabel(self._usage_summary(usage))
-            stats.setStyleSheet("color: #5ac35a;")
+            stats.setStyleSheet("color: #6fbf73;")
             stats.setWordWrap(True)
             self._inner_layout.addWidget(stats)
         elif item.kind in {"skill", "agent"}:
             zumbi = QLabel(
-                "<span style='color:#909399;'>👻 zumbi · "
+                "<span style='color:#8f8f8f;'>👻 zumbi · "
                 "nunca foi usada (ou Claude nunca decidiu invocar)</span>"
             )
             self._inner_layout.addWidget(zumbi)

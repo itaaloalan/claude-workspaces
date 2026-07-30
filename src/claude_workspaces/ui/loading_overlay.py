@@ -14,7 +14,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
-_ARC_COLOR = "#e0b268"
+_ARC_COLOR = "#cfcfcf"
 _ARC_SIZE = 36          # px (lado do widget quadrado)
 _ARC_SPAN_DEG = 100     # comprimento do arco
 _ARC_DEG_PER_SEC = 500  # ≈ 1.4 voltas/segundo (mesma velocidade dos 8°/16ms)

@@ -208,9 +208,9 @@ class FileFinder(QWidget):
         self._input.setPlaceholderText("Digite parte do nome do arquivo…")
         self._input.setClearButtonEnabled(True)
         self._input.setStyleSheet(
-            "QLineEdit { background: #22201c; border: 1px solid #302d27; "
-            "border-radius: 4px; padding: 3px 8px; color: #e8e6e3; font-size: 11px; }"
-            "QLineEdit:focus { border-color: #d4a04a; }"
+            "QLineEdit { background: #1e1e1e; border: 1px solid #2b2b2b; "
+            "border-radius: 4px; padding: 3px 8px; color: #e6e6e6; font-size: 11px; }"
+            "QLineEdit:focus { border-color: #e6e6e6; }"
         )
         self._input.textChanged.connect(self._on_text_changed)
         self._input.returnPressed.connect(self._run_search)
@@ -219,11 +219,11 @@ class FileFinder(QWidget):
 
         self._list = QListWidget()
         self._list.setStyleSheet(
-            "QListWidget { background: #1c1b18; border: 1px solid #302d27; "
-            "border-radius: 4px; color: #c9c6c0; font-family: monospace; "
+            "QListWidget { background: #181818; border: 1px solid #2b2b2b; "
+            "border-radius: 4px; color: #b8b8b8; font-family: monospace; "
             "font-size: 11px; }"
             "QListWidget::item { padding: 3px 6px; }"
-            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
         )
         self._list.setMaximumHeight(180)
         self._list.itemDoubleClicked.connect(self._on_double_click)
@@ -233,7 +233,7 @@ class FileFinder(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
         self._status = QLabel("")
-        self._status.setStyleSheet("color: #8b8880; font-size: 11px;")
+        self._status.setStyleSheet("color: #757575; font-size: 11px;")
         btn_row.addWidget(self._status, stretch=1)
 
         self._open_btn = self._mk_btn("Abrir")
@@ -254,17 +254,17 @@ class FileFinder(QWidget):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         if primary:
             btn.setStyleSheet(
-                "QPushButton { background: #d4a04a; color: #211709; border: 0; "
+                "QPushButton { background: #e6e6e6; color: #111111; border: 0; "
                 "border-radius: 4px; padding: 4px 12px; font-size: 11px; font-weight: 600; }"
-                "QPushButton:hover:enabled { background: #e0b264; }"
-                "QPushButton:disabled { background: #2d2b26; color: #5a5750; }"
+                "QPushButton:hover:enabled { background: #f2f2f2; }"
+                "QPushButton:disabled { background: #262626; color: #4f4f4f; }"
             )
         else:
             btn.setStyleSheet(
-                "QPushButton { background: #22201c; color: #e8e6e3; "
-                "border: 1px solid #302d27; border-radius: 4px; padding: 4px 12px; font-size: 11px; }"
-                "QPushButton:hover:enabled { border-color: #d4a04a; color: #e0b268; }"
-                "QPushButton:disabled { color: #5a5750; border-color: #2d2b26; }"
+                "QPushButton { background: #1e1e1e; color: #e6e6e6; "
+                "border: 1px solid #2b2b2b; border-radius: 4px; padding: 4px 12px; font-size: 11px; }"
+                "QPushButton:hover:enabled { border-color: #e6e6e6; color: #cfcfcf; }"
+                "QPushButton:disabled { color: #4f4f4f; border-color: #262626; }"
             )
         return btn
 

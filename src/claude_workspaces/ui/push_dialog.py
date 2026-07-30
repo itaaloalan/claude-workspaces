@@ -36,8 +36,8 @@ _STATUS_COLOR = {
     "A": theme.SUCCESS,
     "M": theme.WARNING,
     "D": theme.DANGER,
-    "R": "#7aa6e6",
-    "C": "#7aa6e6",
+    "R": "#6f9fd8",
+    "C": "#6f9fd8",
     "T": theme.WARNING,
 }
 _STATUS_LABEL = {
@@ -67,8 +67,8 @@ class PushCommitsDialog(QDialog):
         self.setWindowTitle(f"Push Commits to {remote_label}")
         self.setMinimumSize(820, 480)
         self.setStyleSheet(
-            f"QDialog {{ background: {theme.BG_PANEL}; color: #e8e6e3; }}"
-            "QLabel { color: #c9c6c0; }"
+            f"QDialog {{ background: {theme.BG_PANEL}; color: #e6e6e6; }}"
+            "QLabel { color: #b8b8b8; }"
         )
 
         outer = QVBoxLayout(self)
@@ -78,8 +78,8 @@ class PushCommitsDialog(QDialog):
         split = QSplitter(Qt.Orientation.Horizontal)
         split.setHandleWidth(6)
         split.setStyleSheet(
-            "QSplitter::handle { background: #2d2b26; }"
-            "QSplitter::handle:hover { background: #d4a04a; }"
+            "QSplitter::handle { background: #262626; }"
+            "QSplitter::handle:hover { background: #e6e6e6; }"
         )
         split.addWidget(self._build_commits_tree())
         split.addWidget(self._build_files_tree())
@@ -96,8 +96,8 @@ class PushCommitsDialog(QDialog):
         self._console.setFont(mono)
         self._console.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #121110; border: 1px solid #302d27;"
-            "  border-radius: 6px; color: #c9c6c0; padding: 4px;"
+            "  background: #0e0e0e; border: 1px solid #2b2b2b;"
+            "  border-radius: 6px; color: #b8b8b8; padding: 4px;"
             "}"
         )
         outer.addWidget(self._console)
@@ -126,7 +126,7 @@ class PushCommitsDialog(QDialog):
             tree.addTopLevelItem(branch_node)
             for c in pv.commits:
                 item = QTreeWidgetItem([c.subject])
-                item.setForeground(0, QBrush(QColor("#c9c6c0")))
+                item.setForeground(0, QBrush(QColor("#b8b8b8")))
                 item.setToolTip(
                     0, f"{c.short} · {c.author} · {c.date}\n{c.subject}"
                 )
@@ -152,7 +152,7 @@ class PushCommitsDialog(QDialog):
         for pv in self._previews:
             root = QTreeWidgetItem([f"{pv.name}  {len(pv.files)} files"])
             _bold(root)
-            root.setForeground(0, QBrush(QColor("#c9c6c0")))
+            root.setForeground(0, QBrush(QColor("#b8b8b8")))
             self._populate_dir_tree(root, pv, pv.files)
             tree.addTopLevelItem(root)
             _expand_all(root)
@@ -230,7 +230,7 @@ class PushCommitsDialog(QDialog):
             parent_path, _, name = path.rpartition("/")
             parent = ensure_dir(parent_path)
             node = QTreeWidgetItem([name])
-            node.setForeground(0, QBrush(QColor("#c9c6c0")))
+            node.setForeground(0, QBrush(QColor("#b8b8b8")))
             parent.addChild(node)
             dir_nodes[path] = node
             return node
@@ -250,7 +250,7 @@ class PushCommitsDialog(QDialog):
             parent_path, _, name = rel.rpartition("/")
             parent = ensure_dir(parent_path)
             code = status[0] if status else ""
-            color = _STATUS_COLOR.get(code, "#b0ada6")
+            color = _STATUS_COLOR.get(code, "#9a9a9a")
             leaf = QTreeWidgetItem([name])
             leaf.setForeground(0, QBrush(QColor(color)))
             mono = leaf.font(0)
@@ -289,7 +289,7 @@ class PushCommitsDialog(QDialog):
         row.setSpacing(8)
 
         self.push_tags = QCheckBox("Push tags")
-        self.push_tags.setStyleSheet("QCheckBox { color: #c9c6c0; }")
+        self.push_tags.setStyleSheet("QCheckBox { color: #b8b8b8; }")
         row.addWidget(self.push_tags)
 
         total_commits = sum(len(p.commits) for p in self._previews)
@@ -352,7 +352,7 @@ class PushCommitsDialog(QDialog):
             for pv in self._previews:
                 label = f"{pv.name} ({pv.branch} → {pv.remote})"
                 self._log(f"$ git push {pv.remote} {pv.branch}"
-                          + (" --follow-tags" if follow_tags else ""), "#e0b268")
+                          + (" --follow-tags" if follow_tags else ""), "#cfcfcf")
                 ok_push, out = push(
                     pv.folder,
                     pv.branch,
@@ -410,26 +410,26 @@ def _expand_all(item: QTreeWidgetItem) -> None:
 
 _TREE_QSS = (
     "QTreeWidget {"
-    "  background: #1a1916; border: 1px solid #302d27;"
-    "  border-radius: 6px; color: #e8e6e3;"
+    "  background: #161616; border: 1px solid #2b2b2b;"
+    "  border-radius: 6px; color: #e6e6e6;"
     "}"
-    "QTreeWidget::item { padding: 2px 4px; color: #c9c6c0; }"
-    "QTreeWidget::item:hover { background: #2b2620; color: #fff; }"
-    "QTreeWidget::item:selected { background: #d4a04a; color: #211709; }"
+    "QTreeWidget::item { padding: 2px 4px; color: #b8b8b8; }"
+    "QTreeWidget::item:hover { background: #222222; color: #fff; }"
+    "QTreeWidget::item:selected { background: #e6e6e6; color: #111111; }"
 )
 
 _PRIMARY_QSS = (
     "QPushButton {"
-    "  background: #d4a04a; color: #211709;"
+    "  background: #e6e6e6; color: #111111;"
     "  border: 0; border-radius: 4px; padding: 5px 22px; font-weight: 600;"
     "}"
-    "QPushButton:hover { background: #e0b264; }"
-    "QPushButton:disabled { background: #2d2b26; color: #5a5750; }"
+    "QPushButton:hover { background: #f2f2f2; }"
+    "QPushButton:disabled { background: #262626; color: #4f4f4f; }"
 )
 _GHOST_QSS = (
     "QPushButton {"
-    "  background: #22201c; color: #c9c6c0;"
-    "  border: 1px solid #302d27; border-radius: 4px; padding: 5px 16px;"
+    "  background: #1e1e1e; color: #b8b8b8;"
+    "  border: 1px solid #2b2b2b; border-radius: 4px; padding: 5px 16px;"
     "}"
-    "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
+    "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
 )

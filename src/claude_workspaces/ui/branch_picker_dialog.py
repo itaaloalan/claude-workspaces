@@ -41,7 +41,7 @@ class BranchPickerDialog(QDialog):
         layout.setSpacing(8)
 
         if current:
-            head = QLabel(f"<span style='color:#8b8880'>HEAD:</span> <b>{current}</b>")
+            head = QLabel(f"<span style='color:#757575'>HEAD:</span> <b>{current}</b>")
             head.setStyleSheet("font-size: 11px;")
             layout.addWidget(head)
 
@@ -49,9 +49,9 @@ class BranchPickerDialog(QDialog):
         self._input.setPlaceholderText("Filtrar branches…")
         self._input.setClearButtonEnabled(True)
         self._input.setStyleSheet(
-            "QLineEdit { background: #22201c; border: 1px solid #302d27; "
-            "border-radius: 4px; padding: 4px 8px; color: #e8e6e3; font-size: 12px; }"
-            "QLineEdit:focus { border-color: #d4a04a; }"
+            "QLineEdit { background: #1e1e1e; border: 1px solid #2b2b2b; "
+            "border-radius: 4px; padding: 4px 8px; color: #e6e6e6; font-size: 12px; }"
+            "QLineEdit:focus { border-color: #e6e6e6; }"
         )
         self._input.textChanged.connect(self._apply_filter)
         self._input.installEventFilter(self)
@@ -59,11 +59,11 @@ class BranchPickerDialog(QDialog):
 
         self._list = QListWidget()
         self._list.setStyleSheet(
-            "QListWidget { background: #1c1b18; border: 1px solid #302d27; "
-            "border-radius: 4px; color: #c9c6c0; font-family: monospace; "
+            "QListWidget { background: #181818; border: 1px solid #2b2b2b; "
+            "border-radius: 4px; color: #b8b8b8; font-family: monospace; "
             "font-size: 12px; }"
             "QListWidget::item { padding: 3px 6px; }"
-            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
         )
         self._list.itemDoubleClicked.connect(self._on_double_click)
         layout.addWidget(self._list, stretch=1)
@@ -77,9 +77,9 @@ class BranchPickerDialog(QDialog):
         ok.setDefault(True)
         ok.clicked.connect(self._accept_selected)
         ok.setStyleSheet(
-            "QPushButton { background: #d4a04a; color: #211709; border: 0; "
+            "QPushButton { background: #e6e6e6; color: #111111; border: 0; "
             "border-radius: 4px; padding: 5px 14px; font-weight: 600; }"
-            "QPushButton:hover { background: #e0b264; }"
+            "QPushButton:hover { background: #f2f2f2; }"
         )
         btn_row.addWidget(ok)
         layout.addLayout(btn_row)

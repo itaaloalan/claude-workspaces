@@ -56,7 +56,7 @@ class SkillEditorDialog(QDialog):
             f"<b>{item.kind.title()}</b> · "
             f"<code>{item.path}</code>"
         )
-        header.setStyleSheet("color: #8b8880;")
+        header.setStyleSheet("color: #757575;")
         header.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         outer.addWidget(header)
 
@@ -110,7 +110,7 @@ class SkillEditorDialog(QDialog):
         # Lint status
         self._lint_status = QLabel()
         self._lint_status.setWordWrap(True)
-        self._lint_status.setStyleSheet("color: #5ac35a;")
+        self._lint_status.setStyleSheet("color: #6fbf73;")
         outer.addWidget(self._lint_status)
 
         # Footer
@@ -215,16 +215,16 @@ class SkillEditorDialog(QDialog):
     def _update_lint_display(self, issues: list[LintIssue]) -> None:
         if not issues:
             self._lint_status.setText("✓ Sem issues de lint")
-            self._lint_status.setStyleSheet("color: #5ac35a;")
+            self._lint_status.setStyleSheet("color: #6fbf73;")
             self._save_btn.setEnabled(True)
             return
         has_error = any(i.severity == SEV_ERROR for i in issues)
         parts = []
         for i in issues:
             color = (
-                "#e74c3c" if i.severity == SEV_ERROR
-                else "#e6a23c" if i.severity == SEV_WARNING
-                else "#909399"
+                "#cf6f6f" if i.severity == SEV_ERROR
+                else "#d6b95c" if i.severity == SEV_WARNING
+                else "#8f8f8f"
             )
             parts.append(
                 f"<span style='color:{color};'>{i.badge()} {i.code}</span> {i.message}"

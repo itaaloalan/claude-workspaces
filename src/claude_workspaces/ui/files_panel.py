@@ -51,26 +51,26 @@ class FilesPanel(QWidget):
         # Header com botão de refresh e label do path raiz
         header = QWidget()
         header.setStyleSheet(
-            "background: #181714; border-bottom: 1px solid #2d2b26;"
+            "background: #131313; border-bottom: 1px solid #262626;"
         )
         h = QHBoxLayout(header)
         h.setContentsMargins(8, 4, 8, 4)
         h.setSpacing(6)
         self._root_label = QLabel("(nenhum workspace)")
         self._root_label.setStyleSheet(
-            "color: #9aa0a6; font-size: 11px;"
+            "color: #8f8f8f; font-size: 11px;"
         )
         h.addWidget(self._root_label, stretch=1)
 
         self._refresh_btn = QPushButton()
-        self._refresh_btn.setIcon(ic("fa5s.sync-alt", color="#9aa0a6"))
+        self._refresh_btn.setIcon(ic("fa5s.sync-alt", color="#8f8f8f"))
         self._refresh_btn.setIconSize(QSize(11, 11))
         self._refresh_btn.setFixedSize(22, 22)
         self._refresh_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._refresh_btn.setToolTip("Recarregar árvore de arquivos")
         self._refresh_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; }"
-            "QPushButton:hover { background: #2d2b26; border-radius: 3px; }"
+            "QPushButton:hover { background: #262626; border-radius: 3px; }"
         )
         self._refresh_btn.clicked.connect(self._reload)
         h.addWidget(self._refresh_btn)
@@ -84,10 +84,10 @@ class FilesPanel(QWidget):
         self._search_input.setPlaceholderText("Localizar em arquivos…")
         self._search_input.setClearButtonEnabled(True)
         self._search_input.setStyleSheet(
-            "QLineEdit { background: #22201c; border: 1px solid #302d27; "
-            "border-radius: 4px; padding: 4px 8px; color: #e8e6e3; "
+            "QLineEdit { background: #1e1e1e; border: 1px solid #2b2b2b; "
+            "border-radius: 4px; padding: 4px 8px; color: #e6e6e6; "
             "font-size: 11px; margin: 4px 6px 4px 6px; }"
-            "QLineEdit:focus { border-color: #d4a04a; }"
+            "QLineEdit:focus { border-color: #e6e6e6; }"
         )
         self._search_input.textChanged.connect(self._on_search_changed)
         layout.addWidget(self._search_input)
@@ -115,10 +115,10 @@ class FilesPanel(QWidget):
         self._tree.setAnimated(True)
         self._tree.setIndentation(16)
         self._tree.setStyleSheet(
-            "QTreeView { background: #1a1916; color: #e8e6e3; border: 0; outline: 0; }"
+            "QTreeView { background: #161616; color: #e6e6e6; border: 0; outline: 0; }"
             "QTreeView::item { padding: 2px 4px; }"
-            "QTreeView::item:hover { background: #22201c; }"
-            "QTreeView::item:selected { background: #2d2b26; color: #fff; }"
+            "QTreeView::item:hover { background: #1e1e1e; }"
+            "QTreeView::item:selected { background: #262626; color: #fff; }"
             "QTreeView::branch { background: transparent; }"
         )
         self._tree.doubleClicked.connect(self._on_double_click)
@@ -145,19 +145,19 @@ class FilesPanel(QWidget):
         big_icon = QLabel()
         big_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         big_icon.setPixmap(
-            ic("fa5s.folder-open", color="#302d27").pixmap(QSize(48, 48))
+            ic("fa5s.folder-open", color="#2b2b2b").pixmap(QSize(48, 48))
         )
         ev.addWidget(big_icon)
         title = QLabel("Nenhum workspace selecionado")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: #9aa0a6; font-size: 12px; font-weight: 600;")
+        title.setStyleSheet("color: #8f8f8f; font-size: 12px; font-weight: 600;")
         ev.addWidget(title)
         hint = QLabel(
             "Escolha um workspace na barra lateral pra navegar seus arquivos."
         )
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #8b8880; font-size: 11px;")
+        hint.setStyleSheet("color: #757575; font-size: 11px;")
         ev.addWidget(hint)
         ev.addStretch(2)
         self._empty = empty
@@ -218,10 +218,10 @@ class FilesPanel(QWidget):
         path, is_dir = hit
         menu = QMenu(self._tree)
         menu.setStyleSheet(
-            "QMenu { background: #22201c; color: #e8e6e3; "
-            "border: 1px solid #302d27; }"
+            "QMenu { background: #1e1e1e; color: #e6e6e6; "
+            "border: 1px solid #2b2b2b; }"
             "QMenu::item { padding: 6px 16px; }"
-            "QMenu::item:selected { background: #d4a04a; color: #211709; }"
+            "QMenu::item:selected { background: #e6e6e6; color: #111111; }"
         )
         # Editor configurável (settings.file_open_command, default "code").
         cmd = "code"

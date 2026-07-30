@@ -29,8 +29,8 @@ class MinimizeTray(QWidget):
         super().__init__(parent)
         self.setObjectName("MinimizeTray")
         self.setStyleSheet(
-            "QWidget#MinimizeTray { background: #181714; "
-            "border-top: 1px solid #2d2b26; }"
+            "QWidget#MinimizeTray { background: #131313; "
+            "border-top: 1px solid #262626; }"
         )
         # Não contribui pra largura mínima — evita scroll horizontal
         self.setMinimumWidth(0)
@@ -43,7 +43,7 @@ class MinimizeTray(QWidget):
         # Label "Minimizados:" — discreto
         self._lead = QLabel("Minimizados:")
         self._lead.setStyleSheet(
-            "color: #8b8880; font-size: 10px; "
+            "color: #757575; font-size: 10px; "
             "font-weight: 700; letter-spacing: 0.5px;"
         )
         outer.addWidget(self._lead)
@@ -67,14 +67,14 @@ class MinimizeTray(QWidget):
         btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         btn.setToolTip(f"Restaurar {label}")
         btn.setStyleSheet(
-            "QPushButton { background: #22201c; color: #c9c6c0; "
-            "border: 1px solid #302d27; border-radius: 10px; "
+            "QPushButton { background: #1e1e1e; color: #b8b8b8; "
+            "border: 1px solid #2b2b2b; border-radius: 10px; "
             "padding: 2px 12px; font-size: 11px; }"
-            "QPushButton:hover { border-color: #d4a04a; color: #e0b268; }"
+            "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
         )
         if icon_name:
             from .icons import ic
-            btn.setIcon(ic(icon_name, color="#9aa0a6"))
+            btn.setIcon(ic(icon_name, color="#8f8f8f"))
             btn.setIconSize(QSize(11, 11))
         hint = btn.sizeHint()
         btn.setFixedSize(QSize(hint.width(), max(hint.height(), 22)))

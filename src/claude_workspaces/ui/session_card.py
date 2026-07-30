@@ -194,10 +194,10 @@ class SessionCard(QFrame):
             self._star_btn.setToolTip("Favoritada — clique pra desmarcar")
             self._star_btn.setStyleSheet(
                 "QPushButton {"
-                "  background: transparent; color: #e3c96a;"
+                "  background: transparent; color: #d6b95c;"
                 "  border: 0; font-size: 13px; padding: 0;"
                 "}"
-                "QPushButton:hover { color: #ffd860; }"
+                "QPushButton:hover { color: #f2f2f2; }"
             )
         else:
             self._star_btn.setText("☆")
@@ -210,7 +210,7 @@ class SessionCard(QFrame):
                 # invalidava a folha inteira — era a origem dos warnings
                 # "Could not parse stylesheet" re-emitidos em todo hover.
                 "border: 0; font-size: 13px; padding: 0; }"
-                "QPushButton:hover { color: #e3c96a; }"
+                "QPushButton:hover { color: #d6b95c; }"
             )
 
     def _on_toggle_star(self) -> None:

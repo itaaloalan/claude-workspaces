@@ -135,7 +135,7 @@ class _NavButton(QFrame):
             from PySide6.QtCore import QSize as _QS
 
             from .icons import ic as _ic
-            pix = _ic(icon, color="#9aa0a6").pixmap(_QS(18, 18))
+            pix = _ic(icon, color="#8f8f8f").pixmap(_QS(18, 18))
             self._icon_label.setPixmap(pix)
             self._icon_label.setFixedSize(20, 20)
             self._icon_qta_name = icon
@@ -178,7 +178,7 @@ class _NavButton(QFrame):
             from PySide6.QtCore import QSize as _QS
 
             from .icons import ic as _ic
-            color = "#e0b268" if value else "#9aa0a6"
+            color = "#cfcfcf" if value else "#8f8f8f"
             self._icon_label.setPixmap(_ic(self._icon_qta_name, color=color).pixmap(_QS(18, 18)))
 
     def set_badge(self, text: str, tooltip: str | None = None) -> None:

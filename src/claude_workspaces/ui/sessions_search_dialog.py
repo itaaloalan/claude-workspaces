@@ -52,9 +52,9 @@ class SessionsSearchDialog(QDialog):
         self._search.setPlaceholderText("Buscar texto nas conversas com o Claude…")
         self._search.setClearButtonEnabled(True)
         self._search.setStyleSheet(
-            "QLineEdit { background: #22201c; border: 1px solid #302d27; "
-            "border-radius: 4px; padding: 6px 10px; color: #e8e6e3; }"
-            "QLineEdit:focus { border-color: #d4a04a; }"
+            "QLineEdit { background: #1e1e1e; border: 1px solid #2b2b2b; "
+            "border-radius: 4px; padding: 6px 10px; color: #e6e6e6; }"
+            "QLineEdit:focus { border-color: #e6e6e6; }"
         )
         self._search.textChanged.connect(self._schedule_search)
         self._search.returnPressed.connect(self._search_now)
@@ -70,21 +70,21 @@ class SessionsSearchDialog(QDialog):
         v.addLayout(top)
 
         self._status = QLabel("Digite pra buscar.")
-        self._status.setStyleSheet("color: #b0ada6; font-size: 11px;")
+        self._status.setStyleSheet("color: #9a9a9a; font-size: 11px;")
         v.addWidget(self._status)
 
         self._list = QListWidget()
         self._list.setAlternatingRowColors(False)
         self._list.setStyleSheet(
             "QListWidget {"
-            "  background: #1a1916; border: 1px solid #302d27;"
-            "  border-radius: 6px; color: #e8e6e3;"
+            "  background: #161616; border: 1px solid #2b2b2b;"
+            "  border-radius: 6px; color: #e6e6e6;"
             "}"
             "QListWidget::item {"
-            "  padding: 8px 10px; border-bottom: 1px solid #26241f;"
+            "  padding: 8px 10px; border-bottom: 1px solid #1f1f1f;"
             "}"
-            "QListWidget::item:hover { background: #2b2620; }"
-            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QListWidget::item:hover { background: #222222; }"
+            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
         )
         self._list.itemActivated.connect(self._on_activated)
         self._list.itemDoubleClicked.connect(self._on_activated)

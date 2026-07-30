@@ -30,22 +30,22 @@ from . import theme
 from .runner_widget import RunnerWidget
 
 _RUNNER_BTN_QSS = (
-    "QPushButton { background: rgba(255,255,255,7); color: #c9c6c0; "
+    "QPushButton { background: rgba(255,255,255,7); color: #b8b8b8; "
     "border: 1px solid rgba(255,255,255,18); border-radius: 6px; "
     "padding: 4px 10px; font-size: 11px; }"
     "QPushButton:hover { background: rgba(255,255,255,11); "
-    "border-color: rgba(90,195,90,90); color: #e8e6e3; }"
-    "QPushButton:disabled { color: #5a5750; border-color: rgba(255,255,255,10); }"
+    "border-color: rgba(111, 191, 115, 90); color: #e6e6e6; }"
+    "QPushButton:disabled { color: #4f4f4f; border-color: rgba(255,255,255,10); }"
 )
 
 _RUNNER_TABS_QSS = (
-    "QTabWidget::pane { border: 0; background: #121110; }"
-    "QTabBar::tab { background: #181714; color: #8b8880; "
-    "border: 1px solid #1c1b18; border-bottom: 0; padding: 6px 12px; "
+    "QTabWidget::pane { border: 0; background: #0e0e0e; }"
+    "QTabBar::tab { background: #131313; color: #757575; "
+    "border: 1px solid #181818; border-bottom: 0; padding: 6px 12px; "
     "margin-right: 3px; border-top-left-radius: 7px; border-top-right-radius: 7px; }"
-    "QTabBar::tab:selected { background: #121110; color: #e8e6e3; "
-    "border-color: rgba(90,195,90,80); }"
-    "QTabBar::tab:hover:!selected { color: #c9c6c0; background: #161513; }"
+    "QTabBar::tab:selected { background: #0e0e0e; color: #e6e6e6; "
+    "border-color: rgba(111, 191, 115, 80); }"
+    "QTabBar::tab:hover:!selected { color: #b8b8b8; background: #111111; }"
 )
 
 
@@ -117,7 +117,7 @@ class RunnerArea(QWidget):
         # em documentMode só pinta as abas — as abas do workspace de trás
         # "vazavam" na faixa vazia ao lado. Fundo opaco mata o bleed-through.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet("RunnerArea { background: #121110; }")
+        self.setStyleSheet("RunnerArea { background: #0e0e0e; }")
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -126,7 +126,7 @@ class RunnerArea(QWidget):
         # Header compacto: título | espaço | ▶ | ■ | ⋯
         header = QWidget()
         header.setStyleSheet(
-            "QWidget { background: #181714; border-bottom: 1px solid #26241f; }"
+            "QWidget { background: #131313; border-bottom: 1px solid #1f1f1f; }"
             "QLabel { background: transparent; border: 0; }"
         )
         h = QHBoxLayout(header)
@@ -222,7 +222,7 @@ class RunnerArea(QWidget):
             "Nenhum runner configurado para este workspace.\n"
             "Clique em '+ Novo' para adicionar — em branco ou gerar com IA."
         )
-        self._empty.setStyleSheet("color: #8b8880; padding: 24px;")
+        self._empty.setStyleSheet("color: #757575; padding: 24px;")
         self._empty.setWordWrap(True)
         self._stack.addWidget(self._empty)
 

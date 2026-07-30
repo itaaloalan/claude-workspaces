@@ -56,7 +56,7 @@ from ..new_plugin_request_dialog import NewPluginRequestDialog
 log = logging.getLogger(__name__)
 
 
-_STATUS_COLOR = {True: "#5ac35a", False: "#8b8880"}
+_STATUS_COLOR = {True: "#6fbf73", False: "#757575"}
 
 # Eventos técnicos → descrição amigável (qual situação real dispara isso).
 # Fonte de verdade: docs/PLUGIN_SPEC.md §7. Se um evento novo for
@@ -164,7 +164,7 @@ class PluginsView(QWidget):
         ex_title_row = QHBoxLayout()
         ex_title_row.setSpacing(8)
         ex_title = QLabel(
-            "<b style='color:#f2e2c2;'>💡 Primeira vez aqui? "
+            "<b style='color:#e6e6e6;'>💡 Primeira vez aqui? "
             "O que é um plugin?</b>"
         )
         ex_title_row.addWidget(ex_title)
@@ -173,9 +173,9 @@ class PluginsView(QWidget):
         self._explain_toggle.setText("ocultar")
         self._explain_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self._explain_toggle.setStyleSheet(
-            "QToolButton { color: #e0b268; background: transparent; "
+            "QToolButton { color: #cfcfcf; background: transparent; "
             "border: none; padding: 2px 6px; }"
-            "QToolButton:hover { color: #f2e2c2; }"
+            "QToolButton:hover { color: #e6e6e6; }"
         )
         self._explain_toggle.clicked.connect(self._toggle_explain)
         ex_title_row.addWidget(self._explain_toggle)
@@ -214,21 +214,21 @@ class PluginsView(QWidget):
         outer.addWidget(explain_card)
 
         hint = QLabel(
-            "<span style='color:#8b8880;'>Detalhes técnicos:</span> "
+            "<span style='color:#757575;'>Detalhes técnicos:</span> "
             "plugins estendem o app via hooks/commands/panels. Instalados em "
             f"<code>{self.registry.root}</code>. Spec completa em "
             "<code>docs/PLUGIN_SPEC.md</code>."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0ada6;")
+        hint.setStyleSheet("color: #9a9a9a;")
         outer.addWidget(hint)
 
         # Split list / detail
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(6)
         splitter.setStyleSheet(
-            "QSplitter::handle { background: #2d2b26; }"
-            "QSplitter::handle:hover { background: #d4a04a; }"
+            "QSplitter::handle { background: #262626; }"
+            "QSplitter::handle:hover { background: #e6e6e6; }"
         )
 
         # Left: list
@@ -238,15 +238,15 @@ class PluginsView(QWidget):
         left_l.setSpacing(4)
         self._list = QListWidget()
         self._list.setStyleSheet(
-            "QListWidget { background: #1a1916; border: 1px solid #302d27; "
-            "border-radius: 6px; color: #e8e6e3; }"
-            "QListWidget::item { padding: 8px 10px; border-bottom: 1px solid #26241f; }"
-            "QListWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QListWidget { background: #161616; border: 1px solid #2b2b2b; "
+            "border-radius: 6px; color: #e6e6e6; }"
+            "QListWidget::item { padding: 8px 10px; border-bottom: 1px solid #1f1f1f; }"
+            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
         )
         self._list.itemSelectionChanged.connect(self._render_detail)
         left_l.addWidget(self._list, stretch=1)
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #8b8880; font-size: 11px;")
+        self._counter.setStyleSheet("color: #757575; font-size: 11px;")
         left_l.addWidget(self._counter)
         splitter.addWidget(left)
 
@@ -342,7 +342,7 @@ class PluginsView(QWidget):
             "Clique em '📂 Instalar de pasta…' acima e selecione a pasta de "
             "um bundle (com plugin.yaml na raiz)."
         )
-        lab.setStyleSheet("color: #8b8880;")
+        lab.setStyleSheet("color: #757575;")
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._detail_layout.addWidget(lab)
 
@@ -366,10 +366,10 @@ class PluginsView(QWidget):
             f"● {'ativo' if inst.enabled else 'desabilitado'}</span>"
         ))
         chip_row.addWidget(QLabel(
-            f"<span style='color:#b0ada6;'>v{m.version}</span>"
+            f"<span style='color:#9a9a9a;'>v{m.version}</span>"
         ))
         chip_row.addWidget(QLabel(
-            f"<span style='color:#8b8880;'>por {m.author}</span>"
+            f"<span style='color:#757575;'>por {m.author}</span>"
         ))
         chip_row.addStretch()
 
@@ -381,7 +381,7 @@ class PluginsView(QWidget):
 
         desc = QLabel(m.description or "<i>(sem descrição)</i>")
         desc.setWordWrap(True)
-        desc.setStyleSheet("color: #c9c6c0;")
+        desc.setStyleSheet("color: #b8b8b8;")
         self._detail_layout.addWidget(desc)
 
         # "Como funciona" — explica em PT-BR claro se o plugin é automático,
@@ -479,7 +479,7 @@ class PluginsView(QWidget):
             perm_lines.append(("🗂", f"<b>Ver e agir só nestes workspaces</b>: {ws}"))
         if not perm_lines:
             perm_l.addWidget(QLabel(
-                "<i style='color:#8b8880;'>Plugin não pediu nenhuma permissão — "
+                "<i style='color:#757575;'>Plugin não pediu nenhuma permissão — "
                 "fica isolado, sem tocar em arquivos nem internet.</i>"
             ))
         else:
@@ -493,7 +493,7 @@ class PluginsView(QWidget):
                 row.addWidget(icon_lab)
                 text_lab = QLabel(text)
                 text_lab.setWordWrap(True)
-                text_lab.setStyleSheet("color: #c9c6c0;")
+                text_lab.setStyleSheet("color: #b8b8b8;")
                 row.addWidget(text_lab, stretch=1)
                 perm_l.addLayout(row)
         self._detail_layout.addWidget(perm_box)
@@ -557,7 +557,7 @@ class PluginsView(QWidget):
 
         uninstall_btn = QPushButton("🗑 Desinstalar")
         uninstall_btn.setStyleSheet(
-            "QPushButton { color: #d57272; }"
+            "QPushButton { color: #cf6f6f; }"
             "QPushButton:hover { background: #3a1f1f; }"
         )
         uninstall_btn.clicked.connect(lambda _, p=inst: self._uninstall(p))
@@ -576,9 +576,9 @@ class PluginsView(QWidget):
         no status_label embaixo."""
         box = QGroupBox("🧪 Testar comportamento")
         box.setStyleSheet(
-            "QGroupBox { background: #1a2230; border: 1px solid #3a3226; "
+            "QGroupBox { background: #1a2230; border: 1px solid #262626; "
             "border-radius: 6px; margin-top: 6px; padding-top: 8px; }"
-            "QGroupBox::title { color: #e0b268; subcontrol-origin: margin; "
+            "QGroupBox::title { color: #cfcfcf; subcontrol-origin: margin; "
             "left: 10px; padding: 0 4px; }"
         )
         layout = QVBoxLayout(box)
@@ -594,7 +594,7 @@ class PluginsView(QWidget):
 
         if not inst.enabled:
             warn = QLabel(
-                "<span style='color:#d5a572;'>⚠ Plugin está <b>desabilitado</b>. "
+                "<span style='color:#d6b95c;'>⚠ Plugin está <b>desabilitado</b>. "
                 "Hooks não vão disparar; commands ainda podem ser invocados se "
                 "o runtime mantiver o handler — habilite acima pra um teste "
                 "realista.</span>"
@@ -605,7 +605,7 @@ class PluginsView(QWidget):
         status = QLabel("")
         status.setWordWrap(True)
         status.setStyleSheet(
-            "color: #c9c6c0; background: #0f1620; padding: 6px 8px; "
+            "color: #b8b8b8; background: #0f1620; padding: 6px 8px; "
             "border-radius: 4px; font-family: monospace; font-size: 11px;"
         )
         status.setVisible(False)
@@ -647,16 +647,16 @@ class PluginsView(QWidget):
             row = QHBoxLayout()
             label = QLabel(
                 f"▶️ <b>{cmd.title}</b>  "
-                f"<span style='color:#8b8880; font-size:11px;'>"
+                f"<span style='color:#757575; font-size:11px;'>"
                 f"command · {cmd.id}</span>"
             )
             row.addWidget(label, stretch=1)
             btn = QPushButton("Executar agora")
             btn.setStyleSheet(
-                "QPushButton { background: #3a3226; color: #f2e2c2; "
-                "border: 1px solid #d4a04a; border-radius: 4px; "
+                "QPushButton { background: #262626; color: #e6e6e6; "
+                "border: 1px solid #e6e6e6; border-radius: 4px; "
                 "padding: 4px 10px; }"
-                "QPushButton:hover { background: #d4a04a; }"
+                "QPushButton:hover { background: #e6e6e6; }"
             )
             btn.clicked.connect(
                 lambda _=False, c=cmd: _run(
@@ -671,16 +671,16 @@ class PluginsView(QWidget):
             event_label = _EVENT_HUMAN.get(hook.event, hook.event)
             label = QLabel(
                 f"🔁 <b>{hook.event}</b>  "
-                f"<span style='color:#8b8880; font-size:11px;'>"
+                f"<span style='color:#757575; font-size:11px;'>"
                 f"hook · {event_label}</span>"
             )
             row.addWidget(label, stretch=1)
             btn = QPushButton("Disparar evento")
             btn.setStyleSheet(
-                "QPushButton { background: #3a3226; color: #f2e2c2; "
-                "border: 1px solid #d4a04a; border-radius: 4px; "
+                "QPushButton { background: #262626; color: #e6e6e6; "
+                "border: 1px solid #e6e6e6; border-radius: 4px; "
                 "padding: 4px 10px; }"
-                "QPushButton:hover { background: #d4a04a; }"
+                "QPushButton:hover { background: #e6e6e6; }"
             )
             btn.clicked.connect(
                 lambda _=False, h=hook: _run(
@@ -694,16 +694,16 @@ class PluginsView(QWidget):
             row = QHBoxLayout()
             label = QLabel(
                 f"🪟 <b>{panel.title}</b>  "
-                f"<span style='color:#8b8880; font-size:11px;'>"
+                f"<span style='color:#757575; font-size:11px;'>"
                 f"panel · {panel.id}</span>"
             )
             row.addWidget(label, stretch=1)
             btn = QPushButton("Pré-visualizar")
             btn.setStyleSheet(
-                "QPushButton { background: #3a3226; color: #f2e2c2; "
-                "border: 1px solid #d4a04a; border-radius: 4px; "
+                "QPushButton { background: #262626; color: #e6e6e6; "
+                "border: 1px solid #e6e6e6; border-radius: 4px; "
                 "padding: 4px 10px; }"
-                "QPushButton:hover { background: #d4a04a; }"
+                "QPushButton:hover { background: #e6e6e6; }"
             )
             btn.clicked.connect(
                 lambda _=False, p=panel: _run(
@@ -760,7 +760,7 @@ class PluginsView(QWidget):
         layout = QVBoxLayout(card)
         layout.setContentsMargins(14, 10, 14, 12)
         layout.setSpacing(4)
-        title = QLabel("<b style='color:#f2e2c2;'>💡 Como funciona</b>")
+        title = QLabel("<b style='color:#e6e6e6;'>💡 Como funciona</b>")
         layout.addWidget(title)
         text = QLabel(f"<div style='color:#d4dae3; line-height:150%;'>{body}</div>")
         text.setWordWrap(True)
@@ -769,7 +769,7 @@ class PluginsView(QWidget):
         # pro hook/panel começar a agir.
         if has_hooks or has_panels:
             footer = QLabel(
-                "<span style='color:#e0b268;'>Tudo isso só acontece com o "
+                "<span style='color:#cfcfcf;'>Tudo isso só acontece com o "
                 "switch <b>Habilitado</b> ligado.</span>"
             )
             footer.setWordWrap(True)
@@ -787,7 +787,7 @@ class PluginsView(QWidget):
         head = QLabel(f"<b>{field.label}</b>")
         head.setWordWrap(True)
         v.addWidget(head)
-        key = QLabel(f"<code style='color:#5a5750; font-size:11px;'>{field.key}</code>")
+        key = QLabel(f"<code style='color:#4f4f4f; font-size:11px;'>{field.key}</code>")
         v.addWidget(key)
         return w
 
@@ -800,13 +800,13 @@ class PluginsView(QWidget):
             current = field.default
 
         status = QLabel("")
-        status.setStyleSheet("color: #8b8880; font-size: 11px;")
+        status.setStyleSheet("color: #757575; font-size: 11px;")
 
         def mark_saved() -> None:
             status.setText(
-                "<span style='color:#5ac35a;'>✓ salvo</span>"
+                "<span style='color:#6fbf73;'>✓ salvo</span>"
                 if store.is_overridden(field.key)
-                else "<span style='color:#8b8880;'>· no padrão</span>"
+                else "<span style='color:#757575;'>· no padrão</span>"
             )
 
         def commit(value) -> None:
@@ -820,7 +820,7 @@ class PluginsView(QWidget):
                     store.set(field.key, value)
                 except Exception:
                     log.exception("Falha salvando config %s.%s", inst.id, field.key)
-                    status.setText("<span style='color:#d57272;'>erro ao salvar</span>")
+                    status.setText("<span style='color:#cf6f6f;'>erro ao salvar</span>")
                     return
             mark_saved()
             # Reload só se o plugin tá habilitado — recarregar disabled
@@ -891,10 +891,10 @@ class PluginsView(QWidget):
         reset_btn.setToolTip("Voltar pro valor padrão do plugin")
         reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         reset_btn.setStyleSheet(
-            "QToolButton { color:#e0b268; background:transparent; "
+            "QToolButton { color:#cfcfcf; background:transparent; "
             "border:none; padding:2px 6px; font-size:14px; }"
-            "QToolButton:hover { color:#f2e2c2; }"
-            "QToolButton:disabled { color:#302d27; }"
+            "QToolButton:hover { color:#e6e6e6; }"
+            "QToolButton:disabled { color:#2b2b2b; }"
         )
         reset_btn.setEnabled(store.is_overridden(field.key))
 
@@ -966,13 +966,13 @@ class PluginsView(QWidget):
         row.addWidget(icon_lab)
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        head = QLabel(f"<div style='color:#e8e6e3;'>{headline}</div>")
+        head = QLabel(f"<div style='color:#e6e6e6;'>{headline}</div>")
         head.setWordWrap(True)
         text_col.addWidget(head)
         sub_lab = QLabel(f"<div style='color:#9aa4b1;'>{sub}</div>")
         sub_lab.setWordWrap(True)
         text_col.addWidget(sub_lab)
-        tech_lab = QLabel(f"<span style='color:#5a5750; font-size:11px;'>{tech}</span>")
+        tech_lab = QLabel(f"<span style='color:#4f4f4f; font-size:11px;'>{tech}</span>")
         tech_lab.setWordWrap(True)
         text_col.addWidget(tech_lab)
         row.addLayout(text_col, stretch=1)

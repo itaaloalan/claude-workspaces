@@ -5,7 +5,7 @@ Uso típico:
 
     from .icons import ic
     btn.setIcon(ic("fa5s.play"))
-    btn.setIcon(ic("fa5s.play", color="#5ac35a"))
+    btn.setIcon(ic("fa5s.play", color="#6fbf73"))
 
 Se o qtawesome não estiver disponível ou o nome do ícone for inválido,
 retorna QIcon() vazio (não quebra a UI — só não desenha).
@@ -23,12 +23,12 @@ except ImportError:  # pragma: no cover — opcional na primeira inicialização
 
 
 # Cores default — alinhadas com theme.py / dock_manager QSS
-DEFAULT_COLOR = "#c9c6c0"
-ACTIVE_COLOR = "#e8e6e3"
-MUTED_COLOR = "#9aa0a6"
-PRIMARY_COLOR = "#d4a04a"
-SUCCESS_COLOR = "#5ac35a"
-WARN_COLOR = "#d4a04a"
+DEFAULT_COLOR = "#b8b8b8"
+ACTIVE_COLOR = "#e6e6e6"
+MUTED_COLOR = "#8f8f8f"
+PRIMARY_COLOR = "#e6e6e6"
+SUCCESS_COLOR = "#6fbf73"
+WARN_COLOR = "#e6e6e6"
 
 
 def ic(name: str, color: str = DEFAULT_COLOR, size: int | None = None) -> QIcon:

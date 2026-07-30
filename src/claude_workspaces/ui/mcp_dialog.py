@@ -36,7 +36,7 @@ class MCPDialog(QDialog):
             "esse workspace abre uma sessão."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #c9c6c0;")
+        intro.setStyleSheet("color: #b8b8b8;")
         outer.addWidget(intro)
 
         form = QFormLayout()
@@ -52,7 +52,7 @@ class MCPDialog(QDialog):
             "<code>postgresql://postgres:qwe123@localhost:5432/nome_do_banco</code>."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0ada6; font-size: 11px;")
+        hint.setStyleSheet("color: #9a9a9a; font-size: 11px;")
         outer.addWidget(hint)
 
         outer.addStretch()

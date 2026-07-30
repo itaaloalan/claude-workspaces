@@ -344,8 +344,8 @@ class _RunnerFooterRow(QWidget):
 
 
 _CHIP_QSS = (
-    "QPushButton { background: #1c1b18; "
-    f"color: {theme.TEXT_FAINT}; border: 1px solid #2d2b26; "
+    "QPushButton { background: #181818; "
+    f"color: {theme.TEXT_FAINT}; border: 1px solid #262626; "
     f"border-radius: 5px; font-size: 9px; font-weight: 650; "
     f"padding: 1px 6px; max-height: 18px; }}"
     f"QPushButton:hover {{ border-color: {theme.PRIMARY}; color: {theme.TEXT_LINK}; }}"
@@ -457,7 +457,7 @@ class SidebarFooter(QWidget):
             f"QPushButton {{ color: {theme.TEXT_FAINT}; background: transparent; "
             "border: none; font-size: 13px; padding: 0px; }"
             f"QPushButton:hover {{ color: {theme.TEXT_PRIMARY}; }}"
-            "QPushButton:disabled { color: #5a5750; }"
+            "QPushButton:disabled { color: #4f4f4f; }"
         )
         up_row.addWidget(
             self.context_status_refresh_btn,
@@ -546,7 +546,7 @@ class SidebarFooter(QWidget):
         # ── Footer bar (sempre visível, 28px) ───────────────────────────
         footer_bar = QWidget()
         footer_bar.setFixedHeight(28)
-        footer_bar.setStyleSheet("QWidget { background: #181714; }")
+        footer_bar.setStyleSheet("QWidget { background: #131313; }")
         fb = QHBoxLayout(footer_bar)
         fb.setContentsMargins(8, 0, 6, 0)
         fb.setSpacing(4)
@@ -770,7 +770,7 @@ class SidebarFooter(QWidget):
                 "⬇",
                 "Subir a stack do workspace neste console (copia os "
                 "runners com a próxima porta livre e inicia todos)",
-                "#5ac38a",
+                "#6fbf73",
             )
             raise_btn.clicked.connect(
                 lambda _c=False: self.console_stack_raise_requested.emit(
@@ -780,7 +780,7 @@ class SidebarFooter(QWidget):
             rl.addWidget(raise_btn)
             if count > 0:
                 trash = _mini_btn(
-                    "🗑", "Remover todos os runners deste console", "#e06c75"
+                    "🗑", "Remover todos os runners deste console", "#cf6f6f"
                 )
                 trash.clicked.connect(
                     lambda _c=False: self.console_runners_remove_requested.emit(

@@ -84,7 +84,7 @@ class RunnerGroupWidget(QWidget):
         self._collapse_btn = QLabel()
         self._collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._collapse_btn.setPixmap(
-            _ic("fa5s.chevron-down", color="#9aa0a6").pixmap(_QS(8, 8))
+            _ic("fa5s.chevron-down", color="#8f8f8f").pixmap(_QS(8, 8))
         )
         self._collapse_btn.setToolTip("Recolher / expandir runners")
         if on_toggle_collapse is not None:
@@ -97,14 +97,14 @@ class RunnerGroupWidget(QWidget):
         # com o bucket Sessões Claude que já tem ícone fa5s.comments.
         self._icon_lbl = QLabel()
         self._icon_lbl.setPixmap(
-            _ic("mdi6.source-branch", color="#9aa0a6").pixmap(_QS(12, 12))
+            _ic("mdi6.source-branch", color="#8f8f8f").pixmap(_QS(12, 12))
         )
         row.addWidget(self._icon_lbl, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._label = QLabel(label)
         # Mesma cor/tamanho do header "Sessões Claude" pra paridade visual.
         self._label.setStyleSheet(
-            "color: #c9c6c0; font-size: 11px; font-weight: 600;"
+            "color: #b8b8b8; font-size: 11px; font-weight: 600;"
         )
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
 
@@ -208,6 +208,6 @@ class RunnerGroupWidget(QWidget):
         from .icons import ic as _ic
         name = "fa5s.chevron-right" if collapsed else "fa5s.chevron-down"
         self._collapse_btn.setPixmap(
-            _ic(name, color="#9aa0a6").pixmap(_QS(8, 8))
+            _ic(name, color="#8f8f8f").pixmap(_QS(8, 8))
         )
 

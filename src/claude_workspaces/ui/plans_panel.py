@@ -53,11 +53,11 @@ class PlanScanTask(QRunnable):
 
 _BTN_CSS = (
     "QPushButton {"
-    "  background: transparent; color: #c9c6c0;"
-    "  border: 1px solid #302d27; border-radius: 9px;"
+    "  background: transparent; color: #b8b8b8;"
+    "  border: 1px solid #2b2b2b; border-radius: 9px;"
     "  padding: 1px 8px; font-size: 11px;"
     "}"
-    "QPushButton:hover { color: #e8e6e3; border-color: #d4a04a; }"
+    "QPushButton:hover { color: #e6e6e6; border-color: #e6e6e6; }"
 )
 
 
@@ -84,7 +84,7 @@ class PlansPanel(QWidget):
         self._title_label = QLabel("")
         self._title_label.setWordWrap(True)
         self._title_label.setStyleSheet(
-            "color: #c9c6c0; font-size: 12px; font-weight: 600;"
+            "color: #b8b8b8; font-size: 12px; font-weight: 600;"
         )
         self._title_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
@@ -98,8 +98,8 @@ class PlansPanel(QWidget):
         self._body_view.setFont(mono)
         self._body_view.setStyleSheet(
             "QTextBrowser {"
-            "  background: #1a1916; border: 1px solid #302d27;"
-            "  border-radius: 6px; color: #e8e6e3; padding: 6px;"
+            "  background: #161616; border: 1px solid #2b2b2b;"
+            "  border-radius: 6px; color: #e6e6e6; padding: 6px;"
             "}"
         )
         outer.addWidget(self._body_view, stretch=1)
@@ -107,7 +107,7 @@ class PlansPanel(QWidget):
         footer = QHBoxLayout()
         self._path_label = QLabel("")
         self._path_label.setStyleSheet(
-            "color: #8b8880; font-size: 10px; font-family: monospace;"
+            "color: #757575; font-size: 10px; font-family: monospace;"
         )
         self._path_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse

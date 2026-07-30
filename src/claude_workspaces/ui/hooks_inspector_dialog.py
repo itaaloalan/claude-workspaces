@@ -27,9 +27,9 @@ from ..services.system_open import open_in_file_manager
 log = logging.getLogger(__name__)
 
 _SCOPE_COLOR = {
-    "user": "#e0b268",
-    "project": "#5ac35a",
-    "local": "#e6a23c",
+    "user": "#cfcfcf",
+    "project": "#6fbf73",
+    "local": "#d6b95c",
 }
 
 
@@ -51,7 +51,7 @@ class HooksInspectorDialog(QDialog):
             "<b>todos</b> os configurados, agrupados por evento e escopo."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0ada6;")
+        hint.setStyleSheet("color: #9a9a9a;")
         outer.addWidget(hint)
 
         # Scope legend
@@ -69,16 +69,16 @@ class HooksInspectorDialog(QDialog):
         self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.setStyleSheet(
-            "QTreeWidget { background: #1a1916; border: 1px solid #302d27; "
-            "border-radius: 6px; color: #e8e6e3; }"
+            "QTreeWidget { background: #161616; border: 1px solid #2b2b2b; "
+            "border-radius: 6px; color: #e6e6e6; }"
             "QTreeWidget::item { padding: 4px; }"
-            "QTreeWidget::item:selected { background: #d4a04a; color: #211709; }"
+            "QTreeWidget::item:selected { background: #e6e6e6; color: #111111; }"
         )
         self._tree.itemDoubleClicked.connect(self._on_open_file)
         outer.addWidget(self._tree, stretch=1)
 
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #8b8880; font-size: 11px;")
+        self._counter.setStyleSheet("color: #757575; font-size: 11px;")
         outer.addWidget(self._counter)
 
         # ---------- footer ----------
@@ -131,7 +131,7 @@ class HooksInspectorDialog(QDialog):
                 child.setToolTip(0, self._tooltip_for(h))
                 from PySide6.QtGui import QBrush, QColor
                 child.setForeground(
-                    1, QBrush(QColor(_SCOPE_COLOR.get(h.scope, "#c9c6c0")))
+                    1, QBrush(QColor(_SCOPE_COLOR.get(h.scope, "#b8b8b8")))
                 )
                 ev_item.addChild(child)
             self._tree.addTopLevelItem(ev_item)

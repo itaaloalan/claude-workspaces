@@ -109,13 +109,13 @@ _TAB_COLOR = {
 _TAB_COLOR_DEFAULT = QColor(theme.TEXT_MUTED)
 
 _TABBAR_QSS = (
-    "QTabBar { background: #121110; }"
-    "QTabBar::tab { background: #121110; "
+    "QTabBar { background: #0e0e0e; }"
+    "QTabBar::tab { background: #0e0e0e; "
     "  padding: 4px 12px; border: 0; "
-    "  border-right: 1px solid #2d2b26; "
+    "  border-right: 1px solid #262626; "
     "  font-size: 11px; min-height: 18px; }"
-    "QTabBar::tab:selected { background: #121110; "
-    "  border-bottom: 2px solid #d4a04a; }"
+    "QTabBar::tab:selected { background: #0e0e0e; "
+    "  border-bottom: 2px solid #e6e6e6; }"
 )
 
 
@@ -208,7 +208,7 @@ class TerminalArea(QWidget):
         # Conteúdo: StackAll mantém todas as webviews vivas; a "atual" fica
         # no topo. bg do terminal pra evitar faixa branca atrás das views.
         self._content = QWidget()
-        self._content.setStyleSheet("background: #121110;")
+        self._content.setStyleSheet("background: #0e0e0e;")
         self._content.setMinimumWidth(0)
         self._stack = QStackedLayout(self._content)
         self._stack.setContentsMargins(0, 0, 0, 0)

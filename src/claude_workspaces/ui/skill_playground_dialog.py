@@ -82,7 +82,7 @@ class SkillPlaygroundDialog(QDialog):
             "Pra liberar tools, ajuste o campo abaixo."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #b0ada6;")
+        hint.setStyleSheet("color: #9a9a9a;")
         outer.addWidget(hint)
 
         # Prompt
@@ -117,7 +117,7 @@ class SkillPlaygroundDialog(QDialog):
         run_row.addWidget(clear_btn)
         run_row.addStretch()
         self._status = QLabel("idle")
-        self._status.setStyleSheet("color: #8b8880;")
+        self._status.setStyleSheet("color: #757575;")
         run_row.addWidget(self._status)
         outer.addLayout(run_row)
 
@@ -163,7 +163,7 @@ class SkillPlaygroundDialog(QDialog):
         self._output.clear()
         self._output.appendPlainText(f"$ {' '.join(shlex.quote(a) for a in argv)}\n")
         self._status.setText("running…")
-        self._status.setStyleSheet("color: #e6a23c;")
+        self._status.setStyleSheet("color: #d6b95c;")
         self._run_btn.setEnabled(False)
         self._cancel_btn.setEnabled(True)
 
@@ -190,7 +190,7 @@ class SkillPlaygroundDialog(QDialog):
     def _on_finished(self, exit_code: int, _exit_status) -> None:
         self._status.setText(f"exited {exit_code}")
         self._status.setStyleSheet(
-            "color: #5ac35a;" if exit_code == 0 else "color: #e74c3c;"
+            "color: #6fbf73;" if exit_code == 0 else "color: #cf6f6f;"
         )
         self._run_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)
@@ -199,7 +199,7 @@ class SkillPlaygroundDialog(QDialog):
         msg = self._process.errorString() if self._process else str(err)
         self._output.appendPlainText(f"\n[QProcess error] {msg}")
         self._status.setText("error")
-        self._status.setStyleSheet("color: #e74c3c;")
+        self._status.setStyleSheet("color: #cf6f6f;")
         self._run_btn.setEnabled(True)
         self._cancel_btn.setEnabled(False)
 
@@ -208,7 +208,7 @@ class SkillPlaygroundDialog(QDialog):
             self._process.kill()
             self._output.appendPlainText("\n[interrompido pelo usuário]")
             self._status.setText("killed")
-            self._status.setStyleSheet("color: #e74c3c;")
+            self._status.setStyleSheet("color: #cf6f6f;")
             self._run_btn.setEnabled(True)
             self._cancel_btn.setEnabled(False)
 

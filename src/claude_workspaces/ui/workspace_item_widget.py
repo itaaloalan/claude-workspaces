@@ -196,7 +196,7 @@ class WorkspaceItemWidget(QWidget):
         self._pin_icon = QLabel()
         self._pin_icon.setFixedSize(14, 14)
         self._pin_icon.setPixmap(
-            ic(ICONS["pin"], color="#9aa0a6").pixmap(QSize(12, 12))
+            ic(ICONS["pin"], color="#8f8f8f").pixmap(QSize(12, 12))
         )
         self._pin_icon.setToolTip("Workspace fixado")
         self._pin_icon.hide()
@@ -348,7 +348,7 @@ class WorkspaceItemWidget(QWidget):
 
     def _tick_dot_blink(self) -> None:
         self._dot_blink_on = not self._dot_blink_on
-        color = "#5a3a28" if self._dot_blink_on else self._dot_color
+        color = "#5c4230" if self._dot_blink_on else self._dot_color
         self._dot.setStyleSheet(_dot_qss(color))
 
     def set_pinned(self, pinned: bool) -> None:
@@ -371,7 +371,7 @@ class WorkspaceItemWidget(QWidget):
         acento vertical à esquerda, pra destacar bem do resto. Não-selecionado
         mantém borda transparente de 1px pra não 'pular' o layout ao selecionar."""
         if self._selected:
-            bg = "rgba(212, 160, 74, 92)"
+            bg = "rgba(255, 255, 255, 44)"
             border_qss = (
                 f"border: 1px solid {theme.PRIMARY};"
                 f"  border-left: 3px solid {theme.PRIMARY_HOVER};"

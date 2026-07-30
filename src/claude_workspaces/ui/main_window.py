@@ -491,9 +491,9 @@ class MainWindow(QMainWindow):
         outer.addWidget(self.top_bar)
 
         splitter_css = (
-            "QSplitter::handle { background: #2d2b26; }"
-            "QSplitter::handle:hover { background: #302d27; }"
-            "QSplitter::handle:pressed { background: #e0b264; }"
+            "QSplitter::handle { background: #262626; }"
+            "QSplitter::handle:hover { background: #2b2b2b; }"
+            "QSplitter::handle:pressed { background: #f2f2f2; }"
         )
 
         # Body dock manager (QtAds): sidebar | conteúdo+terminal | right_dock.
@@ -729,7 +729,7 @@ class MainWindow(QMainWindow):
         from .status_bar import StatusBarWidgets
         self.status_widgets = StatusBarWidgets()
         sb = self.statusBar()
-        sb.setStyleSheet("QStatusBar { background: #181714; border-top: 1px solid #2d2b26; }")
+        sb.setStyleSheet("QStatusBar { background: #131313; border-top: 1px solid #262626; }")
         sb.setSizeGripEnabled(False)
         sb.addPermanentWidget(self.status_widgets, stretch=1)
         # Click no segmento de workspace foca a sidebar/seleciona o
@@ -1042,7 +1042,7 @@ class MainWindow(QMainWindow):
         if title_bar is None:
             return
         btn = QPushButton(title_bar)
-        btn.setIcon(_ic("fa5s.minus", color="#c9c6c0"))
+        btn.setIcon(_ic("fa5s.minus", color="#b8b8b8"))
         btn.setIconSize(QSize(13, 13))
         btn.setFlat(True)
         btn.setFixedSize(22, 22)
@@ -1050,7 +1050,7 @@ class MainWindow(QMainWindow):
         btn.setToolTip("Minimizar painel de ferramentas (Ctrl+Shift+B)")
         btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-            "QPushButton:hover { background: #2d2b26; }"
+            "QPushButton:hover { background: #262626; }"
         )
         btn.clicked.connect(self._toggle_right_dock)
         # Insere no fim do layout da title bar → fica no canto superior direito,
@@ -1401,7 +1401,7 @@ class MainWindow(QMainWindow):
 
         from .icons import ic
         idx = self._bottom_tabs.addTab(editor, title)
-        self._bottom_tabs.setTabIcon(idx, ic("fa5s.file-alt", color="#9aa0a6"))
+        self._bottom_tabs.setTabIcon(idx, ic("fa5s.file-alt", color="#8f8f8f"))
         self._bottom_tabs.setTabToolTip(idx, abs_path)
         self._bottom_tabs.setCurrentIndex(idx)
         # Garante que tabsClosable está ON pra essa aba poder fechar
@@ -1558,20 +1558,20 @@ class MainWindow(QMainWindow):
         self._bottom_sub_splitter.setHandleWidth(SPLITTER_HANDLE_W)
         self._bottom_sub_splitter.setMinimumWidth(0)
         self._bottom_sub_splitter.setStyleSheet(
-            "QSplitter::handle { background: #2d2b26; }"
-            "QSplitter::handle:hover { background: #302d27; }"
+            "QSplitter::handle { background: #262626; }"
+            "QSplitter::handle:hover { background: #2b2b2b; }"
         )
 
         # ----- Tabs do TERMINAL (só Claude console + EditorTabs) -----
         tabs_qss = (
             "QTabWidget::pane { border: 0; }"
-            "QTabBar { background: #181714; }"
-            "QTabBar::tab { background: #181714; color: #9aa0a6; "
+            "QTabBar { background: #131313; }"
+            "QTabBar::tab { background: #131313; color: #8f8f8f; "
             "  padding: 6px 14px; border: 0; "
-            "  border-right: 1px solid #2d2b26; min-height: 22px; }"
-            "QTabBar::tab:selected { background: #1a1916; color: #e8e6e3; "
-            "  border-bottom: 2px solid #5ac35a; }"
-            "QTabBar::tab:hover:!selected { color: #c9c6c0; }"
+            "  border-right: 1px solid #262626; min-height: 22px; }"
+            "QTabBar::tab:selected { background: #161616; color: #e6e6e6; "
+            "  border-bottom: 2px solid #6fbf73; }"
+            "QTabBar::tab:hover:!selected { color: #b8b8b8; }"
         )
         self._terminal_tabs = QTabWidget(pane)
         self._terminal_tabs.setMinimumWidth(0)
@@ -1590,7 +1590,7 @@ class MainWindow(QMainWindow):
 
         from .icons import ICONS, ic
         idx_console = self._terminal_tabs.addTab(self.terminal_host, "Console IA")
-        self._terminal_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#9aa0a6"))
+        self._terminal_tabs.setTabIcon(idx_console, ic(ICONS["console"], color="#8f8f8f"))
 
         # Mantém alias _bottom_tabs apontando pro terminal_tabs pra evitar
         # quebrar callsites legados que assumiam um único QTabWidget. EditorTabs
@@ -1608,7 +1608,7 @@ class MainWindow(QMainWindow):
         terminal_header = QWidget()
         terminal_header.setMinimumWidth(0)
         terminal_header.setStyleSheet(
-            "background: #181714; border-bottom: 1px solid #2d2b26;"
+            "background: #131313; border-bottom: 1px solid #262626;"
         )
         th_layout = QHBoxLayout(terminal_header)
         th_layout.setContentsMargins(10, 5, 4, 5)
@@ -1620,7 +1620,7 @@ class MainWindow(QMainWindow):
         self._terminal_pane_title = QLabel("Console IA")
         self._terminal_pane_title.setTextFormat(Qt.TextFormat.RichText)
         self._terminal_pane_title.setStyleSheet(
-            "color: #c9c6c0; font-size: 12px;"
+            "color: #b8b8b8; font-size: 12px;"
         )
         # Branch longo no breadcrumb empurrava o sizeHint do label, forçando
         # a largura mínima do header → painel → dock central e disparando um
@@ -1645,10 +1645,10 @@ class MainWindow(QMainWindow):
         # Mesmo visual do chip 📁 do runner.
         self._plan_chip_btn = _QPB2("📋 Plano")
         self._plan_chip_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #302d27; border-radius: 9px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px solid #2b2b2b; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #d4a04a; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #e6e6e6; }"
         )
         self._plan_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._plan_chip_btn.setToolTip(
@@ -1662,10 +1662,10 @@ class MainWindow(QMainWindow):
         # existente. Mesmos helpers do menu de contexto da sidebar.
         self._worktree_chip_btn = _QPB2("🌿 Worktree")
         self._worktree_chip_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #302d27; border-radius: 9px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px solid #2b2b2b; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #4d8a52; }"
         )
         self._worktree_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._worktree_chip_btn.setToolTip(
@@ -1680,10 +1680,10 @@ class MainWindow(QMainWindow):
         # atual. Evita ter que fechar e reabrir a sessão na mão.
         self._reload_chip_btn = _QPB2("🔄 Reload")
         self._reload_chip_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px solid #302d27; border-radius: 9px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px solid #2b2b2b; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #4d8a52; }"
         )
         self._reload_chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._reload_chip_btn.setToolTip(
@@ -1719,7 +1719,7 @@ class MainWindow(QMainWindow):
         th_layout.addWidget(self._vscode_chip_btn)
         self._terminal_pane_minimize_btn = _QPB2()
         self._terminal_pane_minimize_btn.setIcon(
-            ic("fa5s.window-minimize", color="#c9c6c0")
+            ic("fa5s.window-minimize", color="#b8b8b8")
         )
         self._terminal_pane_minimize_btn.setIconSize(_QS(11, 11))
         self._terminal_pane_minimize_btn.setFixedSize(22, 20)
@@ -1727,7 +1727,7 @@ class MainWindow(QMainWindow):
         self._terminal_pane_minimize_btn.setToolTip("Minimizar terminal")
         self._terminal_pane_minimize_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-            "QPushButton:hover { background: #2d2b26; }"
+            "QPushButton:hover { background: #262626; }"
         )
         self._terminal_pane_minimize_btn.clicked.connect(
             self._toggle_terminal_pane_minimized
@@ -1750,7 +1750,7 @@ class MainWindow(QMainWindow):
         self._loading_overlay = LoadingOverlay(self._terminal_pane_widget)
         self._loading_corner = QLabel("")
         self._loading_corner.setStyleSheet(
-            "color: #e0b268; font-size: 12px; padding: 0 8px;"
+            "color: #cfcfcf; font-size: 12px; padding: 0 8px;"
         )
         self._loading_corner.setVisible(False)
         self.statusBar().addPermanentWidget(self._loading_corner)
@@ -1771,7 +1771,7 @@ class MainWindow(QMainWindow):
         runner_empty = QLabel("Selecione um workspace para ver seus runners.")
         runner_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         runner_empty.setStyleSheet(
-            "background: #121110; color: #5a5750; padding: 28px;"
+            "background: #0e0e0e; color: #4f4f4f; padding: 28px;"
         )
         self._runner_placeholder_idx = self.runner_host.addWidget(runner_empty)
 
@@ -1807,29 +1807,29 @@ class MainWindow(QMainWindow):
             cl.setSpacing(0)
             header = QWidget()
             header.setStyleSheet(
-                "background: #181714; border-bottom: 1px solid #2d2b26;"
+                "background: #131313; border-bottom: 1px solid #262626;"
             )
             hl = QHBoxLayout(header)
             hl.setContentsMargins(8, 3, 4, 3)
             hl.setSpacing(6)
             icon_lbl = QLabel()
-            icon_lbl.setPixmap(ic(icon_name, color="#9aa0a6").pixmap(_QS(12, 12)))
+            icon_lbl.setPixmap(ic(icon_name, color="#8f8f8f").pixmap(_QS(12, 12)))
             hl.addWidget(icon_lbl)
             t_lbl = QLabel(title)
             t_lbl.setStyleSheet(
-                "color: #c9c6c0; font-size: 11px; font-weight: 600;"
+                "color: #b8b8b8; font-size: 11px; font-weight: 600;"
             )
             hl.addWidget(t_lbl)
             hl.addStretch(1)
             btn = _QPB()
-            btn.setIcon(ic("fa5s.window-minimize", color="#c9c6c0"))
+            btn.setIcon(ic("fa5s.window-minimize", color="#b8b8b8"))
             btn.setIconSize(_QS(11, 11))
             btn.setFixedSize(22, 20)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(tooltip_min)
             btn.setStyleSheet(
                 "QPushButton { background: transparent; border: 0; border-radius: 3px; }"
-                "QPushButton:hover { background: #2d2b26; }"
+                "QPushButton:hover { background: #262626; }"
             )
             btn.clicked.connect(on_click)
             hl.addWidget(btn)
@@ -1884,7 +1884,7 @@ class MainWindow(QMainWindow):
         container.setObjectName("consoleRunnerPlaceholder")
         container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         container.setStyleSheet(
-            "#consoleRunnerPlaceholder { background: #121110; }"
+            "#consoleRunnerPlaceholder { background: #0e0e0e; }"
         )
         outer = QVBoxLayout(container)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -1922,7 +1922,7 @@ class MainWindow(QMainWindow):
         )
         body.setAlignment(Qt.AlignmentFlag.AlignCenter)
         body.setWordWrap(True)
-        body.setStyleSheet("background: #121110; color: #5a5750; padding: 28px;")
+        body.setStyleSheet("background: #0e0e0e; color: #4f4f4f; padding: 28px;")
         outer.addWidget(body, stretch=1)
         return container
 
@@ -2016,7 +2016,7 @@ class MainWindow(QMainWindow):
             else:
                 new_sizes[0] = total
             self._bottom_sub_splitter.setSizes(new_sizes)
-            btn.setIcon(ic("fa5s.window-maximize", color="#c9c6c0"))
+            btn.setIcon(ic("fa5s.window-maximize", color="#b8b8b8"))
             btn.setIconSize(_QS(11, 11))
             btn.setToolTip(tooltip_max)
             if hasattr(self, "_minimize_tray"):
@@ -2040,7 +2040,7 @@ class MainWindow(QMainWindow):
                 new_sizes = [each] * 3
                 new_sizes[idx] = max(target, each)
             self._bottom_sub_splitter.setSizes(new_sizes)
-            btn.setIcon(ic("fa5s.window-minimize", color="#c9c6c0"))
+            btn.setIcon(ic("fa5s.window-minimize", color="#b8b8b8"))
             btn.setIconSize(_QS(11, 11))
             btn.setToolTip(tooltip_min)
             if hasattr(self, "_minimize_tray"):
@@ -3959,7 +3959,7 @@ class MainWindow(QMainWindow):
         font.setBold(True)
         font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.0)
         item.setFont(0, font)
-        item.setForeground(0, QBrush(QColor("#b0ada6")))
+        item.setForeground(0, QBrush(QColor("#9a9a9a")))
         item.setSizeHint(0, _QS(0, 20))
         self.list_widget.addTopLevelItem(item)
         # Aplica o colapso restaurado imediatamente — esconde os
@@ -4155,14 +4155,14 @@ class MainWindow(QMainWindow):
         ws_item.insertChild(0, bucket)
 
         btn = _QPB("  Arquivos")
-        btn.setIcon(_ic(ICONS["folder"], color="#9aa0a6"))
+        btn.setIcon(_ic(ICONS["folder"], color="#8f8f8f"))
         btn.setIconSize(_QS(13, 13))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setToolTip("Buscar arquivos neste workspace (Ctrl+P)")
         btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #c9c6c0; "
+            "QPushButton { background: transparent; color: #b8b8b8; "
             "border: 0; text-align: left; padding: 3px 6px; font-size: 12px; }"
-            "QPushButton:hover { color: #fff; background: #22201c; "
+            "QPushButton:hover { color: #fff; background: #1e1e1e; "
             "border-radius: 3px; }"
         )
 
@@ -4219,12 +4219,12 @@ class MainWindow(QMainWindow):
             "ao lado do nome)"
         )
         btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #9aa0a6; "
-            "border: 1px dashed #302d27; border-radius: 4px; "
+            "QPushButton { background: transparent; color: #8f8f8f; "
+            "border: 1px dashed #2b2b2b; border-radius: 4px; "
             "padding: 4px 8px; margin: 0px; text-align: left; "
             "font-size: 11px; }"
-            "QPushButton:hover { color: #e8e6e3; border-color: #5a5750; "
-            "background: #22201c; }"
+            "QPushButton:hover { color: #e6e6e6; border-color: #4f4f4f; "
+            "background: #1e1e1e; }"
         )
         btn.clicked.connect(lambda: self._show_ai_launch_menu(ws))
         ws_item.addChild(child)
@@ -5113,8 +5113,8 @@ class MainWindow(QMainWindow):
         cache = getattr(self, "_focus_icon_cache", None)
         if cache is None:
             cache = {
-                "min": ic("fa5s.window-minimize", color="#c9c6c0"),
-                "max": ic("fa5s.window-maximize", color="#c9c6c0"),
+                "min": ic("fa5s.window-minimize", color="#b8b8b8"),
+                "max": ic("fa5s.window-maximize", color="#b8b8b8"),
             }
             self._focus_icon_cache = cache
         icon_min = cache["min"]
@@ -5433,7 +5433,7 @@ class MainWindow(QMainWindow):
                     break
         if ws is None or term is None or not isinstance(term, TerminalWidget):
             placeholder = (
-                "<span style='color:#5a5750'>Claude console — "
+                "<span style='color:#4f4f4f'>Claude console — "
                 "selecione um console no sidebar</span>"
             )
             if hasattr(self, "_worktree_chip_btn"):
@@ -5467,10 +5467,10 @@ class MainWindow(QMainWindow):
         if len(display) > 48:
             display = display[:47] + "…"
         ws_html = (
-            f"<span style='color:#5ac35a;font-weight:600'>{ws.name}</span>"
+            f"<span style='color:#6fbf73;font-weight:600'>{ws.name}</span>"
         )
         console_html = (
-            f"<span style='color:#d4a04a;font-weight:600'>{display}</span>"
+            f"<span style='color:#e6e6e6;font-weight:600'>{display}</span>"
         )
         # Branch + model: lookup do TerminalChildWidget correspondente
         # (mesma fonte usada pelo footer / status bar) — não duplicar
@@ -5499,22 +5499,22 @@ class MainWindow(QMainWindow):
                         behind = int(info.get("behind") or 0)
                         sync_html = ""
                         if ahead > 0:
-                            sync_html += f" <span style='color:#5ac35a'>↑{ahead}</span>"
+                            sync_html += f" <span style='color:#6fbf73'>↑{ahead}</span>"
                         if behind > 0:
-                            sync_html += f" <span style='color:#e5824a'>↓{behind}</span>"
+                            sync_html += f" <span style='color:#cc8b57'>↓{behind}</span>"
                         mod_html = (
-                            f" <span style='color:#ff9d3b'>●{modified}</span>"
+                            f" <span style='color:#d6b95c'>●{modified}</span>"
                             if modified > 0 else ""
                         )
                         branch_html = (
-                            f" <span style='color:#5a5750'>·</span> "
-                            f"<span style='color:#9aa0a6'>branch</span> "
-                            f"<span style='color:#d4a04a;font-weight:600'>"
+                            f" <span style='color:#4f4f4f'>·</span> "
+                            f"<span style='color:#8f8f8f'>branch</span> "
+                            f"<span style='color:#e6e6e6;font-weight:600'>"
                             f"⎇ {short}</span>"
                             # ⧉ = copiar a branch (linkActivated →
                             # _on_pane_title_link). Inline pra ficar colado
                             # no nome, mesmo com o header quebrando linha.
-                            f" <a href='copy-branch' style='color:#9aa0a6;"
+                            f" <a href='copy-branch' style='color:#8f8f8f;"
                             f"text-decoration:none'>⧉</a>"
                             f"{sync_html}{mod_html}"
                         )
@@ -5528,9 +5528,9 @@ class MainWindow(QMainWindow):
                         branch_tip = f"⎇ {branch}{sync_tip}"
                     if model:
                         model_html = (
-                            f" <span style='color:#5a5750'>·</span> "
-                            f"<span style='color:#9aa0a6'>modelo</span> "
-                            f"<span style='color:#e0b268;font-weight:600'>"
+                            f" <span style='color:#4f4f4f'>·</span> "
+                            f"<span style='color:#8f8f8f'>modelo</span> "
+                            f"<span style='color:#cfcfcf;font-weight:600'>"
                             f"{model}</span>"
                         )
                         model_full = model
@@ -5548,9 +5548,9 @@ class MainWindow(QMainWindow):
             if len(label) > 30:
                 label = label[:29] + "…"
             worktree_html = (
-                f" <span style='color:#5a5750'>·</span> "
-                f"<span style='color:#9aa0a6'>worktree</span> "
-                f"<span style='color:#5ac38a;font-weight:600'>🌿 {escape(label)}</span>"
+                f" <span style='color:#4f4f4f'>·</span> "
+                f"<span style='color:#8f8f8f'>worktree</span> "
+                f"<span style='color:#6fbf73;font-weight:600'>🌿 {escape(label)}</span>"
             )
         # Branch originária: a base de onde a worktree foi criada (registrada
         # em worktree_meta na criação). Só aparece se conhecida.
@@ -5564,8 +5564,8 @@ class MainWindow(QMainWindow):
                 base_full = base
                 b = base if len(base) <= 25 else base[:24] + "…"
                 origem_html = (
-                    f" <span style='color:#5a5750'>·</span> "
-                    f"<span style='color:#9aa0a6'>origem</span> "
+                    f" <span style='color:#4f4f4f'>·</span> "
+                    f"<span style='color:#8f8f8f'>origem</span> "
                     f"<span style='color:#8a8f95;font-weight:600'>🌱 {escape(b)}</span>"
                 )
         # MCPs do workspace (scope=project) — exclui MCPs globais do user
@@ -5578,21 +5578,21 @@ class MainWindow(QMainWindow):
             if len(mcp_names) > 4:
                 shown += f" +{len(mcp_names) - 4}"
             mcp_html = (
-                f" <span style='color:#5a5750'>·</span> "
-                f"<span style='color:#9aa0a6'>mcp</span> "
+                f" <span style='color:#4f4f4f'>·</span> "
+                f"<span style='color:#8f8f8f'>mcp</span> "
                 f"<span style='color:#6cc7ce;font-weight:600'>🔌 {shown}</span>"
             )
         # Linha 1: workspace · console
         # Linha 2: branch · modelo · mcp  (só se houver algum desses campos)
         line1 = (
-            f"<span style='color:#9aa0a6'>workspace</span> {ws_html} "
-            f"<span style='color:#5a5750'>·</span> "
-            f"<span style='color:#9aa0a6'>console</span> {console_html}"
+            f"<span style='color:#8f8f8f'>workspace</span> {ws_html} "
+            f"<span style='color:#4f4f4f'>·</span> "
+            f"<span style='color:#8f8f8f'>console</span> {console_html}"
         )
         # Cada frag começa com " <span...>·</span> conteúdo" — extrai só
         # o conteúdo removendo o prefixo " · " HTML pra montar a linha 2
         # sem separador inicial desnecessário.
-        _DOT_PREFIX = " <span style='color:#5a5750'>·</span> "
+        _DOT_PREFIX = " <span style='color:#4f4f4f'>·</span> "
         line2_parts: list[str] = [
             frag[len(_DOT_PREFIX):] if frag.startswith(_DOT_PREFIX) else frag
             for frag in (branch_html, worktree_html, origem_html, model_html, mcp_html)
@@ -7547,8 +7547,8 @@ class MainWindow(QMainWindow):
         if pending:
             self._reload_chip_btn.setText("🔄 Reload › worktree")
             self._reload_chip_btn.setStyleSheet(
-                "QPushButton { background: rgba(61,138,95,0.18); color: #e8e6e3; "
-                "border: 1px solid #3d8a5f; border-radius: 9px; "
+                "QPushButton { background: rgba(61,138,95,0.18); color: #e6e6e6; "
+                "border: 1px solid #4d8a52; border-radius: 9px; "
                 "padding: 1px 8px; font-size: 11px; }"
                 "QPushButton:hover { border-color: #4fae77; }"
             )
@@ -7559,10 +7559,10 @@ class MainWindow(QMainWindow):
         else:
             self._reload_chip_btn.setText("🔄 Reload")
             self._reload_chip_btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #9aa0a6; "
-                "border: 1px solid #302d27; border-radius: 9px; "
+                "QPushButton { background: transparent; color: #8f8f8f; "
+                "border: 1px solid #2b2b2b; border-radius: 9px; "
                 "padding: 1px 8px; font-size: 11px; }"
-                "QPushButton:hover { color: #e8e6e3; border-color: #3d8a5f; }"
+                "QPushButton:hover { color: #e6e6e6; border-color: #4d8a52; }"
             )
             self._reload_chip_btn.setToolTip(
                 "Recarregar a sessão: reinicia o processo mantendo o contexto "
@@ -8547,10 +8547,10 @@ class MainWindow(QMainWindow):
             return
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background: #22201c; color: #e8e6e3; "
-            "border: 1px solid #302d27; border-radius: 6px; }"
+            "QMenu { background: #1e1e1e; color: #e6e6e6; "
+            "border: 1px solid #2b2b2b; border-radius: 6px; }"
             "QMenu::item { padding: 6px 16px; }"
-            "QMenu::item:selected { background: #d4a04a; color: #211709; }"
+            "QMenu::item:selected { background: #e6e6e6; color: #111111; }"
         )
         claude_act = menu.addAction("Claude Code")
         claude_act.triggered.connect(

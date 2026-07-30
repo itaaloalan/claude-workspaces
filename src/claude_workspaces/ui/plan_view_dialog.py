@@ -63,8 +63,8 @@ class PlanViewDialog(QDialog):
         outer.addLayout(header)
 
         meta = QLabel(
-            f"<span style='color:#8b8880;'>"
-            f"<code style='color:#e0b268;'>{info.path}</code>"
+            f"<span style='color:#757575;'>"
+            f"<code style='color:#cfcfcf;'>{info.path}</code>"
             f"</span>"
         )
         meta.setWordWrap(True)

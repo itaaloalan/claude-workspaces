@@ -149,7 +149,7 @@ class WorkspaceDialog(QDialog):
             "abrir Claude neste workspace."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #b0ada6; font-size: 11px;")
+        info.setStyleSheet("color: #9a9a9a; font-size: 11px;")
         v.addWidget(info)
 
         form = QFormLayout()
@@ -195,7 +195,7 @@ class WorkspaceDialog(QDialog):
         if not available:
             note = QLabel("Nenhum servidor MCP global configurado em ~/.claude.json.")
             note.setWordWrap(True)
-            note.setStyleSheet("color: #b0ada6; font-size: 11px;")
+            note.setStyleSheet("color: #9a9a9a; font-size: 11px;")
             v.addWidget(note)
             self._mcp_auto_chk = None
             return box
@@ -205,7 +205,7 @@ class WorkspaceDialog(QDialog):
             "--strict-mcp-config). No automático, são inferidos pelo nome/pastas."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #b0ada6; font-size: 11px;")
+        info.setStyleSheet("color: #9a9a9a; font-size: 11px;")
         v.addWidget(info)
 
         is_auto = workspace is None or workspace.mcp_servers is None
