@@ -45,7 +45,7 @@ class WindowControls(QWidget):
         row.setSpacing(2)
 
         self._min_btn = QPushButton()
-        self._min_btn.setIcon(ic("fa5s.minus", color=theme.TEXT_FADED))
+        self._min_btn.setIcon(ic("ph.minus", color=theme.TEXT_FADED))
         self._min_btn.setToolTip("Minimizar")
         self._min_btn.clicked.connect(window.showMinimized)
 
@@ -54,7 +54,7 @@ class WindowControls(QWidget):
         self._max_btn.clicked.connect(self._toggle_maximized)
 
         self._close_btn = QPushButton()
-        self._close_btn.setIcon(ic("fa5s.times", color=theme.TEXT_FADED))
+        self._close_btn.setIcon(ic("ph.x", color=theme.TEXT_FADED))
         self._close_btn.setToolTip("Fechar")
         self._close_btn.clicked.connect(window.close)
         self._close_btn.setStyleSheet(_CLOSE_BTN_QSS)
@@ -83,9 +83,9 @@ class WindowControls(QWidget):
 
     def _refresh_max_icon(self) -> None:
         name = (
-            "fa5s.window-restore"
+            "ph.copy"
             if self._window.isMaximized()
-            else "fa5s.window-maximize"
+            else "ph.square"
         )
         self._max_btn.setIcon(ic(name, color=theme.TEXT_FADED))
 

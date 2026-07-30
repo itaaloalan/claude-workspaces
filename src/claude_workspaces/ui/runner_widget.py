@@ -44,6 +44,8 @@ from ..services.runner_expand import (
 from ..services.runner_url_detect import detect_url, swap_url_port, url_port
 from ..settings import Settings
 from .git_panel import _WatchDirsSignals, _WatchDirsTask
+from . import theme
+from .icons import ic
 from .terminal_widget import STATIC_DIR, TerminalBridge
 
 log = logging.getLogger(__name__)
@@ -286,11 +288,13 @@ class RunnerWidget(QWidget):
         self._filter_edit.textChanged.connect(self._on_filter_changed)
         toolbar.addWidget(self._filter_edit)
 
-        self._start_btn = QPushButton("▶ Start")
+        self._start_btn = QPushButton(" Start")
+        self._start_btn.setIcon(ic("ph.play", color=theme.SUCCESS))
         self._start_btn.clicked.connect(self.start)
         toolbar.addWidget(self._start_btn)
 
-        self._stop_btn = QPushButton("■ Stop")
+        self._stop_btn = QPushButton(" Stop")
+        self._stop_btn.setIcon(ic("ph.stop", color=theme.DANGER))
         self._stop_btn.setEnabled(False)
         self._stop_btn.clicked.connect(self.stop)
         toolbar.addWidget(self._stop_btn)

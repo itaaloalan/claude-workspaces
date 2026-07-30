@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from ..models import RunnerConfig, Workspace
 from ..settings import Settings
 from . import theme
+from .icons import ic
 from .runner_widget import RunnerWidget
 
 _RUNNER_BTN_QSS = (
@@ -158,17 +159,20 @@ class RunnerArea(QWidget):
 
         h.addStretch(1)
 
-        self._run_all_btn = QPushButton("▶ Rodar todos")
+        self._run_all_btn = QPushButton(" Rodar todos")
+        self._run_all_btn.setIcon(ic("ph.play", color=theme.SUCCESS))
         self._run_all_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._run_all_btn.clicked.connect(self._run_all)
         h.addWidget(self._run_all_btn)
 
-        self._stop_all_btn = QPushButton("■ Parar todos")
+        self._stop_all_btn = QPushButton(" Parar todos")
+        self._stop_all_btn.setIcon(ic("ph.stop", color=theme.DANGER))
         self._stop_all_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._stop_all_btn.clicked.connect(self._stop_all)
         h.addWidget(self._stop_all_btn)
 
-        self._point_all_btn = QPushButton("📁 Apontar todos")
+        self._point_all_btn = QPushButton(" Apontar todos")
+        self._point_all_btn.setIcon(ic("ph.folder", color=theme.TEXT_MUTED))
         self._point_all_btn.setStyleSheet(_RUNNER_BTN_QSS)
         self._point_all_btn.setToolTip(
             "Mudar o cwd de todos os runners para o worktree/diretório "
@@ -180,7 +184,8 @@ class RunnerArea(QWidget):
         # Só em painel de console: copia a stack do workspace pra cá
         # (remapeando portas) e sobe tudo de uma vez.
         if console_session_id:
-            self._raise_stack_btn = QPushButton("⬇ Subir stack aqui")
+            self._raise_stack_btn = QPushButton(" Subir stack aqui")
+            self._raise_stack_btn.setIcon(ic("ph.stack", color=theme.TEXT_MUTED))
             self._raise_stack_btn.setStyleSheet(_RUNNER_BTN_QSS)
             self._raise_stack_btn.setToolTip(
                 "Copia os runners do workspace pra este console — cada um "
@@ -194,7 +199,8 @@ class RunnerArea(QWidget):
             # Painel workspace-scope: mesma ação, mas mirando o CONSOLE
             # ATIVO — handler injetado pela main_window (que sabe qual
             # console está focado e cria o painel dele sob demanda).
-            self._raise_on_console_btn = QPushButton("⬇ Subir stack no console")
+            self._raise_on_console_btn = QPushButton(" Subir stack no console")
+            self._raise_on_console_btn.setIcon(ic("ph.stack", color=theme.TEXT_MUTED))
             self._raise_on_console_btn.setStyleSheet(_RUNNER_BTN_QSS)
             self._raise_on_console_btn.setToolTip(
                 "Copia estes runners pro console Claude ativo (cada um ganha "

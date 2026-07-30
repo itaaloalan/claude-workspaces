@@ -121,7 +121,7 @@ class GlobalConsoleTabBar(QWidget):
         row.setSpacing(2)
 
         self._back_btn = QPushButton()
-        self._back_btn.setIcon(ic("fa5s.chevron-left", color=theme.TEXT_FAINT))
+        self._back_btn.setIcon(ic("ph.caret-left", color=theme.TEXT_FAINT))
         self._back_btn.setIconSize(QSize(11, 11))
         self._back_btn.setFixedSize(24, 26)
         self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -131,7 +131,7 @@ class GlobalConsoleTabBar(QWidget):
         row.addWidget(self._back_btn)
 
         self._fwd_btn = QPushButton()
-        self._fwd_btn.setIcon(ic("fa5s.chevron-right", color=theme.TEXT_FAINT))
+        self._fwd_btn.setIcon(ic("ph.caret-right", color=theme.TEXT_FAINT))
         self._fwd_btn.setIconSize(QSize(11, 11))
         self._fwd_btn.setFixedSize(24, 26)
         self._fwd_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -154,7 +154,7 @@ class GlobalConsoleTabBar(QWidget):
         row.addWidget(self._bar, stretch=1)
 
         self._plus_btn = QPushButton()
-        self._plus_btn.setIcon(ic("fa5s.plus", color=theme.TEXT_FAINT))
+        self._plus_btn.setIcon(ic("ph.plus", color=theme.TEXT_FAINT))
         self._plus_btn.setIconSize(QSize(11, 11))
         self._plus_btn.setFixedSize(26, 26)
         self._plus_btn.setCursor(Qt.CursorShape.PointingHandCursor)

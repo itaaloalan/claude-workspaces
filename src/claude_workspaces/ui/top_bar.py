@@ -36,7 +36,7 @@ class TopBar(QWidget):
         from .icons import ic as _ic
 
         toggle_btn = QPushButton()
-        toggle_btn.setIcon(_ic("fa5s.bars", color="#b8b8b8"))
+        toggle_btn.setIcon(_ic("ph.list", color="#b8b8b8"))
         toggle_btn.setIconSize(_QS(16, 16))
         toggle_btn.setFlat(True)
         toggle_btn.setFixedSize(30, 30)
@@ -51,7 +51,7 @@ class TopBar(QWidget):
 
         # Logo Claude (robô) compacto — clicável pra voltar à home.
         logo = QPushButton()
-        logo.setIcon(_ic("fa5s.robot", color="#cfcfcf"))
+        logo.setIcon(_ic("ph.robot", color="#cfcfcf"))
         logo.setIconSize(_QS(16, 16))
         logo.setFlat(True)
         logo.setFixedSize(30, 30)
@@ -72,7 +72,7 @@ class TopBar(QWidget):
 
         # Bell de inbox — destaca quando há console aguardando atenção
         self._inbox_btn = QPushButton()
-        self._inbox_btn.setIcon(_ic("fa5s.bell", color="#b8b8b8"))
+        self._inbox_btn.setIcon(_ic("ph.bell", color="#b8b8b8"))
         self._inbox_btn.setIconSize(_QS(15, 15))
         self._inbox_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._inbox_btn.setToolTip("Consoles aguardando atenção")
@@ -85,7 +85,7 @@ class TopBar(QWidget):
         # Simétrico ao toggle da sidebar esquerda — antes só dava pra
         # exibir/esconder via Ctrl+Shift+B, sem botão visível.
         right_dock_btn = QPushButton()
-        right_dock_btn.setIcon(_ic("fa5s.columns", color="#b8b8b8"))
+        right_dock_btn.setIcon(_ic("ph.columns", color="#b8b8b8"))
         right_dock_btn.setIconSize(_QS(15, 15))
         right_dock_btn.setFlat(True)
         right_dock_btn.setFixedSize(30, 30)
@@ -99,7 +99,7 @@ class TopBar(QWidget):
         row.addWidget(right_dock_btn)
 
         settings_btn = QPushButton("  Configurar")
-        settings_btn.setIcon(_ic("fa5s.cog", color="#b8b8b8"))
+        settings_btn.setIcon(_ic("ph.gear", color="#b8b8b8"))
         settings_btn.setIconSize(_QS(14, 14))
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.setToolTip("Configurações (Ctrl+,)")
@@ -135,7 +135,7 @@ class TopBar(QWidget):
 
         from .icons import ic as _ic
         if self._inbox_count > 0:
-            self._inbox_btn.setIcon(_ic("fa5s.bell", color="#fff"))
+            self._inbox_btn.setIcon(_ic("ph.bell", color="#fff"))
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
@@ -146,7 +146,7 @@ class TopBar(QWidget):
                 "QPushButton:hover { background: #dd9a63; border-color: #dd9a63; }"
             )
         else:
-            self._inbox_btn.setIcon(_ic("fa5s.bell", color="#b8b8b8"))
+            self._inbox_btn.setIcon(_ic("ph.bell", color="#b8b8b8"))
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"

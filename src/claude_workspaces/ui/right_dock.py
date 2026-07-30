@@ -63,15 +63,33 @@ _PANEL_BTN_QSS = (
 
 class PanelTabButton(QPushButton):
     """Botão de painel na row superior do RightDock. Tooltip mostra o
-    nome completo do painel. `checked` indica painel ativo."""
+    nome completo do painel. `checked` indica painel ativo.
+
+    `icon` pode ser nome qtawesome ("ph.git-branch") — detectado pelo
+    ponto — ou glyph unicode (fallback como texto)."""
 
     def __init__(self, icon: str, label: str, parent: QWidget | None = None) -> None:
-        super().__init__(icon + _VS15, parent)
+        super().__init__(parent)
+        self._icon_name = icon if "." in icon else None
+        if self._icon_name is None:
+            self.setText(icon + _VS15)
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(36, TOP_ROW_H)
         self.setToolTip(label)
         self.setStyleSheet(_PANEL_BTN_QSS)
+        self._paint_icon()
+        self.toggled.connect(lambda _c: self._paint_icon())
+
+    def _paint_icon(self) -> None:
+        if self._icon_name is None:
+            return
+        from PySide6.QtCore import QSize
+
+        from .icons import ic
+        color = theme.TEXT_PRIMARY if self.isChecked() else theme.TEXT_FAINT
+        self.setIcon(ic(self._icon_name, color=color))
+        self.setIconSize(QSize(15, 15))
 
 
 class RightDock(QWidget):

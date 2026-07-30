@@ -12,42 +12,41 @@ dentro do dock central.
 from __future__ import annotations
 
 import PySide6QtAds as ads
-from PySide6.QtCore import QByteArray, QObject, QRect, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import QByteArray, QObject
 from PySide6.QtWidgets import QMainWindow, QWidget
 
-from . import qss
-
-
-def _glyph_icon(glyph: str, size: int = 14, color: str = "#b8b8b8") -> QIcon:
-    """Renderiza um glyph unicode numa QPixmap transparente. Usado pros
-    botões de title bar do QtAds — os ícones default são pretos e somem
-    no tema dark."""
-    pm = QPixmap(size, size)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-    p.setPen(QPen(QColor(color)))
-    font = QFont()
-    font.setPixelSize(size - 2)
-    font.setBold(True)
-    p.setFont(font)
-    p.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, glyph)
-    p.end()
-    return QIcon(pm)
+from . import qss, theme
+from .icons import ic
 
 
 def _install_dark_icons() -> None:
-    """Substitui os ícones default do QtAds por glyphs unicode claros.
-    Chamado uma vez quando o primeiro CDockManager é criado."""
+    """Substitui os ícones default do QtAds (pretos, somem no tema dark)
+    por Phosphor claros via qtawesome. Chamado uma vez quando o primeiro
+    CDockManager é criado.
+
+    IMPORTANTE: registerCustomIcon TOMA POSSE do QIcon (shiboken transfere
+    ownership pro C++) — mas o qtawesome CACHEIA o mesmo objeto QIcon por
+    (nome, cor). Passar o QIcon do qta direto deixa o cache com um wrapper
+    morto e o próximo `ic()` com a mesma chave estoura "Internal C++ object
+    already deleted". Sempre registrar uma CÓPIA (QIcon(x))."""
+    from PySide6.QtGui import QIcon
+
     ip = ads.CDockManager.iconProvider()
-    ip.registerCustomIcon(ads.TabCloseIcon, _glyph_icon("✕"))
-    ip.registerCustomIcon(ads.DockAreaCloseIcon, _glyph_icon("✕"))
-    ip.registerCustomIcon(ads.DockAreaMenuIcon, _glyph_icon("⋮"))
-    ip.registerCustomIcon(ads.DockAreaUndockIcon, _glyph_icon("⧉"))
-    ip.registerCustomIcon(ads.DockAreaMinimizeIcon, _glyph_icon("—"))
-    ip.registerCustomIcon(ads.AutoHideIcon, _glyph_icon("📌"))
+    color = theme.TEXT_MUTED
+    ip.registerCustomIcon(ads.TabCloseIcon, QIcon(ic("ph.x", color=color)))
+    ip.registerCustomIcon(ads.DockAreaCloseIcon, QIcon(ic("ph.x", color=color)))
+    ip.registerCustomIcon(
+        ads.DockAreaMenuIcon, QIcon(ic("ph.dots-three-vertical", color=color))
+    )
+    ip.registerCustomIcon(
+        ads.DockAreaUndockIcon, QIcon(ic("ph.arrow-square-out", color=color))
+    )
+    ip.registerCustomIcon(
+        ads.DockAreaMinimizeIcon, QIcon(ic("ph.minus", color=color))
+    )
+    ip.registerCustomIcon(
+        ads.AutoHideIcon, QIcon(ic("ph.push-pin", color=color))
+    )
 
 
 class WorkspaceDockManager(QObject):

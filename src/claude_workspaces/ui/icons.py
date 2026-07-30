@@ -22,13 +22,16 @@ except ImportError:  # pragma: no cover — opcional na primeira inicialização
     _HAS_QTA = False
 
 
-# Cores default — alinhadas com theme.py / dock_manager QSS
-DEFAULT_COLOR = "#b8b8b8"
-ACTIVE_COLOR = "#e6e6e6"
-MUTED_COLOR = "#8f8f8f"
-PRIMARY_COLOR = "#e6e6e6"
-SUCCESS_COLOR = "#6fbf73"
-WARN_COLOR = "#e6e6e6"
+# Cores default — tokens do theme.py (monocromático; cor saturada só
+# em status semântico)
+from . import theme as _theme
+
+DEFAULT_COLOR = _theme.TEXT_MUTED
+ACTIVE_COLOR = _theme.TEXT_PRIMARY
+MUTED_COLOR = _theme.TEXT_FAINT
+PRIMARY_COLOR = _theme.PRIMARY
+SUCCESS_COLOR = _theme.SUCCESS
+WARN_COLOR = _theme.WARNING
 
 
 def ic(name: str, color: str = DEFAULT_COLOR, size: int | None = None) -> QIcon:
@@ -50,41 +53,42 @@ def ic(name: str, color: str = DEFAULT_COLOR, size: int | None = None) -> QIcon:
 
 
 # Catálogo de ícones do app — fonte única da verdade. Trocar aqui
-# atualiza em todo lugar.
+# atualiza em todo lugar. Set principal: Phosphor (`ph.`) — traço fino,
+# estética Orca. fa5b/mdi6 só pra marcas sem equivalente.
 ICONS = {
     # IDEs e launchers do header
-    "claude": "fa5s.robot",
-    "terminal": "fa5s.terminal",
-    "pycharm": "mdi6.code-braces",       # genérico pra IDE JetBrains
-    "intellij": "mdi6.code-braces",
+    "claude": "ph.robot",
+    "terminal": "ph.terminal-window",
+    "pycharm": "ph.brackets-curly",       # genérico pra IDE JetBrains
+    "intellij": "ph.brackets-curly",
     "vscode": "mdi6.microsoft-visual-studio-code",
-    "rider": "mdi6.code-braces",
-    "android_studio": "fa5b.android",
-    "webstorm": "mdi6.code-braces",
-    "rubymine": "mdi6.code-braces",
-    "phpstorm": "mdi6.code-braces",
+    "rider": "ph.brackets-curly",
+    "android_studio": "ph.android-logo",
+    "webstorm": "ph.brackets-curly",
+    "rubymine": "ph.brackets-curly",
+    "phpstorm": "ph.brackets-curly",
     # Tabs centrais
-    "console": "fa5s.terminal",
-    "runners_workspace": "mdi6.source-branch",
-    "runners_console": "fa5s.list-alt",
+    "console": "ph.terminal-window",
+    "runners_workspace": "ph.git-branch",
+    "runners_console": "ph.list",
     # Chips do header
-    "stack": "fa5s.cube",
-    "folder": "fa5s.folder",
-    "mcp": "fa5s.plug",
+    "stack": "ph.stack",
+    "folder": "ph.folder",
+    "mcp": "ph.share-network",
     # Status bar
-    "workspace": "fa5s.folder-open",
+    "workspace": "ph.folder-open",
     "python": "fa5b.python",
-    "encoding": "fa5s.file-alt",
-    "task_idle": "far.circle",
-    "task_active": "fa5s.circle",
+    "encoding": "ph.file-text",
+    "task_idle": "ph.circle",
+    "task_active": "ph.circle-fill",
     # Sidebar
-    "pin": "fa5s.thumbtack",
-    "filter": "fa5s.filter",
-    "add": "fa5s.plus",
-    "chevron_down": "fa5s.chevron-down",
-    "chevron_right": "fa5s.chevron-right",
-    "more": "fa5s.ellipsis-h",
-    "expand": "fa5s.expand",
-    "close": "fa5s.times",
-    "menu": "fa5s.bars",
+    "pin": "ph.push-pin",
+    "filter": "ph.funnel",
+    "add": "ph.plus",
+    "chevron_down": "ph.caret-down",
+    "chevron_right": "ph.caret-right",
+    "more": "ph.dots-three",
+    "expand": "ph.arrows-out-simple",
+    "close": "ph.x",
+    "menu": "ph.list",
 }

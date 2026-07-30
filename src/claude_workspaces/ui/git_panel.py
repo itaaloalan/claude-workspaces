@@ -867,7 +867,10 @@ class GitPanel(QWidget):
 
     def set_workspace(self, workspace: Workspace | None) -> None:
         self.workspace = workspace
-        self.refresh()
+        # Debounce curto: na troca de workspace este método pode ser
+        # chamado junto com set_folders_override (sync do console ativo) —
+        # coalesce num único refresh em vez de dois scans de git status.
+        self._refresh_timer.start(50)
 
     def set_folders_override(self, folders: list[str] | None) -> None:
         """Faz o painel inspecionar `folders` (ex.: worktree do console ativo)
@@ -876,7 +879,7 @@ class GitPanel(QWidget):
         if new == self._folders_override:
             return
         self._folders_override = new
-        self.refresh()
+        self._refresh_timer.start(50)
 
     def _active_folders(self) -> list[str]:
         """Pastas a inspecionar: override do console ativo, senão as do workspace."""

@@ -128,6 +128,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Claude Workspaces")
 
         self.settings = Settings.load()
+        from .animations import set_reduce_motion
+        set_reduce_motion(getattr(self.settings, "reduce_motion", False))
 
         # ---------- Coordinators (composição) ----------
         self.workspaces_coord = WorkspaceCoordinator(self)
@@ -1075,7 +1077,7 @@ class MainWindow(QMainWindow):
         if title_bar is None:
             return
         btn = QPushButton(title_bar)
-        btn.setIcon(_ic("fa5s.minus", color="#b8b8b8"))
+        btn.setIcon(_ic("ph.minus", color="#b8b8b8"))
         btn.setIconSize(QSize(13, 13))
         btn.setFlat(True)
         btn.setFixedSize(22, 22)
@@ -1267,7 +1269,11 @@ class MainWindow(QMainWindow):
 
     def _hide_switch_loading(self) -> None:
         self._loading_spinner.stop()
-        self._loading_overlay.hide()
+        # Fade-out curto: a troca fica "assentada" em vez de piscar.
+        # (Overlay é widget opaco comum — seguro pra efeito de opacidade.)
+        from .animations import fade_out
+        if self._loading_overlay.isVisible():
+            fade_out(self._loading_overlay)
         self._loading_corner.setVisible(False)
 
     def _close_active_terminal_tab(self) -> None:
@@ -1408,35 +1414,35 @@ class MainWindow(QMainWindow):
         DockPanelSpec(
             panel_id="git",
             title="Git",
-            icon="⎇",
+            icon="ph.git-branch",
             factory=lambda mw: mw.details.git_panel(),
             default_open=True,
         ),
         DockPanelSpec(
             panel_id="skills",
             title="Skills",
-            icon="✦",
+            icon="ph.sparkle",
             factory=lambda mw: SkillsPanel(settings=mw.settings),
             default_open=False,
         ),
         DockPanelSpec(
             panel_id="files",
             title="Arquivos",
-            icon="📁",
+            icon="ph.folder",
             factory=lambda mw: mw._build_files_panel(),
             default_open=False,
         ),
         DockPanelSpec(
             panel_id="memory",
             title="Memória",
-            icon="❏",
+            icon="ph.brain",
             factory=lambda mw: MemoryPanel(),
             default_open=False,
         ),
         DockPanelSpec(
             panel_id="plans",
             title="Plano",
-            icon="📋",
+            icon="ph.clipboard-text",
             factory=lambda mw: mw._build_plans_panel(),
             default_open=False,
         ),

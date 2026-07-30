@@ -143,15 +143,15 @@ class SidebarNav(QWidget):
 
         self._buttons: dict[str, _NavRow] = {}
         for icon, view_id, label, tooltip in (
-            ("fa5s.layer-group", VIEW_WORKSPACES, "Workspaces",
+            ("ph.squares-four", VIEW_WORKSPACES, "Workspaces",
                 "Workspaces (Ctrl+Shift+1)"),
-            ("fa5s.book", VIEW_CATALOG, "Catálogo",
+            ("ph.book", VIEW_CATALOG, "Catálogo",
                 "Catálogo de skills/agents/commands (Ctrl+Shift+2)"),
-            ("fa5s.anchor", VIEW_HOOKS, "Hooks", "Hooks (Ctrl+Shift+3)"),
-            ("fa5s.plug", VIEW_MCP, "MCP", "MCP servers (Ctrl+Shift+4)"),
-            ("fa5s.puzzle-piece", VIEW_PLUGINS, "Plugins",
+            ("ph.anchor", VIEW_HOOKS, "Hooks", "Hooks (Ctrl+Shift+3)"),
+            ("ph.share-network", VIEW_MCP, "MCP", "MCP servers (Ctrl+Shift+4)"),
+            ("ph.puzzle-piece", VIEW_PLUGINS, "Plugins",
                 "Plugins (Ctrl+Shift+5)"),
-            ("fa5s.th-large", VIEW_APPS, "Apps",
+            ("ph.grid-four", VIEW_APPS, "Apps",
                 "Apps auxiliares (Ctrl+Shift+6)"),
         ):
             row = _NavRow(icon, label, tooltip)

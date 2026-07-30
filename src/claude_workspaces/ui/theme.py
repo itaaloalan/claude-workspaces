@@ -80,18 +80,21 @@ TERMINAL_BTN_W = 28             # largura fixa dos botões min/max/restore
 # ---------- Helpers de QSS ----------
 
 def splitter_qss() -> str:
+    """Splitter invisível em repouso — só aparece no hover/drag."""
     return (
-        f"QSplitter::handle {{ background: {BORDER}; }}"
-        f"QSplitter::handle:hover {{ background: {PRIMARY}; }}"
-        f"QSplitter::handle:pressed {{ background: {PRIMARY_HOVER}; }}"
+        "QSplitter::handle { background: transparent; }"
+        "QSplitter::handle:hover { background: #333333; }"
+        "QSplitter::handle:pressed { background: #3a3a3a; }"
     )
 
 
 def primary_button_qss() -> str:
+    """Botão claro com texto escuro — reservado a UMA ação por tela."""
     return (
         f"QPushButton {{"
         f"  background: {PRIMARY}; color: {TEXT_ON_ACCENT};"
-        f"  border: 0; border-radius: 4px; padding: 4px 14px; font-weight: 600;"
+        f"  border: 0; border-radius: {RADIUS_MD}px; padding: 6px 14px;"
+        f"  font-weight: 600;"
         f"}}"
         f"QPushButton:hover {{ background: {PRIMARY_HOVER}; }}"
         f"QPushButton:disabled {{ background: {BORDER}; color: {TEXT_DISABLED}; }}"
@@ -99,13 +102,17 @@ def primary_button_qss() -> str:
 
 
 def neutral_button_qss() -> str:
+    """Ghost button — o padrão do app: transparente com borda sutil;
+    hover clareia com overlay em vez de trocar pra cor de accent."""
     return (
         f"QPushButton {{"
-        f"  background: {BG_SURFACE}; color: {TEXT_PRIMARY};"
-        f"  border: 1px solid {BORDER_INPUT}; border-radius: 6px;"
+        f"  background: transparent; color: {TEXT_MUTED};"
+        f"  border: 1px solid {BORDER}; border-radius: {RADIUS_MD}px;"
         f"  padding: 6px 12px;"
         f"}}"
-        f"QPushButton:hover {{ border-color: {PRIMARY}; color: {TEXT_LINK}; }}"
+        f"QPushButton:hover {{"
+        f"  background: rgba(255, 255, 255, 15); color: {TEXT_PRIMARY};"
+        f"}}"
     )
 
 
@@ -153,7 +160,7 @@ def list_widget_qss() -> str:
         f"  border-radius: 6px; color: {TEXT_PRIMARY};"
         f"}}"
         f"QListWidget::item {{"
-        f"  padding: 6px 8px; border-bottom: 1px solid {BORDER_SOFT};"
+        f"  padding: 8px 8px;"
         f"  color: {TEXT_MUTED};"
         f"}}"
         f"QListWidget::item:hover {{ background: {PRIMARY_HOVER_BG}; color: {TEXT_BRIGHT}; }}"
@@ -210,9 +217,9 @@ def section_header_qss() -> str:
     return (
         f"QLabel {{"
         f"  color: {TEXT_FAINT};"
-        f"  font-size: 10px;"
-        f"  font-weight: 700;"
-        f"  letter-spacing: 1.4px;"
+        f"  font-size: {FONT_SM}px;"
+        f"  font-weight: 600;"
+        f"  letter-spacing: 0.5px;"
         f"  padding: 2px 4px 6px 4px;"
         f"}}"
     )
@@ -265,7 +272,7 @@ def left_accent_qss(
         f"QFrame#{object_name} {{"
         f"  background: {bg};"
         f"  border: 0;"
-        f"  border-left: 3px solid {state_color};"
+        f"  border-left: 2px solid {state_color};"
         f"  border-radius: {radius}px;"
         f"}}"
     )
