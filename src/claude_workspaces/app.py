@@ -116,10 +116,10 @@ def _build_dark_palette() -> QPalette:
         QPalette.ColorRole.HighlightedText: theme.TEXT_ON_ACCENT,
     }
     disabled_overrides = {
-        QPalette.ColorRole.WindowText: "#757575",
-        QPalette.ColorRole.Text: "#757575",
-        QPalette.ColorRole.ButtonText: "#757575",
-        QPalette.ColorRole.HighlightedText: "#b8b8b8",
+        QPalette.ColorRole.WindowText: "#7f7f7f",
+        QPalette.ColorRole.Text: "#7f7f7f",
+        QPalette.ColorRole.ButtonText: "#7f7f7f",
+        QPalette.ColorRole.HighlightedText: "#c6c6c6",
     }
     for role, hexv in base.items():
         c = QColor(hexv)

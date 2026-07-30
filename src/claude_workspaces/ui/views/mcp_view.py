@@ -31,7 +31,7 @@ from ...services.system_open import open_in_file_manager
 
 log = logging.getLogger(__name__)
 
-_SCOPE_COLOR = {"user": "#cfcfcf", "project": "#6fbf73"}
+_SCOPE_COLOR = {"user": "#d8d8d8", "project": "#6fbf73"}
 _TRANSPORT_COLOR = {"stdio": "#a586d9", "sse": "#6fbf73", "http": "#d6b95c"}
 
 
@@ -69,15 +69,15 @@ class McpView(QWidget):
             "<code>.mcp.json</code> (projeto)."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9a9a9a;")
+        hint.setStyleSheet("color: #a2a2a2;")
         outer.addWidget(hint)
 
         # Split list / detail
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(6)
         splitter.setStyleSheet(
-            "QSplitter::handle { background: #262626; }"
-            "QSplitter::handle:hover { background: #e6e6e6; }"
+            "QSplitter::handle { background: #454545; }"
+            "QSplitter::handle:hover { background: #f4f4f4; }"
         )
 
         # Left: list
@@ -87,15 +87,15 @@ class McpView(QWidget):
         left_l.setSpacing(4)
         self._list = QListWidget()
         self._list.setStyleSheet(
-            "QListWidget { background: #161616; border: 1px solid #2b2b2b; "
-            "border-radius: 6px; color: #e6e6e6; }"
-            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #1f1f1f; }"
-            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
+            "QListWidget { background: #2e2e2e; border: 1px solid #4f4f4f; "
+            "border-radius: 6px; color: #f4f4f4; }"
+            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #3a3a3a; }"
+            "QListWidget::item:selected { background: #f4f4f4; color: #262626; }"
         )
         self._list.itemSelectionChanged.connect(self._render_detail)
         left_l.addWidget(self._list, stretch=1)
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #757575; font-size: 11px;")
+        self._counter.setStyleSheet("color: #7f7f7f; font-size: 11px;")
         left_l.addWidget(self._counter)
         splitter.addWidget(left)
 
@@ -129,7 +129,7 @@ class McpView(QWidget):
             li = QListWidgetItem(f"{s.name}  ·  {s.transport}")
             li.setData(Qt.ItemDataRole.UserRole, s)
             li.setToolTip(f"Escopo: {s.scope}\nArquivo: {s.source_file}")
-            li.setForeground(QBrush(QColor(_SCOPE_COLOR.get(s.scope, "#b8b8b8"))))
+            li.setForeground(QBrush(QColor(_SCOPE_COLOR.get(s.scope, "#c6c6c6"))))
             self._list.addItem(li)
 
         self._counter.setText(f"{len(self._servers)} server(s)")
@@ -152,7 +152,7 @@ class McpView(QWidget):
             "Adicione em ~/.claude.json:\n"
             "  mcpServers: { nome: { command: '…', args: ['…'] } }"
         )
-        lab.setStyleSheet("color: #757575;")
+        lab.setStyleSheet("color: #7f7f7f;")
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._detail_layout.addWidget(lab)
 
@@ -171,11 +171,11 @@ class McpView(QWidget):
         chip_row = QHBoxLayout()
         chip_row.setSpacing(8)
         chip_row.addWidget(QLabel(
-            f"<span style='color:{_SCOPE_COLOR.get(s.scope,'#757575')};'>"
+            f"<span style='color:{_SCOPE_COLOR.get(s.scope,'#7f7f7f')};'>"
             f"● {s.scope}</span>"
         ))
         chip_row.addWidget(QLabel(
-            f"<span style='color:{_TRANSPORT_COLOR.get(s.transport,'#757575')};'>"
+            f"<span style='color:{_TRANSPORT_COLOR.get(s.transport,'#7f7f7f')};'>"
             f"⇄ {s.transport}</span>"
         ))
         chip_row.addStretch()
@@ -203,7 +203,7 @@ class McpView(QWidget):
             meta_l.addRow("<b>url</b>", url_lab)
         if s.env_keys:
             env_str = ", ".join(f"<code>{k}</code>" for k in s.env_keys)
-            env_lab = QLabel(f"{env_str}  <i style='color:#757575;'>(valores ocultos)</i>")
+            env_lab = QLabel(f"{env_str}  <i style='color:#7f7f7f;'>(valores ocultos)</i>")
             env_lab.setWordWrap(True)
             meta_l.addRow("<b>env</b>", env_lab)
         meta_l.addRow("<b>source</b>", QLabel(f"<code>{s.source_file}</code>"))

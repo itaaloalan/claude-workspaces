@@ -45,7 +45,7 @@ class MemoryPanel(QWidget):
         header = QHBoxLayout()
         self._path_label = QLabel("(sem workspace)")
         self._path_label.setStyleSheet(
-            "color: #9a9a9a; font-size: 11px; font-family: monospace;"
+            "color: #a2a2a2; font-size: 11px; font-family: monospace;"
         )
         self._path_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
@@ -64,26 +64,26 @@ class MemoryPanel(QWidget):
         self._editor.setFont(mono)
         self._editor.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #161616; border: 1px solid #2b2b2b;"
-            "  border-radius: 6px; color: #e6e6e6; padding: 6px;"
+            "  background: #2e2e2e; border: 1px solid #4f4f4f;"
+            "  border-radius: 6px; color: #f4f4f4; padding: 6px;"
             "}"
-            "QPlainTextEdit:focus { border-color: #e6e6e6; }"
+            "QPlainTextEdit:focus { border-color: #f4f4f4; }"
         )
         self._editor.textChanged.connect(self._on_text_changed)
         outer.addWidget(self._editor, stretch=1)
 
         footer = QHBoxLayout()
         self._status = QLabel("")
-        self._status.setStyleSheet("color: #9a9a9a; font-size: 11px;")
+        self._status.setStyleSheet("color: #a2a2a2; font-size: 11px;")
         footer.addWidget(self._status, stretch=1)
         self._save_btn = QPushButton("Salvar")
         self._save_btn.setStyleSheet(
             "QPushButton {"
-            "  background: #e6e6e6; color: #111111;"
+            "  background: #f4f4f4; color: #262626;"
             "  border: 0; border-radius: 4px; padding: 4px 14px; font-weight: 600;"
             "}"
-            "QPushButton:hover { background: #f2f2f2; }"
-            "QPushButton:disabled { background: #262626; color: #4f4f4f; }"
+            "QPushButton:hover { background: #ffffff; }"
+            "QPushButton:disabled { background: #454545; color: #5f5f5f; }"
         )
         self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self._save)

@@ -188,7 +188,7 @@ class RunnerWidget(QWidget):
         toolbar = QHBoxLayout(toolbar_widget)
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(parado)")
-        self._status.setStyleSheet("color: #9a9a9a;")
+        self._status.setStyleSheet("color: #a2a2a2;")
         # Status pode ser longo; Ignored evita que empurre o mínimo horizontal.
         self._status.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
@@ -201,7 +201,7 @@ class RunnerWidget(QWidget):
         # Visível só com processo vivo; o relógio re-renderiza a cada minuto.
         self._since_label = QLabel()
         self._since_label.setStyleSheet(
-            "QLabel { color: #8f8f8f; border: 1px solid #2b2b2b; "
+            "QLabel { color: #8f8f8f; border: 1px solid #4f4f4f; "
             "border-radius: 9px; padding: 1px 8px; font-size: 11px; }"
         )
         self._since_label.setVisible(False)
@@ -217,9 +217,9 @@ class RunnerWidget(QWidget):
         self._cwd_btn = QPushButton()
         self._cwd_btn.setStyleSheet(
             "QPushButton { background: transparent; color: #8f8f8f; "
-            "border: 1px solid #2b2b2b; border-radius: 9px; "
+            "border: 1px solid #4f4f4f; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #e6e6e6; }"
+            "QPushButton:hover { color: #f4f4f4; border-color: #f4f4f4; }"
         )
         self._cwd_btn.clicked.connect(self._open_cwd_menu)
         toolbar.addWidget(self._cwd_btn)
@@ -231,9 +231,9 @@ class RunnerWidget(QWidget):
         self._port_btn = QPushButton()
         self._port_btn.setStyleSheet(
             "QPushButton { background: transparent; color: #8f8f8f; "
-            "border: 1px solid #2b2b2b; border-radius: 9px; "
+            "border: 1px solid #4f4f4f; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #4d8a52; }"
+            "QPushButton:hover { color: #f4f4f4; border-color: #4d8a52; }"
         )
         self._port_btn.setToolTip(
             "Porta base do runner — clique pra alterar. {port} no "
@@ -251,9 +251,9 @@ class RunnerWidget(QWidget):
         self._url_btn = QPushButton()
         self._url_btn.setStyleSheet(
             "QPushButton { background: transparent; color: #8f8f8f; "
-            "border: 1px solid #2b2b2b; border-radius: 9px; "
+            "border: 1px solid #4f4f4f; border-radius: 9px; "
             "padding: 1px 8px; font-size: 11px; }"
-            "QPushButton:hover { color: #e6e6e6; border-color: #e6e6e6; }"
+            "QPushButton:hover { color: #f4f4f4; border-color: #f4f4f4; }"
         )
         self._url_btn.clicked.connect(
             lambda _c=False: self._current_url
@@ -721,7 +721,7 @@ class RunnerWidget(QWidget):
         if watching:
             self._hot_reload_btn.setStyleSheet(
                 "QPushButton { background: rgba(224, 138, 60, 0.18); "
-                "color: #dd9a63; border: 1px solid #cc8b57; "
+                "color: #e28a6d; border: 1px solid #d77657; "
                 "border-radius: 9px; padding: 1px 8px; font-size: 11px; }"
                 "QPushButton:hover { color: #e8b184; border-color: #e8b184; }"
             )
@@ -733,9 +733,9 @@ class RunnerWidget(QWidget):
         else:
             self._hot_reload_btn.setStyleSheet(
                 "QPushButton { background: transparent; color: #8f8f8f; "
-                "border: 1px solid #2b2b2b; border-radius: 9px; "
+                "border: 1px solid #4f4f4f; border-radius: 9px; "
                 "padding: 1px 8px; font-size: 11px; }"
-                "QPushButton:hover { color: #e6e6e6; border-color: #cc8b57; }"
+                "QPushButton:hover { color: #f4f4f4; border-color: #d77657; }"
             )
             self._hot_reload_btn.setToolTip(
                 "Hot reload ligado — passa a observar .java/.xhtml e "

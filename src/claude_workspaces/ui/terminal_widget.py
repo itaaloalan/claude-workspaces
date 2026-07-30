@@ -591,7 +591,7 @@ class TerminalWidget(QWidget):
         # entre o toolbar e o terminal (palette default vinha cinza claro
         # em alguns temas).
         self.setStyleSheet(
-            "TerminalWidget { background: #0e0e0e; }"
+            "TerminalWidget { background: #2c3037; }"
             "QLabel { background: transparent; }"
         )
 
@@ -620,8 +620,8 @@ class TerminalWidget(QWidget):
         self._ctx_bar.setMinimumWidth(0)
         self._ctx_bar.setStyleSheet(
             "QLabel#TerminalContextBar {"
-            " background: #111111; color: #8f8f8f;"
-            " border-bottom: 1px solid #181818;"
+            " background: #262626; color: #8f8f8f;"
+            " border-bottom: 1px solid #313131;"
             " padding: 3px 8px; font-size: 11px; }"
         )
         self._ctx_bar.setVisible(False)
@@ -634,12 +634,12 @@ class TerminalWidget(QWidget):
         toolbar_host.setObjectName("TerminalToolbar")
         toolbar_host.setMinimumWidth(0)
         toolbar_host.setStyleSheet(
-            "QWidget#TerminalToolbar { background: #0e0e0e; border: 0; }"
+            "QWidget#TerminalToolbar { background: #2c3037; border: 0; }"
         )
         toolbar = QHBoxLayout(toolbar_host)
         toolbar.setContentsMargins(8, 4, 8, 4)
         self._status = QLabel("(terminal vazio)")
-        self._status.setStyleSheet("color: #9a9a9a;")
+        self._status.setStyleSheet("color: #a2a2a2;")
         # Status pode ser muito longo ("Scampering… 9.1k tokens still thinking
         # with medium effort") — sem Ignored propaga largura mínima enorme pro
         # dock central e dispara scroll horizontal na janela toda.
@@ -744,7 +744,7 @@ class TerminalWidget(QWidget):
         self._main_splitter = QSplitter(Qt.Orientation.Vertical, self)
         self._main_splitter.setMinimumWidth(0)
         self._view_placeholder: QWidget | None = QWidget()
-        self._view_placeholder.setStyleSheet("background: #0e0e0e;")
+        self._view_placeholder.setStyleSheet("background: #2c3037;")
         self._view_placeholder.setMinimumWidth(0)
         self._main_splitter.addWidget(self._view_placeholder)
         self._runner_panel_host = QWidget()
@@ -865,7 +865,7 @@ class TerminalWidget(QWidget):
         view.deleteLater()
         # Recria o placeholder escuro no topo do splitter (mesmo do __init__).
         self._view_placeholder = QWidget()
-        self._view_placeholder.setStyleSheet("background: #0e0e0e;")
+        self._view_placeholder.setStyleSheet("background: #2c3037;")
         self._view_placeholder.setMinimumWidth(0)
         self._main_splitter.insertWidget(0, self._view_placeholder)
         self._main_splitter.setStretchFactor(0, 1)
@@ -967,7 +967,7 @@ class TerminalWidget(QWidget):
         cwd_name = Path(cwd).name or cwd
         dirs = f"📁 {escape(cwd_name)}"
         if extras:
-            dirs += f" <span style='color:#757575'>+{len(extras)} dir</span>"
+            dirs += f" <span style='color:#7f7f7f'>+{len(extras)} dir</span>"
         parts.append(dirs)
 
         # Worktree / branch
@@ -979,7 +979,7 @@ class TerminalWidget(QWidget):
             parts.append(f"🌿 {escape(branch)}")
 
         self._ctx_bar.setText(
-            "<span style='color:#4f4f4f'>  •  </span>".join(parts)
+            "<span style='color:#5f5f5f'>  •  </span>".join(parts)
         )
         # Tooltip com os caminhos completos (o label só mostra o basename)
         tip_dirs = "\n".join([cwd, *extras])
@@ -1629,12 +1629,12 @@ class TerminalWidget(QWidget):
 
         menu = QMenu(self)
         menu.setStyleSheet(
-            "QMenu { background: #1e1e1e; color: #e6e6e6; "
-            "border: 1px solid #2b2b2b; border-radius: 6px; }"
+            "QMenu { background: #383838; color: #f4f4f4; "
+            "border: 1px solid #4f4f4f; border-radius: 6px; }"
             "QMenu::item { padding: 6px 16px; }"
-            "QMenu::item:selected { background: #e6e6e6; color: #111111; }"
-            "QMenu::item:disabled { color: #4f4f4f; }"
-            "QMenu::separator { height: 1px; background: #262626; margin: 3px 8px; }"
+            "QMenu::item:selected { background: #f4f4f4; color: #262626; }"
+            "QMenu::item:disabled { color: #5f5f5f; }"
+            "QMenu::separator { height: 1px; background: #454545; margin: 3px 8px; }"
         )
 
         act_continue = menu.addAction("▶  Continuar")

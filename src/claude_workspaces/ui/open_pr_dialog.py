@@ -42,7 +42,7 @@ class OpenPullRequestDialog(QDialog):
             f"Repo: <b>{repo_label}</b>  ·  "
             f"<b>{branch}</b> → <b>{base}</b>"
         )
-        head.setStyleSheet("color: #b8b8b8;")
+        head.setStyleSheet("color: #c6c6c6;")
         v.addWidget(head)
 
         form = QFormLayout()
@@ -62,10 +62,10 @@ class OpenPullRequestDialog(QDialog):
         self._body.setFont(mono)
         self._body.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #161616; border: 1px solid #2b2b2b;"
-            "  border-radius: 6px; color: #e6e6e6; padding: 8px;"
+            "  background: #2e2e2e; border: 1px solid #4f4f4f;"
+            "  border-radius: 6px; color: #f4f4f4; padding: 8px;"
             "}"
-            "QPlainTextEdit:focus { border-color: #e6e6e6; }"
+            "QPlainTextEdit:focus { border-color: #f4f4f4; }"
         )
         v.addWidget(self._body, stretch=1)
 
@@ -83,10 +83,10 @@ class OpenPullRequestDialog(QDialog):
 
     _INPUT_CSS = (
         "QLineEdit {"
-        "  background: #161616; border: 1px solid #2b2b2b;"
-        "  border-radius: 4px; color: #e6e6e6; padding: 4px 6px;"
+        "  background: #2e2e2e; border: 1px solid #4f4f4f;"
+        "  border-radius: 4px; color: #f4f4f4; padding: 4px 6px;"
         "}"
-        "QLineEdit:focus { border-color: #e6e6e6; }"
+        "QLineEdit:focus { border-color: #f4f4f4; }"
     )
 
     def values(self) -> tuple[str, str, str, bool]:

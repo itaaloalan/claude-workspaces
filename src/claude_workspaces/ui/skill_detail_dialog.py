@@ -85,10 +85,10 @@ class SkillDetailDialog(QDialog):
         outer.addLayout(header)
 
         meta = QLabel(
-            f"<span style='color:#757575;'>"
+            f"<span style='color:#7f7f7f;'>"
             f"<b>{KIND_LABEL_MAP.get(item.kind, item.kind)}</b> · "
             f"fonte: <code>{item.source_label}</code> · "
-            f"<code style='color:#cfcfcf;'>{item.path}</code>"
+            f"<code style='color:#d8d8d8;'>{item.path}</code>"
             f"</span>"
         )
         meta.setWordWrap(True)

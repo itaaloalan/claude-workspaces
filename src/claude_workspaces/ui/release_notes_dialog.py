@@ -58,17 +58,17 @@ class ReleaseNotesDialog(QDialog):
         self._list.setMinimumWidth(160)
         self._list.setMaximumWidth(220)
         self._list.setStyleSheet(
-            "QListWidget { background: #1e1e1e; color: #e6e6e6; border: 1px solid #262626; }"
+            "QListWidget { background: #383838; color: #f4f4f4; border: 1px solid #454545; }"
             "QListWidget::item { padding: 6px 8px; }"
-            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
+            "QListWidget::item:selected { background: #f4f4f4; color: #262626; }"
         )
         splitter.addWidget(self._list)
 
         self._body = QTextBrowser()
         self._body.setOpenExternalLinks(True)
         self._body.setStyleSheet(
-            "QTextBrowser { background: #181818; color: #e6e6e6;"
-            " border: 1px solid #262626; padding: 8px; }"
+            "QTextBrowser { background: #313131; color: #f4f4f4;"
+            " border: 1px solid #454545; padding: 8px; }"
         )
         font = QFont()
         font.setPointSize(font.pointSize() + 1)

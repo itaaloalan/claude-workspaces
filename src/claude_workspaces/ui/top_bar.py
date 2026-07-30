@@ -22,7 +22,7 @@ class TopBar(QWidget):
         super().__init__(parent)
         self.setObjectName("TopBar")
         self.setStyleSheet(
-            "QWidget#TopBar { background: #131313; border-bottom: 1px solid #1f1f1f; }"
+            "QWidget#TopBar { background: #2a2a2a; border-bottom: 1px solid #3a3a3a; }"
         )
 
         # Barra única e compacta (~38px) — a tab ativa já diz o workspace.
@@ -36,7 +36,7 @@ class TopBar(QWidget):
         from .icons import ic as _ic
 
         toggle_btn = QPushButton()
-        toggle_btn.setIcon(_ic("ph.list", color="#b8b8b8"))
+        toggle_btn.setIcon(_ic("ph.list", color="#c6c6c6"))
         toggle_btn.setIconSize(_QS(16, 16))
         toggle_btn.setFlat(True)
         toggle_btn.setFixedSize(30, 30)
@@ -44,14 +44,14 @@ class TopBar(QWidget):
         toggle_btn.setToolTip("Esconder / mostrar a barra lateral (Ctrl+B)")
         toggle_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
-            "QPushButton:hover { background: #1e1e1e; }"
+            "QPushButton:hover { background: #383838; }"
         )
         toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)
         row.addWidget(toggle_btn)
 
         # Logo Claude (robô) compacto — clicável pra voltar à home.
         logo = QPushButton()
-        logo.setIcon(_ic("ph.robot", color="#cfcfcf"))
+        logo.setIcon(_ic("ph.robot", color="#d8d8d8"))
         logo.setIconSize(_QS(16, 16))
         logo.setFlat(True)
         logo.setFixedSize(30, 30)
@@ -59,7 +59,7 @@ class TopBar(QWidget):
         logo.setToolTip("Claude Workspaces — voltar à home")
         logo.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 6px; }"
-            "QPushButton:hover { background: #1e1e1e; }"
+            "QPushButton:hover { background: #383838; }"
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
@@ -72,7 +72,7 @@ class TopBar(QWidget):
 
         # Bell de inbox — destaca quando há console aguardando atenção
         self._inbox_btn = QPushButton()
-        self._inbox_btn.setIcon(_ic("ph.bell", color="#b8b8b8"))
+        self._inbox_btn.setIcon(_ic("ph.bell", color="#c6c6c6"))
         self._inbox_btn.setIconSize(_QS(15, 15))
         self._inbox_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._inbox_btn.setToolTip("Consoles aguardando atenção")
@@ -85,7 +85,7 @@ class TopBar(QWidget):
         # Simétrico ao toggle da sidebar esquerda — antes só dava pra
         # exibir/esconder via Ctrl+Shift+B, sem botão visível.
         right_dock_btn = QPushButton()
-        right_dock_btn.setIcon(_ic("ph.columns", color="#b8b8b8"))
+        right_dock_btn.setIcon(_ic("ph.columns", color="#c6c6c6"))
         right_dock_btn.setIconSize(_QS(15, 15))
         right_dock_btn.setFlat(True)
         right_dock_btn.setFixedSize(30, 30)
@@ -93,20 +93,20 @@ class TopBar(QWidget):
         right_dock_btn.setToolTip("Esconder / mostrar painel de ferramentas (Ctrl+Shift+B)")
         right_dock_btn.setStyleSheet(
             "QPushButton { background: transparent; border: 0; border-radius: 4px; }"
-            "QPushButton:hover { background: #1e1e1e; }"
+            "QPushButton:hover { background: #383838; }"
         )
         right_dock_btn.clicked.connect(self.toggle_right_dock_clicked.emit)
         row.addWidget(right_dock_btn)
 
         settings_btn = QPushButton("  Configurar")
-        settings_btn.setIcon(_ic("ph.gear", color="#b8b8b8"))
+        settings_btn.setIcon(_ic("ph.gear", color="#c6c6c6"))
         settings_btn.setIconSize(_QS(14, 14))
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.setToolTip("Configurações (Ctrl+,)")
         settings_btn.setStyleSheet(
-            "QPushButton { background: #181818; color: #b8b8b8; "
-            "border: 1px solid #262626; border-radius: 7px; padding: 6px 12px; }"
-            "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
+            "QPushButton { background: #313131; color: #c6c6c6; "
+            "border: 1px solid #454545; border-radius: 7px; padding: 6px 12px; }"
+            "QPushButton:hover { border-color: #f4f4f4; color: #d8d8d8; }"
         )
         settings_btn.clicked.connect(self.settings_clicked.emit)
         row.addWidget(settings_btn)
@@ -139,21 +139,21 @@ class TopBar(QWidget):
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
-                "  background: #9c6a3c; color: #fff; font-weight: 650;"
-                "  border: 1px solid #9c6a3c; border-radius: 7px;"
+                "  background: #b05f41; color: #fff; font-weight: 650;"
+                "  border: 1px solid #b05f41; border-radius: 7px;"
                 "  padding: 6px 10px;"
                 "}"
-                "QPushButton:hover { background: #dd9a63; border-color: #dd9a63; }"
+                "QPushButton:hover { background: #e28a6d; border-color: #e28a6d; }"
             )
         else:
-            self._inbox_btn.setIcon(_ic("ph.bell", color="#b8b8b8"))
+            self._inbox_btn.setIcon(_ic("ph.bell", color="#c6c6c6"))
             self._inbox_btn.setIconSize(_QS(15, 15))
             self._inbox_btn.setStyleSheet(
                 "QPushButton {"
-                "  background: #181818; color: #b8b8b8;"
-                "  border: 1px solid #262626; border-radius: 7px;"
+                "  background: #313131; color: #c6c6c6;"
+                "  border: 1px solid #454545; border-radius: 7px;"
                 "  padding: 6px 10px;"
                 "}"
-                "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
+                "QPushButton:hover { border-color: #f4f4f4; color: #d8d8d8; }"
             )
 

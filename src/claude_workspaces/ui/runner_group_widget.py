@@ -104,7 +104,7 @@ class RunnerGroupWidget(QWidget):
         self._label = QLabel(label)
         # Mesma cor/tamanho do header "Sessões Claude" pra paridade visual.
         self._label.setStyleSheet(
-            "color: #b8b8b8; font-size: 11px; font-weight: 600;"
+            "color: #c6c6c6; font-size: 11px; font-weight: 600;"
         )
         row.addWidget(self._label, 0, Qt.AlignmentFlag.AlignVCenter)
 

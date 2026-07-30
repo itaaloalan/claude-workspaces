@@ -28,7 +28,7 @@ from . import theme
 
 _REMOVE_BTN_QSS = (
     "QPushButton { background: transparent; color: #8f8f8f; "
-    "border: 1px solid #2b2b2b; border-radius: 4px; padding: 2px 8px; "
+    "border: 1px solid #4f4f4f; border-radius: 4px; padding: 2px 8px; "
     "font-size: 11px; }"
     "QPushButton:hover { color: #cf6f6f; border-color: #cf6f6f; }"
 )
@@ -114,7 +114,7 @@ class ConsoleRunnersDialog(QDialog):
     def _make_row(self, group: dict) -> QWidget:
         row = QFrame()
         row.setStyleSheet(
-            "QFrame { background: #131313; border: 1px solid #1f1f1f; "
+            "QFrame { background: #2a2a2a; border: 1px solid #3a3a3a; "
             "border-radius: 6px; }"
             "QLabel { background: transparent; border: 0; }"
         )

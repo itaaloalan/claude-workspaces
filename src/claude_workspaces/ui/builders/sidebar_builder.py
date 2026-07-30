@@ -132,7 +132,7 @@ class _WorkspaceBorderOverlay(QWidget):
     estado de seleção do workspace — azul (PRIMARY) quando selecionado,
     cinza neutro caso contrário."""
 
-    _BORDER_COLOR = QColor("#1f1f1f")
+    _BORDER_COLOR = QColor("#3a3a3a")
     _BORDER_COLOR_SELECTED = QColor(theme.PRIMARY)
     _BORDER_RADIUS = 6
 
@@ -237,7 +237,7 @@ class _WorkspaceBorderOverlay(QWidget):
 
 _SECTION_HEADER_QSS = (
     "QLabel {"
-    "  color: #757575;"
+    "  color: #7f7f7f;"
     "  font-size: 10px;"
     "  font-weight: 700;"
     "  letter-spacing: 1.4px;"
@@ -360,7 +360,7 @@ class SidebarBuilder:
         from ..icons import ic as _ic
 
         self.wrapper = QWidget()
-        self.wrapper.setStyleSheet("background: #131313;")
+        self.wrapper.setStyleSheet("background: #2a2a2a;")
         layout = QVBoxLayout(self.wrapper)
         layout.setContentsMargins(10, 10, 8, 6)
         layout.setSpacing(7)

@@ -68,7 +68,7 @@ class ShortcutsDialog(QDialog):
             "embutido (Ctrl+T, Ctrl+K…) operam no terminal visível."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9a9a9a;")
+        hint.setStyleSheet("color: #a2a2a2;")
         outer.addWidget(hint)
 
         mono = QFont("monospace")
@@ -84,11 +84,11 @@ class ShortcutsDialog(QDialog):
                 k = QLabel(key)
                 k.setFont(mono)
                 k.setMinimumWidth(220)
-                k.setStyleSheet("color: #cfcfcf;")
+                k.setStyleSheet("color: #d8d8d8;")
                 row.addWidget(k)
                 d = QLabel(desc)
                 d.setWordWrap(True)
-                d.setStyleSheet("color: #b8b8b8;")
+                d.setStyleSheet("color: #c6c6c6;")
                 row.addWidget(d, stretch=1)
                 outer.addLayout(row)
 

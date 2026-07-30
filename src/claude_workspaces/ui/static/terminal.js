@@ -6,9 +6,9 @@
         allowProposedApi: true,
         scrollback: 1000,
         theme: {
-            background: '#0e0e0e',
-            foreground: '#e6e6e6',
-            cursor: '#e6e6e6',
+            background: '#2c3037',
+            foreground: '#f4f4f4',
+            cursor: '#f4f4f4',
             selectionBackground: '#2e2e2e',
         },
     });

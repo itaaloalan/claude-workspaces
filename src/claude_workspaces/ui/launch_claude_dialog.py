@@ -73,7 +73,7 @@ class LaunchClaudeDialog(QDialog):
 
         header = QLabel(
             f"<b>Workspace:</b> {workspace.name} &nbsp;·&nbsp; "
-            f"<span style='color:#9a9a9a;'>1ª pasta = cwd, demais como "
+            f"<span style='color:#a2a2a2;'>1ª pasta = cwd, demais como "
             f"<code>--add-dir</code></span>"
         )
         header.setTextFormat(Qt.TextFormat.RichText)
@@ -94,7 +94,7 @@ class LaunchClaudeDialog(QDialog):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #262626;")
+        sep.setStyleSheet("color: #454545;")
         v.addWidget(sep)
 
         # ---------- Git ----------
@@ -112,7 +112,7 @@ class LaunchClaudeDialog(QDialog):
             )
         else:
             git_hdr = QLabel(
-                "<b>Git:</b> <span style='color:#9a9a9a;'>"
+                "<b>Git:</b> <span style='color:#a2a2a2;'>"
                 "pasta primária não é repo — worktree indisponível</span>"
             )
         v.addWidget(git_hdr)
@@ -199,7 +199,7 @@ class LaunchClaudeDialog(QDialog):
         form.addRow("Branch existente:", self.existing_combo)
 
         self.path_preview = QLabel("")
-        self.path_preview.setStyleSheet("color: #9a9a9a; font-size: 11px;")
+        self.path_preview.setStyleSheet("color: #a2a2a2; font-size: 11px;")
         self.path_preview.setWordWrap(True)
         form.addRow("Path:", self.path_preview)
 
@@ -207,12 +207,12 @@ class LaunchClaudeDialog(QDialog):
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet("color: #262626;")
+        sep2.setStyleSheet("color: #454545;")
         v.addWidget(sep2)
 
         prompt_label = QLabel(
             "<b>Prompt inicial</b> "
-            "<span style='color:#9a9a9a;'>(opcional — enviado ao iniciar)</span>"
+            "<span style='color:#a2a2a2;'>(opcional — enviado ao iniciar)</span>"
         )
         v.addWidget(prompt_label)
         self.initial_prompt_edit = QPlainTextEdit()

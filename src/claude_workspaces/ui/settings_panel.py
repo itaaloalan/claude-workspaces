@@ -63,7 +63,7 @@ class SettingsPanel(QWidget):
             "($SHELL -ic), então aliases como <code>ia</code> resolvem normalmente."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         outer.addWidget(intro)
 
         form = QFormLayout()
@@ -178,7 +178,7 @@ class SettingsPanel(QWidget):
             f"Configurações: <code>{settings_file()}</code><br>"
             f"Logs: <code>{log_file()}</code>"
         )
-        footer.setStyleSheet("color: #9a9a9a;")
+        footer.setStyleSheet("color: #a2a2a2;")
         footer.setTextInteractionFlags(footer.textInteractionFlags())
         outer.addWidget(footer)
 
@@ -386,7 +386,7 @@ class SettingsPanel(QWidget):
             "<code>/effort</code> trocam dentro da sessão."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         form = QFormLayout()
@@ -484,7 +484,7 @@ class SettingsPanel(QWidget):
             "sempre desmarcar antes de confirmar."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         self._default_isolate_chk = QCheckBox(
@@ -531,7 +531,7 @@ class SettingsPanel(QWidget):
             "endpoint local abaixo (read-only, somente 127.0.0.1)."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         import claude_workspaces as _pkg
@@ -566,7 +566,7 @@ class SettingsPanel(QWidget):
                 "⚠ Pasta não encontrada — a extensão vive no clone do "
                 "repositório claude-workspaces (chrome-extension/)."
             )
-            warn.setStyleSheet("color: #f2f2f2;")
+            warn.setStyleSheet("color: #ffffff;")
             warn.setWordWrap(True)
             layout.addWidget(warn)
 
@@ -602,7 +602,7 @@ class SettingsPanel(QWidget):
             "outros hooks."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         self._hook_status = QLabel()
@@ -625,7 +625,7 @@ class SettingsPanel(QWidget):
             "entrada específica."
         )
         re_intro.setWordWrap(True)
-        re_intro.setStyleSheet("color: #b8b8b8;")
+        re_intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(re_intro)
 
         self._notify_native_chk = QCheckBox(
@@ -690,7 +690,7 @@ class SettingsPanel(QWidget):
             "<code>{project}</code> é substituído pelo basename do cwd."
         )
         texts_intro.setWordWrap(True)
-        texts_intro.setStyleSheet("color: #b8b8b8;")
+        texts_intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(texts_intro)
 
         texts_form = QFormLayout()
@@ -750,7 +750,7 @@ class SettingsPanel(QWidget):
             "&lt;token&gt;</code>). Os mutes por tipo da central também valem aqui."
         )
         dc_intro.setWordWrap(True)
-        dc_intro.setStyleSheet("color: #b8b8b8;")
+        dc_intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(dc_intro)
 
         self._discord_enabled_chk = QCheckBox(
@@ -794,7 +794,7 @@ class SettingsPanel(QWidget):
             "são salvas em <code>~/.config/claude-workspaces/notifications.json</code>."
         )
         sec_intro.setWordWrap(True)
-        sec_intro.setStyleSheet("color: #b8b8b8;")
+        sec_intro.setStyleSheet("color: #c6c6c6;")
         sec_layout.addWidget(sec_intro)
 
         self._notif_desktop_chk = QCheckBox(
@@ -915,7 +915,7 @@ class SettingsPanel(QWidget):
             "KWin continuam funcionando. <b>Requer reiniciar o app.</b>"
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         self._frameless_chk = QCheckBox(
@@ -936,7 +936,7 @@ class SettingsPanel(QWidget):
             "é aplicada ao vivo, sem reiniciar."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         form = QFormLayout()
@@ -966,7 +966,7 @@ class SettingsPanel(QWidget):
             "(comportamento antigo, com flicker)."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         form = QFormLayout()
@@ -991,7 +991,7 @@ class SettingsPanel(QWidget):
             "workspace atual."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         layout.addWidget(intro)
 
         row = QHBoxLayout()
@@ -1036,7 +1036,7 @@ class SettingsPanel(QWidget):
             self._hook_toggle_btn.setText("Remover notificações")
         else:
             self._hook_status.setText("Hook não instalado — notificações desativadas")
-            self._hook_status.setStyleSheet("color: #9a9a9a;")
+            self._hook_status.setStyleSheet("color: #a2a2a2;")
             self._hook_toggle_btn.setText("Ativar notificações")
 
     def _toggle_hook(self) -> None:

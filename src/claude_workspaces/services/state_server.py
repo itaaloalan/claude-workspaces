@@ -683,26 +683,26 @@ _CONSOLE_HTML = """<!doctype html>
 <title>__TITLE__ — console</title>
 <link rel="stylesheet" href="/static/xterm.css">
 <style>
-  html, body { height: 100%; margin: 0; background: #0e0e0e; }
+  html, body { height: 100%; margin: 0; background: #2c3037; }
   body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
   #hdr {
     flex: none; display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px; background: #131313; border-bottom: 1px solid #262626;
-    color: #b8b8b8; font-size: 12px; font-weight: 600;
+    padding: 6px 10px; background: #2a2a2a; border-bottom: 1px solid #454545;
+    color: #c6c6c6; font-size: 12px; font-weight: 600;
   }
   #hdr .branch { color: #6fbf73; }
-  #hdr .hint { color: #757575; font-weight: 400; margin-left: auto; }
+  #hdr .hint { color: #7f7f7f; font-weight: 400; margin-left: auto; }
   #tabs { display: flex; gap: 4px; margin-left: 10px; }
   #tabs .tab {
     padding: 2px 9px; border-radius: 6px; cursor: pointer;
-    background: #1e1e1e; color: #8f8f8f; border: 1px solid #2b2b2b;
+    background: #383838; color: #8f8f8f; border: 1px solid #4f4f4f;
   }
-  #tabs .tab.active { background: #2e3b4e; color: #e6e6e6; }
+  #tabs .tab.active { background: #2e3b4e; color: #f4f4f4; }
   #restart {
-    background: #1e1e1e; color: #b8b8b8; border: 1px solid #2b2b2b;
+    background: #383838; color: #c6c6c6; border: 1px solid #4f4f4f;
     border-radius: 6px; padding: 2px 9px; cursor: pointer; font-size: 12px;
   }
-  #restart:hover { border-color: #f2f2f2; color: #f2f2f2; }
+  #restart:hover { border-color: #ffffff; color: #ffffff; }
   #term { flex: 1; min-height: 0; padding: 4px; }
   /* Scrollbar minimalista no viewport do xterm — espelha o visual dos
    * scrollbars Qt do app (8px, track transparente, thumb sutil, hover amarelo). */
@@ -715,7 +715,7 @@ _CONSOLE_HTML = """<!doctype html>
   .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .40); }
   #off {
     display: none; position: absolute; inset: 0; align-items: center;
-    justify-content: center; background: rgba(14,14,14,.85); color: #f2f2f2;
+    justify-content: center; background: rgba(14,14,14,.85); color: #ffffff;
     font-size: 14px; z-index: 9;
   }
 </style>
@@ -740,7 +740,7 @@ _CONSOLE_HTML = """<!doctype html>
     fontSize: 13,
     fontFamily: "monospace",
     lineHeight: 1,
-    theme: { background: "#0e0e0e", foreground: "#e6e6e6" },
+    theme: { background: "#2c3037", foreground: "#f4f4f4" },
     scrollback: 8000,
   });
   const termEl = document.getElementById("term");

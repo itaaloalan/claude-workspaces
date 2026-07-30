@@ -54,7 +54,7 @@ class NewPluginRequestDialog(QDialog):
             "você manda pro Claude — ele scaffolda o bundle pra você."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #b8b8b8;")
+        intro.setStyleSheet("color: #c6c6c6;")
         outer.addWidget(intro)
 
         # --- Formulário ----------------------------------------------------
@@ -118,7 +118,7 @@ class NewPluginRequestDialog(QDialog):
         # --- Preview do briefing -------------------------------------------
         preview_label = QLabel(
             "<b>Pedido gerado</b> "
-            "<span style='color:#757575;'>(edite à vontade antes de enviar)</span>"
+            "<span style='color:#7f7f7f;'>(edite à vontade antes de enviar)</span>"
         )
         outer.addWidget(preview_label)
 
@@ -128,10 +128,10 @@ class NewPluginRequestDialog(QDialog):
         self._preview.setFont(mono)
         self._preview.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #161616; border: 1px solid #2b2b2b;"
-            "  border-radius: 6px; color: #e6e6e6; padding: 8px;"
+            "  background: #2e2e2e; border: 1px solid #4f4f4f;"
+            "  border-radius: 6px; color: #f4f4f4; padding: 8px;"
             "}"
-            "QPlainTextEdit:focus { border-color: #e6e6e6; }"
+            "QPlainTextEdit:focus { border-color: #f4f4f4; }"
         )
         outer.addWidget(self._preview, stretch=1)
 

@@ -43,14 +43,14 @@ class HandoffDialog(QDialog):
             "como fallback."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #b8b8b8;")
+        info.setStyleSheet("color: #c6c6c6;")
         v.addWidget(info)
 
         origin = QLabel(
             f"<b>Origem:</b> <code>{session.origin_cwd}</code>  ·  "
             f"<b>ID:</b> <code>{session.id[:8] if session.id else '?'}</code>"
         )
-        origin.setStyleSheet("color: #9a9a9a; font-size: 11px;")
+        origin.setStyleSheet("color: #a2a2a2; font-size: 11px;")
         v.addWidget(origin)
 
         self._edit = QPlainTextEdit(briefing)
@@ -59,10 +59,10 @@ class HandoffDialog(QDialog):
         self._edit.setFont(mono)
         self._edit.setStyleSheet(
             "QPlainTextEdit {"
-            "  background: #161616; border: 1px solid #2b2b2b;"
-            "  border-radius: 6px; color: #e6e6e6; padding: 8px;"
+            "  background: #2e2e2e; border: 1px solid #4f4f4f;"
+            "  border-radius: 6px; color: #f4f4f4; padding: 8px;"
             "}"
-            "QPlainTextEdit:focus { border-color: #e6e6e6; }"
+            "QPlainTextEdit:focus { border-color: #f4f4f4; }"
         )
         # Cursor no final pra usuário só digitar o próximo passo
         cursor = self._edit.textCursor()

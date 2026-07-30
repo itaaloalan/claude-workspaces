@@ -93,7 +93,7 @@ class DiffWebView(QWidget):
 
         # Placeholder escuro exibido antes do lazy-load
         self._placeholder = QWidget()
-        self._placeholder.setStyleSheet("background: #0e0e0e;")
+        self._placeholder.setStyleSheet("background: #2c3037;")
         layout.addWidget(self._placeholder)
 
         self.view: QWebEngineView | None = None

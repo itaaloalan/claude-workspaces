@@ -348,7 +348,7 @@ class WorkspaceItemWidget(QWidget):
 
     def _tick_dot_blink(self) -> None:
         self._dot_blink_on = not self._dot_blink_on
-        color = "#5c4230" if self._dot_blink_on else self._dot_color
+        color = "#6b4433" if self._dot_blink_on else self._dot_color
         self._dot.setStyleSheet(_dot_qss(color))
 
     def set_pinned(self, pinned: bool) -> None:

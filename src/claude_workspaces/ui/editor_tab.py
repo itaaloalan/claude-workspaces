@@ -36,8 +36,8 @@ class EditorTab(QWidget):
         font.setPointSize(11)
         self.editor.setFont(font)
         self.editor.setStyleSheet(
-            "QPlainTextEdit { background: #161616; color: #e6e6e6; "
-            "border: 0; selection-background-color: #e6e6e6; }"
+            "QPlainTextEdit { background: #2e2e2e; color: #f4f4f4; "
+            "border: 0; selection-background-color: #f4f4f4; }"
         )
         layout.addWidget(self.editor)
 

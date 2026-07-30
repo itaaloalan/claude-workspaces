@@ -27,7 +27,7 @@ from ..services.system_open import open_in_file_manager
 log = logging.getLogger(__name__)
 
 _SCOPE_COLOR = {
-    "user": "#cfcfcf",
+    "user": "#d8d8d8",
     "project": "#6fbf73",
     "local": "#d6b95c",
 }
@@ -51,7 +51,7 @@ class HooksInspectorDialog(QDialog):
             "<b>todos</b> os configurados, agrupados por evento e escopo."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color: #9a9a9a;")
+        hint.setStyleSheet("color: #a2a2a2;")
         outer.addWidget(hint)
 
         # Scope legend
@@ -69,16 +69,16 @@ class HooksInspectorDialog(QDialog):
         self._tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.header().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self._tree.setStyleSheet(
-            "QTreeWidget { background: #161616; border: 1px solid #2b2b2b; "
-            "border-radius: 6px; color: #e6e6e6; }"
+            "QTreeWidget { background: #2e2e2e; border: 1px solid #4f4f4f; "
+            "border-radius: 6px; color: #f4f4f4; }"
             "QTreeWidget::item { padding: 4px; }"
-            "QTreeWidget::item:selected { background: #e6e6e6; color: #111111; }"
+            "QTreeWidget::item:selected { background: #f4f4f4; color: #262626; }"
         )
         self._tree.itemDoubleClicked.connect(self._on_open_file)
         outer.addWidget(self._tree, stretch=1)
 
         self._counter = QLabel()
-        self._counter.setStyleSheet("color: #757575; font-size: 11px;")
+        self._counter.setStyleSheet("color: #7f7f7f; font-size: 11px;")
         outer.addWidget(self._counter)
 
         # ---------- footer ----------
@@ -131,7 +131,7 @@ class HooksInspectorDialog(QDialog):
                 child.setToolTip(0, self._tooltip_for(h))
                 from PySide6.QtGui import QBrush, QColor
                 child.setForeground(
-                    1, QBrush(QColor(_SCOPE_COLOR.get(h.scope, "#b8b8b8")))
+                    1, QBrush(QColor(_SCOPE_COLOR.get(h.scope, "#c6c6c6")))
                 )
                 ev_item.addChild(child)
             self._tree.addTopLevelItem(ev_item)

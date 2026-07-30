@@ -44,7 +44,7 @@ class PluginPaletteDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(560)
         self.setStyleSheet(
-            "QDialog { background: #1e1e1e; border: 1px solid #2b2b2b; }"
+            "QDialog { background: #383838; border: 1px solid #4f4f4f; }"
         )
 
         outer = QVBoxLayout(self)
@@ -54,19 +54,19 @@ class PluginPaletteDialog(QDialog):
         self._search = QLineEdit()
         self._search.setPlaceholderText("Buscar comando…")
         self._search.setStyleSheet(
-            "QLineEdit { background: #161616; border: 1px solid #2b2b2b; "
-            "border-radius: 4px; padding: 6px 8px; color: #e6e6e6; }"
-            "QLineEdit:focus { border-color: #e6e6e6; }"
+            "QLineEdit { background: #2e2e2e; border: 1px solid #4f4f4f; "
+            "border-radius: 4px; padding: 6px 8px; color: #f4f4f4; }"
+            "QLineEdit:focus { border-color: #f4f4f4; }"
         )
         self._search.textChanged.connect(self._refilter)
         outer.addWidget(self._search)
 
         self._list = QListWidget()
         self._list.setStyleSheet(
-            "QListWidget { background: #161616; border: 1px solid #2b2b2b; "
-            "border-radius: 4px; color: #e6e6e6; }"
-            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #1f1f1f; }"
-            "QListWidget::item:selected { background: #e6e6e6; color: #111111; }"
+            "QListWidget { background: #2e2e2e; border: 1px solid #4f4f4f; "
+            "border-radius: 4px; color: #f4f4f4; }"
+            "QListWidget::item { padding: 6px 8px; border-bottom: 1px solid #3a3a3a; }"
+            "QListWidget::item:selected { background: #f4f4f4; color: #262626; }"
         )
         self._list.itemActivated.connect(self._invoke_selected)
         outer.addWidget(self._list, stretch=1)
@@ -74,7 +74,7 @@ class PluginPaletteDialog(QDialog):
         self._hint = QLabel(
             "Enter pra invocar · ↑↓ pra navegar · Esc pra fechar"
         )
-        self._hint.setStyleSheet("color: #757575; font-size: 11px;")
+        self._hint.setStyleSheet("color: #7f7f7f; font-size: 11px;")
         outer.addWidget(self._hint)
 
         self._all_entries: list[_Entry] = []

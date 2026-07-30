@@ -103,7 +103,7 @@ class SkillDetailView(QWidget):
             "Selecione uma skill, agente ou comando na lista à esquerda "
             "pra ver detalhes, lint, telemetria e o conteúdo."
         )
-        lab.setStyleSheet("color: #757575;")
+        lab.setStyleSheet("color: #7f7f7f;")
         lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lab.setWordWrap(True)
         self._inner_layout.addWidget(lab)
@@ -145,10 +145,10 @@ class SkillDetailView(QWidget):
         self._inner_layout.addLayout(header)
 
         meta = QLabel(
-            f"<span style='color:#757575;'>"
+            f"<span style='color:#7f7f7f;'>"
             f"<b>{KIND_LABEL_MAP.get(item.kind, item.kind)}</b> · "
             f"fonte: <code>{item.source_label}</code> · "
-            f"<code style='color:#cfcfcf;'>{item.path}</code>"
+            f"<code style='color:#d8d8d8;'>{item.path}</code>"
             f"</span>"
         )
         meta.setWordWrap(True)

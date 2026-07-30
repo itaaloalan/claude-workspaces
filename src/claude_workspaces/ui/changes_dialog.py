@@ -52,8 +52,8 @@ class ChangesDialog(QDialog):
         self.setWindowTitle("Changes — mudanças não commitadas")
         self.setMinimumSize(720, 480)
         self.setStyleSheet(
-            f"QDialog {{ background: {theme.BG_PANEL}; color: #e6e6e6; }}"
-            "QLabel { color: #b8b8b8; }"
+            f"QDialog {{ background: {theme.BG_PANEL}; color: #f4f4f4; }}"
+            "QLabel { color: #c6c6c6; }"
         )
 
         outer = QVBoxLayout(self)
@@ -80,7 +80,7 @@ class ChangesDialog(QDialog):
         for name, folder, files in self._repos:
             root = QTreeWidgetItem([f"{name}  {len(files)} files"])
             _bold(root)
-            root.setForeground(0, QBrush(QColor("#b8b8b8")))
+            root.setForeground(0, QBrush(QColor("#c6c6c6")))
             self._populate_dir_tree(root, folder, files)
             tree.addTopLevelItem(root)
             _expand_all(root)
@@ -157,7 +157,7 @@ class ChangesDialog(QDialog):
             parent_path, _, name = path.rpartition("/")
             parent = ensure_dir(parent_path)
             node = QTreeWidgetItem([name])
-            node.setForeground(0, QBrush(QColor("#b8b8b8")))
+            node.setForeground(0, QBrush(QColor("#c6c6c6")))
             parent.addChild(node)
             dir_nodes[path] = node
             return node
@@ -176,7 +176,7 @@ class ChangesDialog(QDialog):
             parent_path, _, name = rel.rpartition("/")
             parent = ensure_dir(parent_path)
             code = status[0] if status else ""
-            color = _STATUS_COLOR.get(code, "#9a9a9a")
+            color = _STATUS_COLOR.get(code, "#a2a2a2")
             leaf = QTreeWidgetItem([name])
             leaf.setForeground(0, QBrush(QColor(color)))
             mono = leaf.font(0)

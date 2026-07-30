@@ -10,40 +10,40 @@ conforme tocarmos eles. Veja MAINTAINABILITY.md item #4.
 # acima do fundo, "accent" claro em vez de cor forte. Cores saturadas
 # ficam reservadas a semântica (git/status/PR).
 
-BG_DEEP = "#0e0e0e"        # áreas do terminal (mais escuro)
-BG_DARKEST = "#111111"     # fundo dock
-BG_DARKER = "#131313"      # topbar, headers compactos
-BG_DARK = "#161616"        # listas, plain text edits
-BG_PANEL = "#181818"       # background geral de painéis
-BG_SURFACE = "#1e1e1e"     # botões neutros, inputs
-BG_ELEVATED = "#232323"    # menus, popovers, cards em destaque
+BG_DEEP = "#2c3037"        # áreas do terminal (mais escuro)
+BG_DARKEST = "#262626"     # fundo dock
+BG_DARKER = "#2a2a2a"      # topbar, headers compactos
+BG_DARK = "#2e2e2e"        # listas, plain text edits
+BG_PANEL = "#313131"       # background geral de painéis
+BG_SURFACE = "#383838"     # botões neutros, inputs
+BG_ELEVATED = "#414141"    # menus, popovers, cards em destaque
 
-BORDER = "#262626"         # divisores, splitter handles
-BORDER_SOFT = "#1f1f1f"    # borda em listas (item separator)
-BORDER_INPUT = "#2b2b2b"   # borda de inputs/buttons
+BORDER = "#454545"         # divisores, splitter handles
+BORDER_SOFT = "#3a3a3a"    # borda em listas (item separator)
+BORDER_INPUT = "#4f4f4f"   # borda de inputs/buttons
 
-PRIMARY = "#e6e6e6"        # "accent" neutro claro: botão primário, foco
-PRIMARY_HOVER = "#f2f2f2"
-PRIMARY_PRESSED = "#d9d9d9"
-PRIMARY_HOVER_BG = "#222222"  # hover suave em listas
-TEXT_ON_ACCENT = "#111111"    # texto sobre bg PRIMARY (claro)
+PRIMARY = "#f4f4f4"        # "accent" neutro claro: botão primário, foco
+PRIMARY_HOVER = "#ffffff"
+PRIMARY_PRESSED = "#e8e8e8"
+PRIMARY_HOVER_BG = "#3a3a3a"  # hover suave em listas
+TEXT_ON_ACCENT = "#1d1d1d"    # texto sobre bg PRIMARY (claro)
 PRIMARY_SELECTION_BG = "rgba(255, 255, 255, 26)"  # bg de item selecionado (~10% branco)
 
-TEXT_PRIMARY = "#e6e6e6"    # texto principal
+TEXT_PRIMARY = "#f4f4f4"    # texto principal
 TEXT_BRIGHT = "#ffffff"     # texto sobre seleção (usar pouco)
-TEXT_MUTED = "#b8b8b8"      # texto secundário
-TEXT_FADED = "#9a9a9a"      # contadores, hints, status
-TEXT_FAINT = "#757575"      # placeholders, labels de seção
-TEXT_DISABLED = "#4f4f4f"
-TEXT_LINK = "#cfcfcf"       # links / hover de botão flat
+TEXT_MUTED = "#c6c6c6"      # texto secundário
+TEXT_FADED = "#a2a2a2"      # contadores, hints, status
+TEXT_FAINT = "#7f7f7f"      # placeholders, labels de seção
+TEXT_DISABLED = "#5f5f5f"
+TEXT_LINK = "#d8d8d8"       # links / hover de botão flat
 
 SUCCESS = "#6fbf73"         # verde (concluído, adicionado)
 WARNING = "#d6b95c"         # amarelo (trabalhando, modificado)
 DANGER = "#cf6f6f"          # vermelho (deletado, erro)
 INFO = "#6f9fd8"            # azul claro (renomeado, info) — semântico
-WAITING = "#cc8b57"         # laranja (aguardando atenção, inbox)
-WAITING_HOVER = "#dd9a63"
-WAITING_BG = "#9c6a3c"      # bg do bell quando há inbox
+WAITING = "#d77657"         # laranja (aguardando atenção, inbox)
+WAITING_HOVER = "#e28a6d"
+WAITING_BG = "#b05f41"      # bg do bell quando há inbox
 PLANNING = "#5fb3af"        # teal — planejando (plan mode)
 PR_PINK = "#d67ba8"         # rosa — PR detectado, estado desconhecido
 PR_PINK_BG = "rgba(214, 123, 168, 0.12)"  # fundo do banner de PR
@@ -302,10 +302,10 @@ def terminal_theme() -> dict:
         "fontFamily": TERMINAL_FONT_FAMILY,
         "xterm": {
             "background": BG_DEEP,
-            "foreground": "#e6e6e6",
+            "foreground": "#f0f0f0",
             "cursor": PRIMARY,
             "cursorAccent": BG_DEEP,
-            "selectionBackground": "#2e2e2e",
+            "selectionBackground": "#3e4451",
         },
         "css": {
             "--term-bg": BG_DEEP,

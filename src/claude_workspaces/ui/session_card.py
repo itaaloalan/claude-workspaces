@@ -197,7 +197,7 @@ class SessionCard(QFrame):
                 "  background: transparent; color: #d6b95c;"
                 "  border: 0; font-size: 13px; padding: 0;"
                 "}"
-                "QPushButton:hover { color: #f2f2f2; }"
+                "QPushButton:hover { color: #ffffff; }"
             )
         else:
             self._star_btn.setText("☆")

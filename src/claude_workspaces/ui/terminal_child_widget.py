@@ -148,7 +148,7 @@ class TerminalChildWidget(QWidget):
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
         self._connector_label.setStyleSheet(
-            "QLabel { color: #4f4f4f; font-size: 11px; background: transparent; border: 0; }"
+            "QLabel { color: #5f5f5f; font-size: 11px; background: transparent; border: 0; }"
         )
         outer.addWidget(self._connector_label)
 
@@ -205,7 +205,7 @@ class TerminalChildWidget(QWidget):
         self._notif_badge.setStyleSheet(
             "QLabel {"
             "  background: rgba(201, 119, 45, 100);"
-            "  color: #dd9a63;"
+            "  color: #e28a6d;"
             "  font-size: 9px; font-weight: 700;"
             "  padding: 1px 5px; border-radius: 6px;"
             "}"
