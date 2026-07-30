@@ -1072,8 +1072,18 @@ class MainWindow(QMainWindow):
                 return data
         return None
 
+    def _set_nav_active(self, view_id: str) -> None:
+        """Sincroniza o estado ativo nos DOIS navegadores de view
+        (ActivityBar legada + SidebarNav) sem disparar sinais."""
+        if hasattr(self, "activity_bar"):
+            self.activity_bar.set_active(view_id)
+        if hasattr(self, "sidebar_nav"):
+            self.sidebar_nav.set_active(view_id)
+
     def _on_activity_view_changed(self, view_id: str) -> None:
-        """Activity bar trocou a view top-level. Carrega lazy."""
+        """Nav (SidebarNav/ActivityBar) trocou a view top-level. Carrega
+        lazy e mantém os dois navegadores em sincronia."""
+        self._set_nav_active(view_id)
         if view_id == VIEW_WORKSPACES:
             self.main_stack.setCurrentWidget(self.body_view)
             self.content_stack.setCurrentIndex(0)
@@ -2125,6 +2135,10 @@ class MainWindow(QMainWindow):
         ).build()
         self._sidebar_search_input = builder.search_input
         self._find_file_input = builder.find_file_input
+        # Nav principal no topo da sidebar (estilo Orca) — espelha a
+        # ActivityBar enquanto ela ainda existe; vira o único caminho na E3.
+        self.sidebar_nav = builder.nav
+        self.sidebar_nav.view_changed.connect(self._on_activity_view_changed)
         self._minimized_ws_tray = builder.minimized_tray
         self._minimized_ws_tray.restore_requested.connect(
             self._on_minimized_workspace_restore
@@ -3583,7 +3597,7 @@ class MainWindow(QMainWindow):
         if ws is None:
             return
         self.main_stack.setCurrentWidget(self.body_view)
-        self.activity_bar.set_active(VIEW_WORKSPACES)
+        self._set_nav_active(VIEW_WORKSPACES)
         self.content_stack.setCurrentIndex(0)
         item = self._find_workspace_item(ws.id)
         if item is not None:
@@ -4611,18 +4625,13 @@ class MainWindow(QMainWindow):
             if self.terminals_coord.state.running_counts.get(ws.id, 0) > 0
         )
         badge, tip = format_activity_badge(working, total)
-        if badge:
-            self.activity_bar.set_badge(VIEW_WORKSPACES, badge, tip)
-        else:
-            self.activity_bar.set_badge(VIEW_WORKSPACES, "")
-
         apps = len(self.settings.apps or [])
-        if apps > 0:
-            self.activity_bar.set_badge(
-                VIEW_APPS, str(apps), f"{apps} app(s) auxiliar(es) configurado(s)"
-            )
-        else:
-            self.activity_bar.set_badge(VIEW_APPS, "")
+        apps_tip = f"{apps} app(s) auxiliar(es) configurado(s)"
+        for bar in (self.activity_bar, getattr(self, "sidebar_nav", None)):
+            if bar is None:
+                continue
+            bar.set_badge(VIEW_WORKSPACES, badge or "", tip if badge else None)
+            bar.set_badge(VIEW_APPS, str(apps) if apps > 0 else "", apps_tip)
 
     # ---------- seleção / settings ----------
 
@@ -5338,12 +5347,12 @@ class MainWindow(QMainWindow):
         # antes de exibir settings — sem isso a tela não aparece.
         if not self.content_stack.isVisible():
             self._toggle_content_minimized()
-        self.activity_bar.set_active(VIEW_SETTINGS)
+        self._set_nav_active(VIEW_SETTINGS)
         self.content_stack.setCurrentWidget(self._settings_scroll)
 
     def _show_workspaces(self) -> None:
         self.main_stack.setCurrentWidget(self.body_view)
-        self.activity_bar.set_active(VIEW_WORKSPACES)
+        self._set_nav_active(VIEW_WORKSPACES)
         self.content_stack.setCurrentIndex(0)
         current = self.list_widget.currentItem()
         if current:

@@ -274,7 +274,7 @@ _TREE_QSS = (
     f"  outline: 0;"
     f"}}"
     f"QTreeWidget::item {{"
-    f"  padding: 1px 4px;"
+    f"  padding: 3px 4px;"
     f"  border: 0;"
     f"  border-radius: 6px;"
     f"  color: {theme.TEXT_PRIMARY};"
@@ -357,7 +357,13 @@ class SidebarBuilder:
         layout.setContentsMargins(10, 10, 8, 6)
         layout.setSpacing(7)
 
-        # Search row primeiro — search alinhado no topo igual ao mockup.
+        # Navegação principal no topo (estilo Orca) — substitui a
+        # ActivityBar vertical. MainWindow conecta view_changed/badges.
+        from ..sidebar_nav import SidebarNav
+        self.nav = SidebarNav()
+        layout.addWidget(self.nav)
+
+        # Search logo abaixo do nav.
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Buscar workspaces…")
         self.search_input.setClearButtonEnabled(True)
@@ -368,42 +374,15 @@ class SidebarBuilder:
         self.search_input.setFixedHeight(28)
         if self._on_search_workspaces is not None:
             self.search_input.textChanged.connect(self._on_search_workspaces)
+        layout.addWidget(self.search_input)
 
-        search_row = QHBoxLayout()
-        search_row.setContentsMargins(0, 0, 0, 0)
-        search_row.setSpacing(4)
-        search_row.addWidget(self.search_input, stretch=1)
-        self.filter_btn = QPushButton()
-        self.filter_btn.setIcon(_ic(ICONS["filter"], color=theme.TEXT_FAINT))
-        self.filter_btn.setIconSize(QSize(12, 12))
-        self.filter_btn.setFixedSize(28, 28)
-        self.filter_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.filter_btn.setToolTip("Filtros avançados (em breve)")
-        self.filter_btn.setStyleSheet(
-            "QPushButton { background: #181818; "
-            "border: 1px solid #1f1f1f; border-radius: 6px; }"
-            f"QPushButton:hover {{ border-color: {theme.PRIMARY}; background: #131313; }}"
-        )
-        search_row.addWidget(self.filter_btn)
-        layout.addLayout(search_row)
-
-        # Seções ATENÇÃO e FIXADOS — começam ocultas; MainWindow popula
-        # via set_attention_items/set_pinned_items (stubs por enquanto).
-        self.attention_section = self._make_section_container("ATENÇÃO")
-        self.attention_section.setVisible(False)
-        layout.addWidget(self.attention_section)
-
-        self.pinned_section = self._make_section_container("FIXADOS")
-        self.pinned_section.setVisible(False)
-        layout.addWidget(self.pinned_section)
-
-        # Header WORKSPACES — label + count chip + botões à direita.
+        # Header PROJECTS — label + count chip + botões à direita.
         header_row = QWidget()
         header_row.setObjectName("WorkspacesHeaderRow")
         header_layout = QHBoxLayout(header_row)
         header_layout.setContentsMargins(0, 12, 0, 0)
         header_layout.setSpacing(6)
-        header = QLabel("WORKSPACES")
+        header = QLabel("PROJECTS")
         header.setStyleSheet(theme.section_header_qss())
         header_layout.addWidget(header, 0)
 
@@ -522,48 +501,7 @@ class SidebarBuilder:
 
         return self
 
-    # ---------- helpers de seção / API pública ----------
-
-    def _make_section_container(self, title: str) -> QFrame:
-        """Container colapsável com header (sm-caps + count chip) + body
-        que recebe filhos via .body_layout. Começa oculto; o caller chama
-        setVisible(True) quando popular."""
-        container = QFrame()
-        container.setObjectName(f"Section_{title}")
-        container.setStyleSheet("QFrame { background: transparent; border: 0; }")
-        vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(0, 0, 0, 0)
-        vbox.setSpacing(4)
-
-        head_row = QHBoxLayout()
-        head_row.setContentsMargins(0, 0, 0, 0)
-        head_row.setSpacing(6)
-
-        title_label = QLabel(title)
-        title_label.setStyleSheet(theme.section_header_qss())
-        head_row.addWidget(title_label, 0)
-
-        count_label = QLabel("")
-        count_label.setStyleSheet(
-            f"QLabel {{ color: {theme.TEXT_FAINT}; background: {theme.BG_SURFACE}; "
-            f"font-size: 9px; font-weight: 700; padding: 1px 6px; "
-            f"border-radius: 7px; }}"
-        )
-        count_label.setVisible(False)
-        head_row.addWidget(count_label, 0, Qt.AlignmentFlag.AlignVCenter)
-        head_row.addStretch(1)
-        vbox.addLayout(head_row)
-
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(4)
-        vbox.addWidget(body)
-
-        # Expostos no próprio container pra MainWindow popular.
-        container.count_label = count_label  # type: ignore[attr-defined]
-        container.body_layout = body_layout  # type: ignore[attr-defined]
-        return container
+    # ---------- helpers / API pública ----------
 
     def _open_header_menu(self) -> None:
         """Menu ⋯ do header WORKSPACES — agrupa ações secundárias que
@@ -586,37 +524,9 @@ class SidebarBuilder:
         ))
 
     def set_workspaces_count(self, n: int) -> None:
-        """Atualiza o chip de contagem ao lado de WORKSPACES."""
+        """Atualiza o chip de contagem ao lado de PROJECTS."""
         if n <= 0:
             self.workspaces_count_label.setVisible(False)
             return
         self.workspaces_count_label.setText(str(n))
         self.workspaces_count_label.setVisible(True)
-
-    def set_attention_items(self, items: list[QWidget]) -> None:
-        """Popula a seção ATENÇÃO com cards já-prontos. Esconde se vazio."""
-        body = self.attention_section.body_layout  # type: ignore[attr-defined]
-        while body.count():
-            it = body.takeAt(0)
-            w = it.widget()
-            if w is not None:
-                w.deleteLater()
-        for w in items:
-            body.addWidget(w)
-        self.attention_section.count_label.setText(str(len(items)))  # type: ignore[attr-defined]
-        self.attention_section.count_label.setVisible(bool(items))  # type: ignore[attr-defined]
-        self.attention_section.setVisible(bool(items))
-
-    def set_pinned_items(self, items: list[QWidget]) -> None:
-        """Popula FIXADOS com cards já-prontos. Esconde se vazio."""
-        body = self.pinned_section.body_layout  # type: ignore[attr-defined]
-        while body.count():
-            it = body.takeAt(0)
-            w = it.widget()
-            if w is not None:
-                w.deleteLater()
-        for w in items:
-            body.addWidget(w)
-        self.pinned_section.count_label.setText(str(len(items)))  # type: ignore[attr-defined]
-        self.pinned_section.count_label.setVisible(bool(items))  # type: ignore[attr-defined]
-        self.pinned_section.setVisible(bool(items))
