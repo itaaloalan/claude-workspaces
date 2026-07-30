@@ -339,8 +339,11 @@ _TREE_QSS = (
     f"  color: {theme.TEXT_PRIMARY};"
     f"  outline: 0;"
     f"}}"
+    # SEM padding vertical: os itemWidgets (WorkspaceItemWidget /
+    # TerminalChildWidget) têm altura própria — padding no item encolhe o
+    # rect disponível e o conteúdo transborda sobre a row seguinte.
     f"QTreeWidget::item {{"
-    f"  padding: 3px 4px;"
+    f"  padding: 1px 4px;"
     f"  border: 0;"
     f"  border-radius: 6px;"
     f"  color: {theme.TEXT_PRIMARY};"

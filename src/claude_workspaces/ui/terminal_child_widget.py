@@ -583,17 +583,25 @@ class TerminalChildWidget(QWidget):
         """Renderiza o console como item subordinado ao workspace."""
         state = getattr(self, "_current_state", STATE_IDLE)
         if self._selected:
-            bg = "rgba(255, 255, 255, 38)"
+            bg = "rgba(255, 255, 255, 14)"
         elif state == STATE_AWAITING:
-            bg = "rgba(204, 139, 87, 9)"
+            bg = "rgba(215, 118, 87, 12)"
         elif state == STATE_ERROR:
             bg = "rgba(207, 111, 111, 10)"
         else:
             bg = "transparent"
-        # Borda primary só quando selecionado; demais ficam com borda
-        # transparente de 1px pra não deslocar o conteúdo ao selecionar.
-        border_color = theme.PRIMARY if self._selected else "transparent"
-        hover_bg = "rgba(224, 178, 100, 100)" if self._selected else "rgba(255, 255, 255, 6)"
+        # Seleção SUTIL: o destaque principal é o card do workspace que a
+        # _StableTree pinta atrás do bloco — aqui só um véu + borda leve
+        # (o PRIMARY sólido virou quase-branco na paleta nova e criava
+        # uma pill berrante brigando com o card).
+        border_color = (
+            "rgba(255, 255, 255, 45)" if self._selected else "transparent"
+        )
+        hover_bg = (
+            "rgba(255, 255, 255, 20)"
+            if self._selected
+            else "rgba(255, 255, 255, 6)"
+        )
         strip_color = STATE_COLOR[state]
         self._card.setStyleSheet(
             f"#ConsoleCard {{"
