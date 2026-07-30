@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.36.0] — 2026-07-30
+
+### Feat: redesign de layout estilo Orca (Fase 2)
+
+A estrutura da janela agora segue o Orca (onorca.dev):
+
+- **Dock direito v2**: strip vertical de 36px vira row de ícones no topo
+  do painel + painel EXCLUSIVO (um por vez, `QStackedWidget`) — acabou o
+  splitter espremendo Git/Skills/Arquivos. Dirty-refresh: painéis
+  ocultos não refrescam na troca de workspace (`right_dock_active_panel`
+  persiste o ativo; `_DOCK_SCHEMA` 3→4).
+- **Sidebar Orca**: novo `SidebarNav` no topo (Workspaces/Catálogo/
+  Hooks/MCP/Plugins/Apps com badges), busca abaixo, seção
+  "PROJECTS" com a árvore de projetos com mais respiro; seções
+  ATENÇÃO/FIXADOS e o filtro "em breve" removidos.
+- **ActivityBar eliminada**: a coluna de 52px saiu; Ctrl+Shift+1..6
+  apontam pro nav; ações Terminal/IA/Hack foram pro menu ⋯ do header
+  e pro menu do "+" da tab bar.
+- **Tabs de console globais na top bar** (`GlobalConsoleTabBar`): tab =
+  sessão de qualquer workspace, com bolinha de status ao vivo, fechar
+  pela tab, "+" pra novo console (menu com shell/IA/hack) e ◀ ▶ com
+  histórico. Mirror puro dos sinais do TerminalCoordinator — zero
+  mudança de ownership. A tab bar interna por-workspace foi ocultada.
+- **Barra superior única de 38px**: busca saiu da barra (Ctrl+F foca a
+  busca da sidebar), logo compacto, chip de workspace removido.
+- **Frameless opt-in** (`Configurar → Janela`, requer restart): TopBar
+  vira title bar com drag/duplo-clique/controles min-max-close;
+  snap/tiling do KWin preservados via startSystemMove/Resize; resize
+  pelas 8 bordas com margem de 6px.
+
 ## [1.35.0] — 2026-07-30
 
 ### Feat: redesign visual — tema dark neutro estilo Orca (Fase 1)
