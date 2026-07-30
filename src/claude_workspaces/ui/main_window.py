@@ -60,7 +60,7 @@ from ..session_persistence import (
 )
 from ..settings import OPENCODE_ENABLED, Settings
 from . import theme
-from .activity_bar import (
+from .sidebar_nav import (
     VIEW_APPS,
     VIEW_CATALOG,
     VIEW_HOOKS,
@@ -68,7 +68,6 @@ from .activity_bar import (
     VIEW_PLUGINS,
     VIEW_SETTINGS,
     VIEW_WORKSPACES,
-    ActivityBar,
 )
 from .builders import SidebarBuilder, TerminalPaneBuilder
 from .builders.shortcuts_installer import install_shortcuts
@@ -695,17 +694,10 @@ class MainWindow(QMainWindow):
         # ---------- Top-level shell: activity bar + main stack ----------
         # body_splitter (workspaces flow) é só uma das views do main_stack.
         # Catálogo / Hooks / MCP têm seus próprios widgets que ocupam o
-        # mesmo espaço quando ativados pela activity bar.
+        # mesmo espaço quando ativados pelo SidebarNav.
         shell_row = QHBoxLayout()
         shell_row.setContentsMargins(0, 0, 0, 0)
         shell_row.setSpacing(0)
-
-        self.activity_bar = ActivityBar()
-        self.activity_bar.view_changed.connect(self._on_activity_view_changed)
-        self.activity_bar.open_terminal_clicked.connect(self._launch_terminal_no_ctx)
-        self.activity_bar.open_claude_no_ctx_clicked.connect(self._launch_claude_no_ctx)
-        self.activity_bar.hack_app_clicked.connect(self._launch_self_dev)
-        shell_row.addWidget(self.activity_bar)
 
         self.main_stack = QStackedWidget()
         # body_dock.widget = CDockManager — root da view de workspaces
@@ -1073,10 +1065,7 @@ class MainWindow(QMainWindow):
         return None
 
     def _set_nav_active(self, view_id: str) -> None:
-        """Sincroniza o estado ativo nos DOIS navegadores de view
-        (ActivityBar legada + SidebarNav) sem disparar sinais."""
-        if hasattr(self, "activity_bar"):
-            self.activity_bar.set_active(view_id)
+        """Sincroniza o estado ativo do SidebarNav sem disparar sinais."""
         if hasattr(self, "sidebar_nav"):
             self.sidebar_nav.set_active(view_id)
 
@@ -2132,6 +2121,9 @@ class MainWindow(QMainWindow):
             on_version_clicked=self._show_release_notes,
             on_find_file=self._open_file_finder_dialog,
             on_search_workspaces=self._apply_filter,
+            on_open_terminal=self._launch_terminal_no_ctx,
+            on_open_claude_no_ctx=self._launch_claude_no_ctx,
+            on_hack_app=self._launch_self_dev,
         ).build()
         self._sidebar_search_input = builder.search_input
         self._find_file_input = builder.find_file_input
@@ -4609,12 +4601,12 @@ class MainWindow(QMainWindow):
         self._refresh_activity_badges()
 
     def _refresh_activity_badges(self) -> None:
-        """Atualiza os contadores do ActivityBar (workspaces + apps).
+        """Atualiza os contadores do SidebarNav (workspaces + apps).
 
         Workspaces: "trabalhando/total" — quantos têm runtime Claude
         ativo vs total cadastrado. Apps: total de PWAs configurados.
         """
-        if not hasattr(self, "activity_bar"):
+        if not hasattr(self, "sidebar_nav"):
             return
         from .sidebar_logic import format_activity_badge
 
@@ -4627,11 +4619,12 @@ class MainWindow(QMainWindow):
         badge, tip = format_activity_badge(working, total)
         apps = len(self.settings.apps or [])
         apps_tip = f"{apps} app(s) auxiliar(es) configurado(s)"
-        for bar in (self.activity_bar, getattr(self, "sidebar_nav", None)):
-            if bar is None:
-                continue
-            bar.set_badge(VIEW_WORKSPACES, badge or "", tip if badge else None)
-            bar.set_badge(VIEW_APPS, str(apps) if apps > 0 else "", apps_tip)
+        self.sidebar_nav.set_badge(
+            VIEW_WORKSPACES, badge or "", tip if badge else None
+        )
+        self.sidebar_nav.set_badge(
+            VIEW_APPS, str(apps) if apps > 0 else "", apps_tip
+        )
 
     # ---------- seleção / settings ----------
 

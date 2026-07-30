@@ -336,6 +336,9 @@ class SidebarBuilder:
         on_version_clicked: Callable[[], None] | None = None,
         on_find_file: Callable[[str], None] | None = None,
         on_search_workspaces: Callable[[str], None] | None = None,
+        on_open_terminal: Callable[[], None] | None = None,
+        on_open_claude_no_ctx: Callable[[], None] | None = None,
+        on_hack_app: Callable[[], None] | None = None,
     ) -> None:
         self._on_current_changed = on_current_changed
         self._on_item_clicked = on_item_clicked
@@ -344,6 +347,11 @@ class SidebarBuilder:
         self._on_version_clicked = on_version_clicked
         self._on_find_file = on_find_file
         self._on_search_workspaces = on_search_workspaces
+        # Ações globais herdadas da ActivityBar — vivem no menu ⋯ do
+        # header até a tab bar global (E4) absorver no menu do "+".
+        self._on_open_terminal = on_open_terminal
+        self._on_open_claude_no_ctx = on_open_claude_no_ctx
+        self._on_hack_app = on_hack_app
 
     def build(self) -> SidebarBuilder:
         from PySide6.QtCore import QSize
@@ -519,6 +527,21 @@ class SidebarBuilder:
         toggle_action = menu.addAction(self.actions_toggle_btn.toolTip().split(".")[0])
         toggle_action.triggered.connect(self.actions_toggle_btn.click)
         menu.addAction("Criar novo workspace…").triggered.connect(self._on_add_clicked)
+        # Ações globais (ex-ActivityBar) — sem workspace/contexto.
+        if self._on_open_terminal or self._on_open_claude_no_ctx or self._on_hack_app:
+            menu.addSeparator()
+        if self._on_open_terminal is not None:
+            menu.addAction("Abrir shell em $HOME").triggered.connect(
+                self._on_open_terminal
+            )
+        if self._on_open_claude_no_ctx is not None:
+            menu.addAction("Abrir agente sem contexto").triggered.connect(
+                self._on_open_claude_no_ctx
+            )
+        if self._on_hack_app is not None:
+            menu.addAction("Hack no claude-workspaces").triggered.connect(
+                self._on_hack_app
+            )
         menu.exec_(self.header_more_btn.mapToGlobal(
             self.header_more_btn.rect().bottomRight()
         ))

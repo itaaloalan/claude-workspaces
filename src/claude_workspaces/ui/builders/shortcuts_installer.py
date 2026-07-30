@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from PySide6.QtGui import QKeySequence, QShortcut
 
-from ..activity_bar import (
+from ..sidebar_nav import (
     VIEW_APPS,
     VIEW_CATALOG,
     VIEW_HOOKS,
@@ -57,27 +57,27 @@ def install_shortcuts(mw) -> None:
     # Views (activity bar) — Ctrl+Shift+1..4 (Ctrl+1..9 já é workspace jump)
     QShortcut(
         QKeySequence("Ctrl+Shift+1"), mw,
-        lambda: mw.activity_bar.activate(VIEW_WORKSPACES),
+        lambda: mw.sidebar_nav.activate(VIEW_WORKSPACES),
     )
     QShortcut(
         QKeySequence("Ctrl+Shift+2"), mw,
-        lambda: mw.activity_bar.activate(VIEW_CATALOG),
+        lambda: mw.sidebar_nav.activate(VIEW_CATALOG),
     )
     QShortcut(
         QKeySequence("Ctrl+Shift+3"), mw,
-        lambda: mw.activity_bar.activate(VIEW_HOOKS),
+        lambda: mw.sidebar_nav.activate(VIEW_HOOKS),
     )
     QShortcut(
         QKeySequence("Ctrl+Shift+4"), mw,
-        lambda: mw.activity_bar.activate(VIEW_MCP),
+        lambda: mw.sidebar_nav.activate(VIEW_MCP),
     )
     QShortcut(
         QKeySequence("Ctrl+Shift+5"), mw,
-        lambda: mw.activity_bar.activate(VIEW_PLUGINS),
+        lambda: mw.sidebar_nav.activate(VIEW_PLUGINS),
     )
     QShortcut(
         QKeySequence("Ctrl+Shift+6"), mw,
-        lambda: mw.activity_bar.activate(VIEW_APPS),
+        lambda: mw.sidebar_nav.activate(VIEW_APPS),
     )
     # Paleta de comandos de plugins (analog do Ctrl+Shift+P do VS Code;
     # Ctrl+P já é Quick Open de arquivo, linha 50)
