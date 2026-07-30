@@ -523,6 +523,13 @@ class MainWindow(QMainWindow):
         self.global_tab_bar.hack_app_requested.connect(self._launch_self_dev)
         self.top_bar.set_console_tabs(self.global_tab_bar)
 
+        # Modo frameless opt-in: TopBar vira title bar (drag/duplo-clique),
+        # controles min/max/close à direita, resize por margem de 6px.
+        if getattr(self.settings, "frameless_window", False):
+            from .frameless import enable_frameless
+            self._window_controls = enable_frameless(self, self.top_bar)
+            self.top_bar.add_right_widget(self._window_controls)
+
         splitter_css = (
             "QSplitter::handle { background: #262626; }"
             "QSplitter::handle:hover { background: #2b2b2b; }"

@@ -111,6 +111,11 @@ class TopBar(QWidget):
         settings_btn.clicked.connect(self.settings_clicked.emit)
         row.addWidget(settings_btn)
 
+    def add_right_widget(self, widget: QWidget) -> None:
+        """Anexa um widget no fim da barra (ex.: WindowControls do modo
+        frameless)."""
+        self._row.addWidget(widget)
+
     def set_console_tabs(self, widget: QWidget) -> None:
         """Injeta a GlobalConsoleTabBar no slot central da barra
         (substitui o stretch placeholder)."""

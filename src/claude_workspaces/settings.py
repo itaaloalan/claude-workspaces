@@ -88,6 +88,11 @@ class Settings:
     right_dock_collapsed: dict = field(default_factory=dict)  # {panel_id: bool}
     # Painel ativo do dock direito no modelo exclusivo (um por vez).
     right_dock_active_panel: str = "git"
+    # Janela sem decoração do sistema (TopBar vira title bar). Aplicado
+    # no startup — mudar exige reiniciar o app.
+    frameless_window: bool = False
+    # Desliga animações da UI (fades/slides) pra quem prefere instantâneo.
+    reduce_motion: bool = False
     # Estado colapsado dos workspaces na sidebar (persistente entre sessões).
     workspace_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado do submenu "Runners workspace" por workspace.

@@ -153,6 +153,7 @@ class SettingsPanel(QWidget):
         outer.addWidget(self._build_worktree_section())
         outer.addWidget(self._build_browser_extension_section())
         outer.addWidget(self._build_notifications_section())
+        outer.addWidget(self._build_window_section())
         outer.addWidget(self._build_console_section())
         outer.addWidget(self._build_status_detection_section())
         outer.addWidget(self._build_inspectors_section())
@@ -256,6 +257,7 @@ class SettingsPanel(QWidget):
         self._notify_hook_default_body.setText(self.settings.notify_hook_default_body)
         self._idle_debounce_secs.setValue(self.settings.idle_debounce_seconds)
         self._console_scrollback.setValue(int(self.settings.console_scrollback_lines))
+        self._frameless_chk.setChecked(bool(self.settings.frameless_window))
         self._discord_enabled_chk.setChecked(self.settings.discord_webhook_enabled)
         self._discord_webhook_url.setText(self.settings.discord_webhook_url)
 
@@ -345,6 +347,7 @@ class SettingsPanel(QWidget):
         )
         self.settings.idle_debounce_seconds = int(self._idle_debounce_secs.value())
         self.settings.console_scrollback_lines = int(self._console_scrollback.value())
+        self.settings.frameless_window = self._frameless_chk.isChecked()
         self.settings.discord_webhook_enabled = self._discord_enabled_chk.isChecked()
         self.settings.discord_webhook_url = self._discord_webhook_url.text().strip()
 
@@ -900,6 +903,27 @@ class SettingsPanel(QWidget):
                 self._notif_service.remove(n.id)
                 removed += 1
         log.info("Limpou %s notificações do histórico", removed)
+
+    def _build_window_section(self) -> QWidget:
+        box = QGroupBox("Janela")
+        layout = QVBoxLayout(box)
+
+        intro = QLabel(
+            "Modo sem borda do sistema: a barra superior vira a barra de "
+            "título (arraste em área vazia move; duplo-clique maximiza; "
+            "controles min/max/fechar entram à direita). Snap e tiling do "
+            "KWin continuam funcionando. <b>Requer reiniciar o app.</b>"
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #b8b8b8;")
+        layout.addWidget(intro)
+
+        self._frameless_chk = QCheckBox(
+            "Janela sem borda do sistema (frameless, estilo Orca)"
+        )
+        layout.addWidget(self._frameless_chk)
+
+        return box
 
     def _build_console_section(self) -> QWidget:
         box = QGroupBox("Console")
