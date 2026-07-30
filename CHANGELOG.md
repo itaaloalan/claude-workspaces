@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.35.0] — 2026-07-30
+
+### Feat: redesign visual — tema dark neutro estilo Orca (Fase 1)
+
+Primeira fase do redesign inspirado no Orca (onorca.dev): a paleta
+marrom/âmbar inteira dá lugar a um dark neutro de cinzas quase pretos,
+com "accent" claro em vez de cor forte — cor saturada agora é só
+semântica (git/status/PR).
+
+- **`ui/theme.py`**: novos valores em todos os tokens (fundos
+  `#0e0e0e→#232323`, bordas 1 nível acima do fundo, `PRIMARY #e6e6e6`
+  claro com texto escuro, semânticas dessaturadas) + tokens novos:
+  `BG_ELEVATED`, escala tipográfica (`FONT_XS..LG`), `SPACE_XL/XXL`,
+  `RADIUS_LG`.
+- **Replace mecânico em 66 arquivos** (803 substituições): todos os
+  hexes/rgba copiados da paleta antiga (e órfãos próximos) trocados
+  pelos valores neutros; laranjas de aguardando/hot-reload realinhados
+  aos tokens `WAITING`/`WARNING`.
+- **`ui/qss.py` (novo)**: QSS global consolidado — `_GLOBAL_DARK_QSS`
+  (app.py) e `_ADS_DARK_QSS` (dock_manager.py) viram
+  `build_app_qss()`/`ads_qss()` 100% derivados de theme.py. Menus em
+  `BG_ELEVATED` com seleção por overlay; tab ativa do dock com
+  indicador claro de 2px.
+- **Tema do terminal via bridge**: `theme.terminal_theme()` é a fonte
+  única do visual do xterm.js (console + runners), com paleta ANSI 16
+  neutra nova, empurrada como JSON pelo novo sinal
+  `TerminalBridge.theme_changed`; `terminal.html` usa CSS vars com
+  fallback anti-flash e o texture atlas é limpo na troca.
+
 ## [1.34.0] — 2026-07-30
 
 ### Feat: hot reload 🔥 nos runners (redeploy automático em .java/.xhtml)
