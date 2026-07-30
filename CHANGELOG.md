@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.37.2] — 2026-07-30
+
+### Fix: console com cara de "desabilitado" (cores lavadas)
+
+A paleta ANSI 16 dessaturada introduzida na 1.35.0 deixava o conteúdo
+do terminal (TUI do Claude, `ls --color`, logs) acinzentado, como se o
+console estivesse travado/disabled. O override ANSI foi REMOVIDO do
+`theme.terminal_theme()` — o conteúdo volta às cores vivas default do
+xterm.js (comportamento pré-redesign); o neutro fica só no chrome
+(fundo/cursor/seleção/scrollbar). Foreground também voltou a subir:
+`#dcdcdc` → `#e6e6e6` (idem no fallback do terminal.js e no preview de
+console do state_server).
+
 ## [1.37.1] — 2026-07-30
 
 ### Fix: navegação da sidebar compactada em linha de ícones

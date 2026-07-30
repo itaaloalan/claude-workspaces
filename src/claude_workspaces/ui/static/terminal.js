@@ -7,7 +7,7 @@
         scrollback: 1000,
         theme: {
             background: '#0e0e0e',
-            foreground: '#dcdcdc',
+            foreground: '#e6e6e6',
             cursor: '#e6e6e6',
             selectionBackground: '#2e2e2e',
         },

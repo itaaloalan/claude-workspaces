@@ -740,7 +740,7 @@ _CONSOLE_HTML = """<!doctype html>
     fontSize: 13,
     fontFamily: "monospace",
     lineHeight: 1,
-    theme: { background: "#0e0e0e", foreground: "#b8b8b8" },
+    theme: { background: "#0e0e0e", foreground: "#e6e6e6" },
     scrollback: 8000,
   });
   const termEl = document.getElementById("term");

@@ -289,39 +289,23 @@ TERMINAL_FONT_FAMILY = (
     '"JetBrains Mono", "Hack", "Fira Code", "DejaVu Sans Mono", monospace'
 )
 
-# Paleta ANSI 16 neutra — contraste confortável sobre BG_DEEP.
-_ANSI = {
-    "black": "#1a1a1a",
-    "red": "#d17a7a",
-    "green": "#8fbf8f",
-    "yellow": "#d6bd7c",
-    "blue": "#82a3c9",
-    "magenta": "#b391bd",
-    "cyan": "#7fb5b0",
-    "white": "#c9c9c9",
-    "brightBlack": "#5f5f5f",
-    "brightRed": "#e09a9a",
-    "brightGreen": "#a8d1a8",
-    "brightYellow": "#e6d194",
-    "brightBlue": "#9db8d9",
-    "brightMagenta": "#c9a9cf",
-    "brightCyan": "#99cbc6",
-    "brightWhite": "#f2f2f2",
-}
-
-
 def terminal_theme() -> dict:
-    """Tema completo do xterm.js + CSS vars do terminal.html."""
+    """Tema do xterm.js + CSS vars do terminal.html.
+
+    De propósito NÃO define a paleta ANSI 16: o conteúdo do terminal
+    (TUI do Claude, ls --color, logs) fica com as cores vivas default do
+    xterm.js — uma paleta dessaturada aqui deixava tudo com cara de
+    "desabilitado/acinzentado". O neutro do redesign vale só pro chrome
+    (fundo/cursor/seleção/scrollbar)."""
     return {
         "fontSize": TERMINAL_FONT_SIZE,
         "fontFamily": TERMINAL_FONT_FAMILY,
         "xterm": {
             "background": BG_DEEP,
-            "foreground": "#dcdcdc",
+            "foreground": "#e6e6e6",
             "cursor": PRIMARY,
             "cursorAccent": BG_DEEP,
             "selectionBackground": "#2e2e2e",
-            **_ANSI,
         },
         "css": {
             "--term-bg": BG_DEEP,
