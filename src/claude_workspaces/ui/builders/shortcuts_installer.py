@@ -28,6 +28,9 @@ def install_shortcuts(mw) -> None:
     QShortcut(QKeySequence("Ctrl+B"), mw, mw._toggle_sidebar)
     QShortcut(QKeySequence("Ctrl+J"), mw, mw._toggle_terminal)
     QShortcut(QKeySequence("Ctrl+Shift+B"), mw, mw._toggle_right_dock)
+    # Busca — vive na sidebar (a top bar não tem mais campo de busca).
+    QShortcut(QKeySequence("Ctrl+F"), mw, mw._focus_sidebar_search)
+    QShortcut(QKeySequence("Ctrl+L"), mw, mw._focus_sidebar_search)
     # Workspace
     QShortcut(QKeySequence("Ctrl+Return"), mw, mw._launch_current_claude)
     QShortcut(QKeySequence("Ctrl+,"), mw, mw._show_settings)

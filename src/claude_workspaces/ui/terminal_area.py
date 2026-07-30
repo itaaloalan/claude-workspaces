@@ -477,6 +477,35 @@ class TerminalArea(QWidget):
     def count(self) -> int:
         return self._bar.count()
 
+    # ---------- lookup por tab_uid (GlobalConsoleTabBar) ----------
+
+    def uid_at(self, i: int) -> int:
+        """tab_uid do console no índice `i` (0 se inválido)."""
+        w = self._stack.widget(i)
+        return tab_uid_of(w) if w is not None else 0
+
+    def index_of_uid(self, uid: int) -> int:
+        """Índice do console com esse tab_uid, ou -1."""
+        for i in range(self._stack.count()):
+            w = self._stack.widget(i)
+            if w is not None and tab_uid_of(w) == uid:
+                return i
+        return -1
+
+    def current_uid(self) -> int:
+        """tab_uid do console ativo (0 se área vazia)."""
+        w = self._stack.currentWidget()
+        return tab_uid_of(w) if w is not None else 0
+
+    def close_tab_by_uid(self, uid: int) -> bool:
+        """Fecha (terminate + cleanup) o console com esse tab_uid —
+        delega pro fluxo normal de _close_tab."""
+        idx = self.index_of_uid(uid)
+        if idx < 0:
+            return False
+        self._close_tab(idx)
+        return True
+
     def running_count(self) -> int:
         return self._running_count
 
@@ -504,10 +533,11 @@ class TerminalArea(QWidget):
         self._refresh_tab_bar_visibility()
 
     def _refresh_tab_bar_visibility(self) -> None:
-        """Mostra a tab bar quando há ≥2 consoles; esconde quando há apenas 1.
-        Com a sidebar flat (sem sub-itens), a tab bar é o único meio de
-        alternar entre consoles de um workspace."""
-        self._bar.setVisible(self._bar.count() > 1)
+        """A QTabBar interna fica SEMPRE oculta: a navegação entre consoles
+        vive na GlobalConsoleTabBar (top bar). A barra continua existindo
+        como storage de índices/títulos do `_TabsCompat` — contrato usado
+        por main_window/coordinator/testes."""
+        self._bar.setVisible(False)
 
     def _refresh_all_tab_texts(self) -> None:
         for i in range(self._stack.count()):

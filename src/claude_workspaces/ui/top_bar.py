@@ -1,18 +1,17 @@
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QLineEdit,
     QPushButton,
     QWidget,
 )
 
 
 class TopBar(QWidget):
-    """Barra superior global: toggle sidebar + logo + busca + inbox + Configurar."""
+    """Barra superior global: toggle sidebar + logo + tabs de console
+    (GlobalConsoleTabBar via set_console_tabs) + inbox + Configurar.
 
-    search_changed = Signal(str)
-    search_submitted = Signal()
+    A busca saiu da barra — Ctrl+F foca a busca da sidebar."""
+
     settings_clicked = Signal()
     home_clicked = Signal()
     toggle_sidebar_clicked = Signal()
@@ -48,17 +47,17 @@ class TopBar(QWidget):
         toggle_btn.clicked.connect(self.toggle_sidebar_clicked.emit)
         row.addWidget(toggle_btn)
 
-        # Logo Claude (robô) + título — clicáveis pra voltar à home.
-        logo = QPushButton("  Claude Workspaces")
+        # Logo Claude (robô) compacto — clicável pra voltar à home.
+        logo = QPushButton()
         logo.setIcon(_ic("fa5s.robot", color="#cfcfcf"))
         logo.setIconSize(_QS(16, 16))
         logo.setFlat(True)
+        logo.setFixedSize(30, 30)
         logo.setCursor(Qt.CursorShape.PointingHandCursor)
+        logo.setToolTip("Claude Workspaces — voltar à home")
         logo.setStyleSheet(
-            "QPushButton { font-weight: 700; color: #e6e6e6; font-size: 13px; "
-            "padding: 4px 6px; background: transparent; border: 0; border-radius: 6px; "
-            "text-align: left; }"
-            "QPushButton:hover { color: #cfcfcf; background: #1e1e1e; }"
+            "QPushButton { background: transparent; border: 0; border-radius: 6px; }"
+            "QPushButton:hover { background: #1e1e1e; }"
         )
         logo.clicked.connect(self.home_clicked.emit)
         row.addWidget(logo)
@@ -82,21 +81,11 @@ class TopBar(QWidget):
         self._ws_chip.setVisible(False)
         row.addWidget(self._ws_chip)
 
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Filtrar por nome, pasta ou sessão… (Ctrl+F)")
-        self.search.setClearButtonEnabled(True)
-        self.search.setMinimumWidth(380)
-        self.search.setStyleSheet(
-            "QLineEdit { background: #181818; border: 1px solid #1f1f1f; "
-            "border-radius: 6px; padding: 6px 10px; color: #e6e6e6; }"
-            "QLineEdit:hover { border-color: #1f1f1f; }"
-            "QLineEdit:focus { border-color: #e6e6e6; background: #131313; }"
-        )
-        self.search.textChanged.connect(self.search_changed.emit)
-        self.search.returnPressed.connect(self.search_submitted.emit)
-        row.addWidget(self.search, stretch=1)
-
-        row.addStretch()
+        # Slot central: GlobalConsoleTabBar (injetada via set_console_tabs).
+        # Placeholder stretch até a MainWindow injetar.
+        self._center_slot_index = row.count()
+        row.addStretch(1)
+        self._row = row
 
         # Bell de inbox — destaca quando há console aguardando atenção
         self._inbox_btn = QPushButton()
@@ -139,9 +128,13 @@ class TopBar(QWidget):
         settings_btn.clicked.connect(self.settings_clicked.emit)
         row.addWidget(settings_btn)
 
-        # Atalho Ctrl+F foca a busca da topbar
-        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
-        QShortcut(QKeySequence("Ctrl+L"), self, self._focus_search)
+    def set_console_tabs(self, widget: QWidget) -> None:
+        """Injeta a GlobalConsoleTabBar no slot central da barra
+        (substitui o stretch placeholder)."""
+        item = self._row.takeAt(self._center_slot_index)
+        if item is not None and item.widget() is not None:
+            item.widget().deleteLater()
+        self._row.insertWidget(self._center_slot_index, widget, stretch=1)
 
     def set_active_workspace(self, name: str | None) -> None:
         """Atualiza o chip de workspace ativo. None oculta."""
@@ -184,10 +177,3 @@ class TopBar(QWidget):
                 "QPushButton:hover { border-color: #e6e6e6; color: #cfcfcf; }"
             )
 
-    def _focus_search(self) -> None:
-        self.search.setFocus()
-        self.search.selectAll()
-
-    def set_search_text(self, text: str) -> None:
-        if self.search.text() != text:
-            self.search.setText(text)

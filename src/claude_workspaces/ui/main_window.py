@@ -480,14 +480,48 @@ class MainWindow(QMainWindow):
         outer.setSpacing(0)
 
         self.top_bar = TopBar()
-        self.top_bar.search_changed.connect(self._apply_filter)
-        self.top_bar.search_submitted.connect(self._search_submit)
         self.top_bar.settings_clicked.connect(self._show_settings)
         self.top_bar.home_clicked.connect(self._show_workspaces)
         self.top_bar.toggle_sidebar_clicked.connect(self._toggle_sidebar)
         self.top_bar.toggle_right_dock_clicked.connect(self._toggle_right_dock)
         self.top_bar.inbox_clicked.connect(self._show_inbox)
         outer.addWidget(self.top_bar)
+
+        # Tab bar global de consoles (estilo Orca: tab = sessão de qualquer
+        # workspace) no centro da top bar. Mirror puro dos sinais do
+        # TerminalCoordinator — ownership dos widgets segue nas TerminalAreas.
+        from .global_tab_bar import GlobalConsoleTabBar
+        self.global_tab_bar = GlobalConsoleTabBar()
+        self.global_tab_bar.set_workspace_name_resolver(
+            lambda ws_id: next(
+                (w.name for w in self.workspaces_coord.workspaces
+                 if w.id == ws_id),
+                "",
+            )
+        )
+        self.terminals_coord.tab_activity_changed.connect(
+            self.global_tab_bar.on_tab_activity
+        )
+        self.terminals_coord.tab_removed.connect(
+            self.global_tab_bar.on_tab_removed
+        )
+        self.global_tab_bar.tab_activate_requested.connect(
+            self._on_global_tab_activate
+        )
+        self.global_tab_bar.tab_close_requested.connect(
+            self._on_global_tab_close
+        )
+        self.global_tab_bar.new_console_requested.connect(
+            self._on_global_new_console
+        )
+        self.global_tab_bar.open_terminal_requested.connect(
+            self._launch_terminal_no_ctx
+        )
+        self.global_tab_bar.open_claude_no_ctx_requested.connect(
+            self._launch_claude_no_ctx
+        )
+        self.global_tab_bar.hack_app_requested.connect(self._launch_self_dev)
+        self.top_bar.set_console_tabs(self.global_tab_bar)
 
         splitter_css = (
             "QSplitter::handle { background: #262626; }"
@@ -1135,6 +1169,55 @@ class MainWindow(QMainWindow):
         self._prev_terminal_area = current
         if isinstance(current, TerminalArea):
             current.on_area_activated()
+        self._sync_global_tab_active()
+
+    # ---------- GlobalConsoleTabBar (tabs na top bar) ----------
+
+    def _sync_global_tab_active(self) -> None:
+        """Marca na tab bar global o console ativo da área atual."""
+        if not hasattr(self, "global_tab_bar"):
+            return
+        area = self._active_terminal_area()
+        if area is not None:
+            uid = area.current_uid()
+            if uid:
+                self.global_tab_bar.set_active_uid(uid)
+
+    def _on_global_tab_activate(self, uid: int) -> None:
+        """Clique numa tab global: seleciona o item do console na sidebar
+        (dispara o fluxo completo de troca de workspace) e foca a aba."""
+        item = self.terminals_coord.state.tree_items.get(uid)
+        if item is not None:
+            try:
+                self.list_widget.setCurrentItem(item)
+            except RuntimeError:
+                item = None
+        for ws_id, area in self.terminals_coord._areas.items():
+            if area.index_of_uid(uid) >= 0:
+                ws = next(
+                    (w for w in self.workspaces_coord.workspaces
+                     if w.id == ws_id),
+                    None,
+                )
+                if ws is not None:
+                    self._focus_terminal_tab(ws, uid)
+                break
+        self._sync_global_tab_active()
+
+    def _on_global_tab_close(self, uid: int) -> None:
+        """Fecha o console pela tab global — mesmo fluxo do close interno
+        (terminate + cleanup via TerminalArea._close_tab)."""
+        for area in self.terminals_coord._areas.values():
+            if area.close_tab_by_uid(uid):
+                return
+
+    def _on_global_new_console(self) -> None:
+        """Botão "+" da tab bar: novo console no workspace ativo."""
+        ws = self._current_workspace()
+        if ws is None and self.details.workspace is not None:
+            ws = self.details.workspace
+        if ws is not None:
+            self._show_ai_launch_menu(ws)
 
     def _raise_current_host_widget(self, _idx: int = -1) -> None:
         """Igual ao terminal_host, mas pros runner hosts em StackAll: traz a
@@ -2126,6 +2209,9 @@ class MainWindow(QMainWindow):
             on_hack_app=self._launch_self_dev,
         ).build()
         self._sidebar_search_input = builder.search_input
+        # Enter na busca foca o primeiro workspace visível (comportamento
+        # herdado da busca da top bar, removida na E4).
+        self._sidebar_search_input.returnPressed.connect(self._search_submit)
         self._find_file_input = builder.find_file_input
         # Nav principal no topo da sidebar (estilo Orca) — espelha a
         # ActivityBar enquanto ela ainda existe; vira o único caminho na E3.
@@ -3230,7 +3316,9 @@ class MainWindow(QMainWindow):
         # Reaplica o filtro imediatamente (sem debounce) — estamos
         # reconstruindo a lista, então o estado de hidden tem que valer já.
         self._pending_filter = (
-            self.top_bar.search.text() if hasattr(self, "top_bar") else ""
+            self._sidebar_search_input.text()
+            if hasattr(self, "_sidebar_search_input")
+            else ""
         )
         self._do_apply_filter()
         self._refresh_activity_badges()
@@ -3356,6 +3444,14 @@ class MainWindow(QMainWindow):
 
     def _invalidate_session_cache(self, ws_id: str | None = None) -> None:
         self.workspaces_coord.invalidate_cache(ws_id)
+
+    def _focus_sidebar_search(self) -> None:
+        """Ctrl+F: garante a sidebar visível e foca a busca dela."""
+        d = self.body_dock.dock("sidebar")
+        if d is not None and d.isClosed():
+            self._toggle_sidebar()
+        self._sidebar_search_input.setFocus()
+        self._sidebar_search_input.selectAll()
 
     def _search_submit(self) -> None:
         """Enter na busca: foca o primeiro workspace visível."""
@@ -6729,6 +6825,10 @@ class MainWindow(QMainWindow):
         # troca de aba precisa re-renderizar a lista.
         area.tabs.currentChanged.connect(
             lambda _i: self._refresh_console_runners_footer()
+        )
+        # Tab bar global: marca a tab do console que ficou ativo.
+        area.tabs.currentChanged.connect(
+            lambda _i: self._sync_global_tab_active()
         )
         # Header do terminal pane mostra workspace+console+branch+model.
         # Atualiza em:

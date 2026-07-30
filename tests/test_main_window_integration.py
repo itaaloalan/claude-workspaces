@@ -283,7 +283,7 @@ def test_add_btn_hidden_until_hover(main_window):
 
 def test_search_submit_no_crash(main_window):
     _add_ws(main_window, "ProjA")
-    main_window.top_bar.search.setText("proj")
+    main_window._sidebar_search_input.setText("proj")
     main_window._search_submit()  # não deve lançar
 
 
