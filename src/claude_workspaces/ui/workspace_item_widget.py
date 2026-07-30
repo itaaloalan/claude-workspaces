@@ -366,31 +366,20 @@ class WorkspaceItemWidget(QWidget):
         self._apply_card_qss()
 
     def _apply_card_qss(self) -> None:
-        """Renderiza o workspace como pill arredondado estilo Polaris.
-        Selecionado ganha tint azul (PRIMARY) nítido + borda primary e um
-        acento vertical à esquerda, pra destacar bem do resto. Não-selecionado
-        mantém borda transparente de 1px pra não 'pular' o layout ao selecionar."""
-        if self._selected:
-            bg = "rgba(255, 255, 255, 44)"
-            border_qss = (
-                f"border: 1px solid {theme.PRIMARY};"
-                f"  border-left: 3px solid {theme.PRIMARY_HOVER};"
-                f"  border-radius: 6px;"
-            )
-            hover_extra = "background: rgba(224, 178, 100, 120);"
-        else:
-            bg = "transparent"
-            border_qss = (
-                "border: 1px solid transparent;"
-                "  border-left: 3px solid transparent;"
-                "  border-radius: 6px;"
-            )
-            hover_extra = "background: rgba(255, 255, 255, 10);"
-
+        """O destaque do workspace selecionado vem do card unificado que
+        a _StableTree pinta atrás do bloco (header + filhos) — estilo
+        Orca. Aqui o widget fica transparente pra não duplicar fundo;
+        só o hover do NÃO-selecionado ganha um véu sutil."""
+        hover_extra = (
+            "background: transparent;"
+            if self._selected
+            else "background: rgba(255, 255, 255, 10);"
+        )
         self.setStyleSheet(
             f"#WorkspaceCard {{"
-            f"  background: {bg};"
-            f"  {border_qss}"
+            f"  background: transparent;"
+            f"  border: 1px solid transparent;"
+            f"  border-radius: 6px;"
             f"}}"
             f"#WorkspaceCard:hover {{ {hover_extra} }}"
             f"#WorkspaceCard QLabel {{ background: transparent; }}"

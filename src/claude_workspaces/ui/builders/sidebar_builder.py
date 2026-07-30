@@ -98,6 +98,72 @@ class _StableTree(QTreeWidget):
         """Overlay de bordas removido — a lista fica flat sem caixas."""
         pass
 
+    # --- Card de seleção estilo Orca: o workspace selecionado (header +
+    # descendentes visíveis) ganha um card com fundo elevado, borda sutil
+    # e cantos arredondados, pintado ANTES dos itens (fica atrás dos
+    # itemWidgets, que têm fundo transparente).
+
+    _CARD_RADIUS = 8
+    _CARD_MARGIN_X = 1
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        self._paint_selection_card()
+        super().paintEvent(event)
+
+    def _selection_card_rect(self) -> QRect | None:
+        """Rect do bloco do workspace selecionado (header até o último
+        descendente visível / fronteira do próximo top-level)."""
+        from ..workspace_item_widget import WorkspaceItemWidget
+        count = self.topLevelItemCount()
+        for i in range(count):
+            top = self.topLevelItem(i)
+            w = self.itemWidget(top, 0)
+            if not (isinstance(w, WorkspaceItemWidget)
+                    and getattr(w, "_selected", False)):
+                continue
+            top_rect = self.visualItemRect(top)
+            if not top_rect.isValid() or top_rect.height() == 0:
+                return None
+            y_top = top_rect.top()
+            y_bottom = top_rect.bottom()
+            if top.isExpanded():
+                # Fronteira real = topo do próximo top-level visível;
+                # fallback: base do último descendente visível.
+                nxt = None
+                for j in range(i + 1, count):
+                    r = self.visualItemRect(self.topLevelItem(j))
+                    if r.isValid() and r.height() > 0:
+                        nxt = r.top()
+                        break
+                if nxt is not None:
+                    y_bottom = nxt - 3
+                else:
+                    last = self._last_visible_descendant(top)
+                    if last is not None:
+                        lr = self.visualItemRect(last)
+                        if lr.isValid():
+                            y_bottom = lr.bottom() + 2
+            return QRect(
+                top_rect.left() + self._CARD_MARGIN_X,
+                y_top,
+                top_rect.width() - 2 * self._CARD_MARGIN_X,
+                max(y_bottom - y_top, top_rect.height()),
+            )
+        return None
+
+    def _paint_selection_card(self) -> None:
+        rect = self._selection_card_rect()
+        if rect is None:
+            return
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(QColor(theme.BORDER_INPUT)))
+        painter.setBrush(QColor(theme.BG_ELEVATED))
+        painter.drawRoundedRect(
+            rect.adjusted(0, 0, -1, -1), self._CARD_RADIUS, self._CARD_RADIUS
+        )
+        painter.end()
+
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         ov = getattr(self, "_card_overlay", None)
@@ -443,6 +509,12 @@ class SidebarBuilder:
         self.list_widget.setAnimated(True)
         self.list_widget.setExpandsOnDoubleClick(False)
         self.list_widget.currentItemChanged.connect(self._on_current_changed)
+        # Card de seleção (pintado no paintEvent) precisa de repaint da
+        # viewport inteira quando a seleção muda — o QTreeWidget só
+        # repinta as rows afetadas por padrão.
+        self.list_widget.currentItemChanged.connect(
+            lambda *_a: self.list_widget.viewport().update()
+        )
         self.list_widget.itemClicked.connect(self._on_item_clicked)
         self.list_widget.itemActivated.connect(self._on_item_activated)
         self.list_widget.setStyleSheet(_TREE_QSS)
