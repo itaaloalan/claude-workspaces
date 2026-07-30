@@ -31,11 +31,18 @@ class DiffTab(QWidget):
         rel_path: str,
         staged: bool = False,
         parent: QWidget | None = None,
+        provider=None,
+        header_suffix: str = "(diff)",
     ) -> None:
+        """`provider` opcional: callable() -> str com o texto do diff —
+        usado pela seção COMMITTED ON BRANCH (diff base..HEAD) no lugar
+        do diff do working tree."""
         super().__init__(parent)
         self.folder = folder
         self.rel_path = rel_path
         self.staged = staged
+        self._provider = provider
+        self._header_suffix = header_suffix
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -51,7 +58,7 @@ class DiffTab(QWidget):
         hl.setContentsMargins(10, 0, 6, 0)
         hl.setSpacing(6)
 
-        path_lbl = QLabel(f"{Path(folder).name} · {rel_path} (diff)")
+        path_lbl = QLabel(f"{Path(folder).name} · {rel_path} {self._header_suffix}")
         path_lbl.setStyleSheet(
             f"color: {theme.TEXT_FADED}; font-size: {theme.FONT_SM}px; border: 0;"
         )
@@ -99,8 +106,10 @@ class DiffTab(QWidget):
 
     def refresh(self) -> None:
         name = self.rel_path.rsplit("/", 1)[-1]
-        text = get_diff(self.folder, self.rel_path, staged=self.staged, context=3)
-        if not text.strip():
-            # Arquivo pode ter sido commitado/revertido desde a abertura.
-            text = ""
-        self._web.show_diff(text, name)
+        if self._provider is not None:
+            text = self._provider()
+        else:
+            text = get_diff(
+                self.folder, self.rel_path, staged=self.staged, context=3
+            )
+        self._web.show_diff(text or "", name)

@@ -125,6 +125,35 @@ class _WatchDirsSignals(QObject):
     done = Signal(tuple, list)  # key (tuple de repo_folders), dirs
 
 
+class _CommittedScanSignals(QObject):
+    done = Signal(dict)  # {folder: (upstream, merge_base_sha, [BranchFile])}
+
+
+class _CommittedScanTask(QRunnable):
+    """Escaneia os arquivos commitados vs upstream (COMMITTED ON BRANCH)
+    fora da UI thread — git diff em monorepo pode levar segundos."""
+
+    def __init__(self, folders: list[str], signals: _CommittedScanSignals) -> None:
+        super().__init__()
+        self._folders = folders
+        self._signals = signals
+
+    def run(self) -> None:
+        from ..git_status import get_branch_files, upstream_ref
+        out: dict = {}
+        try:
+            for folder in self._folders:
+                up = upstream_ref(folder)
+                if not up:
+                    continue
+                sha, files = get_branch_files(folder, up)
+                if sha:
+                    out[folder] = (up, sha, files)
+        except Exception:
+            log.exception("git_panel: scan de committed-on-branch falhou")
+        self._signals.done.emit(out)
+
+
 class _WatchDirsTask(QRunnable):
     """Roda o os.walk dos working trees fora da UI thread — em monorepos
     grandes montar a lista de watch dirs (até _WATCH_DIR_CAP) leva segundos
@@ -444,6 +473,9 @@ class GitPanel(QWidget):
     # Duplo-clique num arquivo modificado: abrir o diff como aba central
     # (folder, rel_path, staged) — estilo Orca.
     open_diff_tab_requested = Signal(str, str, bool)
+    # Duplo-clique num arquivo da seção COMMITTED ON BRANCH: diff
+    # commitado (folder, rel_path, merge_base_sha) como aba central.
+    open_committed_diff_requested = Signal(str, str, str)
     # Emitido após cada commit local. Args: (workspace_id, folder, sha, message)
     # sha vai vazio se não conseguirmos resolver o HEAD pós-commit — assinante
     # deve tratar como "houve commit mesmo sem detalhe".
@@ -537,7 +569,22 @@ class GitPanel(QWidget):
         self._tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
-        split.addWidget(self._tree)
+
+        # Seção CHANGES (estilo Orca): header sm-caps + contador + tree.
+        changes_box = QWidget()
+        cb_lay = QVBoxLayout(changes_box)
+        cb_lay.setContentsMargins(0, 0, 0, 0)
+        cb_lay.setSpacing(2)
+        changes_hdr = QHBoxLayout()
+        changes_hdr.setContentsMargins(4, 0, 4, 0)
+        changes_lbl = QLabel("CHANGES")
+        changes_lbl.setStyleSheet(theme.section_header_qss())
+        changes_hdr.addWidget(changes_lbl)
+        changes_hdr.addWidget(self._counter)
+        changes_hdr.addStretch()
+        cb_lay.addLayout(changes_hdr)
+        cb_lay.addWidget(self._tree, stretch=1)
+        split.addWidget(changes_box)
 
         # Container do diff: header fino (arquivo + toggles) + DiffWebView
         diff_container = QWidget()
@@ -648,13 +695,18 @@ class GitPanel(QWidget):
             "QSplitter::handle { background: #454545; }"
             "QSplitter::handle:hover { background: #f4f4f4; }"
         )
-        main_split.addWidget(split)
+        # Ordem estilo Orca: commit (mensagem + stage) no TOPO, CHANGES no
+        # meio, COMMITTED ON BRANCH e atividade embaixo.
+        self._committed_box = self._build_committed_section()
         main_split.addWidget(commit_area)
+        main_split.addWidget(split)
+        main_split.addWidget(self._committed_box)
         main_split.addWidget(self._activity)
-        main_split.setStretchFactor(0, 1)  # tree/diff
-        main_split.setStretchFactor(1, 0)  # commit
-        main_split.setStretchFactor(2, 0)  # atividade git
-        main_split.setSizes([460, 110, 0])
+        main_split.setStretchFactor(0, 0)  # commit
+        main_split.setStretchFactor(1, 1)  # changes/diff
+        main_split.setStretchFactor(2, 0)  # committed on branch
+        main_split.setStretchFactor(3, 0)  # atividade git
+        main_split.setSizes([132, 400, 24, 0])
         self._main_split = main_split
         outer.addWidget(main_split, stretch=1)
         # Byte offset já lido de cada reflog (.git/logs/HEAD) por repo.
@@ -690,10 +742,15 @@ class GitPanel(QWidget):
         self._wt_dirs_key: tuple = ()
         self._watch_dirs_signals = _WatchDirsSignals()
         self._watch_dirs_signals.done.connect(self._on_watch_dirs_ready)
+        self._committed_signals = _CommittedScanSignals()
+        self._committed_signals.done.connect(self._apply_committed)
 
     # ---------- construção ----------
 
     def _make_toolbar(self, branch_row: QHBoxLayout, actions_row: QHBoxLayout) -> None:
+        """Layout estilo Orca: linha 1 = 'Criar PR' em pill de destaque +
+        refresh + menu ⋯ (ações secundárias); linha 2 = branch + compare +
+        push. O contador de mudanças vive no header da seção CHANGES."""
         from PySide6.QtCore import QSize as _QS
 
         from .icons import ic as _ic
@@ -717,7 +774,6 @@ class GitPanel(QWidget):
             "background: transparent; font-weight: 400; }"
         )
         self._branch_btn.clicked.connect(self._on_branch_btn_clicked)
-        branch_row.addWidget(self._branch_btn)
 
         # Toggle do modo "Comparar com branch base" — estilo IntelliJ
         # "Compare with branch...". Azul (não âmbar) pra não se confundir
@@ -738,12 +794,11 @@ class GitPanel(QWidget):
             "color: #6f9fd8; border-color: rgba(122, 166, 230, 0.5); }"
         )
         self._compare_btn.clicked.connect(self._on_compare_btn_clicked)
-        branch_row.addWidget(self._compare_btn)
 
+        # Contador de mudanças — criado aqui, mas exibido no header da
+        # seção CHANGES (o __init__ o insere lá).
         self._counter = QLabel()
         self._counter.setStyleSheet("color: #a2a2a2; font-size: 11px; padding: 0 4px;")
-        branch_row.addWidget(self._counter)
-        branch_row.addStretch()
 
         btn_css = (
             "QPushButton { background: transparent; color: #a2a2a2; "
@@ -751,10 +806,6 @@ class GitPanel(QWidget):
             "QPushButton:hover { color: #d8d8d8; border-color: #f4f4f4; }"
             "QPushButton:disabled { color: #4f4f4f; }"
         )
-
-        from PySide6.QtCore import QSize as _QS
-
-        from .icons import ic as _ic
 
         def _icon_btn(qta_name: str, tooltip: str, slot, label: str = "") -> QPushButton:
             b = QPushButton(f"  {label}" if label else "")
@@ -765,38 +816,60 @@ class GitPanel(QWidget):
             b.clicked.connect(slot)
             return b
 
-        actions_row.addWidget(_icon_btn("fa5s.sync-alt", "Atualizar", self.refresh))
-        actions_row.addWidget(_icon_btn("fa5s.exchange-alt", "Fetch (todos os repos)", self._do_fetch_all))
-        actions_row.addWidget(_icon_btn("fa5s.cloud-download-alt", "Pull ff-only (todos os repos)", self._do_pull_all))
-        # PR button guardado em self pra poder desabilitar enquanto gh roda
-        self._pr_btn = _icon_btn(
-            "fa5s.code-branch",
-            "Abrir Pull Request no GitHub (branch atual → base)",
-            self._do_open_pr,
-            label="PR",
+        # ---- Linha 1: Criar PR (destaque, estilo Orca) + refresh + ⋯
+        self._pr_btn = QPushButton("  Criar PR")
+        self._pr_btn.setIcon(_ic("ph.git-pull-request", color="#1d1d1d"))
+        self._pr_btn.setIconSize(_QS(13, 13))
+        self._pr_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pr_btn.setToolTip(
+            "Abrir Pull Request no GitHub (branch atual → base)"
         )
-        actions_row.addWidget(self._pr_btn)
+        self._pr_btn.setStyleSheet(theme.primary_button_qss())
+        self._pr_btn.clicked.connect(self._do_open_pr)
+        branch_row.addWidget(self._pr_btn)
+        branch_row.addStretch()
+        branch_row.addWidget(_icon_btn("ph.arrow-clockwise", "Atualizar", self.refresh))
+        more_btn = QPushButton()
+        more_btn.setIcon(_ic("ph.dots-three", color="#a2a2a2"))
+        more_btn.setIconSize(_QS(14, 14))
+        more_btn.setToolTip("Mais ações (fetch, pull, diff inline, atividade git)")
+        more_btn.setStyleSheet(btn_css)
+        more_btn.clicked.connect(self._open_more_menu)
+        branch_row.addWidget(more_btn)
+        self._more_btn = more_btn
+
+        # ---- Linha 2: branch + compare + push
+        actions_row.addWidget(self._branch_btn)
+        actions_row.addWidget(self._compare_btn)
+        actions_row.addStretch()
         actions_row.addWidget(
             _icon_btn(
-                "fa5s.cloud-upload-alt",
+                "ph.cloud-arrow-up",
                 "Push — mostra commits e arquivos antes de enviar",
                 self._do_push,
                 label="Push",
             )
         )
-        self._toggle_diff_btn = _icon_btn(
-            "fa5s.eye",
-            "Mostrar / esconder painel de diff inline",
-            self._toggle_diff,
+
+    def _open_more_menu(self) -> None:
+        """Menu ⋯ com as ações secundárias que saíram da toolbar."""
+        menu = QMenu(self._more_btn)
+        menu.addAction("Fetch (todos os repos)").triggered.connect(
+            self._do_fetch_all
         )
-        actions_row.addWidget(self._toggle_diff_btn)
-        self._toggle_log_btn = _icon_btn(
-            "fa5s.terminal",
-            "Mostrar / esconder console de atividade git",
-            self._toggle_activity,
+        menu.addAction("Pull ff-only (todos os repos)").triggered.connect(
+            self._do_pull_all
         )
-        actions_row.addWidget(self._toggle_log_btn)
-        actions_row.addStretch()
+        menu.addSeparator()
+        a_diff = menu.addAction("Painel de diff inline")
+        a_diff.setCheckable(True)
+        a_diff.setChecked(self._diff_visible)
+        a_diff.triggered.connect(lambda _c: self._toggle_diff())
+        a_log = menu.addAction("Console de atividade git")
+        a_log.setCheckable(True)
+        a_log.setChecked(self._activity.isVisible())
+        a_log.triggered.connect(lambda _c: self._toggle_activity())
+        menu.exec(self._more_btn.mapToGlobal(self._more_btn.rect().bottomLeft()))
 
     def _build_commit_area(self) -> QWidget:
         box = QWidget()
@@ -815,6 +888,29 @@ class GitPanel(QWidget):
             "QPlainTextEdit:focus { border-color: #f4f4f4; }"
         )
         v.addWidget(self._msg, stretch=1)
+
+        # Stage All largo (estilo Orca) — marca/desmarca todos os arquivos
+        # da seção CHANGES pro commit.
+        self._stage_all_btn = QPushButton("+ Marcar tudo pro commit")
+        self._stage_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._stage_all_btn.setToolTip(
+            "Marca todos os arquivos de CHANGES (clique direito: desmarcar todos)"
+        )
+        self._stage_all_btn.setStyleSheet(
+            "QPushButton { background: #383838; color: #c6c6c6;"
+            " border: 1px solid #4f4f4f; border-radius: 6px; padding: 5px 10px; }"
+            "QPushButton:hover { border-color: #7f7f7f; color: #f4f4f4; }"
+        )
+        self._stage_all_btn.clicked.connect(
+            lambda: self._set_all_files_checked(True)
+        )
+        self._stage_all_btn.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
+        self._stage_all_btn.customContextMenuRequested.connect(
+            lambda _p: self._set_all_files_checked(False)
+        )
+        v.addWidget(self._stage_all_btn)
 
         bottom = QHBoxLayout()
         bottom.setSpacing(4)
@@ -865,6 +961,139 @@ class GitPanel(QWidget):
         bottom.addStretch()
         v.addLayout(bottom)
         return box
+
+    def _set_all_files_checked(self, checked: bool) -> None:
+        """Marca/desmarca todos os arquivos de CHANGES pro commit
+        (equivalente ao Stage All do Orca)."""
+        if self._read_only_mode:
+            return
+        state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        def _walk(item: QTreeWidgetItem) -> None:
+            for i in range(item.childCount()):
+                child = item.child(i)
+                data = child.data(0, Qt.ItemDataRole.UserRole) or {}
+                if data.get("type") == T_FILE and (
+                    child.flags() & Qt.ItemFlag.ItemIsUserCheckable
+                ):
+                    child.setCheckState(0, state)
+                _walk(child)
+        for i in range(self._tree.topLevelItemCount()):
+            top = self._tree.topLevelItem(i)
+            data = top.data(0, Qt.ItemDataRole.UserRole) or {}
+            if data.get("type") == T_FILE and (
+                top.flags() & Qt.ItemFlag.ItemIsUserCheckable
+            ):
+                top.setCheckState(0, state)
+            _walk(top)
+
+    # ---------- COMMITTED ON BRANCH (estilo Orca) ----------
+
+    def _build_committed_section(self) -> QWidget:
+        """Seção colapsável com os arquivos já COMMITADOS na branch
+        (merge-base(upstream)..HEAD). Carrega lazy na primeira expansão."""
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+
+        hdr = QPushButton("  COMMITTED ON BRANCH")
+        hdr.setCursor(Qt.CursorShape.PointingHandCursor)
+        hdr.setCheckable(True)
+        hdr.setStyleSheet(
+            "QPushButton { background: transparent; color: #7f7f7f;"
+            " border: 0; text-align: left; font-size: 11px;"
+            " font-weight: 600; letter-spacing: 0.5px; padding: 3px 4px; }"
+            "QPushButton:hover { color: #c6c6c6; }"
+            "QPushButton:checked { color: #c6c6c6; }"
+        )
+        hdr.toggled.connect(self._on_committed_toggled)
+        self._committed_hdr = hdr
+        v.addWidget(hdr)
+
+        tree = QTreeWidget()
+        tree.setColumnCount(1)
+        tree.setHeaderHidden(True)
+        tree.setRootIsDecorated(True)
+        tree.setIndentation(11)
+        tree.setUniformRowHeights(True)
+        tree.setStyleSheet(self._tree.styleSheet())
+        tree.setItemDelegate(_ChangesDelegate(tree))
+        tree.setVisible(False)
+        tree.itemDoubleClicked.connect(self._on_committed_double_click)
+        self._committed_tree = tree
+        v.addWidget(tree, stretch=1)
+        # merge_base por folder — usado no diff do duplo-clique.
+        self._committed_bases: dict[str, str] = {}
+        self._committed_loaded = False
+        return box
+
+    def _on_committed_toggled(self, checked: bool) -> None:
+        self._committed_tree.setVisible(checked)
+        if checked:
+            # Dá altura útil pra seção dentro do splitter.
+            sizes = self._main_split.sizes()
+            if len(sizes) == 4 and sizes[2] < 120:
+                total = sum(sizes)
+                sizes[2] = min(220, max(140, total // 4))
+                sizes[1] = max(120, sizes[1] - sizes[2])
+                self._main_split.setSizes(sizes)
+            self._load_committed()
+        else:
+            self._committed_loaded = False  # re-scan na próxima expansão
+
+    def _load_committed(self) -> None:
+        """Escaneia (thread pool) os arquivos commitados vs upstream de
+        cada repo ativo e popula a tree da seção."""
+        if self._committed_loaded:
+            return
+        self._committed_loaded = True
+        folders = [f for f, st in self._statuses.items() if st.is_repo]
+        if not folders:
+            self._committed_hdr.setText("  COMMITTED ON BRANCH — sem repo")
+            return
+        self._committed_hdr.setText("  COMMITTED ON BRANCH — carregando…")
+        self._status_pool.start(
+            _CommittedScanTask(folders, self._committed_signals)
+        )
+
+    def _apply_committed(self, result: dict) -> None:
+        tree = self._committed_tree
+        tree.clear()
+        self._committed_bases = {}
+        total = 0
+        for folder, (up, sha, files) in result.items():
+            self._committed_bases[folder] = sha
+            parent: QTreeWidgetItem | None = None
+            if len(result) > 1:
+                parent = QTreeWidgetItem(tree, [Path(folder).name])
+                parent.setForeground(0, QColor("#7f7f7f"))
+                parent.setExpanded(True)
+            for bf in files:
+                total += 1
+                item = QTreeWidgetItem([bf.path.rsplit("/", 1)[-1]])
+                item.setToolTip(0, f"{bf.path} ({bf.status}) — vs {up}")
+                item.setData(
+                    0,
+                    Qt.ItemDataRole.UserRole,
+                    {"folder": folder, "rel_path": bf.path},
+                )
+                item.setData(0, _STATS_ROLE, (bf.plus, bf.minus))
+                if parent is not None:
+                    parent.addChild(item)
+                else:
+                    tree.addTopLevelItem(item)
+        self._committed_hdr.setText(
+            f"  COMMITTED ON BRANCH {total}" if total
+            else "  COMMITTED ON BRANCH — nada além do upstream"
+        )
+
+    def _on_committed_double_click(self, item: QTreeWidgetItem, _col: int) -> None:
+        data = item.data(0, Qt.ItemDataRole.UserRole) or {}
+        folder = data.get("folder")
+        rel = data.get("rel_path")
+        sha = self._committed_bases.get(folder or "")
+        if folder and rel and sha:
+            self.open_committed_diff_requested.emit(folder, rel, sha)
 
     # ---------- workspace ----------
 

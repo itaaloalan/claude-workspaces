@@ -478,6 +478,88 @@ def get_compare_scan(folder: str, base_rev: str) -> CompareScan:
     return scan
 
 
+def upstream_ref(folder: str) -> str:
+    """Nome do upstream da branch atual (ex.: 'origin/master'), ou ''."""
+    try:
+        r = _run(
+            ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+            folder,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+@dataclass
+class BranchFile:
+    """Arquivo COMMITADO na branch (merge-base(base)..HEAD) — sem
+    working tree, ao contrário do CompareScan."""
+
+    path: str
+    status: str  # M/A/D/R...
+    plus: int = 0
+    minus: int = 0
+
+
+def get_branch_files(folder: str, base_rev: str) -> tuple[str, list[BranchFile]]:
+    """(merge_base_sha, arquivos commitados em merge-base(base_rev)..HEAD).
+
+    Alimenta a seção "COMMITTED ON BRANCH" do painel git (estilo Orca):
+    só o que já está em commits da branch, diferente do CompareScan que
+    inclui o working tree."""
+    sha = merge_base(folder, base_rev)
+    if not sha:
+        return "", []
+    from .git_actions import _parse_name_status_z
+
+    try:
+        r_names = _run(["git", "diff", "--name-status", "-z", f"{sha}..HEAD"], folder)
+        r_num = _run(["git", "diff", "--numstat", f"{sha}..HEAD"], folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return sha, []
+    if r_names.returncode != 0:
+        return sha, []
+    numstat: dict[str, tuple[int, int]] = {}
+    for line in (r_num.stdout or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3:
+            try:
+                numstat[parts[2]] = (int(parts[0]), int(parts[1]))
+            except ValueError:
+                pass  # binário: "-\t-\tpath"
+    out: list[BranchFile] = []
+    for status, path in _parse_name_status_z(r_names.stdout or ""):
+        plus, minus = numstat.get(path, (0, 0))
+        out.append(BranchFile(path=path, status=status, plus=plus, minus=minus))
+    return sha, out
+
+
+def get_diff_committed(
+    folder: str,
+    file_path: str,
+    base_sha: str,
+    context: int | None = None,
+) -> str:
+    """Diff COMMITADO de `file_path` entre `base_sha` e HEAD (sem working
+    tree) — par do get_branch_files pra seção COMMITTED ON BRANCH."""
+    args = ["git", "diff", "--no-color"]
+    if context is not None:
+        args.append(f"-U{context}")
+    args.extend([f"{base_sha}..HEAD", "--", file_path])
+    try:
+        r = _run(args, folder)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return f"(erro ao rodar git diff: {e})"
+    if r.returncode != 0:
+        return f"(git diff falhou: {r.stderr.strip()})"
+    if len(r.stdout) > MAX_DIFF_BYTES:
+        return (
+            f"(diff grande demais ({len(r.stdout) // 1024} KiB) — "
+            "abra o arquivo no editor para ver as mudanças completas)"
+        )
+    return r.stdout
+
+
 def get_diff_range(
     folder: str,
     file_path: str,

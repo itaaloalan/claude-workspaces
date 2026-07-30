@@ -246,6 +246,13 @@ class MainWindow(QMainWindow):
         self._plan_scan_epoch = 0
         self._plan_scan_last_key: tuple | None = None
         self._plan_dialog = None
+        # Throttle do re-scan por activity: enquanto o Claude streama, o
+        # transcript muda a cada chunk — sem isso, cada activity vira um
+        # scan no pool (fila infinita durante sessões longas).
+        self._plan_refresh_timer = QTimer(self)
+        self._plan_refresh_timer.setSingleShot(True)
+        self._plan_refresh_timer.setInterval(2_000)
+        self._plan_refresh_timer.timeout.connect(self._refresh_active_plan)
         self._long_running_timer = QTimer(self)
         self._long_running_timer.setInterval(30_000)
         self._long_running_timer.timeout.connect(self._scan_long_running)
@@ -576,6 +583,9 @@ class MainWindow(QMainWindow):
         self.details.open_file_requested.connect(self._open_file_in_editor)
         self.details.open_diff_tab_requested.connect(
             self._open_diff_as_central_tab
+        )
+        self.details.open_committed_diff_requested.connect(
+            self._open_committed_diff_as_central_tab
         )
         self.details.handoff_requested.connect(self._handoff_session)
         self.details.export_session_requested.connect(self._export_session)
@@ -1538,6 +1548,42 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.setTabsClosable(True)
         self._refresh_terminal_tabs_bar()
 
+    def _open_committed_diff_as_central_tab(
+        self, folder: str, rel_path: str, base_sha: str
+    ) -> None:
+        """Diff COMMITADO (base..HEAD) da seção COMMITTED ON BRANCH como
+        aba central."""
+        from ..git_status import get_diff_committed
+        from .diff_tab import DiffTab
+
+        for i in range(self._bottom_tabs.count()):
+            w = self._bottom_tabs.widget(i)
+            if (
+                isinstance(w, DiffTab)
+                and w.folder == folder
+                and w.rel_path == rel_path
+            ):
+                self._bottom_tabs.setCurrentIndex(i)
+                w.refresh()
+                return
+
+        tab = DiffTab(
+            folder,
+            rel_path,
+            provider=lambda: get_diff_committed(
+                folder, rel_path, base_sha, context=3
+            ),
+            header_suffix="(commitado na branch)",
+        )
+        name = rel_path.rsplit("/", 1)[-1]
+        from .icons import ic
+        idx = self._bottom_tabs.addTab(tab, f"{name} (branch)")
+        self._bottom_tabs.setTabIcon(idx, ic("ph.git-diff", color="#8f8f8f"))
+        self._bottom_tabs.setTabToolTip(idx, f"{folder} · {rel_path} vs merge-base")
+        self._bottom_tabs.setCurrentIndex(idx)
+        self._bottom_tabs.setTabsClosable(True)
+        self._refresh_terminal_tabs_bar()
+
     def _build_plans_panel(self) -> QWidget:
         """Factory pro PlansPanel no right dock — mostra o plano (plan
         mode) da sessão do console ativo, inline."""
@@ -1547,6 +1593,11 @@ class MainWindow(QMainWindow):
         )
         panel.open_dialog_requested.connect(self._open_current_plan_dialog)
         return panel
+
+    def _schedule_plan_refresh(self) -> None:
+        """Coalesce de refreshes por activity: um por janela de 2s."""
+        if not self._plan_refresh_timer.isActive():
+            self._plan_refresh_timer.start()
 
     def _refresh_active_plan(self, force: bool = False) -> None:
         """Descobre o plano (plan mode) da sessão do console ativo e
@@ -6890,14 +6941,15 @@ class MainWindow(QMainWindow):
         area.tab_activity_changed.connect(
             lambda *_a: self._refresh_terminal_pane_title()
         )
-        # Chip 📋 / PlansPanel seguem o console ativo. Seguro chamar a
-        # cada activity: `_refresh_active_plan` curto-circuita por
-        # stat (mtime+size) do transcript antes de escanear.
+        # Chip 📋 / PlansPanel seguem o console ativo. Troca de aba
+        # refresca na hora; activity (dispara a cada chunk de output no
+        # streaming) é coalescida pelo `_plan_refresh_timer` — no máximo
+        # um scan agendado a cada 2s.
         area.tabs.currentChanged.connect(
             lambda _i: self._refresh_active_plan()
         )
         area.tab_activity_changed.connect(
-            lambda *_a: self._refresh_active_plan()
+            lambda *_a: self._schedule_plan_refresh()
         )
 
     def _handle_tab_activity(

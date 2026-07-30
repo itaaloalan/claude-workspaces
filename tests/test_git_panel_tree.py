@@ -58,11 +58,15 @@ def _top_level_types(panel: GitPanel) -> list[str]:
     ]
 
 
-def test_feed_removido_e_splitter_com_3_paineis(qapp):
+def test_feed_removido_e_splitter_com_4_paineis(qapp):
+    """Layout Orca: commit no topo, CHANGES, COMMITTED ON BRANCH e
+    atividade git — 4 panes no splitter principal."""
     panel = _make_panel([])
     assert not hasattr(panel, "_feed")
-    assert panel._main_split.count() == 3
+    assert panel._main_split.count() == 4
     assert panel._tree.columnCount() == 1
+    # Ordem: commit area primeiro (estilo Orca)
+    assert panel._main_split.widget(0) is panel._commit_area
 
 
 def test_single_repo_monta_grupos_na_raiz(qapp, tmp_path):

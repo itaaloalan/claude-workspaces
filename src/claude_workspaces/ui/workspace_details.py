@@ -77,6 +77,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
     open_file_requested = Signal(str)
     # Repassa do GitPanel: diff de arquivo como aba central (folder, rel, staged)
     open_diff_tab_requested = Signal(str, str, bool)
+    # (folder, rel_path, merge_base_sha) — seção COMMITTED ON BRANCH
+    open_committed_diff_requested = Signal(str, str, str)
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -247,6 +249,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
         self._git_panel.open_diff_tab_requested.connect(
             self.open_diff_tab_requested.emit
+        )
+        self._git_panel.open_committed_diff_requested.connect(
+            self.open_committed_diff_requested.emit
         )
 
         # Localizar arquivo moveu pra sidebar (esquerda) e abre num modal —
