@@ -16,6 +16,8 @@ from PySide6.QtCore import QByteArray, QObject, QRect, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMainWindow, QWidget
 
+from . import qss
+
 
 def _glyph_icon(glyph: str, size: int = 14, color: str = "#b8b8b8") -> QIcon:
     """Renderiza um glyph unicode numa QPixmap transparente. Usado pros
@@ -48,65 +50,6 @@ def _install_dark_icons() -> None:
     ip.registerCustomIcon(ads.AutoHideIcon, _glyph_icon("📌"))
 
 
-# QSS dark pro QtAds — o default tem gradiente light nas title bars que
-# destoa do tema escuro. Cobre tab bar, area title bar, splitter handle
-# e dock widget. Cores alinhadas com ui/theme.py.
-_ADS_DARK_QSS = """
-ads--CDockContainerWidget,
-ads--CDockAreaWidget,
-ads--CDockWidget {
-    background: #161616;
-    color: #e6e6e6;
-}
-ads--CDockAreaTitleBar {
-    background: #161616;
-    border-bottom: 1px solid #262626;
-    padding: 0;
-}
-ads--CDockWidgetTab {
-    background: #1e1e1e;
-    border: 0;
-    border-right: 1px solid #262626;
-    padding: 4px 12px;
-    min-height: 22px;
-}
-ads--CDockWidgetTab QLabel,
-ads--CDockWidgetTab ads--CElidingLabel {
-    color: #8f8f8f;
-    background: transparent;
-}
-ads--CDockWidgetTab[activeTab="true"] {
-    background: #161616;
-    border-bottom: 2px solid #e6e6e6;
-}
-ads--CDockWidgetTab[activeTab="true"] QLabel,
-ads--CDockWidgetTab[activeTab="true"] ads--CElidingLabel {
-    color: #e6e6e6;
-}
-ads--CTitleBarButton {
-    background: transparent;
-    border: 0;
-    padding: 3px;
-    min-width: 18px;
-    min-height: 18px;
-}
-ads--CTitleBarButton:hover {
-    background: #262626;
-    border-radius: 3px;
-}
-ads--CDockSplitter::handle {
-    background: #262626;
-}
-ads--CDockSplitter::handle:hover {
-    background: #e6e6e6;
-}
-ads--CFloatingDockContainer {
-    background: #161616;
-    border: 1px solid #262626;
-}
-"""
-
-
 class WorkspaceDockManager(QObject):
     """Donos dos 3 docks do shell de workspaces."""
 
@@ -137,7 +80,7 @@ class WorkspaceDockManager(QObject):
 
         self._manager = ads.CDockManager(host)
         _install_dark_icons()
-        self._manager.setStyleSheet(_ADS_DARK_QSS)
+        self._manager.setStyleSheet(qss.ads_qss())
         self._docks: dict[str, ads.CDockWidget] = {}
 
     # ---------- API pública ----------

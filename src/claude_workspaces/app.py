@@ -40,94 +40,8 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from .logging_setup import setup_logging  # noqa: E402
-from .ui import theme  # noqa: E402
+from .ui import qss, theme  # noqa: E402
 from .ui.main_window import MainWindow  # noqa: E402
-
-_GLOBAL_DARK_QSS = f"""
-QMenu {{
-    background: {theme.BG_SURFACE};
-    color: {theme.TEXT_PRIMARY};
-    border: 1px solid {theme.BORDER_INPUT};
-    padding: 4px 0;
-}}
-QMenu::item {{
-    padding: 6px 22px 6px 18px;
-    background: transparent;
-}}
-QMenu::item:selected {{
-    background: {theme.PRIMARY};
-    color: {theme.TEXT_ON_ACCENT};
-}}
-QMenu::item:disabled {{
-    color: #757575;
-}}
-QMenu::separator {{
-    height: 1px;
-    background: {theme.BORDER_INPUT};
-    margin: 4px 8px;
-}}
-QToolTip {{
-    background: {theme.BG_SURFACE};
-    color: {theme.TEXT_PRIMARY};
-    border: 1px solid {theme.BORDER_INPUT};
-    padding: 4px 6px;
-}}
-QMessageBox, QInputDialog, QFileDialog {{
-    background: {theme.BG_DARK};
-    color: {theme.TEXT_PRIMARY};
-}}
-QMessageBox QLabel, QInputDialog QLabel {{
-    color: {theme.TEXT_PRIMARY};
-    background: transparent;
-}}
-/* Scrollbar global — espelha o visual minimalista do viewport do
- * console (terminal.html): 8px, sem track, thumb sutil, hover âmbar.
- * Pega QListWidget/QTreeWidget/QScrollArea/QPlainTextEdit/QTextBrowser
- * etc. de uma vez. */
-QScrollBar:vertical {{
-    background: transparent;
-    width: 8px;
-    margin: 0;
-    border: 0;
-}}
-QScrollBar:horizontal {{
-    background: transparent;
-    height: 8px;
-    margin: 0;
-    border: 0;
-}}
-QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
-    background: rgba(255, 255, 255, 40);
-    border-radius: 4px;
-    min-height: 24px;
-    min-width: 24px;
-}}
-QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
-    background: rgba(255, 255, 255, 70);
-}}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
-    background: transparent;
-    border: 0;
-    height: 0;
-    width: 0;
-}}
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
-QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
-    background: transparent;
-}}
-QScrollBar::up-arrow, QScrollBar::down-arrow,
-QScrollBar::left-arrow, QScrollBar::right-arrow {{
-    background: transparent;
-    border: 0;
-    width: 0;
-    height: 0;
-}}
-QScrollBar::corner {{
-    background: transparent;
-}}
-"""
-
 
 def _tint_white(icon: QIcon, size: int = 16) -> QIcon:
     """Recolore um ícone monocromático pra branco (preservando o alfa).
@@ -351,7 +265,7 @@ def main() -> int:
     app.setFont(_load_ui_font())
     # QSS global pra widgets que o Fusion + palette não cobrem direito
     # (QMenu vinha branco em algumas distros, QToolTip idem).
-    app.setStyleSheet(_GLOBAL_DARK_QSS)
+    app.setStyleSheet(qss.build_app_qss())
     # Ícone padrão de TODAS as janelas/diálogos (QDialog, QInputDialog,
     # QMessageBox). Sem isto o Qt renderiza um ícone preto na barra de
     # título — invisível no tema escuro. O SVG é o mesmo do taskbar/menu.
