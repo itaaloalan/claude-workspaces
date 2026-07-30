@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.37.1] — 2026-07-30
+
+### Fix: navegação da sidebar compactada em linha de ícones
+
+As 6 linhas de nav (Workspaces/Catálogo/Hooks/MCP/Plugins/Apps)
+ocupavam ~175px verticais antes da lista de projetos. Agora é uma única
+row horizontal de ~30px com botões-ícone: tooltip com nome+atalho,
+estado ativo com fundo sutil arredondado e badges de contagem ancorados
+no canto superior direito do ícone. API do `SidebarNav` intacta
+(`view_changed`/`set_active`/`activate`/`set_badge`) — nada mais mudou.
+
 ## [1.37.0] — 2026-07-30
 
 ### Feat: ícones Phosphor, declutter e fluidez (Fase 3 do redesign Orca)

@@ -1,15 +1,16 @@
-"""Navegação principal no topo da sidebar — estilo Orca.
+"""Navegação principal no topo da sidebar — linha compacta de ícones.
 
-Linhas flat full-width com ícone + label (Workspaces, Catálogo, Hooks,
-MCP, Plugins, Apps). Substitui a ActivityBar vertical de 52px: a view
-ativa ganha fundo sutil arredondado; badges de contagem aparecem à
-direita da linha. API espelha a da ActivityBar (view_changed /
-set_active / activate / set_badge) pra troca 1:1 na MainWindow.
+Uma row horizontal (~30px) com um botão-ícone por view (Workspaces,
+Catálogo, Hooks, MCP, Plugins, Apps) — o formato de linhas com label
+ocupava ~175px verticais antes da lista de projetos. Tooltip carrega o
+nome + atalho; badges de contagem ficam ancorados no canto do ícone.
+API espelha a da antiga ActivityBar (view_changed / set_active /
+activate / set_badge) — MainWindow e shortcuts não mudam.
 """
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QCursor, QMouseEvent
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 from . import theme
 from .icons import ic
@@ -22,113 +23,84 @@ VIEW_PLUGINS = "plugins"
 VIEW_APPS = "apps"
 VIEW_SETTINGS = "settings"
 
-_ROW_QSS = (
-    f"QFrame#NavRow {{"
+_BTN_QSS = (
+    f"QPushButton {{"
     f"  background: transparent;"
     f"  border: 0;"
     f"  border-radius: {theme.RADIUS_MD}px;"
     f"}}"
-    f"QFrame#NavRow:hover {{"
+    f"QPushButton:hover {{"
     f"  background: {theme.PRIMARY_HOVER_BG};"
     f"}}"
-    f"QFrame#NavRow[nav_checked=\"true\"] {{"
+    f"QPushButton:checked {{"
     f"  background: {theme.PRIMARY_SELECTION_BG};"
     f"}}"
-    f"QFrame#NavRow QLabel#NavLabel {{"
-    f"  color: {theme.TEXT_FADED};"
-    f"  font-size: {theme.FONT_MD}px;"
-    f"  background: transparent;"
-    f"}}"
-    f"QFrame#NavRow:hover QLabel#NavLabel {{"
+)
+
+_BADGE_QSS = (
+    f"QLabel {{"
+    f"  background: rgba(90, 90, 90, 235);"
     f"  color: {theme.TEXT_PRIMARY};"
-    f"}}"
-    f"QFrame#NavRow[nav_checked=\"true\"] QLabel#NavLabel {{"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  font-weight: 500;"
-    f"}}"
-    f"QFrame#NavRow QLabel#NavBadge {{"
-    f"  background: rgba(255, 255, 255, 30);"
-    f"  color: {theme.TEXT_PRIMARY};"
-    f"  border-radius: 7px;"
-    f"  padding: 0px 5px;"
-    f"  font-size: 9px;"
+    f"  border-radius: 6px;"
+    f"  padding: 0px 3px;"
+    f"  font-size: 8px;"
     f"  font-weight: 600;"
-    f"  min-width: 14px;"
-    f"  min-height: 14px;"
-    f"  max-height: 14px;"
     f"}}"
 )
 
 
-class _NavRow(QFrame):
-    """Linha de navegação: ícone + label + badge opcional."""
-
-    clicked = Signal()
+class _NavIconButton(QPushButton):
+    """Botão-ícone com badge de contagem ancorado no canto superior
+    direito (child posicionado à mão — QSS não posiciona overlay)."""
 
     def __init__(
         self, icon: str, label: str, tooltip: str, parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
-        self.setObjectName("NavRow")
+        self._icon_name = icon
+        self._label = label
+        self.setCheckable(True)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setToolTip(tooltip)
-        self.setFixedHeight(28)
-        self._checked = False
-        self.setProperty("nav_checked", "false")
-        self._icon_name = icon
-
-        h = QHBoxLayout(self)
-        h.setContentsMargins(8, 0, 8, 0)
-        h.setSpacing(8)
-
-        self._icon_label = QLabel()
-        self._icon_label.setFixedSize(16, 16)
-        self._icon_label.setStyleSheet("background: transparent;")
+        self.setFixedSize(32, 28)
+        self.setStyleSheet(_BTN_QSS)
         self._paint_icon()
-        h.addWidget(self._icon_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.toggled.connect(lambda _c: self._paint_icon())
 
-        self._text_label = QLabel(label)
-        self._text_label.setObjectName("NavLabel")
-        h.addWidget(self._text_label, 1)
-
-        self._badge_label = QLabel("")
-        self._badge_label.setObjectName("NavBadge")
-        self._badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._badge_label.setVisible(False)
-        h.addWidget(self._badge_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._badge = QLabel("", self)
+        self._badge.setStyleSheet(_BADGE_QSS)
+        self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._badge.setVisible(False)
 
     def _paint_icon(self) -> None:
-        color = theme.TEXT_PRIMARY if self._checked else theme.TEXT_FADED
-        self._icon_label.setPixmap(
-            ic(self._icon_name, color=color).pixmap(QSize(15, 15))
-        )
+        from PySide6.QtCore import QSize
+        color = theme.TEXT_PRIMARY if self.isChecked() else theme.TEXT_FADED
+        self.setIcon(ic(self._icon_name, color=color))
+        self.setIconSize(QSize(16, 16))
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(event)
+    def _place_badge(self) -> None:
+        self._badge.adjustSize()
+        w = max(self._badge.width(), 12)
+        h = max(self._badge.height(), 12)
+        # Canto superior direito, levemente pra dentro.
+        self._badge.setGeometry(self.width() - w - 1, 0, w, h)
 
-    def isChecked(self) -> bool:
-        return self._checked
-
-    def setChecked(self, value: bool) -> None:
-        if self._checked == value:
-            return
-        self._checked = value
-        self.setProperty("nav_checked", "true" if value else "false")
-        self.style().unpolish(self)
-        self.style().polish(self)
-        self._paint_icon()
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        if self._badge.isVisible():
+            self._place_badge()
 
     def set_badge(self, text: str, tooltip: str | None = None) -> None:
         if not text:
-            self._badge_label.setVisible(False)
-            self._badge_label.setText("")
-            self._badge_label.setToolTip("")
+            self._badge.setVisible(False)
+            self._badge.setText("")
+            self._badge.setToolTip("")
             return
-        self._badge_label.setText(text)
-        self._badge_label.setToolTip(tooltip or "")
-        self._badge_label.setVisible(True)
+        self._badge.setText(text)
+        self._badge.setToolTip(tooltip or "")
+        self._badge.setVisible(True)
+        self._place_badge()
+        self._badge.raise_()
 
 
 class SidebarNav(QWidget):
@@ -136,12 +108,12 @@ class SidebarNav(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setStyleSheet(_ROW_QSS)
-        v = QVBoxLayout(self)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(1)
+        self.setFixedHeight(30)
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(2)
 
-        self._buttons: dict[str, _NavRow] = {}
+        self._buttons: dict[str, _NavIconButton] = {}
         for icon, view_id, label, tooltip in (
             ("ph.squares-four", VIEW_WORKSPACES, "Workspaces",
                 "Workspaces (Ctrl+Shift+1)"),
@@ -154,10 +126,11 @@ class SidebarNav(QWidget):
             ("ph.grid-four", VIEW_APPS, "Apps",
                 "Apps auxiliares (Ctrl+Shift+6)"),
         ):
-            row = _NavRow(icon, label, tooltip)
-            row.clicked.connect(lambda vid=view_id: self._on_clicked(vid))
-            v.addWidget(row)
-            self._buttons[view_id] = row
+            btn = _NavIconButton(icon, label, tooltip)
+            btn.clicked.connect(lambda _c=False, vid=view_id: self._on_clicked(vid))
+            h.addWidget(btn)
+            self._buttons[view_id] = btn
+        h.addStretch(1)
 
         self._buttons[VIEW_WORKSPACES].setChecked(True)
 
@@ -168,7 +141,7 @@ class SidebarNav(QWidget):
 
     def set_active(self, view_id: str) -> None:
         """Marca uma view como ativa sem emitir signal (programmatic).
-        `settings` não tem linha própria — desmarca tudo."""
+        `settings` não tem botão próprio — desmarca tudo."""
         for vid, b in self._buttons.items():
             b.setChecked(vid == view_id)
 
