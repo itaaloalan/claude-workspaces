@@ -10,7 +10,9 @@
             width: 100%;
             max-width: 100vw;
             height: 100%;
-            background: #0e0e0e;
+            /* Fallback anti-flash — o valor real chega via bridge
+               (theme_changed) como var --term-bg. */
+            background: var(--term-bg, #0e0e0e);
             overflow: hidden;
         }
         #terminal {
@@ -46,13 +48,13 @@
             background: transparent;
         }
         .xterm-viewport::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.10);
+            background: var(--scroll-thumb, rgba(255, 255, 255, 0.10));
             border-radius: 4px;
             border: 2px solid transparent;
             background-clip: padding-box;
         }
         .xterm-viewport::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.40);
+            background: var(--scroll-thumb-hover, rgba(255, 255, 255, 0.40));
             background-clip: padding-box;
             border: 2px solid transparent;
         }

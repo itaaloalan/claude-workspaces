@@ -148,6 +148,32 @@
             });
         }
 
+        // Tema vindo do Python (theme.terminal_theme() como JSON) — fonte
+        // única de verdade das cores; o theme inline do construtor é só
+        // fallback anti-flash. xterm.js aplica options.theme ao vivo.
+        if (bridge.theme_changed) {
+            bridge.theme_changed.connect(function (payload) {
+                try {
+                    const t = JSON.parse(payload);
+                    if (t.xterm) { term.options.theme = t.xterm; }
+                    if (t.fontSize) { term.options.fontSize = t.fontSize; }
+                    if (t.fontFamily) { term.options.fontFamily = t.fontFamily; }
+                    if (t.css) {
+                        const root = document.documentElement;
+                        Object.keys(t.css).forEach(function (k) {
+                            root.style.setProperty(k, t.css[k]);
+                        });
+                    }
+                    // Glyphs já rasterizados com o tema antigo ficariam no
+                    // atlas do renderer acelerado — descarta.
+                    if (rendererAddon && typeof rendererAddon.clearTextureAtlas === 'function') {
+                        try { rendererAddon.clearTextureAtlas(); } catch (e) { }
+                    }
+                    safeFit();
+                } catch (e) { /* payload inválido — mantém fallback */ }
+            });
+        }
+
         // Limite de scrollback configurável (Settings → Console). Emitido no
         // frontend_ready (valor inicial) e ao vivo quando o usuário muda.
         if (bridge.scrollback_changed) {

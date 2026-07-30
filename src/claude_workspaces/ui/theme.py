@@ -271,6 +271,59 @@ def left_accent_qss(
     )
 
 
+# ---------- Tema do terminal (xterm.js) ----------
+# Fonte única de verdade pro visual do console/runners — empurrado pro JS
+# via TerminalBridge.theme_changed (JSON) no frontend_ready. Os valores
+# hardcoded em terminal.html/terminal.js são só fallback anti-flash e
+# devem espelhar estes.
+
+TERMINAL_FONT_SIZE = 13
+TERMINAL_FONT_FAMILY = (
+    '"JetBrains Mono", "Hack", "Fira Code", "DejaVu Sans Mono", monospace'
+)
+
+# Paleta ANSI 16 neutra — contraste confortável sobre BG_DEEP.
+_ANSI = {
+    "black": "#1a1a1a",
+    "red": "#d17a7a",
+    "green": "#8fbf8f",
+    "yellow": "#d6bd7c",
+    "blue": "#82a3c9",
+    "magenta": "#b391bd",
+    "cyan": "#7fb5b0",
+    "white": "#c9c9c9",
+    "brightBlack": "#5f5f5f",
+    "brightRed": "#e09a9a",
+    "brightGreen": "#a8d1a8",
+    "brightYellow": "#e6d194",
+    "brightBlue": "#9db8d9",
+    "brightMagenta": "#c9a9cf",
+    "brightCyan": "#99cbc6",
+    "brightWhite": "#f2f2f2",
+}
+
+
+def terminal_theme() -> dict:
+    """Tema completo do xterm.js + CSS vars do terminal.html."""
+    return {
+        "fontSize": TERMINAL_FONT_SIZE,
+        "fontFamily": TERMINAL_FONT_FAMILY,
+        "xterm": {
+            "background": BG_DEEP,
+            "foreground": "#dcdcdc",
+            "cursor": PRIMARY,
+            "cursorAccent": BG_DEEP,
+            "selectionBackground": "#2e2e2e",
+            **_ANSI,
+        },
+        "css": {
+            "--term-bg": BG_DEEP,
+            "--scroll-thumb": "rgba(255, 255, 255, 0.10)",
+            "--scroll-thumb-hover": "rgba(255, 255, 255, 0.40)",
+        },
+    }
+
+
 def tree_widget_qss() -> str:
     return (
         f"QTreeWidget {{ background: transparent; border: 0; color: {TEXT_PRIMARY}; }}"

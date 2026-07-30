@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import pwd
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..pty_session import PtySession, _CONSOLE_SLICE
+from . import theme
 
 
 def _login_shell() -> str:
@@ -224,6 +226,10 @@ class TerminalBridge(QObject):
     # Empurra o limite de scrollback (linhas) pro xterm.js — tanto no initial
     # load (emit no frontend_ready) quanto ao vivo (set_scrollback_lines).
     scrollback_changed = Signal(int)
+    # Empurra o tema (JSON de theme.terminal_theme()) pro xterm.js no
+    # frontend_ready — fonte única de verdade das cores do console; os
+    # valores em terminal.html/js são só fallback anti-flash.
+    theme_changed = Signal(str)
 
     # Limite de linhas do scrollback aplicado a todo bridge vivo (console +
     # runners). Atualizado por `set_scrollback_lines` quando o usuário muda em
@@ -419,8 +425,9 @@ class TerminalBridge(QObject):
     @Slot()
     def frontend_ready(self) -> None:
         self.ready.emit()
-        # Aplica o limite de scrollback atual assim que o xterm.js carrega
+        # Aplica tema e limite de scrollback assim que o xterm.js carrega
         # (override por instância, se houver, senão o padrão global).
+        self.theme_changed.emit(json.dumps(theme.terminal_theme()))
         self.scrollback_changed.emit(self.effective_scrollback())
 
 
