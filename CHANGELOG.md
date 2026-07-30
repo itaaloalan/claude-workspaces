@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.38.0] — 2026-07-30
+
+### Fix URGENTE: lentidão extrema / app travando + véu cinza no console
+
+Dois bugs introduzidos hoje, ambos corrigidos:
+
+- **Fade do overlay de troca de workspace**: o `QGraphicsOpacityEffect`
+  era aplicado num widget DENTRO do container das webviews — quebrava a
+  composição de GPU da janela inteira e, com trocas sobrepostas, o
+  efeito ficava preso semi-transparente sobre o console (o "véu cinza /
+  cara de travado"). Voltou a hide instantâneo, com limpeza defensiva
+  do effect.
+- **Debounce do GitPanel**: `QTimer.start(50)` da troca de workspace
+  rebaixava PERMANENTEMENTE o intervalo do timer compartilhado com o
+  file-watcher (400ms → 50ms) — cada rajada de escrita de arquivo (ex.:
+  Claude trabalhando) disparava scans de git quase contínuos. Agora
+  cada origem passa o intervalo explícito.
+
+### Feat: paleta dark do Orca + card de seleção + diff em aba central
+
+- **Paleta por amostragem do print do Orca**: chrome sobe pra cinzas
+  médios (sidebar #2a2a2a, inputs #383838, card #414141), texto
+  #f4f4f4, accent coral do Claude (#d77657) no "aguardando", terminal
+  em tom OneDark (#2c3037).
+- **Card de seleção na sidebar**: o workspace selecionado (header +
+  consoles) vira um card único elevado com cantos arredondados.
+- **Diff como aba central** (novo `ui/diff_tab.py`): duplo-clique num
+  arquivo modificado do painel Git abre o diff numa aba ao lado do
+  Console IA (inline/lado-a-lado, refresh, fechável, idempotente).
+
 ## [1.37.2] — 2026-07-30
 
 ### Fix: console com cara de "desabilitado" (cores lavadas)

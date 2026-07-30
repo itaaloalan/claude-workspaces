@@ -441,6 +441,9 @@ class GitPanel(QWidget):
     """
 
     open_file_requested = Signal(str)
+    # Duplo-clique num arquivo modificado: abrir o diff como aba central
+    # (folder, rel_path, staged) — estilo Orca.
+    open_diff_tab_requested = Signal(str, str, bool)
     # Emitido após cada commit local. Args: (workspace_id, folder, sha, message)
     # sha vai vazio se não conseguirmos resolver o HEAD pós-commit — assinante
     # deve tratar como "houve commit mesmo sem detalhe".
@@ -976,7 +979,12 @@ class GitPanel(QWidget):
     # ---------- refresh ----------
 
     def _schedule_refresh(self, *_args) -> None:
-        self._refresh_timer.start()
+        # Intervalo EXPLÍCITO: QTimer.start(ms) muda o interval do timer
+        # permanentemente, então o start(50) da troca de workspace estava
+        # rebaixando este debounce de 400ms pra 50ms — o watcher passava a
+        # disparar um scan de git a cada rajada de escrita de arquivo
+        # (ex.: Claude trabalhando) e o app inteiro sentia.
+        self._refresh_timer.start(400)
 
     def refresh(self) -> None:
         # Drena reflogs antes de qualquer early-return — captura atividade
@@ -1650,7 +1658,12 @@ class GitPanel(QWidget):
             # sentinela WORKTREE pro lado direito (não commitado).
             self._open_compare_diff_viewer(data["folder"], data["rel_path"])
             return
-        self.open_file_requested.emit(data["path"])
+        # Estilo Orca: duplo-clique abre o DIFF do arquivo como aba no
+        # painel central (o arquivo em si continua acessível pelo painel
+        # Arquivos / menu de contexto).
+        self.open_diff_tab_requested.emit(
+            data["folder"], data["rel_path"], bool(data.get("staged", False))
+        )
 
     def _open_compare_diff_viewer(self, clicked_folder: str, clicked_rel: str) -> None:
         entries: list[dict] = []

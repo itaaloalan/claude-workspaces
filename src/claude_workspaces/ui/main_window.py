@@ -574,6 +574,9 @@ class MainWindow(QMainWindow):
         )
         self.details.launch_shell_requested.connect(self._launch_shell_for)
         self.details.open_file_requested.connect(self._open_file_in_editor)
+        self.details.open_diff_tab_requested.connect(
+            self._open_diff_as_central_tab
+        )
         self.details.handoff_requested.connect(self._handoff_session)
         self.details.export_session_requested.connect(self._export_session)
         self.content_stack.addWidget(self.details)
@@ -1269,11 +1272,13 @@ class MainWindow(QMainWindow):
 
     def _hide_switch_loading(self) -> None:
         self._loading_spinner.stop()
-        # Fade-out curto: a troca fica "assentada" em vez de piscar.
-        # (Overlay é widget opaco comum — seguro pra efeito de opacidade.)
-        from .animations import fade_out
-        if self._loading_overlay.isVisible():
-            fade_out(self._loading_overlay)
+        # SEM fade aqui: o overlay vive DENTRO do container do terminal
+        # (QWebEngineViews) — QGraphicsOpacityEffect ali quebra a
+        # composição de GPU da janela e, com trocas sobrepostas, o efeito
+        # ficava preso semi-transparente sobre o console (véu cinza +
+        # lentidão geral). Hide instantâneo é a "transição" correta.
+        self._loading_overlay.setGraphicsEffect(None)
+        self._loading_overlay.hide()
         self._loading_corner.setVisible(False)
 
     def _close_active_terminal_tab(self) -> None:
@@ -1468,11 +1473,12 @@ class MainWindow(QMainWindow):
         )
 
     def _on_central_tab_close(self, idx: int) -> None:
-        """Fecha a aba SE for um EditorTab. Abas fixas (Claude console /
-        Runners workspace / Runners console) ignoram o close request."""
+        """Fecha a aba SE for um EditorTab/DiffTab. Abas fixas (Claude
+        console / Runners workspace / Runners console) ignoram o close."""
+        from .diff_tab import DiffTab
         from .editor_tab import EditorTab
         w = self._bottom_tabs.widget(idx)
-        if isinstance(w, EditorTab):
+        if isinstance(w, (EditorTab, DiffTab)):
             self._bottom_tabs.removeTab(idx)
             w.deleteLater()
             self._refresh_terminal_tabs_bar()
@@ -1500,6 +1506,35 @@ class MainWindow(QMainWindow):
         self._bottom_tabs.setTabToolTip(idx, abs_path)
         self._bottom_tabs.setCurrentIndex(idx)
         # Garante que tabsClosable está ON pra essa aba poder fechar
+        self._bottom_tabs.setTabsClosable(True)
+        self._refresh_terminal_tabs_bar()
+
+    def _open_diff_as_central_tab(
+        self, folder: str, rel_path: str, staged: bool
+    ) -> None:
+        """Abre o diff de um arquivo modificado como aba central (estilo
+        Orca). Idempotente por (folder, rel_path): reabrir só foca e
+        recarrega."""
+        from .diff_tab import DiffTab
+
+        for i in range(self._bottom_tabs.count()):
+            w = self._bottom_tabs.widget(i)
+            if (
+                isinstance(w, DiffTab)
+                and w.folder == folder
+                and w.rel_path == rel_path
+            ):
+                self._bottom_tabs.setCurrentIndex(i)
+                w.refresh()
+                return
+
+        tab = DiffTab(folder, rel_path, staged)
+        name = rel_path.rsplit("/", 1)[-1]
+        from .icons import ic
+        idx = self._bottom_tabs.addTab(tab, f"{name} (diff)")
+        self._bottom_tabs.setTabIcon(idx, ic("ph.git-diff", color="#8f8f8f"))
+        self._bottom_tabs.setTabToolTip(idx, f"{folder} · {rel_path}")
+        self._bottom_tabs.setCurrentIndex(idx)
         self._bottom_tabs.setTabsClosable(True)
         self._refresh_terminal_tabs_bar()
 

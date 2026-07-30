@@ -75,6 +75,8 @@ class WorkspaceDetailsPanel(QStackedWidget):
     export_session_requested = Signal(ClaudeSession)
     columns_splitter_moved = Signal()
     open_file_requested = Signal(str)
+    # Repassa do GitPanel: diff de arquivo como aba central (folder, rel, staged)
+    open_diff_tab_requested = Signal(str, str, bool)
 
     def __init__(self, settings: Settings) -> None:
         super().__init__()
@@ -243,6 +245,9 @@ class WorkspaceDetailsPanel(QStackedWidget):
         # puxa via accessor pra colocá-lo no dock.
         self._git_panel = GitPanel()
         self._git_panel.open_file_requested.connect(self.open_file_requested.emit)
+        self._git_panel.open_diff_tab_requested.connect(
+            self.open_diff_tab_requested.emit
+        )
 
         # Localizar arquivo moveu pra sidebar (esquerda) e abre num modal —
         # ver `MainWindow._open_file_finder_dialog`. Mantemos só uma
