@@ -83,8 +83,11 @@ class Settings:
     minimized_panes: list[str] = field(default_factory=list)
     workspace_columns_sizes: list[int] = field(default_factory=list)  # legado, sem uso atual
     window_geometry: list[int] = field(default_factory=list)  # [x, y, w, h]
-    # Dock direito (Tarefas + Git + Skills colapsáveis)
+    # Dock direito (Tarefas + Git + Skills colapsáveis) — legado do modelo
+    # multi-painel; mantido só pra tolerar settings antigos.
     right_dock_collapsed: dict = field(default_factory=dict)  # {panel_id: bool}
+    # Painel ativo do dock direito no modelo exclusivo (um por vez).
+    right_dock_active_panel: str = "git"
     # Estado colapsado dos workspaces na sidebar (persistente entre sessões).
     workspace_collapsed: dict = field(default_factory=dict)  # {workspace_id: bool}
     # Estado colapsado do submenu "Runners workspace" por workspace.

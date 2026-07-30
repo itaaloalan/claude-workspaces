@@ -586,12 +586,9 @@ class MainWindow(QMainWindow):
         else:
             self.right_splitter.setSizes([380, 520])
 
-        # Dock direito (3ª coluna): Tarefas + Git + Skills colapsáveis.
-        # NÃO forçamos minimumWidth aqui — o próprio RightDock controla seu
-        # min/max (strip de 36px quando colapsado, ≥256px com painel aberto).
-        # Forçar min aqui conflitava com o maxWidth(36) interno e quebrava o
-        # layout. A garantia de "sempre visível" é feita no startup abrindo
-        # um painel default + botão na activity bar.
+        # Dock direito (3ª coluna): row de ícones no topo + painel exclusivo
+        # (um por vez, estilo Orca). Sempre há um painel ativo; esconder é
+        # alternar o dock inteiro (Ctrl+Shift+B / botão da top bar).
         self.right_dock = self._build_right_dock()
 
         # Container do center: right_splitter (painéis verticais) +
@@ -630,7 +627,10 @@ class MainWindow(QMainWindow):
         #  3 = força sidebar/ferramentas visíveis SEMPRE no startup,
         #      mesmo após restoreState — o safety net da 0.55.3 não
         #      funcionava quando o dock saía removido do container (0.55.5)
-        _DOCK_SCHEMA = 3
+        #  4 = RightDock v2 exclusivo (row de ícones no topo): descarta
+        #      states onde o dock direito ficou salvo com 36px de strip
+        #      colapsada, estreito demais pro layout novo (1.36.0)
+        _DOCK_SCHEMA = 4
         saved_state = (
             self.settings.body_dock_state
             if self.settings.body_dock_state_schema >= _DOCK_SCHEMA

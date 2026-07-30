@@ -2,8 +2,10 @@
 
 Responsabilidades:
 - Construir o RightDock com os painéis declarados nas specs
-- Propagar set_workspace(ws) pra todos os painéis quando workspace muda
-- Persistir estado collapsed dos painéis via Settings
+- Propagar set_workspace(ws) SÓ pro painel ativo (dirty-refresh: os
+  ocultos ficam marcados e recebem o workspace quando forem ativados —
+  painel escondido não paga refresh na troca de workspace)
+- Persistir o painel ativo via Settings (right_dock_active_panel)
 """
 
 import logging
@@ -38,11 +40,19 @@ class DockCoordinator(QObject):
         self._panels: list[DockPanel] = []
         self._panels_by_id: dict[str, DockPanel] = {}
         self.widget: RightDock | None = None
+        # Dirty-refresh: workspace pendente + ids que ainda não o receberam.
+        self._pending_ws: Workspace | None = None
+        self._dirty: set[str] = set()
 
     def build(self) -> RightDock:
         """Constrói o RightDock e o devolve pronto pra MainWindow embutir."""
         dock = RightDock()
-        collapsed = self.settings.right_dock_collapsed or {}
+        active = self.settings.right_dock_active_panel or ""
+        if active not in {s.panel_id for s in self.specs}:
+            active = next(
+                (s.panel_id for s in self.specs if s.default_open),
+                self.specs[0].panel_id if self.specs else "",
+            )
 
         for spec in self.specs:
             panel = spec.factory(self._main_window)
@@ -50,7 +60,7 @@ class DockCoordinator(QObject):
                 spec.panel_id,
                 spec.title,
                 panel,
-                open_=not collapsed.get(spec.panel_id, not spec.default_open),
+                open_=spec.panel_id == active,
                 icon=spec.icon,
             )
             self._panels.append(panel)
@@ -67,24 +77,40 @@ class DockCoordinator(QObject):
         return self._panels_by_id.get(panel_id)
 
     def broadcast_workspace(self, workspace: Workspace | None) -> None:
-        """Notifica todos os painéis sobre mudança de workspace. Um
-        painel quebrado não derruba os outros (cada chamada é try/except).
-        Cada painel é cronometrado ([SWITCH-PERF]) — set_workspace pesado
-        aqui congela o overlay da troca de workspace."""
+        """Aplica o workspace no painel ATIVO e marca os demais como
+        dirty — eles recebem o set_workspace quando forem ativados.
+        Cada aplicação é cronometrada ([SWITCH-PERF])."""
+        self._pending_ws = workspace
+        self._dirty = set(self._panels_by_id.keys())
+        active = self.widget.active_panel() if self.widget else None
+        if active is not None:
+            self._apply_workspace(active)
+
+    def _apply_workspace(self, panel_id: str) -> None:
+        """set_workspace(pendente) num painel específico. Um painel
+        quebrado não derruba os outros."""
         import time
-        for panel in self._panels:
-            t0 = time.perf_counter()
-            try:
-                panel.set_workspace(workspace)
-            except Exception:
-                log.exception(
-                    "set_workspace falhou em %s", type(panel).__name__
-                )
-            log.info(
-                "[SWITCH-PERF] panel=%s dt=%.1fms",
-                type(panel).__name__, (time.perf_counter() - t0) * 1000,
+        panel = self._panels_by_id.get(panel_id)
+        if panel is None:
+            return
+        self._dirty.discard(panel_id)
+        t0 = time.perf_counter()
+        try:
+            panel.set_workspace(self._pending_ws)
+        except Exception:
+            log.exception(
+                "set_workspace falhou em %s", type(panel).__name__
             )
+        log.info(
+            "[SWITCH-PERF] panel=%s dt=%.1fms",
+            type(panel).__name__, (time.perf_counter() - t0) * 1000,
+        )
 
     def _on_panel_toggled(self, panel_id: str, is_open: bool) -> None:
-        self.settings.right_dock_collapsed[panel_id] = not is_open
+        if is_open:
+            self.settings.right_dock_active_panel = panel_id
+            # Painel acabou de ficar visível com workspace defasado —
+            # aplica agora (dirty-refresh).
+            if panel_id in self._dirty:
+                self._apply_workspace(panel_id)
         self.panel_toggled.emit(panel_id, is_open)
