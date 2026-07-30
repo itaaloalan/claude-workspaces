@@ -334,6 +334,48 @@ def test_gc_orphan_console_runners(main_window):
     assert remaining == {("api", ""), ("api", "live-sid")}
 
 
+def test_ensure_terminal_runner_panel_dedups_same_session_across_tabs(main_window):
+    """Duas abas resolvendo pro MESMO session_id (ex.: resume de uma sessão
+    já aberta noutra aba — Ctrl+Shift+R, busca de sessões etc.) não podem
+    ganhar RunnerAreas independentes: `claimed_session_id()` já devolve o sid
+    real (via `_claude_resume_id`) antes do claim de fato acontecer no poll,
+    então a checagem por tab_uid sozinha não pega essa colisão. Sem o dedup
+    por session_id, o rodapé e o painel central passavam a ler RunnerWidgets
+    diferentes pro mesmo runner persistido — um mostrando "rodando", o outro
+    "parado"."""
+    from types import SimpleNamespace
+
+    ws = _add_ws(main_window, "deduptest")
+
+    term_a = SimpleNamespace(
+        _tab_uid=9001,
+        claimed_session_id=lambda: "shared-sid",
+        worktree_dir=lambda: "",
+        claude_cwd=lambda: "/tmp/deduptest",
+    )
+    term_b = SimpleNamespace(
+        _tab_uid=9002,
+        claimed_session_id=lambda: "shared-sid",
+        worktree_dir=lambda: "",
+        claude_cwd=lambda: "/tmp/deduptest",
+    )
+
+    area_a = main_window._ensure_terminal_runner_panel(ws, term_a, focus_pane=False)
+    area_b = main_window._ensure_terminal_runner_panel(ws, term_b, focus_pane=False)
+
+    assert area_a is area_b
+    per_console = main_window._console_runner_areas.get(ws.id, {})
+    assert per_console.get(9001) is per_console.get(9002)
+
+    # Fechar UMA das abas não pode derrubar a area — a outra ainda a usa.
+    main_window._handle_tab_removed(9001)
+    assert main_window._console_runner_areas.get(ws.id, {}).get(9002) is area_a
+
+    # Fechar a última alias derruba a area de verdade.
+    main_window._handle_tab_removed(9002)
+    assert 9002 not in main_window._console_runner_areas.get(ws.id, {})
+
+
 def test_persist_on_shutdown_is_idempotent(main_window):
     """closeEvent + aboutToQuit podem ambos chamar _persist_on_shutdown; só o
     primeiro grava, o segundo vira no-op (não clobbera com lista vazia)."""

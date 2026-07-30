@@ -283,7 +283,16 @@ def remap_into_worktree(path: str, worktree_dir: str) -> str:
         return ""
     root = repo_root(path)
     wt_root = repo_root(worktree_dir)
-    if not root or not wt_root:
+    if not root:
+        return ""
+    if not wt_root:
+        # worktree_dir é pasta-grupo (não é repo): remapeia pro membro do
+        # grupo que for do mesmo repo de `path` — preserva o subdir via
+        # recursão (mesma lógica abaixo, aplicada ao path do membro).
+        for m in worktree_group_members(worktree_dir):
+            remapped = remap_into_worktree(path, m["path"])
+            if remapped:
+                return remapped
         return ""
     root_p = Path(root).resolve()
     wt_p = Path(wt_root).resolve()
@@ -313,6 +322,20 @@ def translate_dir_for_repo(target_dir: str, repo_folder: str) -> str:
     - senão → "" (sem equivalente; quem chama mantém o dir base do repo).
     """
     if not target_dir or not repo_folder:
+        return ""
+    members = worktree_group_members(target_dir)
+    if members:
+        # target é pasta-grupo de worktrees (não é repo git): traduz pro
+        # membro do MESMO repo que repo_folder (common-dir igual) —
+        # equivalente ao caso "mesmo repo" abaixo, mas partindo do grupo.
+        r_root = repo_root(repo_folder)
+        r_dirs = resolve_git_dirs(r_root) if r_root else None
+        if r_dirs is None:
+            return ""
+        for m in members:
+            m_dirs = resolve_git_dirs(m["path"])
+            if m_dirs and m_dirs[1].resolve() == r_dirs[1].resolve():
+                return m["path"]
         return ""
     # Resolve as RAÍZES antes do resolve_git_dirs: a pasta do workspace pode ser
     # um SUBDIR do repo (ex.: sipepro → .../sipe/sipe/src, sem .git ali), e

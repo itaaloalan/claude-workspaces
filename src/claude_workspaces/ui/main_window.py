@@ -6253,7 +6253,8 @@ class MainWindow(QMainWindow):
         """`focus_pane=False` (restore de boot): cria/regista a RunnerArea
         sem focar o pane "Runners console" — o boot não deve roubar o foco
         nem forçar o pane visível pra cada console restaurado."""
-        existing = self._console_runner_areas.get(workspace.id, {}).get(tab_uid_of(terminal))
+        tab_id = tab_uid_of(terminal)
+        existing = self._console_runner_areas.get(workspace.id, {}).get(tab_id)
         if existing is not None:
             # Já existe — só foca o pane "Runners console" e seleciona a area.
             if focus_pane:
@@ -6261,6 +6262,29 @@ class MainWindow(QMainWindow):
                 self._ensure_runners_console_pane_visible()
             return existing
         sid = terminal.claimed_session_id() or self._pending_console_key(terminal)
+        # Mesma sessão Claude já tem uma RunnerArea viva noutra aba — ex.:
+        # resume de uma sessão que já está aberta noutro console (Ctrl+Shift+R,
+        # busca de sessões, ação "abrir console" da notificação...). Essas
+        # aberturas criam uma TerminalWidget NOVA, mas `claimed_session_id()`
+        # já devolve o sid real de `_claude_resume_id` antes mesmo do claim
+        # de fato acontecer no primeiro poll — então a checagem por tab_uid
+        # acima não pega a colisão. Sem este guard, a aba nova ganhava sua
+        # PRÓPRIA RunnerArea (com PtySessions/RunnerWidgets independentes)
+        # pro mesmo sid: rodapé e painel central passavam a discordar sobre
+        # "rodando" porque cada um podia acabar lendo uma area diferente pro
+        # mesmo runner persistido. Em vez de criar, reusa/alia a area
+        # existente sob o tab_uid novo também.
+        if not sid.startswith("pending:"):
+            for other_area in self._console_runner_areas.get(workspace.id, {}).values():
+                if other_area.console_session_id() == sid:
+                    self._console_runner_areas.setdefault(workspace.id, {})[tab_id] = other_area
+                    if focus_pane:
+                        self.console_runner_host.setCurrentWidget(other_area)
+                        self._ensure_runners_console_pane_visible()
+                    term_item = self.terminals_coord.state.tree_items.get(tab_id)
+                    if term_item is not None:
+                        self._install_console_runner_children(term_item, workspace, tab_id)
+                    return other_area
         area = RunnerArea(
             workspace,
             settings=self.settings,
@@ -6802,6 +6826,13 @@ class MainWindow(QMainWindow):
         for ws_id, per_console in list(self._console_runner_areas.items()):
             area = per_console.pop(tab_id, None)
             if area is None:
+                continue
+            # Area "aliased" — mesma RunnerArea registrada sob outro tab_uid
+            # porque as duas abas resolveram pro mesmo session_id (ver o
+            # guard de dedup em `_ensure_terminal_runner_panel`). Só derruba
+            # de fato quando nenhuma outra aba ainda aponta pra ela — senão
+            # a aba sobrevivente ficaria com uma RunnerArea já deletada.
+            if area in per_console.values():
                 continue
             area.close_all()
             try:
@@ -8397,7 +8428,8 @@ class MainWindow(QMainWindow):
     def _on_repo_status_ready(self, folder: str, status) -> None:
         """Aplica o GitStatus em todos os children cujo alvo git bate
         com `folder`. O alvo é o worktree adotado em runtime (quando a
-        sessão criou um via /criar-worktree) ou, sem worktree, o claude_cwd.
+        sessão criou um via /criar-worktree), senão o membro representativo
+        de um grupo de worktrees (group_chip_dir), senão o claude_cwd.
         Um mesmo folder pode aparecer em vários consoles."""
         branch = status.branch if status.is_repo else ""
         modified = len(status.files) if status.is_repo else 0
@@ -8410,7 +8442,7 @@ class MainWindow(QMainWindow):
             term = self._terminal_widget_for(tab_id)
             if term is None:
                 continue
-            target = term.worktree_dir() or term.claude_cwd()
+            target = term.worktree_dir() or term.group_chip_dir() or term.claude_cwd()
             if target != folder:
                 continue
             widget.update_git_info(
@@ -8420,7 +8452,7 @@ class MainWindow(QMainWindow):
                 ahead=status.ahead,
                 behind=status.behind,
                 files=status.files,
-                worktree_dir=term.worktree_dir() or "",
+                worktree_dir=term.worktree_dir() or term.group_chip_dir() or "",
             )
         # Aciona busca de PR/MR em paralelo sempre que a branch é conhecida.
         if branch:

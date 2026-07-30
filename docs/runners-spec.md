@@ -42,6 +42,12 @@ Esta spec é o contrato que o Claude deve seguir ao gerar um
   "⬇ Subir stack" (cópia automática pro console com porta remapeada).
   Marque `false` em workers, simuladores e variantes alternativas (ex:
   uma segunda api com outro JDK) que não compõem a stack paralela.
+- `hot_reload` — opcional, default `false`. Se `true`, enquanto o runner
+  estiver rodando o app observa seu `cwd` e chama Restart sozinho ao
+  detectar uma mudança salva em arquivo `.java` ou `.xhtml`. Útil em
+  runners de servidor de aplicação (Glassfish/Tomcat) onde uma mudança de
+  classe exige redeploy manual. Não marque `true` por padrão — é uma
+  preferência explícita do usuário, não algo a inferir do tipo de runner.
 
 ## Convenções
 

@@ -1,5 +1,58 @@
 # Changelog
 
+## [1.34.0] — 2026-07-30
+
+### Feat: hot reload 🔥 nos runners (redeploy automático em .java/.xhtml)
+
+Novo campo `hot_reload` no `RunnerConfig` (default `false`, editável no
+dialog ⚙ e documentado na spec de runners). Com ele ligado, enquanto o
+runner está rodando o app observa o cwd efetivo da execução (recursivo,
+pulando `node_modules`/`target`/`.git` etc.) e chama Restart sozinho ao
+detectar mudança salva em `.java` ou `.xhtml` — pensado pra Glassfish/JSF,
+onde mudança de classe exige redeploy manual.
+
+- **`ui/runner_widget.py`**: watcher via `QFileSystemWatcher` + scan de
+  diretórios em thread (monorepos grandes), debounce de 800ms pra "Save
+  All" em lote, epoch pra descartar scans atrasados pós stop/restart, e
+  chip 🔥 na toolbar (contorno aceso = observando; clicável pra desligar
+  sem abrir o dialog). Ligar/desligar no dialog com o runner de pé aplica
+  na hora.
+- **`ui/runner_area.py`** + **`models.py`**: persistência via
+  `hot_reload_changed` → `runners_changed` (igual ao `port_changed`).
+
+### Fix: `${...}` no start_cmd mutilado pelo systemd-run ≥ 254
+
+`systemd-run --scope` (v254+, `--expand-environment=yes` por default)
+expandia `$VAR`/`${d##*/}` do start_cmd com o env do APP antes de chegar
+no bash — "Invalid environment variable name evaluates to an empty
+string". **`pty_session.py`** agora passa `--expand-environment=no`
+(com sonda + fallback pra systemd antigo, que não conhece a flag mas
+também não expande).
+
+### Fix: remap/tradução de worktree pra pasta-grupo
+
+- **`git_worktree.py`**: `remap_into_worktree` e `translate_dir_for_repo`
+  agora resolvem quando o alvo é uma pasta-grupo de worktrees
+  (`.worktrees/<feat>/`, que não é repo): remapeiam pro membro do MESMO
+  repo do path original (common-dir igual), preservando subdir via
+  recursão. Antes caíam no repo principal.
+
+### Fix: chip git da sidebar em consoles de grupo de worktrees
+
+- **`ui/terminal_widget.py`**: novo `group_chip_dir()` — quando o cwd do
+  console é a pasta-pai do grupo (que nunca tem git status), o chip da
+  sidebar passa a refletir o 1º worktree-membro.
+- **`ui/main_window.py`**: `_on_repo_status_ready` considera
+  `group_chip_dir()` na resolução do alvo git de cada child.
+
+### Fix: RunnerArea duplicada ao reabrir a mesma sessão Claude noutra aba
+
+Resume de uma sessão já aberta (Ctrl+Shift+R, busca de sessões, ação da
+notificação) criava uma segunda RunnerArea pro mesmo `session_id`, e
+rodapé/painel central passavam a discordar sobre "rodando".
+**`ui/main_window.py`** agora reusa/alia a area existente sob o tab novo,
+e o teardown só derruba a area quando nenhuma aba mais aponta pra ela.
+
 ## [1.33.2] — 2026-07-29
 
 ### Fix: arraste do painel "Runners" da sidebar não redimensionava nada

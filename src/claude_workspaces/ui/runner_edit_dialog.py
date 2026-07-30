@@ -135,6 +135,20 @@ class RunnerEditDialog(QDialog):
         self._restart.setFixedHeight(60)
         form.addRow("Restart:", self._restart)
 
+        self._hot_reload = QCheckBox(
+            "🔥 Hot reload (reinicia sozinho ao detectar mudança em .java/.xhtml)"
+        )
+        self._hot_reload.setToolTip(
+            "Enquanto o runner estiver rodando, observa seu diretório e, ao "
+            "detectar uma alteração salva em arquivo .java ou .xhtml, chama "
+            "Restart automaticamente (restart_cmd, ou stop + start quando "
+            "vazio) — nem que seja um redeploy completo. Útil pra "
+            "Glassfish/JSF: não precisa mais clicar em Restart manualmente "
+            "a cada mudança de classe."
+        )
+        self._hot_reload.setChecked(base.hot_reload)
+        form.addRow("", self._hot_reload)
+
         self._enabled = QCheckBox("Incluir em 'Rodar todos'")
         self._enabled.setChecked(base.enabled)
         form.addRow("", self._enabled)
@@ -283,6 +297,7 @@ class RunnerEditDialog(QDialog):
             restart_cmd=self._restart.toPlainText().strip(),
             enabled=self._enabled.isChecked(),
             include_in_stack=self._include_stack.isChecked(),
+            hot_reload=self._hot_reload.isChecked(),
             open_browser_on_ready=self._open_browser.isChecked(),
             browser_url=self._browser_url.text().strip(),
             ready_pattern=self._ready_pattern.text().strip(),

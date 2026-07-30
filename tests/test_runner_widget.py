@@ -8,6 +8,8 @@ apareciam. Este teste fixa que o frontend ficando pronto destrava o gate e
 replaya o buffer.
 """
 
+import os
+
 from claude_workspaces.models import RunnerConfig
 from claude_workspaces.ui.runner_widget import RunnerWidget
 
@@ -162,6 +164,131 @@ def test_cross_repo_override_is_ignored(qapp, tmp_path):
     w = RunnerWidget(rc, default_cwd=str(repo_a))
     try:
         assert w.effective_cwd() == str(repo_a / "src")
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+# ---------- hot reload: chip visível no console do runner ---------------
+
+def test_hot_reload_chip_hidden_when_flag_off(qapp, tmp_path):
+    w = RunnerWidget(RunnerConfig(name="t", start_cmd="true"), default_cwd=str(tmp_path))
+    try:
+        assert w._hot_reload_btn.isHidden() is True
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+def test_hot_reload_chip_visible_idle_then_watching(qapp, tmp_path, qtbot):
+    """Ligado mas parado: chip visível, mas não no estilo "observando"
+    (watcher só existe com o runner rodando). Ao simular o runner rodando e
+    montar o watcher, o chip reflete o estado ativo."""
+    rc = RunnerConfig(name="glassfish-ogpms", start_cmd="true", hot_reload=True)
+    w = RunnerWidget(rc, default_cwd=str(tmp_path))
+    try:
+        assert w._hot_reload_btn.isHidden() is False
+        assert "ligado" in w._hot_reload_btn.toolTip()
+
+        w._state = "running"
+        w._start_hot_reload_watch(str(tmp_path))
+        qtbot.waitUntil(lambda: w._hot_reload_watcher is not None, timeout=2000)
+        assert w._hot_reload_btn.isHidden() is False
+        assert "ativo" in w._hot_reload_btn.toolTip()
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+def test_hot_reload_chip_click_toggles_flag(qapp, tmp_path):
+    w = RunnerWidget(RunnerConfig(name="t", start_cmd="true"), default_cwd=str(tmp_path))
+    try:
+        assert w._runner.hot_reload is False
+        emitted = []
+        w.hot_reload_changed.connect(emitted.append)
+
+        w._toggle_hot_reload()
+        assert w._runner.hot_reload is True
+        assert w._hot_reload_btn.isHidden() is False
+        assert emitted == [True]
+
+        w._toggle_hot_reload()
+        assert w._runner.hot_reload is False
+        assert w._hot_reload_btn.isHidden() is True
+        assert emitted == [True, False]
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+# ---------- hot reload: restart automático ao detectar .java/.xhtml -----
+
+def test_hot_reload_restarts_on_java_change(qapp, tmp_path, qtbot):
+    """hot_reload=True, runner "rodando": tocar um .java no cwd observado
+    dispara restart() sozinho, depois do debounce. Simula o watcher via
+    `_on_hot_reload_dir_changed` diretamente (evita depender do timing real
+    de inotify em CI) — o que este teste garante é a lógica nova: snapshot
+    de mtimes por padrão, debounce e chamada de restart()."""
+    (tmp_path / "Foo.java").write_text("class Foo {}")
+    rc = RunnerConfig(name="glassfish-ogpms", start_cmd="true", hot_reload=True)
+    w = RunnerWidget(rc, default_cwd=str(tmp_path))
+    try:
+        w._state = "running"  # simula processo de pé sem forkar de verdade
+        restarts = []
+        w.restart = lambda: restarts.append(1)
+
+        w._start_hot_reload_watch(str(tmp_path))
+        qtbot.waitUntil(lambda: w._hot_reload_watcher is not None, timeout=2000)
+        assert any(p.endswith("Foo.java") for p in w._hot_reload_mtimes)
+
+        # Toca o .java com mtime no futuro — determinístico mesmo em FS com
+        # resolução de mtime de 1s (sem precisar de time.sleep real).
+        java_path = tmp_path / "Foo.java"
+        future = java_path.stat().st_mtime + 5
+        os.utime(java_path, (future, future))
+
+        w._on_hot_reload_dir_changed(str(tmp_path))
+        qtbot.waitUntil(lambda: len(restarts) == 1, timeout=2000)
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+def test_hot_reload_ignores_unrelated_file_change(qapp, tmp_path, qtbot):
+    """Arquivo que não casa .java/.xhtml (ex: .log de build) não deve
+    disparar restart — só o padrão observado importa."""
+    (tmp_path / "Foo.java").write_text("class Foo {}")
+    rc = RunnerConfig(name="glassfish-ogpms", start_cmd="true", hot_reload=True)
+    w = RunnerWidget(rc, default_cwd=str(tmp_path))
+    try:
+        w._state = "running"
+        restarts = []
+        w.restart = lambda: restarts.append(1)
+
+        w._start_hot_reload_watch(str(tmp_path))
+        qtbot.waitUntil(lambda: w._hot_reload_watcher is not None, timeout=2000)
+
+        (tmp_path / "build.log").write_text("linha irrelevante")
+        w._on_hot_reload_dir_changed(str(tmp_path))
+        # Dá tempo do debounce (800ms) rodar e confirma que NADA disparou.
+        qtbot.wait(1000)
+        assert restarts == []
+    finally:
+        w.terminate()
+        w.deleteLater()
+
+
+def test_hot_reload_disabled_does_not_restart(qapp, tmp_path, qtbot):
+    """hot_reload=False (default): não monta watcher nenhum."""
+    rc = RunnerConfig(name="glassfish-ogpms", start_cmd="true")
+    w = RunnerWidget(rc, default_cwd=str(tmp_path))
+    try:
+        w._state = "running"
+        w._start_hot_reload_watch(str(tmp_path))
+        # Como hot_reload é False, _on_hot_reload_dirs_ready descarta o
+        # resultado do scan assíncrono e o watcher nunca é montado.
+        qtbot.wait(300)
+        assert w._hot_reload_watcher is None
     finally:
         w.terminate()
         w.deleteLater()

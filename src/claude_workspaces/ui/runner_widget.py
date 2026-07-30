@@ -7,13 +7,15 @@ ao vivo no xterm.js (mesmo HTML/JS da aba Terminal).
 
 from __future__ import annotations
 
+import fnmatch
 import logging
+import os
 import re
 import shlex
 import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl, Signal
+from PySide6.QtCore import QFileSystemWatcher, QThreadPool, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
@@ -41,9 +43,19 @@ from ..services.runner_expand import (
 )
 from ..services.runner_url_detect import detect_url, swap_url_port, url_port
 from ..settings import Settings
+from .git_panel import _WatchDirsSignals, _WatchDirsTask
 from .terminal_widget import STATIC_DIR, TerminalBridge
 
 log = logging.getLogger(__name__)
+
+# Padrões observados pelo hot reload (ver RunnerConfig.hot_reload) — fixo
+# de propósito: o pedido era "classe (.java) e xhtml", não um watcher
+# genérico configurável por runner.
+_HOT_RELOAD_PATTERNS = ("*.java", "*.xhtml")
+# Debounce entre a 1ª mudança detectada e o restart — builds/saves em lote
+# (ex: "Save All" da IDE) tocam vários arquivos em sequência; sem isso cada
+# arquivo dispararia um restart próprio.
+_HOT_RELOAD_DEBOUNCE_MS = 800
 
 
 class RunnerWidget(QWidget):
@@ -71,6 +83,9 @@ class RunnerWidget(QWidget):
     # Limite de scrollback per-runner mudou via menu ⋯ — RunnerArea re-emite
     # runners_changed pro main_window persistir (igual ao port_changed).
     scrollback_pref_changed = Signal(int)
+    # hot_reload ligado/desligado pelo chip 🔥 — RunnerArea re-emite
+    # runners_changed pro main_window persistir (igual ao port_changed).
+    hot_reload_changed = Signal(bool)
 
     def __init__(
         self,
@@ -135,6 +150,24 @@ class RunnerWidget(QWidget):
         # Provider nome→porta dos runners do MESMO escopo (placeholder
         # {port:<nome>} — ex: web referenciando a porta da api da stack).
         self._scope_ports_provider = None
+
+        # Hot reload (ver RunnerConfig.hot_reload): watcher ativo só enquanto
+        # o processo está rodando, sobre o cwd EFETIVO daquela execução
+        # (`_running_cwd`, travado no momento do start/restart — trocar o
+        # chip 📁 com o runner de pé não aplica até reiniciar, então não
+        # remonta o watcher nesse meio tempo). `_hot_reload_scan_epoch`
+        # descarta resultados de scan de diretórios que chegam depois de um
+        # stop/restart/toggle — o scan roda em thread separada (monorepos
+        # grandes) e pode terminar depois que o estado já mudou de novo.
+        self._hot_reload_watcher: QFileSystemWatcher | None = None
+        self._hot_reload_mtimes: dict[str, float] = {}
+        self._hot_reload_scan_epoch = 0
+        self._hot_reload_watch_signals: _WatchDirsSignals | None = None
+        self._running_cwd: str = ""
+        self._hot_reload_timer = QTimer(self)
+        self._hot_reload_timer.setSingleShot(True)
+        self._hot_reload_timer.setInterval(_HOT_RELOAD_DEBOUNCE_MS)
+        self._hot_reload_timer.timeout.connect(self._check_hot_reload_changes)
 
         # A toolbar tem muitos botões (~8) em linha — a soma dos sizeHints
         # passa de 700px e propagaria mínimo de largura pra toda a hierarquia,
@@ -227,6 +260,16 @@ class RunnerWidget(QWidget):
         self._url_btn.setVisible(False)
         toolbar.addWidget(self._url_btn)
         self._refresh_url_chip()
+
+        # Chip 🔥 — visível só quando hot_reload está ligado na config.
+        # Estilo muda entre "ligado, aguardando o runner rodar" (contorno
+        # apagado) e "observando de verdade" (contorno laranja aceso, watcher
+        # montado) — clicável pra desligar sem abrir o dialog ⚙ Editar.
+        self._hot_reload_btn = QPushButton()
+        self._hot_reload_btn.clicked.connect(self._toggle_hot_reload)
+        self._hot_reload_btn.setVisible(False)
+        toolbar.addWidget(self._hot_reload_btn)
+        self._refresh_hot_reload_chip()
         toolbar.addStretch()
 
         # Filtro de log — substring case-insensitive aplicada linha a linha.
@@ -633,6 +676,15 @@ class RunnerWidget(QWidget):
             self._set_current_url(new_url)
         elif not new_url and old_url and self._current_url == old_url:
             self._set_current_url("")
+        # hot_reload pode ter sido ligado/desligado no dialog de edição com
+        # o runner de pé — aplica na hora, sem esperar um restart.
+        if self._state == "running":
+            if self._runner.hot_reload and self._hot_reload_watcher is None:
+                if self._running_cwd:
+                    self._start_hot_reload_watch(self._running_cwd)
+            elif not self._runner.hot_reload and self._hot_reload_watcher is not None:
+                self._teardown_hot_reload_watcher()
+        self._refresh_hot_reload_chip()
 
     def current_url(self) -> str:
         return self._current_url
@@ -655,6 +707,48 @@ class RunnerWidget(QWidget):
         self._url_btn.setText(f"🌐 {addr}")
         self._url_btn.setToolTip(f"Abrir {url} no navegador")
         self._url_btn.setVisible(True)
+
+    def _refresh_hot_reload_chip(self) -> None:
+        if not self._runner.hot_reload:
+            self._hot_reload_btn.setVisible(False)
+            return
+        watching = self._hot_reload_watcher is not None
+        self._hot_reload_btn.setText("🔥 hot reload")
+        if watching:
+            self._hot_reload_btn.setStyleSheet(
+                "QPushButton { background: rgba(224, 138, 60, 0.18); "
+                "color: #e0a55c; border: 1px solid #e08a3c; "
+                "border-radius: 9px; padding: 1px 8px; font-size: 11px; }"
+                "QPushButton:hover { color: #f5c98a; border-color: #f5c98a; }"
+            )
+            self._hot_reload_btn.setToolTip(
+                f"Hot reload ativo — observando {self._running_cwd or '?'} "
+                "por mudanças em .java/.xhtml; ao detectar, reinicia o "
+                "runner sozinho. Clique pra desligar."
+            )
+        else:
+            self._hot_reload_btn.setStyleSheet(
+                "QPushButton { background: transparent; color: #9aa0a6; "
+                "border: 1px solid #302d27; border-radius: 9px; "
+                "padding: 1px 8px; font-size: 11px; }"
+                "QPushButton:hover { color: #e8e6e3; border-color: #e08a3c; }"
+            )
+            self._hot_reload_btn.setToolTip(
+                "Hot reload ligado — passa a observar .java/.xhtml e "
+                "reiniciar sozinho assim que o runner rodar (Start). "
+                "Clique pra desligar."
+            )
+        self._hot_reload_btn.setVisible(True)
+
+    def _toggle_hot_reload(self) -> None:
+        self._runner.hot_reload = not self._runner.hot_reload
+        if self._state == "running":
+            if self._runner.hot_reload and self._hot_reload_watcher is None and self._running_cwd:
+                self._start_hot_reload_watch(self._running_cwd)
+            elif not self._runner.hot_reload and self._hot_reload_watcher is not None:
+                self._teardown_hot_reload_watcher()
+        self._refresh_hot_reload_chip()
+        self.hot_reload_changed.emit(self._runner.hot_reload)
 
     def _warn_port_mismatch(self, url: str) -> None:
         """URL real detectada com porta ≠ da configurada → o comando não
@@ -867,6 +961,14 @@ class RunnerWidget(QWidget):
         if intent in ("start", "restart"):
             label = "startando"
             self._mark_started()
+            # `session.start()` acima já matou o pid anterior (síncrono,
+            # via PtySession.terminate()), que já disparou
+            # `_on_session_finished` → `_teardown_hot_reload_watcher` pra
+            # esta MESMA chamada antes de chegar aqui — seguro montar o
+            # watcher novo sem risco de a teardown do pid antigo derrubá-lo.
+            self._running_cwd = cwd
+            if self._runner.hot_reload:
+                self._start_hot_reload_watch(cwd)
         else:
             label = {"stop": "parando"}.get(intent, intent)
         self._set_state(
@@ -1125,6 +1227,7 @@ class RunnerWidget(QWidget):
         # - intent=stop → bem-sucedido → "exited"
         # (não tem como sair de stop pra running sem nova chamada explícita)
         self._clear_started()
+        self._teardown_hot_reload_watcher()
         self._set_state("exited", "(processo encerrado)")
 
     def _set_state(
@@ -1149,6 +1252,111 @@ class RunnerWidget(QWidget):
         if prev != state:
             self.state_changed.emit(state)
         self._emit_status_label(status_label)
+
+    # ---- hot reload --------------------------------------------------------
+
+    def _start_hot_reload_watch(self, cwd: str) -> None:
+        """Monta o watcher do cwd efetivo desta execução. O `os.walk` que
+        lista os diretórios roda em thread do pool (reusa `_WatchDirsTask`
+        do git_panel — monorepos grandes levariam segundos na UI thread);
+        `epoch` descarta o resultado se o runner já tiver parado/reiniciado/
+        desligado a flag antes do scan voltar."""
+        self._teardown_hot_reload_watcher()
+        if not cwd or not Path(cwd).is_dir():
+            return
+        self._hot_reload_scan_epoch += 1
+        epoch = self._hot_reload_scan_epoch
+        signals = _WatchDirsSignals()
+        signals.done.connect(
+            lambda _key, dirs, e=epoch: self._on_hot_reload_dirs_ready(e, dirs)
+        )
+        # Mantém referência viva — sem isso o QObject seria coletado antes
+        # do QRunnable (thread separada) emitir `done`.
+        self._hot_reload_watch_signals = signals
+        QThreadPool.globalInstance().start(_WatchDirsTask((cwd,), [cwd], signals))
+
+    def _on_hot_reload_dirs_ready(self, epoch: int, dirs: list[str]) -> None:
+        if epoch != self._hot_reload_scan_epoch:
+            return  # scan obsoleto — outro start/stop/toggle já rolou
+        if not (self._runner.hot_reload and self._state == "running"):
+            return
+        watcher = QFileSystemWatcher(self)
+        if dirs:
+            watcher.addPaths(dirs)
+        watcher.directoryChanged.connect(self._on_hot_reload_dir_changed)
+        self._hot_reload_watcher = watcher
+        self._hot_reload_mtimes = self._snapshot_hot_reload_mtimes(dirs)
+        self._refresh_hot_reload_chip()
+
+    def _on_hot_reload_dir_changed(self, _path: str) -> None:
+        # QFileSystemWatcher não diz QUAL arquivo mudou nem se casa com os
+        # padrões — só que algo mudou num diretório observado. O debounce
+        # dá tempo de saves em lote se acumularem antes do re-scan decidir
+        # se foi de fato um .java/.xhtml.
+        self._hot_reload_timer.start()
+
+    def _check_hot_reload_changes(self) -> None:
+        watcher = self._hot_reload_watcher
+        if watcher is None:
+            return
+        dirs = list(watcher.directories())
+        new_snap = self._snapshot_hot_reload_mtimes(dirs)
+        changed = sorted(
+            path for path, mtime in new_snap.items()
+            if self._hot_reload_mtimes.get(path) != mtime
+        )
+        self._hot_reload_mtimes = new_snap
+        if not changed:
+            return
+        if not (self._runner.hot_reload and self._state == "running"):
+            return
+        sample = Path(changed[0]).name
+        extra = f" (+{len(changed) - 1})" if len(changed) > 1 else ""
+        msg = (
+            f"\r\n\x1b[38;5;214m\U0001f525 hot reload: mudança em "
+            f"{sample}{extra} — reiniciando...\x1b[0m\r\n"
+        )
+        self._log_buf = (self._log_buf + msg)[-self._log_buf_max:]
+        try:
+            self.bridge.emit_direct(msg.encode("utf-8"))
+        except Exception:
+            log.debug("emit do aviso de hot reload falhou", exc_info=True)
+        self.restart()
+
+    def _snapshot_hot_reload_mtimes(self, dirs: list[str]) -> dict[str, float]:
+        """mtime de todo arquivo casando `_HOT_RELOAD_PATTERNS` nos `dirs`
+        observados. QFileSystemWatcher não é recursivo nem filtra por nome —
+        o filtro por padrão/mtime é o que decide se uma mudança de fato
+        importa (evita restart por qualquer arquivo tocado no diretório)."""
+        snap: dict[str, float] = {}
+        for d in dirs:
+            try:
+                with os.scandir(d) as it:
+                    for entry in it:
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        if not any(
+                            fnmatch.fnmatch(entry.name, pat)
+                            for pat in _HOT_RELOAD_PATTERNS
+                        ):
+                            continue
+                        try:
+                            snap[entry.path] = entry.stat().st_mtime
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+        return snap
+
+    def _teardown_hot_reload_watcher(self) -> None:
+        self._hot_reload_scan_epoch += 1  # invalida scan pendente em thread
+        self._hot_reload_timer.stop()
+        if self._hot_reload_watcher is not None:
+            self._hot_reload_watcher.deleteLater()
+            self._hot_reload_watcher = None
+        self._hot_reload_mtimes = {}
+        self._hot_reload_watch_signals = None
+        self._refresh_hot_reload_chip()
 
     def closeEvent(self, event) -> None:  # noqa: D401
         self.terminate()

@@ -20,6 +20,10 @@ log = logging.getLogger(__name__)
 _RUNNER_SLICE = "cw-runners.slice"
 _CONSOLE_SLICE = "cw-consoles.slice"
 _scope_supported: bool | None = None
+# "" quando --expand-environment=no não é suportado (systemd < 254) — nesse
+# caso o systemd-run antigo também não expande os args de --scope, então
+# rodar sem a flag é seguro.
+_scope_expand_flag: str | None = None
 
 
 def _scope_prefix(cwd: str, slice_name: str = _RUNNER_SLICE) -> list[str] | None:
@@ -32,32 +36,52 @@ def _scope_prefix(cwd: str, slice_name: str = _RUNNER_SLICE) -> list[str] | None
     Por que é transparente pro kill/reap: `--scope` faz `exec()` do comando (não
     deixa um supervisor no meio), então o pid forkado continua sendo o
     session-leader do `bash` — killpg(pid) e waitpid(pid) seguem idênticos.
-    `--scope` também herda env e cwd do processo. Checado uma vez e cacheado."""
-    global _scope_supported
+    `--scope` também herda env e cwd do processo. Checado uma vez e cacheado.
+
+    `--expand-environment=no` evita que o systemd-run (>= v254, default `yes`)
+    expanda `$VAR`/`${...}` do start_cmd do usuário com o env do APP antes de
+    passar pro bash — sem isso, `${d##*/}` num start_cmd vira "Invalid
+    environment variable name evaluates to an empty string" e mutila o
+    comando antes mesmo de rodar."""
+    global _scope_supported, _scope_expand_flag
     if _scope_supported is None:
         ok = False
+        expand_flag = ""
         if shutil.which("systemd-run"):
             try:
                 r = subprocess.run(
                     ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+                     "--expand-environment=no",
                      "--slice=" + _RUNNER_SLICE, "true"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     timeout=5,
                 )
-                ok = r.returncode == 0
+                if r.returncode == 0:
+                    ok = True
+                    expand_flag = "--expand-environment=no"
+                else:
+                    # systemd antigo não conhece a flag: mas também não
+                    # expande args de --scope, então spawnar sem ela é seguro.
+                    r = subprocess.run(
+                        ["systemd-run", "--user", "--scope", "--quiet",
+                         "--collect", "--slice=" + _RUNNER_SLICE, "true"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=5,
+                    )
+                    ok = r.returncode == 0
             except Exception:
                 ok = False
         _scope_supported = ok
+        _scope_expand_flag = expand_flag
         log.info("isolamento de runner em cgroup (systemd-run --scope): %s",
                  "ativo" if ok else "indisponível (spawn direto)")
     if not _scope_supported:
         return None
-    return [
-        "systemd-run", "--user", "--scope", "--quiet", "--collect",
-        "--slice=" + slice_name,
-        "--working-directory=" + cwd,
-        "--",
-    ]
+    prefix = ["systemd-run", "--user", "--scope", "--quiet", "--collect"]
+    if _scope_expand_flag:
+        prefix.append(_scope_expand_flag)
+    prefix += ["--slice=" + slice_name, "--working-directory=" + cwd, "--"]
+    return prefix
 
 
 class PtySession(QObject):

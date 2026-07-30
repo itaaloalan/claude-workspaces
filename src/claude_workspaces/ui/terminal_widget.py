@@ -929,6 +929,14 @@ class TerminalWidget(QWidget):
         self._extra_dirs = list(extras)
         self._worktree_label = worktree_label
         self._is_worktree = is_worktree
+        # cwd é pasta-pai de grupo (não é repo) e os extras são os
+        # worktrees-membros: o chip git da sidebar passa a refletir o 1º
+        # membro, já que a própria pasta-pai nunca tem git status.
+        self._group_chip_dir = ""
+        if is_worktree and extras:
+            from ..git_worktree import resolve_git_dirs
+            if resolve_git_dirs(cwd) is None:
+                self._group_chip_dir = extras[0]
         parts: list[str] = []
 
         # MCPs: usa workspace_folders pra alinhar com o top bar (evita
@@ -1178,6 +1186,11 @@ class TerminalWidget(QWidget):
         """Dir do worktree adotado em runtime (criado pela sessão via
         /criar-worktree). "" quando o console não adotou worktree."""
         return getattr(self, "_worktree_dir", "")
+
+    def group_chip_dir(self) -> str:
+        """Membro do grupo de worktrees cujo git status alimenta o chip da
+        sidebar. "" quando o cwd não é pasta-grupo."""
+        return getattr(self, "_group_chip_dir", "")
 
     def _schedule_session_io(self) -> None:
         """Agenda no worker compartilhado o I/O de disco do poll (resolver

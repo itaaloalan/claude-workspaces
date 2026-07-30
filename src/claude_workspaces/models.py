@@ -67,6 +67,13 @@ class RunnerConfig:
     # reter menos linhas e poupar memória do renderer. Ajustável ao vivo
     # pelo menu ⋯ do runner; persiste entre restarts.
     scrollback_lines: int = 0
+    # Auto redeploy: enquanto o runner está rodando, observa o cwd efetivo
+    # (recursivo, pulando node_modules/target/.git/etc — ver
+    # ui.git_panel._WATCH_SKIP_DIRS) e, ao detectar uma mudança salva em
+    # .java ou .xhtml, chama restart() sozinho (restart_cmd, ou stop+start
+    # quando vazio). Pensado pra Glassfish/JSF: .xhtml já é copiado ao vivo
+    # por watchers externos (ex: inotifywait), mas .java exige redeploy.
+    hot_reload: bool = False
     id: str = field(default_factory=_new_id)
 
     def to_dict(self) -> dict:
@@ -97,6 +104,7 @@ class RunnerConfig:
             ready_pattern=str(data.get("ready_pattern", "")),
             port=port,
             include_in_stack=bool(data.get("include_in_stack", True)),
+            hot_reload=bool(data.get("hot_reload", False)),
             console_session_id=str(data.get("console_session_id", "")),
             gen_session_id=str(data.get("gen_session_id", "")),
             gen_cwd=str(data.get("gen_cwd", "")),

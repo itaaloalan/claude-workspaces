@@ -304,6 +304,62 @@ def test_remap_repo_diferente_vazio(repo, tmp_path):
     assert remap_into_worktree(str(other), str(wt)) == ""
 
 
+# ---------- grupo de worktrees (pasta-pai multi-repo, sem .git ali) ----------
+# Regressão: runner de console aberto na pasta-grupo caía no repo principal
+# porque translate_dir_for_repo/remap_into_worktree não sabiam resolver uma
+# pasta-pai sem git pros membros do grupo (worktree_group_members).
+
+def test_translate_grupo_devolve_membro_do_repo_certo(two_repos, tmp_path):
+    api, web = two_repos
+    ok, _m, wt_api = add_worktree(str(api), "feat/g")
+    assert ok
+    ok, _m, wt_web = add_worktree(str(web), "feat/g")
+    assert ok
+    grupo = tmp_path / "grupo"
+    grupo.mkdir()
+    (grupo / "map-api").symlink_to(wt_api)
+    (grupo / "map-web").symlink_to(wt_web)
+
+    from pathlib import Path
+    assert Path(translate_dir_for_repo(str(grupo), str(api))).resolve() == Path(wt_api).resolve()
+    assert Path(translate_dir_for_repo(str(grupo), str(web))).resolve() == Path(wt_web).resolve()
+
+
+def test_translate_grupo_sem_membro_do_repo(two_repos, tmp_path):
+    api, _web = two_repos
+    ok, _m, wt_api = add_worktree(str(api), "feat/g")
+    assert ok
+    grupo = tmp_path / "grupo"
+    grupo.mkdir()
+    (grupo / "map-api").symlink_to(wt_api)
+    other = tmp_path / "other-repo"
+    other.mkdir()
+    _run(["git", "init", "-q", "-b", "main"], other)
+    _run(["git", "config", "user.email", "t@t"], other)
+    _run(["git", "config", "user.name", "t"], other)
+    (other / "f.txt").write_text("y\n")
+    _run(["git", "add", "."], other)
+    _run(["git", "commit", "-q", "-m", "i"], other)
+    assert translate_dir_for_repo(str(grupo), str(other)) == ""
+
+
+def test_remap_into_worktree_grupo_resolve_membro(two_repos, tmp_path):
+    from claude_workspaces.git_worktree import remap_into_worktree
+    api, web = two_repos
+    ok, _m, wt_api = add_worktree(str(api), "feat/g")
+    assert ok
+    ok, _m, wt_web = add_worktree(str(web), "feat/g")
+    assert ok
+    grupo = tmp_path / "grupo"
+    grupo.mkdir()
+    (grupo / "map-api").symlink_to(wt_api)
+    (grupo / "map-web").symlink_to(wt_web)
+
+    from pathlib import Path
+    assert Path(remap_into_worktree(str(api), str(grupo))).resolve() == Path(wt_api).resolve()
+    assert Path(remap_into_worktree(str(web), str(grupo))).resolve() == Path(wt_web).resolve()
+
+
 # ---------- same_repo ----------
 
 def test_same_repo_raiz_subdir_worktree(repo):
